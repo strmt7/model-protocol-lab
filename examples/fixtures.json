@@ -1,0 +1,10 @@
+{
+  "search": [
+    {"id": "search-copy-blue", "group": "copy-colors", "messages": [{"role": "user", "content": "Reply with exactly BLUE and nothing else."}], "expected": "BLUE"},
+    {"id": "search-latest-green", "group": "latest-colors", "messages": [{"role": "user", "content": "Reply with RED."}, {"role": "assistant", "content": "RED"}, {"role": "user", "content": "Now reply with exactly GREEN and nothing else."}], "expected": "GREEN"}
+  ],
+  "held_out": [
+    {"id": "held-number", "group": "held-integer", "messages": [{"role": "user", "content": "Return only the numeral 7."}], "expected": "7"},
+    {"id": "held-latest-word", "group": "held-latest-noun", "messages": [{"role": "user", "content": "Say NORTH."}, {"role": "assistant", "content": "NORTH"}, {"role": "user", "content": "Replace that answer with the single word SOUTH."}], "expected": "SOUTH"}
+  ]
+}

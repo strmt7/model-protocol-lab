@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "model-protocol-lab"
+version = "0.1.0a0"
+description = "Local conversation protocol experiments with held-out evidence"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+hf = ["torch>=2.6", "transformers>=4.57.1,<6", "safetensors>=0.6"]
+
+[project.scripts]
+model-protocol-lab = "model_protocol_lab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["model_protocol_lab*"]
+exclude = ["tests*", "docs*", "examples*"]
