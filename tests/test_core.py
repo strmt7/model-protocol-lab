@@ -1,13 +1,21 @@
 """Core contract tests using a scripted, non-model backend."""
+
+import unittest
 from dataclasses import FrozenInstanceError, replace
 from hashlib import sha256
 from threading import Event
-import unittest
 from unittest.mock import patch
 
 from model_protocol_lab.core import (
-    EvaluationReport, Fixture, Format, Generation, Message, Split,
-    evaluate, first_boundary, local_repairs,
+    EvaluationReport,
+    Fixture,
+    Format,
+    Generation,
+    Message,
+    Split,
+    evaluate,
+    first_boundary,
+    local_repairs,
 )
 
 
@@ -23,16 +31,27 @@ PRIVATE = "synthetic-private-diagnostic-do-not-export"
 
 
 def case(name="one", *, expected="ok", group=None, messages=None):
-    return Fixture(name, (Message("user", "question:" + name),)
-                   if messages is None else messages, expected,
-                   "group:" + name if group is None else group)
+    return Fixture(
+        name,
+        (Message("user", "question:" + name),) if messages is None else messages,
+        expected,
+        "group:" + name if group is None else group,
+    )
 
 
 class FakeBackend:
     fingerprint = "scripted-fixture-not-a-model"
 
-    def __init__(self, generation=GOOD, *, encode_script=(),
-                 generate_script=(), decode_script=(), cancel_at=None, event=None):
+    def __init__(
+        self,
+        generation=GOOD,
+        *,
+        encode_script=(),
+        generate_script=(),
+        decode_script=(),
+        cancel_at=None,
+        event=None,
+    ):
         self.generation = generation
         self.encode_script = list(encode_script)
         self.generate_script = list(generate_script)
@@ -74,10 +93,9 @@ class FakeBackend:
 
 
 def run_case(backend, *, cases=None, candidate=BASE, **kwargs):
-    options = dict(boundary=ids("|"), max_new_tokens=len(RAW), seed=0)
+    options = {"boundary": ids("|"), "max_new_tokens": len(RAW), "seed": 0}
     options.update(kwargs)
-    return evaluate(backend, candidate, (case(),) if cases is None else cases,
-                    **options)
+    return evaluate(backend, candidate, (case(),) if cases is None else cases, **options)
 
 
 class ValueTests(unittest.TestCase):
@@ -121,10 +139,15 @@ class ValueTests(unittest.TestCase):
 
     def test_value_records_are_frozen(self):
         report = run_case(FakeBackend())
-        pairs = ((Message("user", "q"), "content"), (BASE, "bos"),
-                 (case(), "expected"), (GOOD, "token_ids"),
-                 (Split((case("s"),), (case("h"),)), "search"),
-                 (report.observations[0], "answer"), (report, "status"))
+        pairs = (
+            (Message("user", "q"), "content"),
+            (BASE, "bos"),
+            (case(), "expected"),
+            (GOOD, "token_ids"),
+            (Split((case("s"),), (case("h"),)), "search"),
+            (report.observations[0], "answer"),
+            (report, "status"),
+        )
         for value, field in pairs:
             with self.subTest(field=field), self.assertRaises(FrozenInstanceError):
                 setattr(value, field, None)
@@ -150,11 +173,17 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(empty.render(history), "q a\nr")
 
     def test_invalid_message_orders_and_containers(self):
-        invalid = ((), None, [], [Message("user", "q")], ("q",),
-                   (Message("assistant", "a"),),
-                   (Message("user", "q"), Message("assistant", "a")),
-                   (Message("user", "q"), Message("user", "r")),
-                   (Message("assistant", "a"), Message("user", "r")))
+        invalid = (
+            (),
+            None,
+            [],
+            [Message("user", "q")],
+            ("q",),
+            (Message("assistant", "a"),),
+            (Message("user", "q"), Message("assistant", "a")),
+            (Message("user", "q"), Message("user", "r")),
+            (Message("assistant", "a"), Message("user", "r")),
+        )
         for messages in invalid:
             with self.subTest(messages=messages), self.assertRaises(ValueError):
                 BASE.render(messages)
@@ -164,9 +193,10 @@ class RenderTests(unittest.TestCase):
         before = replace(base)
         variants = local_repairs(base)
         self.assertEqual(base, before)
-        self.assertEqual([v.name for v in variants],
-                         ["base", "base/toggle-bos", "base/no-bos",
-                          "base/prefix-newline", "base/prefix-trim"])
+        self.assertEqual(
+            [v.name for v in variants],
+            ["base", "base/toggle-bos", "base/no-bos", "base/prefix-newline", "base/prefix-trim"],
+        )
         self.assertIs(variants[0], base)
         self.assertTrue(variants[1].repeat_bos)
         self.assertEqual(variants[2].bos, "")
@@ -193,8 +223,14 @@ class SplitTests(unittest.TestCase):
 
     def test_invalid_split_containers_and_items(self):
         a, b = (case("a"),), (case("b"),)
-        for left, right in (((), b), (a, ()), (list(a), b), (a, list(b)),
-                            ((object(),), b), (a, (object(),))):
+        for left, right in (
+            ((), b),
+            (a, ()),
+            (list(a), b),
+            (a, list(b)),
+            ((object(),), b),
+            (a, (object(),)),
+        ):
             with self.subTest(left=left, right=right), self.assertRaises(ValueError):
                 Split(left, right)
 
@@ -220,12 +256,19 @@ class SplitTests(unittest.TestCase):
 
 class BoundaryTests(unittest.TestCase):
     def test_matching_and_nonmatching_boundaries(self):
-        samples = (((1,), (1,), 0), ((1, 2), (1, 2), 0),
-                   ((9, 1, 2), (1, 2), 1), ((1, 2, 1, 2), (1, 2), 0),
-                   ((1, 1, 1), (1, 1), 0), ((1, 1, 2), (1, 2), 1),
-                   ((), (1,), None), ((1,), (1, 2), None),
-                   ((1, 2), (1, 2, 3), None), ((9, 1), (1, 2), None),
-                   ((1, 2), (3,), None))
+        samples = (
+            ((1,), (1,), 0),
+            ((1, 2), (1, 2), 0),
+            ((9, 1, 2), (1, 2), 1),
+            ((1, 2, 1, 2), (1, 2), 0),
+            ((1, 1, 1), (1, 1), 0),
+            ((1, 1, 2), (1, 2), 1),
+            ((), (1,), None),
+            ((1,), (1, 2), None),
+            ((1, 2), (1, 2, 3), None),
+            ((9, 1), (1, 2), None),
+            ((1, 2), (3,), None),
+        )
         for tokens, stop, expected in samples:
             with self.subTest(tokens=tokens, stop=stop):
                 self.assertEqual(first_boundary(tokens, stop), expected)
@@ -242,41 +285,58 @@ class EvaluationTests(unittest.TestCase):
         fixture = case()
         report = run_case(backend, cases=(fixture,))
         obs = report.observations[0]
-        self.assertEqual((report.status, report.planned_count, report.attempted_count),
-                         ("completed", 1, 1))
+        self.assertEqual(
+            (report.status, report.planned_count, report.attempted_count), ("completed", 1, 1)
+        )
         self.assertTrue(report.complete and report.aggregate_eligible)
         self.assertEqual((obs.candidate, obs.fixture), ("base", "one"))
         self.assertEqual(obs.input_ids, ids(BASE.render(fixture.messages)))
         self.assertEqual(obs.output_ids, RAW)
-        self.assertEqual((obs.answer, obs.raw_reason, obs.error, obs.status),
-                         ("ok", "limit", None, "completed"))
+        self.assertEqual(
+            (obs.answer, obs.raw_reason, obs.error, obs.status), ("ok", "limit", None, "completed")
+        )
         self.assertTrue(obs.exact_match and obs.boundary_found)
-        self.assertEqual(backend.decoded, [ids("ok")])
+        # decode calls: answer ids, boundary ids, retained ids (diagnostic).
+        self.assertEqual(backend.decoded, [ids("ok"), ids("|"), ids("ok|")])
         self.assertEqual(backend.encoded, [BASE.render(fixture.messages)])
 
     def test_exact_match_boundary_and_suffix_are_separate(self):
-        samples = (("ok", "ok", "|", True, False),
-                   ("ok|ignored|suffix", "ok", "|", True, True),
-                   ("|suffix", "", "|", True, True),
-                   ("ok|", "ok", "|", True, True),
-                   ("ok|", "ok|", "||", True, False))
+        samples = (
+            ("ok", "ok", "|", True, False),
+            ("ok|ignored|suffix", "ok", "|", True, True),
+            ("|suffix", "", "|", True, True),
+            ("ok|", "ok", "|", True, True),
+            ("ok|", "ok|", "||", True, False),
+        )
         for raw, expected, stop, match, found in samples:
             with self.subTest(raw=raw, stop=stop):
                 backend = FakeBackend(Generation(ids(raw), "limit"))
-                obs = run_case(backend, cases=(case(expected=expected),),
-                               max_new_tokens=len(raw), boundary=ids(stop)).observations[0]
+                obs = run_case(
+                    backend,
+                    cases=(case(expected=expected),),
+                    max_new_tokens=len(raw),
+                    boundary=ids(stop),
+                ).observations[0]
                 self.assertEqual(obs.exact_match, match)
                 self.assertEqual(obs.boundary_found, found)
                 self.assertEqual(obs.output_ids, ids(raw))
 
     def test_exact_matching_performs_no_normalization(self):
-        for actual, expected in (("OK", "ok"), (" ok", "ok"), ("ok ", "ok"),
-                                 ("ok\n", "ok"), ("a  b", "a b"), ("e\u0301", "é")):
+        for actual, expected in (
+            ("OK", "ok"),
+            (" ok", "ok"),
+            ("ok ", "ok"),
+            ("ok\n", "ok"),
+            ("a  b", "a b"),
+            ("e\u0301", "é"),
+        ):
             with self.subTest(actual=actual):
                 raw = ids(actual + "|")
-                obs = run_case(FakeBackend(Generation(raw, "limit")),
-                               cases=(case(expected=expected),),
-                               max_new_tokens=len(raw)).observations[0]
+                obs = run_case(
+                    FakeBackend(Generation(raw, "limit")),
+                    cases=(case(expected=expected),),
+                    max_new_tokens=len(raw),
+                ).observations[0]
                 self.assertFalse(obs.exact_match)
                 self.assertEqual(obs.answer, actual)
                 self.assertEqual(obs.status, "completed")
@@ -287,8 +347,11 @@ class EvaluationTests(unittest.TestCase):
         backend = FakeBackend(Generation(raw, "limit"))
         obs = run_case(backend, boundary=stop, max_new_tokens=len(raw)).observations[0]
         self.assertTrue(obs.exact_match and obs.boundary_found)
-        self.assertEqual(backend.decoded, [ids("ok")])
+        self.assertEqual(backend.decoded, [ids("ok"), stop])
         self.assertEqual(len(backend.encoded), 1)
+        # The oversized boundary IDs are not valid text: the text cross-check
+        # degrades to None instead of failing the run.
+        self.assertIsNone(obs.boundary_text_match)
 
     def test_multi_fixture_order_and_output_cap_endpoints(self):
         report = run_case(FakeBackend(), cases=(case("c"), case("a"), case("b")))
@@ -298,8 +361,9 @@ class EvaluationTests(unittest.TestCase):
             with self.subTest(cap=cap):
                 text = "x" * cap
                 backend = FakeBackend(Generation(ids(text), "limit"))
-                obs = run_case(backend, cases=(case(expected=text),),
-                               max_new_tokens=cap).observations[0]
+                obs = run_case(
+                    backend, cases=(case(expected=text),), max_new_tokens=cap
+                ).observations[0]
                 self.assertEqual(backend.generated[0][1], cap)
                 self.assertTrue(obs.exact_match)
 
@@ -310,8 +374,13 @@ class EvaluationTests(unittest.TestCase):
         self.assertTrue(report.complete)
 
     def test_invalid_arguments_fail_before_backend_calls(self):
-        bad = [{"candidate": None}, {"cases": ()}, {"cases": [case()]},
-               {"cases": (object(),)}, {"cases": (case(), case())}]
+        bad = [
+            {"candidate": None},
+            {"cases": ()},
+            {"cases": [case()]},
+            {"cases": (object(),)},
+            {"cases": (case(), case())},
+        ]
         bad += [{"max_new_tokens": v} for v in (-1, 0, 4097, True, False, 1.0, None, "2")]
         bad += [{"boundary": v} for v in ((), [], [1], None, 1, (True,), (-1,), (1.0,), ("1",))]
         bad += [{"seed": v} for v in (True, False, 1.0, None, "1", -1, 2**64, 1 << 20000)]
@@ -320,7 +389,9 @@ class EvaluationTests(unittest.TestCase):
                 backend = FakeBackend()
                 with self.assertRaises(ValueError):
                     run_case(backend, **options)
-                self.assertEqual((backend.encoded, backend.generated, backend.decoded), ([], [], []))
+                self.assertEqual(
+                    (backend.encoded, backend.generated, backend.decoded), ([], [], [])
+                )
 
     def test_invalid_encoded_tokens_are_not_retained(self):
         for payload in (None, [], [1, 2], (True,), (-1,), (1.0,), ("1",)):
@@ -340,13 +411,23 @@ class EvaluationTests(unittest.TestCase):
 
     def test_malformed_generation_fails_closed(self):
         raw = ids("ok|")
-        bad = (None, object(), {"token_ids": raw, "reason": "limit"},
-               Generation(list(raw), "limit"), Generation((True, 2, 3), "limit"),
-               Generation((-1, 2, 3), "limit"), Generation((1.0, 2, 3), "limit"),
-               Generation(("1", 2, 3), "limit"), Generation(raw, "unknown"),
-               Generation(raw, None), Generation(raw, "limit", PRIVATE),
-               Generation(raw, "cancelled", PRIVATE), Generation(raw, "error", 123),
-               Generation((), "limit"), Generation(ids("ok"), "limit"))
+        bad = (
+            None,
+            object(),
+            {"token_ids": raw, "reason": "limit"},
+            Generation(list(raw), "limit"),
+            Generation((True, 2, 3), "limit"),
+            Generation((-1, 2, 3), "limit"),
+            Generation((1.0, 2, 3), "limit"),
+            Generation(("1", 2, 3), "limit"),
+            Generation(raw, "unknown"),
+            Generation(raw, None),
+            Generation(raw, "limit", PRIVATE),
+            Generation(raw, "cancelled", PRIVATE),
+            Generation(raw, "error", 123),
+            Generation((), "limit"),
+            Generation(ids("ok"), "limit"),
+        )
         for index, result in enumerate(bad):
             with self.subTest(index=index):
                 backend = FakeBackend(result)
@@ -363,8 +444,9 @@ class EvaluationTests(unittest.TestCase):
     def test_all_reasons_must_respect_output_cap(self):
         for reason in ("limit", "cancelled", "error"):
             with self.subTest(reason=reason):
-                obs = run_case(FakeBackend(Generation(ids("over"), reason)),
-                               max_new_tokens=3).observations[0]
+                obs = run_case(
+                    FakeBackend(Generation(ids("over"), reason)), max_new_tokens=3
+                ).observations[0]
                 self.assertEqual(obs.error, "invalid_generation")
                 self.assertEqual(obs.output_ids, ())
 
@@ -383,8 +465,9 @@ class EvaluationTests(unittest.TestCase):
                 backend = FakeBackend(Generation(ids("ok|"), "error", error))
                 report = run_case(backend, cases=(case("first"), case("later")))
                 obs = report.observations[0]
-                self.assertEqual((report.status, report.planned_count, report.attempted_count),
-                                 ("failed", 2, 1))
+                self.assertEqual(
+                    (report.status, report.planned_count, report.attempted_count), ("failed", 2, 1)
+                )
                 self.assertEqual(obs.error, "backend_reported_error")
                 self.assertEqual(obs.raw_reason, "error")
                 self.assertTrue(obs.boundary_found)
@@ -393,9 +476,14 @@ class EvaluationTests(unittest.TestCase):
                 self.assertEqual(backend.decoded, [])
 
     def test_each_failure_stage_retains_prior_records_and_stops(self):
-        stages = (("render", "render_failed"), ("encode", "encode_failed"),
-                  ("input", "invalid_input_ids"), ("generate", "generate_failed"),
-                  ("generation", "invalid_generation"), ("decode", "decode_failed"))
+        stages = (
+            ("render", "render_failed"),
+            ("encode", "encode_failed"),
+            ("input", "invalid_input_ids"),
+            ("generate", "generate_failed"),
+            ("generation", "invalid_generation"),
+            ("decode", "decode_failed"),
+        )
         for stage, code in stages:
             with self.subTest(stage=stage):
                 first, second, third = case("first"), case("second"), case("third")
@@ -411,24 +499,35 @@ class EvaluationTests(unittest.TestCase):
                 elif stage == "generation":
                     options["generate_script"] = [GOOD, Generation((), "limit")]
                 elif stage == "decode":
-                    options["decode_script"] = ["ok", error]
+                    # Per-case decode sequence: answer ids, boundary ids,
+                    # retained ids (diagnostic); the failure lands on the
+                    # second case's answer decode.
+                    options["decode_script"] = ["ok", "|", "ok|", error]
                 report = run_case(FakeBackend(**options), cases=(first, second, third))
                 before, failed = report.observations
-                self.assertEqual((report.status, report.planned_count, report.attempted_count),
-                                 ("failed", 3, 2))
+                self.assertEqual(
+                    (report.status, report.planned_count, report.attempted_count), ("failed", 3, 2)
+                )
                 self.assertTrue(before.exact_match)
-                self.assertEqual((failed.fixture, failed.status, failed.error),
-                                 ("second", "failed", code))
+                self.assertEqual(
+                    (failed.fixture, failed.status, failed.error), ("second", "failed", code)
+                )
                 self.assertFalse(failed.exact_match or report.aggregate_eligible)
                 self.assertNotIn(PRIVATE, repr(report))
-                self.assertEqual(failed.input_ids, () if stage in ("render", "encode", "input")
-                                 else ids(BASE.render(second.messages)))
+                self.assertEqual(
+                    failed.input_ids,
+                    ()
+                    if stage in ("render", "encode", "input")
+                    else ids(BASE.render(second.messages)),
+                )
                 self.assertEqual(failed.output_ids, RAW if stage == "decode" else ())
                 self.assertEqual(failed.boundary_found, stage == "decode")
 
     def test_failures_take_precedence_over_concurrent_cancellation(self):
-        for result, code in ((Generation((), "limit"), "invalid_generation"),
-                             (Generation(RAW, "error", PRIVATE), "backend_reported_error")):
+        for result, code in (
+            (Generation((), "limit"), "invalid_generation"),
+            (Generation(RAW, "error", PRIVATE), "backend_reported_error"),
+        ):
             with self.subTest(code=code):
                 event = Event()
                 report = run_case(FakeBackend(result, cancel_at="generate"), cancel=event)
@@ -436,8 +535,9 @@ class EvaluationTests(unittest.TestCase):
                 self.assertEqual(report.status, "failed")
                 self.assertEqual(report.observations[0].error, code)
         event = Event()
-        report = run_case(FakeBackend(decode_script=[None], cancel_at="decode", event=event),
-                          cancel=event)
+        report = run_case(
+            FakeBackend(decode_script=[None], cancel_at="decode", event=event), cancel=event
+        )
         self.assertTrue(event.is_set())
         self.assertEqual(report.observations[0].error, "decode_failed")
 
@@ -465,8 +565,8 @@ class SeedTests(unittest.TestCase):
         first, second = FakeBackend(), FakeBackend()
         run_case(first, cases=cases, seed=41)
         run_case(second, cases=tuple(reversed(cases)), seed=41)
-        a = {c.id: call[2] for c, call in zip(cases, first.generated)}
-        b = {c.id: call[2] for c, call in zip(reversed(cases), second.generated)}
+        a = {c.id: call[2] for c, call in zip(cases, first.generated, strict=True)}
+        b = {c.id: call[2] for c, call in zip(reversed(cases), second.generated, strict=True)}
         self.assertEqual(a, b)
 
     def test_candidates_share_fixture_seed_without_sharing_prompt(self):
@@ -483,17 +583,20 @@ class CancellationTests(unittest.TestCase):
         event, backend = Event(), FakeBackend()
         event.set()
         report = run_case(backend, cases=(case("a"), case("b")), cancel=event)
-        self.assertEqual((report.status, report.planned_count, report.attempted_count),
-                         ("cancelled", 2, 0))
+        self.assertEqual(
+            (report.status, report.planned_count, report.attempted_count), ("cancelled", 2, 0)
+        )
         self.assertEqual((backend.encoded, backend.generated, backend.decoded), ([], [], []))
         self.assertFalse(report.aggregate_eligible)
 
     def test_cancel_after_render_skips_encode(self):
         event, backend, original = Event(), FakeBackend(), BASE.render
+
         def cancelling_render(messages):
             text = original(messages)
             event.set()
             return text
+
         with patch.object(Format, "render", side_effect=cancelling_render):
             report = run_case(backend, cancel=event)
         obs = report.observations[0]
@@ -574,15 +677,25 @@ class ReportTests(unittest.TestCase):
 
     def test_invalid_reports_rejected(self):
         g, c, f = self.good, self.cancelled, self.failed
-        invalid = (((g,), 0, "completed"), ((g,), -1, "completed"),
-                   ((g,), True, "completed"), ((g,), 1.0, "completed"),
-                   ([g], 1, "completed"), ((object(),), 1, "completed"),
-                   ((g,), 1, "unknown"), ((g, g), 1, "completed"),
-                   ((), 1, "completed"), ((g,), 2, "completed"),
-                   ((c,), 1, "completed"), ((), 1, "failed"),
-                   ((g,), 1, "failed"), ((f, g), 2, "failed"),
-                   ((c,), 1, "failed"), ((f,), 1, "cancelled"),
-                   ((replace(g, status="unknown"),), 1, "cancelled"))
+        invalid = (
+            ((g,), 0, "completed"),
+            ((g,), -1, "completed"),
+            ((g,), True, "completed"),
+            ((g,), 1.0, "completed"),
+            ([g], 1, "completed"),
+            ((object(),), 1, "completed"),
+            ((g,), 1, "unknown"),
+            ((g, g), 1, "completed"),
+            ((), 1, "completed"),
+            ((g,), 2, "completed"),
+            ((c,), 1, "completed"),
+            ((), 1, "failed"),
+            ((g,), 1, "failed"),
+            ((f, g), 2, "failed"),
+            ((c,), 1, "failed"),
+            ((f,), 1, "cancelled"),
+            ((replace(g, status="unknown"),), 1, "cancelled"),
+        )
         for index, args in enumerate(invalid):
             with self.subTest(index=index), self.assertRaises(ValueError):
                 EvaluationReport(*args)
