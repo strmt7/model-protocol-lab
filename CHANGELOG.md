@@ -8,6 +8,74 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `run` stdout now names the written artifacts: the final JSON line is
+  `{"decision": ..., "selected_candidate": ..., "results": "<dir>/results.json",
+  "report": "<dir>/report.html"}` so a first run points the operator at the
+  report instead of leaving them guessing where it went (consistent with
+  `fixtures build`, which already reports its output path).
+
+- `doctor` suggestion now sizes `--max-new-tokens` to the checkpoint's
+  declared window (`doctor._longest_prompt_tokens`): the longest fixture
+  prompt rendered with every catalog candidate is encoded with the
+  checkpoint tokenizer, and the suggested budget is the largest value (up
+  to 64) that still fits prompt + budget within the window. When even the
+  longest prompt fills the window, the suggestion keeps `--max-new-tokens 1`
+  and warns to shorten the fixtures or use a larger-window checkpoint.
+  Without a measurable tokenizer the suggestion keeps the default 64.
+- Failed-run diagnosis: `run_experiment` summaries carry the sanitized
+  `failure_code`, and the report's decision banner names it with operator
+  guidance ("Failure diagnosis"). `core.evaluate` now passes through the
+  built-in backend's fixed-vocabulary error codes (`context_limit_exceeded`
+  and friends) via an allowlist; arbitrary backend text still collapses to
+  `backend_reported_error`, so the sanitization boundary holds.
+- Per-candidate response boundaries (`run --boundary-map NAME=ID,ID`,
+  repeatable; `doctor --boundary-map` for pre-flight vocab checks):
+  each format hypothesis is measured with its own end-of-turn marker
+  instead of one sequence for all candidates, with `--boundary-ids` as
+  the default. The selection rule is unchanged (exactly one candidate
+  passing every search fixture under its own boundary; ties and failures
+  abstain); the held-out stage, stop matrix and budget frontier use each
+  candidate's own boundary, and every search entry records its
+  `boundary_token_ids`. Unknown or duplicate candidate names fail fast.
+- `fixtures build` (`model_protocol_lab/fixtures.py`): compile a compact
+  authoring CSV (one row per fixture: `id,group,partition,expected` plus
+  `user_1,assistant_1,...` message columns) into the strict fixture JSON.
+  The search/held-out discipline (ID uniqueness, group non-overlap,
+  identical-message leakage, NFC-normalized) is enforced at build time
+  with row-numbered errors; the emitted JSON is round-tripped through the
+  strict loader before it is returned, so a built file satisfies the
+  schema by construction. Output is never overwritten and is written
+  owner-only (0o600); `examples/fixtures.csv` builds to the equivalent of
+  `examples/fixtures.json`.
+- Richer report views (still a single file, no scripts or remote assets):
+  a per-fixture x candidate outcome grid (✓/✗/– with the selected
+  candidate starred), decisive fixtures (fixtures passed by exactly one
+  candidate while all others failed -- the evidence the verdict rests
+  on), per-candidate token-budget pass-curve sparklines in the frontier
+  section, and a boundary-IDs column in the candidate table.
+- Byte-space HF stop-string matching (`backends._hf_byte_token_mapper`,
+  `LocalHFBackend.hf_stop_token_bytes`, threaded through
+  `emulate_hf_stop_string`/`stop_matrix`/CLI): for byte-level and
+  byte-fallback decoders the HF emulation now matches on raw token bytes
+  with the stop string UTF-8-encoded, mirroring current transformers (the
+  byte-space fix for upstream issue #46519); tokens the byte table cannot
+  represent fall back to the isolated decode. Differentially verified
+  against the real `StopStringCriteria`, including the byte-fragment shape
+  where the old decode-string path stayed silent and the oracle fires.
+- Token-budget robustness frontier (`experiments.budget_frontier`, always-on
+  `run` diagnostic, new HTML section): recomputes the search-stage decision
+  at every smaller token budget from the recorded outputs -- exact under
+  greedy decoding, no extra model calls -- reporting per-candidate minimal
+  passing budgets, the pass-count step curve, and the budget ranges where
+  the decision or winner would have differed (`flip_ranges`,
+  `budget_robust`).
+- `doctor` next-command suggestion: a clean `doctor` with `--dataset` and
+  `--boundary-ids` now carries a `suggestion` with the exact `run`
+  invocation, `--max-context` filled from the checkpoint's declared window
+  and paths shell-quoted; the format family stays an explicit placeholder.
+  `examine_model` also reports `model.context_window`.
+- `docs/FAQ.md`: troubleshooting and interpretation Q&A grounded in
+  documented behavior, linked from README and `docs/USAGE.md`.
 - Template-conformance diff (`core.template_diff`, `doctor.template_conformance`,
   surfaced in `run` reports): each hand-rendered hypothesis is compared as an
   exact token-ID sequence against the checkpoint tokenizer's own
@@ -71,7 +139,43 @@ All notable changes to this project are documented here. The format follows
 - README status: "unexecuted alpha" → tested state with evidence pointers; new
   "How this differs" section grounded in primary sources.
 
-### Fixed (third hardening round, 2026-10-13)
+### Fixed (third hardening round, red-team, 2026-10-13)
+
+- **Red-team round 3 — HF stop emulation:** `_hf_overhang_match` missed the
+  tensor implementation's end-overlap class where the stop string ends
+  *inside* the final token (e.g. token `" world"`, stop `"or"`); the stop
+  matrix systematically under-reported HF stops. Now mirrors
+  `_stop_string_get_matching_positions` exactly — differentially verified
+  against the real `transformers.StopStringCriteria` (1500/1500 random
+  trials on byte-level BPE, exhaustive 256-combination scan, zero
+  divergences). Known residual: per-token `decode` strings vs HF's cleaned
+  vocab strings / raw bytes can diverge on UTF-8-fragment tokens
+  (documented in `docs/USAGE.md` §8.2).
+- **Red-team round 3 — `template_diff` algorithmic DoS:** adversarially
+  fragmented inputs made difflib super-quadratic (~45 s at n=2000, ~cubic
+  scaling). The matching-blocks loop now runs under a 10 s wall-clock
+  budget and degrades to `ValueError("template_diff_too_fragmented")`
+  (the conformance check marks the pair `"unavailable"`); output is
+  byte-identical to unbounded difflib on ordinary inputs.
+- **Red-team round 3 — uncapped tokenizer loads in `doctor`:** the
+  reference-model portability check and `template_conformance` loaded
+  `tokenizer.json` via HF with no 128 MB pre-load cap (the round-1 fix
+  covered only `LocalHFBackend`). New `_tokenizer_file()` helper enforces
+  the cap at every loader call site; oversized files degrade to the fixed
+  `"skipped"`/`"unavailable"` codes without parsing.
+- **Red-team round 3 — hostile Jinja chat templates:** a checkpoint
+  template rendering unbounded text (`{{ 'x' * 10**8 }}`) OOM-killed the
+  conformance worker. Template source and rendered output are each capped
+  at 1 MB chars, degrading to `"unavailable"` (`"chat_template_too_large"`);
+  CPU burn inside the Jinja render itself remains the same exposure as HF's
+  own `apply_chat_template` (documented residual).
+- **Round-3 test hygiene:** the new `test_round3.py` broke the `[dev]`-only
+  suite (7 classes imported the HF stack at test time with no skip guard);
+  added the `HAS_HF` module guard so the README quick-start path is
+  skip-clean again.
+- 9 new regression tests (361 total, all passing, 98% line coverage).
+
+### Fixed (third hardening round, audit, 2026-10-13)
 
 - **Audit:** `doctor`'s config-read failure path returned a non-uniform report
   shape (missing `assets`/`special_tokens`/`added_tokens`) — now uses the same

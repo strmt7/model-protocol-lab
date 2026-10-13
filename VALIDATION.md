@@ -1,5 +1,99 @@
 # Validation status
 
+## Evidence — third hardening round, red-team (executed 2026-10-13, Python 3.12.3, Linux x86-64)
+
+Adversarial round 3 against the five new capabilities, with fixes and
+re-verification. All commands run from the repository root.
+
+- Fresh installs: `python -m venv` + `pip install -U pip setuptools`, then
+  `pip install -e .` (base: package imports, `catalog` smoke OK) and
+  `pip install -e ".[dev]"` (ruff, mypy, coverage, hypothesis present).
+- `python -m unittest discover -s tests -t .` — **361 tests, all passing**
+  (352 carried over + 9 new regression tests), across **3 consecutive green
+  executions** (9.79 s / 9.50 s / 9.87 s — no variance, no flakiness).
+  The `[dev]`-only suite (fresh venv, no `hf` extra) is green again:
+  **OK (skipped=73)** — the round-3 test file had broken this path with
+  unguarded HF imports (fixed with the `HAS_HF` skip guard).
+- `ruff check` and `ruff format --check` — clean on
+  `model_protocol_lab tests examples` (21 files).
+- `mypy model_protocol_lab` — clean (10 source files).
+- `coverage run -m unittest discover -s tests -t .` — **98% total line
+  coverage** (1493 statements), above the 97% bar; new code is covered by
+  the new regression tests (the two misses are the provably-dead difflib
+  block-merge branch and pre-existing defensive branches).
+- `bandit -r model_protocol_lab` — **0 issues** at any severity/confidence.
+- `pip-audit` (2026-10-13) — **no known vulnerabilities** in the installed
+  set; `torch 2.14.1+cpu` keeps its local version tag (invisible to the
+  OSV DB — the accepted residual; CVE posture re-verified manually per
+  `docs/SECURITY.md` F2).
+- `python -m build` + `twine check` — re-verified clean in round 1;
+  packaging metadata unchanged since.
+- Differential verification of the fixed HF stop emulation against the
+  real `transformers.StopStringCriteria` (locally trained byte-level BPE
+  tokenizers, no downloads): **1500/1500 random trials agree**, plus an
+  exhaustive 256-combination scan with zero divergences. The pre-fix port
+  diverged on 18/300 trials (all lab-miss-real-fire).
+- `template_diff` equivalence: 400 randomized inputs produce byte-identical
+  output to unbounded difflib; the adversarial alternating pattern (45 s at
+  n=2000 pre-fix) now degrades in ~2 s with a 2 s budget.
+- CLI smoke (tiny locally-generated GPT-2 checkpoint, no downloads):
+  `catalog`, `inspect`, `doctor` (plain, `--boundary-ids`,
+  `--reference-model`, invalid-IDs exit 1), `run` (plain,
+  `--mutate --sensitivity-sweep --max-drop-bytes 2 --include-evidence`;
+  all diagnostics sections present; `--max-drop-bytes 9` rejected by
+  argparse). Sample-report golden test regenerates byte-identically.
+- Config files validated: CI YAML (4 jobs, actions pinned to SHAs),
+  pre-commit YAML (ruff-pre-commit v0.17.0), Dependabot YAML (pip,
+  github-actions, pre-commit), `CITATION.cff` (title/authors present).
+- Red-team round 3 findings fixed: H3-1 (HF emulation missed mid-token
+  end-overlaps — stop matrix under-reported stops), H3-2 (`template_diff`
+  super-quadratic blowup — 10 s degradation budget), H3-3 (uncapped
+  `tokenizer.json` loads in `doctor`'s reference/conformance paths),
+  H3-4 (hostile Jinja template OOM — 1 MB source/render caps), H3-5
+  (`[dev]`-only suite broken by unguarded HF imports). Each with a
+  regression test; full triage in `docs/SECURITY.md`. Probed and defended
+  without changes: report XSS via hostile candidate names (all four new
+  sections), `--reference-model` traversal/symlink attacks, UTF-8-tail
+  truncation (no lone surrogates), sweep compute bounds and cancellation,
+  taxonomy classification (17 adversarial shapes), vLLM emulation vs the
+  upstream detokenizer source.
+
+## Evidence — development cycles 1–4 (executed 2026-10-13, Python 3.12.3, Linux x86-64)
+
+Four research → plan → develop cycles followed the red-team round, each
+logged with sources in `docs/RESEARCH_LOG.md` (prior competitive research:
+lm-eval harness, vLLM, llama.cpp, HF transformers, lighteval, HELM, Unitxt —
+10 ideas killed as already covered). Cycles stop only after consecutive
+insignificant rounds; Cycles 3 and 4 were both quiet, winding the process
+down.
+
+- Cycle 1: byte-space HF stop matching (ports upstream's decoder-mode
+  detection; differentially proven against real `StopStringCriteria`),
+  token-budget robustness frontier, `doctor` next-command suggestion,
+  `docs/FAQ.md` (12 Q&As).
+- Cycle 2: per-candidate response boundaries (`run --boundary-map`),
+  `fixtures build` CSV authoring with leakage-unbuildable discipline,
+  report views (per-fixture outcome grid, decisive fixtures, budget
+  sparklines). The llama.cpp stop cell was verified against primary
+  sources and killed as duplicative (documented in `docs/USAGE.md` §8.2).
+- Cycle 3 (quiet): `doctor` suggestion window-fitting, failed-run
+  diagnosis with sanitized failure codes, 3 mutation-found boundary
+  tests; cosmic-ray feasibility trial on `fixtures.py` (87% interim kill
+  rate; full-codebase run judged impractical per-commit).
+- Cycle 4 (quiet): scoped cosmic-ray trial on `core.py` (56 mutants: 42
+  killed, 12 equivalent, 2 real gaps fixed with kill-verified tests);
+  first-run UX fixes. No upstream drift found in any cycle.
+
+Final verification (independent runs for this section):
+- `python -m unittest discover -s tests -t .` — **509 tests, all passing**,
+  consecutive green executions.
+- `coverage` — **98% total line coverage** (2171 statements).
+- `ruff check` and `ruff format --check` — clean (25 files);
+  `mypy model_protocol_lab` — clean (11 files).
+- CLI smoke: `catalog`, `inspect examples/fixtures.json`,
+  `fixtures build examples/fixtures.csv --output` (output byte-equivalent
+  to `examples/fixtures.json`).
+
 ## Evidence — second hardening round (executed 2026-10-13, Python 3.12.3, Linux x86-64)
 
 A fresh-eyes second pass (independent audit of all 10 modules, a new
@@ -123,7 +217,9 @@ reproducible from the repository root in a fresh virtual environment.
   production checkpoints, CPU/GPU parity, and VRAM fit are unverified.
 - No browser rendering check of `report.html` (structure/contrast/escaping
   validated programmatically only).
-- No mutation-testing run; no benchmark of any kind.
+- No full-codebase mutation-testing run (scoped cosmic-ray trials on
+  `fixtures.py` and `core.py` only; see `docs/RESEARCH_LOG.md` Cycles 3–4);
+  no benchmark of any kind.
 - The weekly CI schedule and Dependabot have not yet executed on GitHub.
 - `pre-commit run --all-files` has not executed end-to-end (see above).
 
