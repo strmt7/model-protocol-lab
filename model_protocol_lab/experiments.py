@@ -1,23 +1,57 @@
 """Bounded search followed by one frozen held-out evaluation."""
+
+import json
 from dataclasses import asdict
+from hashlib import sha256
 from threading import Event
-from .core import Backend, Format, Split, evaluate
+from typing import Any
+
+from .core import Backend, Format, Split, _valid_token_ids, evaluate
+
+
+def candidate_fingerprint(fmt: Format) -> str:
+    """Stable identity for a format hypothesis: name, markers and flags.
+
+    Lets a report consumer verify that the candidate evaluated here is
+    byte-identical — including its name — to a hypothesis recorded
+    elsewhere, without trusting the candidate name alone. The ``name`` is
+    part of the payload (unlike ``local_repairs``' dedup key, which drops
+    it because ``repeat_bos`` is meaningless when ``bos`` is empty): two
+    formats that render identically but carry different names therefore get
+    different fingerprints. The behavioral fields are otherwise normalized
+    exactly like the dedup key.
+    """
+    payload = asdict(fmt)
+    if not payload["bos"]:
+        payload["repeat_bos"] = False
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + sha256(text.encode("utf-8")).hexdigest()
 
 
 def _summary(report):
     passed = sum(o.exact_match and o.boundary_found for o in report.observations)
-    return {"status": report.status, "planned": report.planned_count,
-            "attempted": report.attempted_count,
-            "aggregate_eligible": report.aggregate_eligible,
-            "exact_and_boundary_passes": passed,
-            "rate": passed / report.planned_count if report.aggregate_eligible else None,
-            "encoded_input_tokens": sum(len(o.input_ids) for o in report.observations),
-            "retained_output_tokens": sum(len(o.output_ids) for o in report.observations)}
+    return {
+        "status": report.status,
+        "planned": report.planned_count,
+        "attempted": report.attempted_count,
+        "aggregate_eligible": report.aggregate_eligible,
+        "exact_and_boundary_passes": passed,
+        "rate": passed / report.planned_count if report.aggregate_eligible else None,
+        "encoded_input_tokens": sum(len(o.input_ids) for o in report.observations),
+        "retained_output_tokens": sum(len(o.output_ids) for o in report.observations),
+    }
 
 
-def run_experiment(backend: Backend, formats: tuple[Format, ...], split: Split, *,
-                   boundary: tuple[int, ...], max_new_tokens: int = 64,
-                   seed: int = 0, cancel: Event | None = None) -> dict:
+def run_experiment(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    boundary: tuple[int, ...],
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict:
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
         raise ValueError("Supply between 1 and 24 candidates")
     if any(type(fmt) is not Format for fmt in formats):
@@ -26,24 +60,53 @@ def run_experiment(backend: Backend, formats: tuple[Format, ...], split: Split, 
         raise ValueError("Candidate names must be unique")
     if type(split) is not Split:
         raise ValueError("A validated split is required")
+    if cancel is not None and not isinstance(cancel, Event):
+        raise ValueError("cancel must be a threading.Event")
+    if type(backend.fingerprint) is not str:
+        # Fail fast on protocol-violating backends before any compute: a
+        # non-string fingerprint would otherwise explode in json.dumps inside
+        # save_report, after hours of generation, as an uncaught TypeError.
+        raise ValueError("Backend fingerprint must be a string")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
     if len(split.search) > 100 or len(split.held_out) > 100:
         raise ValueError("Experiment fixture limit exceeded")
     event = cancel if cancel is not None else Event()
-    output = {"schema_version": 1, "selection_rule": "unique_all_search_pass",
-              "measurement": "exact_answer_and_boundary", "seed": seed,
-              "max_new_tokens": max_new_tokens, "boundary_token_ids": list(boundary),
-              "backend_fingerprint": backend.fingerprint,
-              "statistical_confidence": "not_estimated",
-              "compute_comparison": "not_equal_compute_certified",
-              "decision": "not_started", "search": [], "held_out": None,
-              "selected_candidate": None}
+    output: dict[str, Any] = {
+        "schema_version": 1,
+        "selection_rule": "unique_all_search_pass",
+        "measurement": "exact_answer_and_boundary",
+        "seed": seed,
+        "max_new_tokens": max_new_tokens,
+        "boundary_token_ids": list(boundary),
+        "backend_fingerprint": backend.fingerprint,
+        "statistical_confidence": "not_estimated",
+        "compute_comparison": "not_equal_compute_certified",
+        "decision": "not_started",
+        "search": [],
+        "held_out": None,
+        "selected_candidate": None,
+    }
     winners = []
     for fmt in formats:
-        report = evaluate(backend, fmt, split.search, boundary=boundary,
-                          max_new_tokens=max_new_tokens, seed=seed, cancel=event)
+        report = evaluate(
+            backend,
+            fmt,
+            split.search,
+            boundary=boundary,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=event,
+        )
         summary = _summary(report)
-        output["search"].append({"format": asdict(fmt), "summary": summary,
-                                 "observations": [asdict(o) for o in report.observations]})
+        output["search"].append(
+            {
+                "format": asdict(fmt),
+                "candidate_fingerprint": candidate_fingerprint(fmt),
+                "summary": summary,
+                "observations": [asdict(o) for o in report.observations],
+            }
+        )
         if not report.aggregate_eligible:
             output["decision"] = report.status
             return output
@@ -57,10 +120,19 @@ def run_experiment(backend: Backend, formats: tuple[Format, ...], split: Split, 
         return output
     selected = winners[0]
     output["selected_candidate"] = selected.name
-    held = evaluate(backend, selected, split.held_out, boundary=boundary,
-                    max_new_tokens=max_new_tokens, seed=seed, cancel=event)
-    output["held_out"] = {"summary": _summary(held),
-                          "observations": [asdict(o) for o in held.observations]}
+    held = evaluate(
+        backend,
+        selected,
+        split.held_out,
+        boundary=boundary,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=event,
+    )
+    output["held_out"] = {
+        "summary": _summary(held),
+        "observations": [asdict(o) for o in held.observations],
+    }
     if not held.aggregate_eligible:
         output["decision"] = held.status
     else:
