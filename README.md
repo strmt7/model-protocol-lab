@@ -7,18 +7,13 @@
 
 **Is a local language model failing because of its weights, or because its conversations are formatted incorrectly?**
 
-Model Protocol Lab is a bounded experiment lab: render several conversation formats as exact token sequences, send them to a local checkpoint, and compare task answers and response boundaries. A separate held-out fixture set checks the single candidate selected during search.
+Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — ChatML, Llama 3, Gemma, plus bounded BOS and prefix mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
+
+What sets it apart: it measures checkpoints on token sequences their own chat templates would never produce; it detects response boundaries as token-ID subsequences rather than string stop-sequences; it generates exactly N tokens with no implicit EOS stop; and it abstains on ties instead of crowning a leaderboard winner. The differences are verifiable design decisions, documented with sources in [How this differs](#how-this-differs-from-nearby-tools) — not marketing claims.
 
 ## Status
 
-**Hardened and tested; not a validated release.** The package installs cleanly,
-the full test suite passes (213 tests, 97% line coverage), `ruff` and `mypy`
-are clean, and the optional Hugging Face adapter is integration-tested against a
-locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for
-the exact commands, counts, dates and environment — and for what is still *not*
-established (real-model runs beyond the synthetic checkpoint, browser rendering
-checks, mutation testing). No benchmark-superiority or unique-invention claim is
-made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (509 tests, 98% line coverage), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -36,7 +31,6 @@ python -m unittest discover -s tests -t .
 ```
 
 (A `model-protocol-lab` console script is installed as an equivalent entry point.)
-```
 
 To run a model you also need the optional dependencies and a trusted,
 already-downloaded checkpoint directory (the adapter never downloads models):
@@ -47,9 +41,10 @@ python -m model_protocol_lab doctor --model path/to/checkpoint --dataset example
 ```
 
 `doctor` validates the checkpoint assets and fixture file before any run and
-never loads model weights. Read [docs/USAGE.md](docs/USAGE.md) before running a
-model — boundary token IDs must be established from the **actual checkpoint
-tokenizer**.
+never loads model weights. It even suggests the exact `run` command to use
+next, with limits fitted to the checkpoint's declared context window. Read
+[docs/USAGE.md](docs/USAGE.md) before running a model — boundary token IDs must
+be established from the **actual checkpoint tokenizer**.
 
 No checkpoint handy? Generate the synthetic sample report (a scripted backend
 stands in for a model; clearly labeled, deterministic):
@@ -59,19 +54,56 @@ python examples/make_sample_report.py
 # then open examples/sample-report/report.html in a browser
 ```
 
+Prefer authoring fixtures in a spreadsheet? Write one row per fixture as CSV
+and compile it to the strict schema with the search/held-out discipline
+enforced at build time:
+
+```sh
+python -m model_protocol_lab fixtures build examples/fixtures.csv -o examples/fixtures.json
+```
+
 ## What the report looks like
 
 `examples/sample-report/report.html` is a committed, byte-deterministic example
-produced by the command above from `examples/fixtures.json`: a decision banner,
-run configuration, a color-coded candidate heatmap with pass-rate bars, and the
-held-out check. It is one self-contained file — no scripts, fonts or remote
-assets — and it never embeds raw prompts or generations.
+produced from `examples/fixtures.json`: a decision banner with a failure-mode
+diagnosis, run configuration, a color-coded candidate heatmap with pass-rate
+bars, a per-fixture outcome grid, decisive fixtures, token-budget robustness
+curves, and the held-out check. It is one self-contained file — no scripts,
+fonts or remote assets — and it never embeds raw prompts or generations.
+
+## Capabilities
+
+**Exact-token measurement.**
+- Strict, bounded JSON fixture loading with search/held-out separation checks (IDs, groups and message inputs cannot leak across the split; NFC-normalized).
+- Text-only ChatML, Llama 3 and Gemma serialization hypotheses, plus bounded BOS and prefix mutations.
+- Raw token evaluation (`add_special_tokens=False`): explicit token-ID boundary detection with a text-level mismatch diagnostic, cooperative cancellation, and sanitized failure records.
+- Per-candidate response boundaries (`run --boundary-map`): each format hypothesis is measured with its own end-of-turn marker.
+
+**Disciplined selection.**
+- A conservative rule: exactly one candidate must pass every search fixture; only that candidate reaches held-out evaluation. Ties and failures abstain — there is no leaderboard.
+- Failure-mode taxonomy with per-candidate counts, cited in the decision banner (`no-boundary-in-N`, `boundary-text-mismatch`, `eos-without-boundary`, `held-out-divergence`, `backend-error`).
+
+**Second-opinion diagnostics.**
+- Template-conformance diffs: each hand-rendered hypothesis compared token-for-token against the checkpoint's own chat-template rendering.
+- Stop-behavior isolation matrix: the winner re-measured under emulated HF stop-string, vLLM detokenizer, and EOS-appended semantics, so backend stop behavior never silently decides the outcome.
+- Token-budget robustness frontier: the search decision recomputed at every smaller token budget, post-hoc and exact.
+- Cross-tokenizer boundary portability check (`doctor --reference-model`).
+- Prompt-boundary sensitivity sweep (`run --sensitivity-sweep`): measures whether truncating the prompt mid-token flips the selection.
+
+**Operator experience.**
+- `doctor` pre-flight validation of checkpoint assets and fixtures without loading weights, with actionable next-command suggestions.
+- `fixtures build`: CSV fixture authoring that makes search/held-out leakage structurally unbuildable.
+- Local JSON output and a static, color-coded HTML comparison report with no external assets.
+- A committed synthetic sample report that regenerates byte-identically.
+- An optional local Hugging Face adapter restricted to supported GPT-2 and Llama causal-language-model configurations with standalone safetensors weights.
+
+The format catalog and model-loader support are different things. A Gemma-format hypothesis does **not** mean this adapter loads Gemma model architectures. The report is a static heatmap, not a live training or model-internals dashboard.
 
 ## How this differs from nearby tools
 
 This is not a benchmark suite and not an inference server. The distinctions
 below are verifiable design differences, grounded in the referenced sources
-(checked 2026-10-12), not superiority claims.
+(checked 2026-10-13; research log in `docs/RESEARCH_LOG.md`), not superiority claims.
 
 **Exact token sequences in, exact token sequences out.** General harnesses take
 text strings and apply the checkpoint's own chat template: lm-eval renders via
@@ -112,19 +144,6 @@ model's training template, serve inference, or train anything. The bundled
 fixtures demonstrate the schema; they are not a scientifically sufficient
 benchmark.
 
-## Included source
-
-- Strict, bounded JSON fixture loading with search/held-out separation checks.
-- Text-only ChatML, Llama 3 and Gemma serialization hypotheses, plus bounded BOS and prefix mutations.
-- Raw token evaluation, explicit boundary detection with a text-level mismatch diagnostic, cancellation and sanitized failure records.
-- A conservative selection rule: exactly one candidate must pass every search fixture; only that candidate reaches held-out evaluation. Ties and failures abstain.
-- A `doctor` pre-flight command that validates checkpoint assets and fixtures without loading weights.
-- An optional local Hugging Face adapter restricted to supported GPT-2 and Llama causal-language-model configurations with standalone safetensors weights.
-- Local JSON output and a static, color-coded HTML comparison report with no external assets.
-- A committed synthetic sample report that regenerates byte-identically.
-
-The format catalog and model-loader support are different things. A Gemma-format hypothesis does **not** mean this adapter loads Gemma model architectures. The report is a static heatmap, not a live training or model-internals dashboard.
-
 ## How to interpret a result
 
 `compatible_on_fixture_set` means the sole search winner also passed the supplied held-out cases under this exact run configuration. It does not recover a model's historical training template or establish general compatibility. `ambiguous` means several candidates passed; `no_candidate` means none passed. A partial, failed or cancelled evaluation is not a valid aggregate comparison.
@@ -136,8 +155,8 @@ The current adapter uses greedy full-prefix recomputation, float32 weights, no K
 ```text
 model_protocol_lab/       Renderer, evaluator, catalog, loader, experiment, reports, CLI
 tests/                    Core, workflow, adapter-integration, e2e and sample-report tests
-examples/                 Small synthetic fixture file and a byte-deterministic sample report
-docs/                     Usage and security guidance
+examples/                 Fixture files (JSON + CSV) and a byte-deterministic sample report
+docs/                     Usage, FAQ, research log, and security guidance
 .github/workflows/       CI: lint, typecheck, tests on 3.11-3.13, packaging
 DEVELOPMENT_PLAN.md       Architecture, milestones, test matrices and release gates
 VALIDATION.md             Verification evidence and limitations
