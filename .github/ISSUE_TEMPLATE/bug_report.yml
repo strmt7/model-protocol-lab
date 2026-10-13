@@ -1,0 +1,50 @@
+---
+name: Bug report
+description: Something behaved differently than documented
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Package version (`python -c "import model_protocol_lab"` won't print one; use the git commit or release tag)
+      placeholder: commit or tag, e.g. 0.1.0a0
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+      placeholder: 3.12.3
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      description: The exact command, with placeholder paths (do not paste secrets or private prompts)
+      placeholder: python -m model_protocol_lab run --model ... --dataset ... --family chatml --boundary-ids ... --output ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What the docs (README, USAGE.md, VALIDATION.md) led you to expect
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Full error output or the unexpected behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran `python -m model_protocol_lab doctor` on the inputs where applicable and include its verdict below
+        - label: I have not attached model weights, credentials, or private prompts
