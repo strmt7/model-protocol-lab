@@ -1,8 +1,9 @@
 """Asset-validation tests independent of optional model dependencies."""
+
 import json
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from model_protocol_lab.backends import _ids_valid, _manifest, _member, _model_assets, _read_json
 
@@ -17,7 +18,13 @@ class AssetTests(unittest.TestCase):
     def test_member_rejects_paths_and_missing_assets(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ("../config.json", "sub/config.json", "sub\\config.json", "/config.json", "missing.json"):
+            for name in (
+                "../config.json",
+                "sub/config.json",
+                "sub\\config.json",
+                "/config.json",
+                "missing.json",
+            ):
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     _member(root, name)
 
@@ -71,8 +78,44 @@ class AssetTests(unittest.TestCase):
             root = Path(tmp)
             (root / "config.json").write_text("{}", encoding="utf-8")
             (root / "model.safetensors.index.json").write_text(
-                json.dumps({"weight_map": {"weight": "part.safetensors"}}), encoding="utf-8")
+                json.dumps({"weight_map": {"weight": "part.safetensors"}}), encoding="utf-8"
+            )
             with self.assertRaises(ValueError):
                 _model_assets(root)
             (root / "part.safetensors").write_bytes(b"synthetic shard")
             self.assertIn("part.safetensors", _model_assets(root))
+
+
+class WeightIndexEdgeTests(unittest.TestCase):
+    def _root_with_index(self, tmp, weight_map):
+        from pathlib import Path as _Path
+
+        root = _Path(tmp)
+        (root / "config.json").write_text("{}", encoding="utf-8")
+        (root / "model.safetensors.index.json").write_text(
+            json.dumps({"weight_map": weight_map}), encoding="utf-8"
+        )
+        return root
+
+    def test_empty_and_nondict_weight_maps_rejected(self):
+        from tempfile import TemporaryDirectory as _TD
+
+        for mapping in ({}, [], "x", None, 0):
+            with self.subTest(mapping=mapping), _TD() as tmp:
+                root = self._root_with_index(tmp, mapping)
+                with self.assertRaises(ValueError):
+                    _model_assets(root)
+
+    def test_oversized_asset_json_rejected(self):
+        from pathlib import Path as _Path
+        from tempfile import TemporaryDirectory as _TD
+
+        with _TD() as tmp:
+            path = _Path(tmp) / "big.json"
+            # Sparse file: reports a huge size without consuming disk, so this
+            # stays reliable on small tmpfs mounts.
+            with path.open("wb") as handle:
+                handle.write(b'{"k": "')
+                handle.truncate(128 * 1024 * 1024 + 1)
+            with self.assertRaises(ValueError):
+                _read_json(path)
