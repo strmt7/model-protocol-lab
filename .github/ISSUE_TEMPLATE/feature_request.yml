@@ -1,0 +1,29 @@
+---
+name: Feature request
+description: Propose a change to the lab's behavior or scope
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What experiment can you not run today, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The smallest change that would solve it
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design constraints
+      description: The lab's guarantees are load-bearing; confirm your proposal respects them
+      options:
+        - label: No model downloads and no remote code execution by the adapter
+        - label: Local-only outputs; raw evidence stays opt-in
+        - label: Deterministic, byte-identical reports for identical inputs
+        - label: The conservative selection rule (abstain on ties/failures) is preserved, or the proposal explains why it should change

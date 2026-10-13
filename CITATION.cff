@@ -1,0 +1,25 @@
+# Citation metadata for this software. Only cff-version, message, title and
+# authors are required by the schema; the rest is recommended detail.
+# `date-released` is intentionally omitted: no release has been cut yet.
+cff-version: 1.2.0
+title: "model-protocol-lab"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Stratos
+    alias: strmt7
+version: 0.1.0a0
+repository-code: "https://github.com/strmt7/model-protocol-lab"
+license: MIT
+abstract: >-
+  A bounded experiment lab for local LLMs: render conversation-format
+  hypotheses as exact token sequences, evaluate them against a local
+  checkpoint with explicit boundary detection, and select at most one
+  candidate under a conservative abstention rule with strict
+  search/held-out separation.
+keywords:
+  - llm
+  - evaluation
+  - tokenizer
+  - chat-template
+  - experiment

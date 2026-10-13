@@ -1,30 +1,34 @@
 """Schema, selection, privacy and CLI contracts using scripted fixtures."""
-from dataclasses import replace
+
 import argparse
 import io
 import json
+import unittest
+from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
-import unittest
-from contextlib import redirect_stdout
 
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.cli import main, parse_boundary
 from model_protocol_lab.core import Generation, Split
-from model_protocol_lab.datasets import load_dataset, parse_dataset, MAX_BYTES
+from model_protocol_lab.datasets import MAX_BYTES, load_dataset, parse_dataset
 from model_protocol_lab.experiments import run_experiment
 from model_protocol_lab.reporting import render_html, save_report
-from tests.test_core import BASE, RAW, GOOD, FakeBackend, case, ids
+from tests.test_core import BASE, GOOD, RAW, FakeBackend, case, ids
 
 
 def dataset_object():
     def item(name):
-        return {"id": name, "group": name,
-                "messages": [{"role": "user", "content": "question:" + name}],
-                "expected": "ok"}
-    return {"search": [item("s1"), item("s2")],
-            "held_out": [item("h1"), item("h2")]}
+        return {
+            "id": name,
+            "group": name,
+            "messages": [{"role": "user", "content": "question:" + name}],
+            "expected": "ok",
+        }
+
+    return {"search": [item("s1"), item("s2")], "held_out": [item("h1"), item("h2")]}
 
 
 def split():
@@ -32,8 +36,14 @@ def split():
 
 
 def experiment(backend=None, formats=(BASE,), cancel=None):
-    return run_experiment(backend or FakeBackend(), formats, split(),
-                          boundary=ids("|"), max_new_tokens=len(RAW), cancel=cancel)
+    return run_experiment(
+        backend or FakeBackend(),
+        formats,
+        split(),
+        boundary=ids("|"),
+        max_new_tokens=len(RAW),
+        cancel=cancel,
+    )
 
 
 class DatasetTests(unittest.TestCase):
@@ -76,7 +86,7 @@ class DatasetTests(unittest.TestCase):
             file.write_text(json.dumps(dataset_object()), encoding="utf-8")
             self.assertEqual(len(load_dataset(file).search), 2)
             file.write_bytes(b"\xff")
-            with self.assertRaises(UnicodeDecodeError):
+            with self.assertRaisesRegex(ValueError, "not valid UTF-8"):
                 load_dataset(file)
 
     def test_split_leakage_survives_json_loading(self):
@@ -113,8 +123,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(backend.generated), 2)
 
     def test_heldout_failure_is_not_reported_as_compatibility(self):
-        backend = FakeBackend(generate_script=[GOOD, GOOD,
-                                              Generation(ids("no|tail"), "limit"), GOOD])
+        backend = FakeBackend(
+            generate_script=[GOOD, GOOD, Generation(ids("no|tail"), "limit"), GOOD]
+        )
         result = experiment(backend)
         self.assertEqual(result["decision"], "held_out_failed")
         self.assertEqual(result["held_out"]["summary"]["exact_and_boundary_passes"], 1)
@@ -123,7 +134,9 @@ class WorkflowTests(unittest.TestCase):
         for reason in ("cancelled", "error"):
             with self.subTest(reason=reason):
                 result = experiment(FakeBackend(Generation((), reason)))
-                self.assertEqual(result["decision"], "cancelled" if reason == "cancelled" else "failed")
+                self.assertEqual(
+                    result["decision"], "cancelled" if reason == "cancelled" else "failed"
+                )
                 self.assertIsNone(result["selected_candidate"])
                 self.assertIsNone(result["held_out"])
 
@@ -165,9 +178,8 @@ class ReportTests(unittest.TestCase):
             self.assertIn("observations", saved["search"][0])
 
     def test_existing_directory_is_not_overwritten(self):
-        with TemporaryDirectory() as tmp:
-            with self.assertRaises(FileExistsError):
-                save_report(experiment(), tmp)
+        with TemporaryDirectory() as tmp, self.assertRaises(FileExistsError):
+            save_report(experiment(), tmp)
 
     def test_html_escapes_candidate_names_and_decisions(self):
         result = experiment()
@@ -205,8 +217,10 @@ class CLITests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main(["inspect", str(path)]), 0)
-            self.assertEqual(json.loads(output.getvalue()),
-                             {"search_cases": 2, "held_out_cases": 2, "valid": True})
+            self.assertEqual(
+                json.loads(output.getvalue()),
+                {"search_cases": 2, "held_out_cases": 2, "valid": True},
+            )
 
     def test_boundary_parser(self):
         self.assertEqual(parse_boundary("1, 2,3"), (1, 2, 3))

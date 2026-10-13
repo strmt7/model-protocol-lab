@@ -1,0 +1,10 @@
+# Pre-commit hooks. Install with `pre-commit install`; run manually with
+# `pre-commit run --all-files`. The ruff rev is pinned to the line verified in
+# CI and the dev extra; Dependabot (pre-commit ecosystem) proposes updates.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
