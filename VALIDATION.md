@@ -1,18 +1,138 @@
 # Validation status
 
-## Evidence available for this source snapshot
+## Evidence — second hardening round (executed 2026-10-13, Python 3.12.3, Linux x86-64)
 
-- Source-level review of renderer and evaluator invariants, failure handling, cancellation, split separation, report escaping and privacy defaults.
-- Test source covering deterministic fake-backend behavior, invalid inputs, boundary truncation, partial runs, search selection, dataset parsing and report serialization.
-- Source inspection and archive packaging checks are distinct from application execution.
+A fresh-eyes second pass (independent audit of all 10 modules, a new
+adversarial red-team round with novel vectors, re-verification of every
+workflow and documented command). All commands run from the repository root.
+
+- `python -m unittest discover -s tests -t .` — **224 tests, all passing**
+  (213 carried over + 11 new regression tests), across **4 consecutive green
+  executions** (no variance — no flakiness). Suite now also passes with only
+  the `[dev]` extra installed: `OK (skipped=40)` — the 3 hf-dependent tests
+  that previously *failed* without torch now skip cleanly like the other 37,
+  so the README quick-start `[dev]`-only path is green.
+- `ruff check` and `ruff format --check` — clean on
+  `model_protocol_lab tests examples` (20 files).
+- `mypy model_protocol_lab` — clean (10 source files).
+- `coverage run -m unittest discover -s tests -t .` — **97% total line
+  coverage** (961 statements), holding the bar; new code is covered by the
+  new regression tests.
+- `bandit -r model_protocol_lab` — **0 issues** at any severity/confidence.
+- `pip-audit` (fresh venv, 2026-10-13) — 12 known vulnerabilities, all in the
+  venv's bundled `pip 24.0` itself; **zero in any project dependency**
+  (torch, transformers, safetensors, tokenizers audited clean).
+- `python -m build` + `twine check` — re-verified clean in round 1; packaging
+  metadata unchanged since.
+- Fresh-eyes audit findings fixed: 1 medium (stock GPT-2 unusable with the
+  CLI default `--max-context 2048` — now fails fast with the distinct,
+  actionable code `local_context_limit_exceeds_declared_window`, documented
+  in `docs/USAGE.md`) and 6 lows (false `candidate_fingerprint` docstring
+  corrected; `run_experiment` now validates `boundary`/`cancel`/fingerprint
+  types up front instead of raw `TypeError`s; `evaluate` rejects non-`Event`
+  `cancel`; `doctor` validates `boundary_ids` element types and returns a
+  uniform report shape on early failures). Each with a regression test.
+- Red-team round 2 findings fixed: U1 (NFD/NFC evasion of ID-uniqueness and
+  cross-split leakage checks — `Split` now compares NFC-normalized keys,
+  stored data stays byte-exact) and T1 (terminal escape injection via raw
+  fixture IDs in `inspect`/`run` stderr warnings — control characters
+  stripped). 9 of 10 probed vectors verified defended with PoCs. Full
+  triage in `docs/SECURITY.md`.
+- Docs: `docs/USAGE.md` documents the GPT-2 context-window requirement and
+  the NFC-normalization behavior; round-1 "not established" items below are
+  unchanged.
+
+## Evidence (executed 2026-10-12, Python 3.12.3, Linux x86-64)
+
+The following were actually run against this working tree; commands are
+reproducible from the repository root in a fresh virtual environment.
+
+- `python -m pip install -e .` and `python -m pip install -e ".[dev,hf]"`
+  (torch 2.14.1+cpu, transformers 5.19.0, safetensors 0.8.0, tokenizers —
+  CPU-only wheels; no model weights downloaded at any point).
+- `python -m unittest discover -s tests -t .` — **213 tests, all passing**
+  across repeated runs (8+ consecutive green executions after a transient
+  tmpfs-space flake in an oversized-file test was fixed with a sparse file).
+  Suite composition: core invariants, dataset validation, workflows/selection,
+  CLI end-to-end (subprocess), adapter integration against a locally generated
+  tiny GPT-2 safetensors checkpoint (config validation, strict
+  loading-info checks, greedy determinism, cancellation, failure records),
+  `doctor` checks, sample-report golden test, hypothesis property tests
+  (dataset loading, fixture separation, boundary parsing), and regression
+  tests for every security/red-team finding.
+- `ruff check` and `ruff format --check` — clean on
+  `model_protocol_lab tests examples` (includes flake8-bandit `S` rules).
+- `mypy model_protocol_lab` — clean, both with the `hf` extra installed and
+  in a venv without it (optional imports silenced via per-module override).
+- `coverage run -m unittest discover -s tests -t .` — **97% total line
+  coverage**; `datasets.py`, `cli.py` (99%), `experiments.py`, `catalog.py` at
+  100%/near-100%, `core.py` at 98%, `reporting.py` at 98%, `backends.py` at
+  93%, `doctor.py` at 95%. Remaining misses are defensive/racy branches:
+  mid-manifest file substitution, lock-race cancellation windows, non-finite
+  logits guards, undecodable boundary diagnostics, the non-`local_` backend
+  error branch, and the `__main__` SystemExit path — deliberately not chased
+  with flaky tests.
+- `python -m build` + `twine check` — sdist and wheel build; metadata valid
+  (`License-Expression: MIT`, `License-File: LICENSE`).
+- CLI smoke: `catalog`, `inspect examples/fixtures.json`, and `doctor` against
+  synthetic and real (locally generated) checkpoint directories.
+- HTML report validated programmatically: required structure, zero external
+  assets (no http/https/script/link/img/iframe, strict CSP), all text pairs at
+  WCAG AA contrast (minimum measured 6.81:1), hostile-input escaping, byte-identical
+  re-rendering, all six decision values rendering safely.
+- Config files validated: CI YAML, Dependabot YAML, pre-commit YAML and
+  `CITATION.cff` parse and match their schemas; GitHub Action versions
+  (`checkout@v7.0.1`, `setup-python@v7.0.0`) and pre-commit hook IDs/tag
+  (`ruff-check`, `ruff-format`, `v0.17.0`) verified against the official
+  release/tag APIs and the hook manifest. (`pre-commit run` itself could not
+  execute in this sandbox — outbound git to github.com times out — but runs
+  exactly the `ruff check`/`ruff format` commands verified clean here.)
+- Adversarial red-team round: 1 high (FIFO hang), 1 medium (output-dir
+  ordering), 4 low findings — all fixed with regression tests; 10 attack
+  vectors verified as defended (selection-rule gaming, boundary bypasses,
+  locale-independent byte-identical reports, symlink escapes, XSS, supply
+  chain, ReDoS, algorithmic DoS, generation-config influence, docs
+  spot-checks). Full report in `docs/SECURITY.md`.
+- `bandit` — 0 issues on `model_protocol_lab/`; `pip-audit` — clean on the
+  installed set (after upgrading install-time `pip`/`setuptools`).
+
+## Design notes with primary-source grounding
+
+- Raw token evaluation (`add_special_tokens=False`) follows the workflow the
+  Hugging Face chat-templating docs prescribe for avoiding duplicated special
+  tokens; the BOS-duplication pitfall it avoids is documented by both HF and
+  lm-evaluation-harness.
+- The token-ID boundary match is exact by design; the known false-negative
+  mode (same boundary text, different tokenization — cf. HF transformers'
+  `StopStringCriteria`) is surfaced per observation as `boundary_text_match`
+  and documented in `docs/USAGE.md` §4. It never changes the pass criterion.
+- Decode order of operations: the lab cuts in token-ID space, then decodes
+  (`decode(output_ids[:cut])`, `skip_special_tokens=False`,
+  `clean_up_tokenization_spaces=False`); lm-eval decodes first and truncates
+  at the string level. These can differ at the cut edge for subword
+  tokenizers; boundary IDs should be verified in context (`doctor
+  --boundary-ids`).
+- The conservative selection rule (exactly one all-pass candidate; ties and
+  failures abstain; winner frozen before held-out) has no counterpart in the
+  surveyed harnesses; it is this lab's own discipline, not an industry
+  standard.
 
 ## Not established
 
-The application and its tests have not been executed. No package installation, import check, bytecode compilation, dependency resolution, CPU/GPU model run, browser rendering test, coverage measurement, mutation-testing run or benchmark has been performed for this snapshot. The presence of a test does not mean it passes. This is a source handoff, not a validated release.
+- No real (non-synthetic) model run has been performed; adapter behavior on
+  production checkpoints, CPU/GPU parity, and VRAM fit are unverified.
+- No browser rendering check of `report.html` (structure/contrast/escaping
+  validated programmatically only).
+- No mutation-testing run; no benchmark of any kind.
+- The weekly CI schedule and Dependabot have not yet executed on GitHub.
+- `pre-commit run --all-files` has not executed end-to-end (see above).
 
 ## Important limitations
 
-1. The local adapter's supported architecture and dependency combinations require integration testing. GPT-2/Llama-only loading is intentionally narrow; unsupported configurations should fail closed.
+1. The local adapter's supported architecture and dependency combinations have
+   integration tests only against a synthetic tiny GPT-2 checkpoint.
+   GPT-2/Llama-only loading is intentionally narrow; unsupported configurations
+   should fail closed.
 2. Exact string fixtures are strict behavioral probes, not general model-quality metrics. Group IDs and exact-duplicate checks do not establish semantic independence.
 3. A unique all-pass search candidate can still be a false selection on an insufficient fixture set. There is no statistical confidence estimate.
 4. The supplied example is only a schema demonstration. Build separate representative search and held-out families before drawing conclusions.

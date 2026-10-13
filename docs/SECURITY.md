@@ -4,7 +4,119 @@
 
 Treat checkpoints, tokenizer files, fixtures, generated text and reports as separate trust boundaries. Local-only loading and safetensors reduce exposure; they do not make arbitrary files, native dependencies or GPU drivers safe. Run unfamiliar model assets in an appropriately isolated environment with resource limits.
 
-Use trusted, immutable checkpoint directories. Do not grant this process unnecessary filesystem or network access. The adapter requests local-only model resolution, disables remote model code and rejects pickle weight layouts; this has not been verified by runtime network-isolation tests.
+Use trusted, immutable checkpoint directories. Do not grant this process unnecessary filesystem or network access. The adapter requests local-only model resolution, disables remote model code and rejects pickle weight layouts; runtime network isolation is verified by `test_no_network_access_during_doctor_and_backend_init`. Run `doctor` on any unfamiliar checkpoint before evaluation; it validates assets without loading weights.
+
+## Security audit (2026-10-12)
+
+A full audit was conducted against this tree and every finding was resolved or
+explicitly accepted below. Methodology: `pip-audit 2.10.1` (OSV DB) on the
+installed dependency set; `bandit 1.9.4` on `model_protocol_lab/`; ruff
+flake8-bandit (`S`) rules in CI; manual line-by-line review of all package
+modules; adversarial PoCs (XSS payloads through `render_html`, path-traversal
+names through `_member`, 100 kB ReDoS probes, deeply-nested/NaN JSON through
+the dataset loader). `semgrep` could not run (sandbox `/tmp` exhaustion);
+bandit + ruff `S` + manual review covered the same ground.
+
+### Findings and resolutions
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| F1 | Medium | No lockfile/hashes; `torch>=2.6` unbounded — fresh installs trust PyPI tip-of-range. | Upper-bound discipline documented; `pip-audit` runs as a CI gate (`security` job) on every build; torch CVE posture tracked below. |
+| F2 | Low | `pip-audit` cannot see `torch 2.14.1+cpu` (local version tag). | Manual CVE review 2026-10-12: postdates fixes for CVE-2025-3000 and CVE-2025-32434; CVE-2026-4538 (`torch.export.load`) is not reachable — the codebase never calls `torch.export.load`/`torch.load`; weights load only via `from_pretrained(use_safetensors=True, weights_only=True)`. Re-verify on every torch bump. |
+| F3 | Low | Report files created with default umask (0644) — readable by other local users. | Fixed: `save_report` now creates the directory with `0o700` and files with `0o600`, using `O_EXCL` exclusive creation. Regression test asserts the modes. |
+| F4 | Info | `_read_json` caps JSON at 128 MB but HF re-reads `tokenizer.json` uncapped. | Fixed: `stat()` size check (128 MB) on `tokenizer.json` before `PreTrainedTokenizerFast` loads it; sparse-file regression test. |
+| F5 | Info | Deeply nested JSON raised bare `RecursionError`, not `ValueError`. | Fixed: caught and re-raised as `ValueError("Dataset nesting too deep")`. |
+| F6 | Info | `load_dataset` on a TTY/char device could block indefinitely. | Fixed: refuse character/block devices with `ValueError`. Superseded by H1 (2026-10-12): FIFOs, sockets and directories are now refused too; only regular files are accepted. |
+| F7 | Low | CI used mutable action tags and had no audit gate. | Fixed: actions pinned to SHAs; new `security` CI job runs `pip-audit` (after `pip install -U pip setuptools`) and `bandit`, both gating. |
+
+### Red-team round (2026-10-12)
+
+An adversarial review round found 1 high, 1 medium and 4 low issues; all
+fixed with regression tests:
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| H1 | High | F6 was fixed incompletely: a named FIFO with no writer hangs `load_dataset` forever (no timeout), contradicting F6's own rationale. | Fixed: `load_dataset` now opens with `O_NONBLOCK` and `fstat`s the fd, refusing everything that is not a regular file (char/block devices, FIFOs, sockets, directories). The fd-based check also closes the stat→open TOCTOU. Watchdog-thread regression test proves no hang. |
+| M1 | Medium | Output-path failures surfaced only after the expensive run; the completed result was discarded with it. | Fixed: the CLI claims the output directory (via new `prepare_report_dir`) before backend init; on any failure before the report is saved the empty dir is released so retries still see a fresh path. Regression tests cover init failure and path-through-file. |
+| L1 | Low | Empty `expected` answers are trivially satisfiable (a backend emitting only the boundary passes) with no warning. | Fixed: `inspect` and `run` now warn on stderr naming the vacuous fixtures; documented in `docs/USAGE.md`. |
+| L2 | Low | `candidate_fingerprint` was syntactic: `repeat_bos=True` with `bos=""` fingerprinted differently from `repeat_bos=False`, contradicting `local_repairs`' own dedup notion of identity. | Fixed: the fingerprint payload is normalized exactly like the dedup key. |
+| L3 | Low | Intermediate report parent dirs were 0o755, overstating the "readable only by the invoking user" claim. | Fixed: `prepare_report_dir` chmods every created path component to 0o700; regression test asserts all components. |
+| L4 | Low | `doctor`'s `tokenizer_deep` failure interpolated raw dependency exception text into machine-readable output — the one hole in the sanitized-error discipline. | Fixed: maps to the fixed code `tokenizer_deep_check_failed`. |
+
+The red team also verified dynamically (socket firewall raising on any
+`connect`) that `doctor`, backend init and generation perform zero network
+access — this retires residual risk #4 below. A regression test
+(`test_no_network_access_during_doctor_and_backend_init`) now guards it.
+
+`pip-audit` raw results: 6 vulns in `pip 24.0` and 2 in `setuptools 78.1.0`
+(install-time tools only; the package has zero runtime dependencies) —
+resolved by upgrading (`pip install -U pip setuptools`); post-upgrade audit is
+clean. `transformers 5.19.0`, `safetensors 0.8.0`, `tokenizers 0.23.3` audited
+clean.
+
+### Red-team round 2 (2026-10-13)
+
+A second adversarial round probed novel vectors only (round-1 vectors were not
+re-tested). 9 of 10 vectors came back defended with PoC evidence: path
+traversal variants (`../`, absolute, `..\`, URL-encoded, null bytes — IDs never
+reach the filesystem); symlink TOCTOU (16,731 file↔symlink swaps: 6,480 clean
+loads, 14,791 sanitized `ValueError`s, zero unexpected exceptions, zero hangs);
+malicious fixtures (200k-deep nesting, duplicate keys, `NaN`/`Infinity`, 50 MB
+strings, invalid UTF-8 — all rejected; control chars and lone surrogates flow
+safely via `ensure_ascii` JSON and HTML escaping); HTML injection round 2 (12
+hostile payloads through the full pipeline: zero raw payloads in `report.html`;
+CSP verified byte-for-byte; `frame-ancestors` cannot be expressed via meta tag
+— noted limitation); concurrent runs (atomic `mkdir(exist_ok=False)` + `O_EXCL`
+prevent corruption; loser fails fast); resource exhaustion (caps exact,
+cooperative cancellation measured at 0.41 s into a ~18 s run, flat memory);
+CLI edge cases (`/`, `/dev/null`, dangling symlinks, fullwidth digits, 5000-digit
+ints — all clean argparse errors); tempfile hygiene (zero `tempfile` usage;
+reports written directly with `O_EXCL`). Two genuine findings, both fixed:
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| U1 | Low–Medium | Unicode normalization evasion: NFD/NFC variants of the same visual string (e.g. `café` vs `café`) evaded the fixture-ID uniqueness and cross-split identical-message checks, allowing silent held-out contamination. | Fixed: `Split.__post_init__` compares NFC-normalized keys for IDs, groups and message contents; stored fixture data stays byte-exact so the exact-token-sequence principle is preserved. Homoglyph/confusable detection is out of scope (no normalization form unifies those) and is documented in `core.py`. Regression tests cover ID, message and group variants. |
+| T1 | Low | Terminal escape injection: `inspect`/`run` interpolated raw fixture IDs into stderr warnings, so a hostile fixture file could rewrite the operator's terminal title or clear the screen. | Fixed: control characters (C0/C1) are stripped from IDs before display in both warnings (`cli._display_id`). Regression test asserts no ESC bytes on stderr. |
+
+`doctor`'s machine-readable output was additionally reviewed: checkpoint-controlled
+strings there are always emitted through `json.dumps` (`ensure_ascii=True`),
+which neutralizes terminal escapes — no change needed.
+
+### Proven safe (adversarial PoCs, observed not inferred)
+
+- **XSS:** hostile payloads in every dynamic `render_html` field render fully
+  neutralized (`html.escape`, `quote=True`); CSS classes from internal dicts;
+  CSP `default-src 'none'`; no external assets, no `<script>`.
+- **Path traversal:** `_member` rejects `..`/separators/symlinks (regex
+  `^[A-Za-z0-9_.-]+$` + `is_symlink`/`is_file` checks); shard names constrained
+  to `[A-Za-z0-9_.-]+\.safetensors`; `save_report` writes only fixed filenames.
+- **ReDoS:** the two regexes are linear char classes (100 kB near-miss in ~1 ms);
+  no nested quantifiers or alternation.
+- **Deserialization:** `NaN`/`Infinity`/duplicate keys rejected; 2 MB cap before
+  `json.loads`; no `pickle`/`yaml`/`marshal`/`eval`/`subprocess` in the package.
+- **Supply chain:** the only network-adjacent calls are two `from_pretrained`
+  (`local_files_only=True`, `trust_remote_code=False`, `token=False`), one
+  `PreTrainedTokenizerFast(tokenizer_file=…)` (local file), and
+  `importlib.metadata.version()` (local). No `hf_hub_download`,
+  `snapshot_download`, sockets, or HTTP clients anywhere.
+- **TOCTOU:** `_manifest` hashes every asset before and after HF loading and
+  compares size/mtime/ino + sha256; swaps fail closed.
+- **Cancellation:** the generate `Event` is checked before lock acquisition, in
+  the lock-retry loop, and between forward steps; all public caps are hard.
+
+### Residual risks (accepted)
+
+1. torch's `+cpu` local tag stays invisible to `pip-audit`; its CVE posture
+   needs manual re-verification on every bump.
+2. No hash-pinned lockfile: fresh installs trust PyPI within the declared
+   ranges; mitigated by the CI `pip-audit` gate.
+3. `_manifest` reads every weight file twice per run (before/after init) —
+   hundreds of GB of I/O on very large checkpoints; documented, not a defect.
+4. ~~Runtime network isolation of the adapter has not been verified by test
+   (code review only).~~ **Retired 2026-10-12:** verified dynamically under a
+   socket firewall (zero `connect` attempts across `doctor`, backend init and
+   generation); guarded by
+   `test_no_network_access_during_doctor_and_backend_init`.
 
 ## Data disclosure
 

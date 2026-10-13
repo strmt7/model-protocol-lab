@@ -9,14 +9,77 @@ description = "Local conversation protocol experiments with held-out evidence"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+license-files = ["LICEN[CS]E*"]
+keywords = ["llm", "evaluation", "tokenizer", "chat-template", "experiment"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = []
 
 [project.optional-dependencies]
 hf = ["torch>=2.6", "transformers>=4.57.1,<6", "safetensors>=0.6"]
+dev = ["ruff>=0.14", "mypy>=1.18", "coverage>=7.10", "hypothesis>=6.140"]
 
 [project.scripts]
 model-protocol-lab = "model_protocol_lab.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/strmt7/model-protocol-lab"
+
 [tool.setuptools.packages.find]
 include = ["model_protocol_lab*"]
 exclude = ["tests*", "docs*", "examples*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "S", "SIM", "BLE", "UP"]
+# NOTE: BLE001 (blind except) stays enabled. The `except Exception` blocks in
+# core.py/backends.py/doctor.py are deliberate sanitization boundaries: arbitrary
+# backend/dependency exceptions must be converted to fixed error codes and never
+# leak text. Each site carries an explicit `# noqa: BLE001` with that rationale.
+
+[tool.ruff.lint.per-file-ignores]
+# S101: asserts are the standard unittest mechanism in tests.
+# S105/S106: tests deliberately use fake secrets (e.g. SECRET) and tokenizer
+#   parameter names (unk_token) that bandit's name matching flags; no real
+#   credentials exist anywhere in this repo.
+# S603: test_e2e.py invokes the CLI via subprocess with fixed argv lists and
+#   shell disabled; no untrusted input reaches the shell.
+"tests/*" = ["S101", "S105", "S106", "S603"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+show_error_codes = true
+[[tool.mypy.overrides]]
+# The override must name the IMPORTED optional modules, not the importing file:
+# this silences missing-import errors for the optional HF stack when it is not
+# installed (the adapter itself stays importable without it).
+module = ["torch", "transformers"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["model_protocol_lab"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

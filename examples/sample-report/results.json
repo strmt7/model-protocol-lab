@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "selection_rule": "unique_all_search_pass",
+  "measurement": "exact_answer_and_boundary",
+  "seed": 20261012,
+  "max_new_tokens": 16,
+  "boundary_token_ids": [
+    124
+  ],
+  "backend_fingerprint": "synthetic-demo-backend-v1-not-a-model",
+  "statistical_confidence": "not_estimated",
+  "compute_comparison": "not_equal_compute_certified",
+  "decision": "compatible_on_fixture_set",
+  "search": [
+    {
+      "format": {
+        "name": "llama3",
+        "bos": "<|begin_of_text|>",
+        "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+        "turn_end": "<|eot_id|>",
+        "repeat_bos": false
+      },
+      "candidate_fingerprint": "sha256:b5bcfd60e28c3472af9989469e6ed70361ebdcc4821b36a457a0970edea5933c",
+      "summary": {
+        "status": "completed",
+        "planned": 2,
+        "attempted": 2,
+        "aggregate_eligible": true,
+        "exact_and_boundary_passes": 2,
+        "rate": 1.0,
+        "encoded_input_tokens": 446,
+        "retained_output_tokens": 32
+      }
+    },
+    {
+      "format": {
+        "name": "llama3/toggle-bos",
+        "bos": "<|begin_of_text|>",
+        "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+        "turn_end": "<|eot_id|>",
+        "repeat_bos": true
+      },
+      "candidate_fingerprint": "sha256:b2ba1718c692a8c92e6b88cdbd0d1c72e9348d58ba1889144cf63c7bc28a667f",
+      "summary": {
+        "status": "completed",
+        "planned": 2,
+        "attempted": 2,
+        "aggregate_eligible": true,
+        "exact_and_boundary_passes": 0,
+        "rate": 0.0,
+        "encoded_input_tokens": 514,
+        "retained_output_tokens": 32
+      }
+    },
+    {
+      "format": {
+        "name": "llama3/no-bos",
+        "bos": "",
+        "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+        "turn_end": "<|eot_id|>",
+        "repeat_bos": false
+      },
+      "candidate_fingerprint": "sha256:1b14d265044d796ab8503dad6b871a810209d0e0f10fcbb5f45c34ba7a972d41",
+      "summary": {
+        "status": "completed",
+        "planned": 2,
+        "attempted": 2,
+        "aggregate_eligible": true,
+        "exact_and_boundary_passes": 0,
+        "rate": 0.0,
+        "encoded_input_tokens": 412,
+        "retained_output_tokens": 32
+      }
+    },
+    {
+      "format": {
+        "name": "llama3/prefix-newline",
+        "bos": "<|begin_of_text|>",
+        "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>\n\n\n",
+        "turn_end": "<|eot_id|>",
+        "repeat_bos": false
+      },
+      "candidate_fingerprint": "sha256:4106eb906eebd5cb0b22a2b93629bc7c7e0bc627eb02ced1129fd06adb92d8bb",
+      "summary": {
+        "status": "completed",
+        "planned": 2,
+        "attempted": 2,
+        "aggregate_eligible": true,
+        "exact_and_boundary_passes": 0,
+        "rate": 0.0,
+        "encoded_input_tokens": 449,
+        "retained_output_tokens": 32
+      }
+    },
+    {
+      "format": {
+        "name": "llama3/prefix-trim",
+        "bos": "<|begin_of_text|>",
+        "user_prefix": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "assistant_prefix": "<|start_header_id|>assistant<|end_header_id|>",
+        "turn_end": "<|eot_id|>",
+        "repeat_bos": false
+      },
+      "candidate_fingerprint": "sha256:9207b25899b92f89dde3c3e8cd3aeefde7082db8cea281f924368ff82c2cbd1b",
+      "summary": {
+        "status": "completed",
+        "planned": 2,
+        "attempted": 2,
+        "aggregate_eligible": true,
+        "exact_and_boundary_passes": 0,
+        "rate": 0.0,
+        "encoded_input_tokens": 440,
+        "retained_output_tokens": 32
+      }
+    }
+  ],
+  "held_out": {
+    "summary": {
+      "status": "completed",
+      "planned": 2,
+      "attempted": 2,
+      "aggregate_eligible": true,
+      "exact_and_boundary_passes": 2,
+      "rate": 1.0,
+      "encoded_input_tokens": 429,
+      "retained_output_tokens": 32
+    }
+  },
+  "selected_candidate": "llama3",
+  "raw_evidence_included": false
+}
