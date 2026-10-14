@@ -127,9 +127,9 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, sensitivity sweep and held-out cards. No scripts, fonts or remote assets.
+- `report.html`: offline static comparison -- decision banner, section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, sensitivity sweep and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
-Open the HTML file in a browser. It loads no scripts, fonts or other remote assets. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
+Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
 Output requires a new directory and will not overwrite an existing one. Inspect a partial directory after any write failure. Do not assume that a file's existence proves a complete run.
 
@@ -345,3 +345,164 @@ owner-only permissions (fixture prompts can be sensitive). Empty `expected`
 answers warn on stderr exactly like `inspect`, since they pass vacuously.
 See `examples/fixtures.csv`, which builds to the equivalent of
 `examples/fixtures.json`.
+
+## 10. Interactive protocol debugger (`debug`)
+
+`debug` is an offline, stdlib-only REPL for poking at format hypotheses the
+way the experiments do: render a catalog hypothesis over a fixture's
+messages, inspect the per-segment char spans (and exact token IDs when a
+tokenizer is attached), step through response-boundary detection one token
+at a time, and audit fixtures for special-token literals -- all in one
+terminal session, scriptable for repeatability.
+
+```sh
+python -m model_protocol_lab debug --dataset examples/fixtures.json
+python -m model_protocol_lab debug --dataset examples/fixtures.json --model path/to/checkpoint
+python -m model_protocol_lab debug --dataset examples/fixtures.json --script session.txt
+```
+
+- `--dataset` (required): fixture JSON file, loaded through the same
+  bounded loader as `inspect` and `run`.
+- `--model` (optional): local checkpoint directory. This attaches **the
+  checkpoint's tokenizer only** -- it reuses `doctor`'s tokenizer path,
+  building a `PreTrainedTokenizerFast` from the checkpoint's
+  `tokenizer.json` (with the same 128 MB pre-load size cap). Model weights
+  are never loaded, no model code is executed, and nothing touches the
+  network. Without `--model`, `.tokens` and the per-segment token IDs print
+  a reminder instead of IDs; everything else works.
+- `--script` (optional): run a `.read` script non-interactively and exit
+  (no banner); deterministic output, suitable for checked-in operator
+  sessions.
+
+A live session starts with a banner naming the dataset, the fixture count,
+the active hypothesis family (starts at `chatml`) and the tokenizer state,
+then prompts `mpl:<family> fixture-<n> >`.
+
+Dot-commands (sqlite3-style: the dot namespace, unambiguous abbreviations
+like `.help ren`, `.help PATTERN` search, `#` comments):
+
+| Command | What it does |
+|---|---|
+| `.help [COMMAND\|PATTERN]` | List every dot-command, or full help for one |
+| `.use <family>` | Switch the format hypothesis (validated against the catalog) |
+| `.families` | List the 16 catalog families |
+| `.fixtures` | List loaded fixture ids (search, then held-out); current one marked `*` |
+| `.fixture <n\|id>` | Select the active fixture by number or id |
+| `.render` | Render the hypothesis over the active messages, with a per-segment char-span map (plus exact token IDs per segment when `--model` is given) |
+| `.tokens` | Exact token IDs of the full render (needs `--model`) |
+| `.boundary ID,ID,...` | Set the boundary token-ID sequence (1-16 ASCII IDs, same grammar as `run --boundary`) |
+| `.stream ID,ID,...` | Record a token stream (up to 4096 IDs) for `.step` to walk |
+| `.step [ID,ID,...]` | Walk boundary detection one token at a time; prints the running overhang (how much of the boundary currently matches as a stream suffix) and the first full-boundary position |
+| `.audit` | Flag special-token literals (e.g. `<|im_start|>`) embedded in fixture text that could forge a role boundary |
+| `.say` | Enter ad-hoc messages multiline (one per line; an optional `user:`/`assistant:` prefix sets the role, otherwise roles alternate starting with user); a lone `.` ends entry, and `.render` then uses the buffered messages instead of the fixture's |
+| `.save <path>` | Append the session transcript (command echoes plus output) to a file |
+| `.read <path>` | Execute a scripted command file (bounded: refused over 1 MB or 10k lines; nesting capped at 5) |
+| `.quit`, `.q` | Exit |
+
+Example session (real output; the segment map names every char span of the
+render, so the "extra" control tokens stop being invisible):
+
+```text
+$ python -m model_protocol_lab debug --dataset examples/fixtures.json
+model-protocol-lab debug 0.1.0a0
+dataset: examples/fixtures.json (4 fixtures) | family: chatml | tokenizer: none (rerun with --model PATH)
+Enter .help for usage hints.
+mpl:chatml fixture-1 > .fixture 1
+selected fixture 1: search-copy-blue
+mpl:chatml fixture-1 > .render
+render: family=chatml fixture=search-copy-blue messages=1 chars=91
+<|im_start|>user
+Reply with exactly BLUE and nothing else.<|im_end|>
+<|im_start|>assistant
+
+segments:
+  [0] bos              chars 0:0
+  [1] user_prefix      chars 0:17
+  [2] user_content     chars 17:58
+  [3] user_turn_end    chars 58:69
+  [4] open_suffix      chars 69:91
+mpl:chatml fixture-1 > .boundary 8
+boundary set: [8]
+mpl:chatml fixture-1 > .step 1,2,8,3
+...
+mpl:chatml fixture-1 > .quit
+```
+
+## 11. Differential backend stop testing (`diff-backends`)
+
+When a run verdict surprises you, the suspect is sometimes not the weights
+or the format hypothesis but the backend's stop behavior. `diff-backends`
+runs the lab's stop emulations -- HF `StopStringCriteria`
+(`hf_stop_string`), vLLM's detokenizer holdback with stop-string stripping
+(`vllm_holdback_strip`) and keeping (`vllm_holdback_keep`), and an
+EOS-appended truncation (`eos_appended`) -- over **one recorded token
+sequence** and reports where the emulated backends disagree:
+
+```sh
+python -m model_protocol_lab diff-backends \
+  --model path/to/checkpoint \
+  --prompt-text "the answer is" \
+  --output-text "42 STOP hello" \
+  --stops "STOP"
+```
+
+- `--model` (required): local checkpoint directory; tokenizer only --
+  weights are never loaded.
+- `--prompt-text`, `--output-text` (required): prompt and recorded output
+  text, each encoded with `add_special_tokens=False`.
+- `--stops` (required): comma-separated stop texts, e.g. `"STOP,</answer>"`.
+- `--eos-id` (default: none): EOS token id for the `eos_appended` cell.
+- `--min-tokens` (default 0): vLLM `min_tokens` gating applied to the
+  holdback cells.
+
+The divergence classes, with one-line meanings (each drawn from the
+vendors' own bug trackers; research log in `docs/RESEARCH_LOG.md`):
+
+- `KEPT_VS_STRIPPED` -- HF keeps the stop string in the returned text
+  while vLLM's default strips it (or vice versa); the same generation
+  scores differently depending on the backend.
+- `FIRING_STEP_DIFFERS` -- the emulated semantics disagree on *which*
+  output step completes the stop (or whether it fires at all).
+- `MIN_TOKENS_GATED` -- a stop that fires with `min_tokens=0` does not
+  fire under the given `--min-tokens`.
+- `EOS_PRECEDENCE` -- EOS fires at or before the stop-string firing step,
+  so stop-string vs EOS precedence changes the outcome.
+- `HARNESS_NORMALIZATION_RELIED` -- a strip-disposition cell's returned
+  text still contains the stop string (the strip failed), so correct
+  scoring would depend on the harness re-stripping.
+
+Reading the JSON output: the top level carries `prompt_tokens`,
+`output_tokens`, `min_tokens`, `eos_id`, `stop_texts`, `cells`,
+`divergences` and the `verdict` (`"agree"` or `"diverge"`). `cells` holds
+one record per stop text, with a `semantics` map of the four emulated
+cells; each cell records `available` (false when the emulation could not
+run -- recorded but excluded from the divergence checks), `fired`,
+`firing_step`, `truncated_ids`, `returned_text` (set only by the vLLM
+cells) and `disposition` (`"kept"`, `"stripped"`, or null for
+`eos_appended`). Each entry in `divergences` names the `class`, the
+`stop_text` and a human-readable `detail`. A compact real example:
+
+```sh
+$ python -m model_protocol_lab diff-backends --model path/to/checkpoint \
+    --prompt-text "the answer is" --output-text "42 STOP hello world" --stops "STOP"
+{
+  ...
+  "divergences": [
+    {
+      "class": "KEPT_VS_STRIPPED",
+      "stop_text": "STOP",
+      "detail": "vllm_holdback_strip returned '42 ' while hf_stop_string kept '42 STOP'"
+    }
+  ],
+  "verdict": "diverge"
+}
+```
+
+Scope limit: one stop string is emulated per stop text per run. Multi-stop
+earliest-completion selection is *not* emulated -- run each stop text
+separately (the `--stops` list exists to batch them). Streaming vs
+non-streaming divergence and match-position leftmost/rightmost rules are
+likewise not emulated; the port follows the vendors' documented
+non-streaming final-truncation paths. No semantics are invented: every cell
+is one of the existing emulations in the `backends` module, run with fixed
+inputs.
