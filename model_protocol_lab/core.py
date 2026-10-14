@@ -32,6 +32,19 @@ class Format:
     assistant_prefix: str
     turn_end: str
     repeat_bos: bool = False
+    # Optional per-role turn terminators; None means "use turn_end". Some
+    # real templates terminate user and assistant turns differently: the
+    # DeepSeek V3/R1 template leaves user turns unterminated while assistant
+    # turns end with <end of sentence>; Mistral v0.3 ends user turns with
+    # [/INST] and assistant turns with </s>. Empty-string overrides are
+    # honored (they are not None).
+    user_turn_end: str | None = None
+    assistant_turn_end: str | None = None
+    # Optional override for the trailing open-reply suffix; None means "use
+    # assistant_prefix". GLM-4 needs this: assistant turns are framed as
+    # <|assistant|>\n{content} but the generation prompt ends with a bare
+    # <|assistant|> (no newline).
+    open_suffix: str | None = None
 
     def __post_init__(self) -> None:
         fields = (self.name, self.bos, self.user_prefix, self.assistant_prefix, self.turn_end)
@@ -41,9 +54,17 @@ class Format:
             raise ValueError("Format name must be nonblank")
         if type(self.repeat_bos) is not bool:
             raise ValueError("repeat_bos must be a bool")
+        for optional in (self.user_turn_end, self.assistant_turn_end, self.open_suffix):
+            if optional is not None and type(optional) is not str:
+                raise ValueError("Optional Format fields must be strings or None")
 
     def render(self, messages: tuple[Message, ...]) -> str:
-        """repeat_bos means BOS before every message, including the open reply."""
+        """repeat_bos means BOS before every message, including the open reply.
+
+        Per-role turn terminators (user_turn_end/assistant_turn_end) fall
+        back to turn_end when unset; the open-reply suffix (open_suffix)
+        falls back to assistant_prefix when unset.
+        """
         if (
             type(messages) is not tuple
             or not messages
@@ -60,10 +81,13 @@ class Format:
             if index and self.repeat_bos:
                 parts.append(self.bos)
             prefix = self.user_prefix if message.role == "user" else self.assistant_prefix
-            parts.extend((prefix, message.content, self.turn_end))
+            per_role_end = self.user_turn_end if message.role == "user" else self.assistant_turn_end
+            turn_end = per_role_end if per_role_end is not None else self.turn_end
+            parts.extend((prefix, message.content, turn_end))
         if self.repeat_bos:
             parts.append(self.bos)
-        parts.append(self.assistant_prefix)
+        suffix = self.open_suffix if self.open_suffix is not None else self.assistant_prefix
+        parts.append(suffix)
         return "".join(parts)
 
 
@@ -87,6 +111,9 @@ def local_repairs(base: Format) -> tuple[Format, ...]:
             candidate.user_prefix,
             candidate.assistant_prefix,
             candidate.turn_end,
+            candidate.user_turn_end,
+            candidate.assistant_turn_end,
+            candidate.open_suffix,
             candidate.repeat_bos if candidate.bos else False,
         )
         unique.setdefault(key, candidate)
