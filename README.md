@@ -7,13 +7,13 @@
 
 **Is a local language model failing because of its weights, or because its conversations are formatted incorrectly?**
 
-Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — ChatML, Llama 3, Gemma, plus bounded BOS and prefix mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
+Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — a 16-family catalog (ChatML; Llama 3 and 4; Gemma 2 and 3; Qwen3; DeepSeek V3/R1 and V4.1; Mistral v0.3 and Large; Phi-4; GLM-4, 4.5 and 5.3; Kimi K2 and K3), plus bounded BOS and prefix mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
 
 What sets it apart: it measures checkpoints on token sequences their own chat templates would never produce; it detects response boundaries as token-ID subsequences rather than string stop-sequences; it generates exactly N tokens with no implicit EOS stop; and it abstains on ties instead of crowning a leaderboard winner. The differences are verifiable design decisions, documented with sources in [How this differs](#how-this-differs-from-nearby-tools) — not marketing claims.
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (509 tests, 98% line coverage), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (716 tests, 95% line coverage), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -68,14 +68,16 @@ python -m model_protocol_lab fixtures build examples/fixtures.csv -o examples/fi
 produced from `examples/fixtures.json`: a decision banner with a failure-mode
 diagnosis, run configuration, a color-coded candidate heatmap with pass-rate
 bars, a per-fixture outcome grid, decisive fixtures, token-budget robustness
-curves, and the held-out check. It is one self-contained file — no scripts,
-fonts or remote assets — and it never embeds raw prompts or generations.
+curves, and the held-out check. It is one self-contained file — a single
+tiny inline table-sorting script (hash-allowlisted in its
+Content-Security-Policy), no fonts or remote assets — and it never embeds
+raw prompts or generations.
 
 ## Capabilities
 
 **Exact-token measurement.**
 - Strict, bounded JSON fixture loading with search/held-out separation checks (IDs, groups and message inputs cannot leak across the split; NFC-normalized).
-- Text-only ChatML, Llama 3 and Gemma serialization hypotheses, plus bounded BOS and prefix mutations.
+- Text-only serialization hypotheses across a 16-family catalog — ChatML; Llama 3/4; Gemma 2/3; Qwen3; DeepSeek V3/R1/V4.1; Mistral v0.3/Large; Phi-4; GLM-4/4.5/5.3; Kimi K2/K3 — plus bounded BOS and prefix mutations (`catalog` lists every family with its source).
 - Raw token evaluation (`add_special_tokens=False`): explicit token-ID boundary detection with a text-level mismatch diagnostic, cooperative cancellation, and sanitized failure records.
 - Per-candidate response boundaries (`run --boundary-map`): each format hypothesis is measured with its own end-of-turn marker.
 
@@ -93,6 +95,8 @@ fonts or remote assets — and it never embeds raw prompts or generations.
 **Operator experience.**
 - `doctor` pre-flight validation of checkpoint assets and fixtures without loading weights, with actionable next-command suggestions.
 - `fixtures build`: CSV fixture authoring that makes search/held-out leakage structurally unbuildable.
+- `debug`: an interactive, offline protocol-debugger REPL over one dataset and one hypothesis — render with a per-segment char-span (and token-ID) map, step response-boundary detection one token at a time, and audit fixtures for special-token literals; `--model` attaches a checkpoint tokenizer only, weights never loaded. Try `python -m model_protocol_lab debug --dataset examples/fixtures.json`, then `.render`.
+- `diff-backends`: differential testing of emulated backend stop semantics (HF StopStringCriteria, vLLM detokenizer strip/keep, EOS-appended) on one recorded token sequence — prints a JSON verdict (`agree`/`diverge`) with the per-semantic cells and any divergence findings, so a surprising run verdict can be checked against backend stop behavior. Try `python -m model_protocol_lab diff-backends --model path/to/checkpoint --prompt-text "the answer is" --output-text "42 STOP" --stops "STOP"`.
 - Local JSON output and a static, color-coded HTML comparison report with no external assets.
 - A committed synthetic sample report that regenerates byte-identically.
 - An optional local Hugging Face adapter restricted to supported GPT-2 and Llama causal-language-model configurations with standalone safetensors weights.

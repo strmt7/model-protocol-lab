@@ -85,9 +85,9 @@ down.
   first-run UX fixes. No upstream drift found in any cycle.
 
 Final verification (independent runs for this section):
-- `python -m unittest discover -s tests -t .` — **509 tests, all passing**,
+- `python -m unittest discover -s tests -t .` — **708 tests, all passing**,
   consecutive green executions.
-- `coverage` — **98% total line coverage** (2171 statements).
+- `coverage` — **95% total line coverage** (2322 statements).
 - `ruff check` and `ruff format --check` — clean (25 files);
   `mypy model_protocol_lab` — clean (11 files).
 - CLI smoke: `catalog`, `inspect examples/fixtures.json`,
