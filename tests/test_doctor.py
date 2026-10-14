@@ -215,11 +215,14 @@ class FingerprintTests(unittest.TestCase):
         payload = json.dumps(
             {
                 "assistant_prefix": "<A>",
+                "assistant_turn_end": None,
                 "bos": "<B>",
                 "name": "base",
+                "open_suffix": None,
                 "repeat_bos": False,
                 "turn_end": "<E>",
                 "user_prefix": "<U>",
+                "user_turn_end": None,
             },
             sort_keys=True,
             separators=(",", ":"),

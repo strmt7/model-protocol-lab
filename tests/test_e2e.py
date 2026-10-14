@@ -41,7 +41,27 @@ class ModuleEntryTests(unittest.TestCase):
         proc = run_module("catalog")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         entries = json.loads(proc.stdout)
-        self.assertEqual({e["name"] for e in entries}, {"chatml", "llama3", "gemma"})
+        self.assertEqual(
+            {e["name"] for e in entries},
+            {
+                "chatml",
+                "llama3",
+                "gemma",
+                "qwen3",
+                "deepseek",
+                "deepseek41",
+                "mistral",
+                "mistral_large",
+                "phi4",
+                "gemma3",
+                "llama4",
+                "glm4",
+                "glm45",
+                "glm53",
+                "kimi2",
+                "kimi3",
+            },
+        )
 
     def test_module_no_args_exits_two(self):
         proc = run_module()
