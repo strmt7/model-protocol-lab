@@ -45,7 +45,7 @@ from model_protocol_lab.experiments import (
     run_experiment,
     stop_matrix,
 )
-from model_protocol_lab.reporting import render_html
+from model_protocol_lab.reporting import _SCRIPT, render_html
 from tests.test_core import BASE, FakeBackend, case, ids
 from tests.test_doctor import write_model_dir
 
@@ -1852,7 +1852,9 @@ class ReportingBranchTests(unittest.TestCase):
             },
         }
         html = render_html(result)
-        self.assertNotIn("<script>", html)
+        # The only <script> permitted is the allowlisted inline table sorter.
+        scrubbed = html.replace("<script>" + _SCRIPT + "</script>", "")
+        self.assertNotIn("<script>", scrubbed)
         self.assertNotIn("<img", html)
         self.assertNotIn(evil, html)
         # The escaped form is present: neutralization, not deletion.
