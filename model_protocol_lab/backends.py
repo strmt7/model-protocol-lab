@@ -115,13 +115,21 @@ class StopOutcome:
     ``available=False`` means the emulation could not run (e.g. a decode it
     needed failed); ``detail`` uses a fixed vocabulary, never raw backend
     text. ``truncated_ids`` is the token sequence the competitor would have
-    returned: a prefix of the recorded output.
+    returned: a prefix of the recorded output. ``returned_text`` is the text
+    the competitor would have returned when it differs from the decode of
+    ``truncated_ids``: currently set only by ``emulate_vllm_holdback``, whose
+    default ``include_stop_str_in_output=False`` strips the stop string from
+    the returned text while keeping the completing token in
+    ``truncated_ids`` (token_ids and text can disagree, exactly as upstream).
+    None everywhere else; the field defaults to None so old callers and
+    positional constructions are unaffected.
     """
 
     available: bool
     fired: bool
     truncated_ids: tuple[int, ...]
     detail: str
+    returned_text: str | None = None
 
 
 # Token representations for the HF stop-string port: decoded strings on the
@@ -349,6 +357,15 @@ def emulate_hf_stop_string(
     cleaned-vocab-string fallback). Without ``token_bytes`` the classic
     string path is used: token texts come from per-token
     ``backend.decode``, an approximation of HF's cleaned vocab strings.
+
+    HF always keeps the stop string: there is no include/exclude option
+    upstream -- ``truncated_ids`` ends with the token that completed the
+    stop string, and the returned text is exactly the decode of
+    ``truncated_ids``. This is a hard divergence from vLLM's default
+    ``include_stop_str_in_output=False``, which strips the stop string from
+    the returned text (see ``emulate_vllm_holdback``). The
+    ``StopOutcome.returned_text`` field stays None here: nothing is
+    stripped, so the kept text is simply ``backend.decode(truncated_ids)``.
     """
     if (
         not _valid_token_ids(prompt_ids)
@@ -389,7 +406,12 @@ def emulate_hf_stop_string(
 
 
 def emulate_vllm_holdback(
-    backend: Backend, output_ids: tuple[int, ...], stop_text: str
+    backend: Backend,
+    output_ids: tuple[int, ...],
+    stop_text: str,
+    *,
+    include_stop_str_in_output: bool = False,
+    min_tokens: int = 0,
 ) -> StopOutcome:
     """Emulate vLLM's detokenizer stop handling over a recorded output.
 
@@ -397,16 +419,35 @@ def emulate_vllm_holdback(
     each new token the decoded text is searched with the same
     ``find(stop, 1 - new_char_count - stop_len)`` window, and the
     earliest-completing stop string wins (one stop string here, so no
-    tie-break applies). On fire the text is truncated to the stop-string
-    start -- vLLM's default ``include_stop_str_in_output=False`` -- and
-    tokens after the one completing the stop string are dropped via
-    ``bisect_left`` over per-token text offsets, which for single-token
-    updates keeps exactly the firing prefix. The incremental text comes
-    from ``backend.decode`` of each prefix, an approximation of vLLM's
-    ``DecodeStream``; the ``stop_buffer_length`` holdback only withholds
-    streamed deltas and does not change this final truncation.
+    tie-break applies). With the default ``include_stop_str_in_output=False``
+    -- vLLM's upstream default and a hard divergence from HF, which always
+    keeps the stop string -- the returned text is truncated to the
+    stop-string start; pass ``include_stop_str_in_output=True`` to model the
+    kept variant, which returns the text through the stop string's end. The
+    completing token stays in ``truncated_ids`` either way: tokens after the
+    one completing the stop string are dropped via ``bisect_left`` over
+    per-token text offsets, which for single-token updates keeps exactly the
+    firing prefix. The exposed ``StopOutcome.returned_text`` is the text the
+    competitor would return (truncated to the stop start, or to the stop end
+    when kept). ``min_tokens`` ports vLLM's ``min_tokens`` gating (PR
+    #22014): upstream skips the stop check while ``num_output_tokens <=
+    min_tokens``. The check resumes at the first ungated step, but the find
+    window only covers the tail region where a newly completing stop could
+    begin (the negative ``find`` start counts from the end of the text), so
+    a stop fully completed during the gated period is *not* refound -- only
+    a stop completing at or after the gate (including one spanning the
+    gate boundary) fires. If the recorded output ends while still gated, no
+    check ever ran (``detail="gated_by_min_tokens"``). The
+    incremental text comes from ``backend.decode`` of each prefix, an
+    approximation of vLLM's ``DecodeStream``; the ``stop_buffer_length``
+    holdback only withholds streamed deltas and does not change this final
+    truncation.
     """
     if not _valid_token_ids(output_ids) or type(stop_text) is not str or not stop_text:
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    if type(include_stop_str_in_output) is not bool or not (
+        type(min_tokens) is int and min_tokens >= 0
+    ):
         return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
     stop_len = len(stop_text)
     texts: list[str] = []
@@ -428,9 +469,19 @@ def emulate_vllm_holdback(
         index = text.find(stop_text, 1 - new_char_count - stop_len)
         if index == -1:
             continue
+        if step <= min_tokens:
+            # vLLM skips the stop check while num_output_tokens <= min_tokens;
+            # the check simply resumes at the first ungated step. The find
+            # window (negative start counts from the end) only covers the
+            # tail region, so a stop fully completed during the gate is not
+            # refound -- only a stop completing at/after the gate fires.
+            continue
         stop_end = index + stop_len
         kept = bisect_left(offsets, stop_end, lo=1)
-        return StopOutcome(True, True, tuple(output_ids[:kept]), f"fired_at_step_{step}")
+        returned = text[:stop_end] if include_stop_str_in_output else text[:index]
+        return StopOutcome(True, True, tuple(output_ids[:kept]), f"fired_at_step_{step}", returned)
+    if min_tokens >= len(output_ids) and min_tokens > 0:
+        return StopOutcome(True, False, tuple(output_ids), "gated_by_min_tokens")
     return StopOutcome(True, False, tuple(output_ids), "no_stop_within_cap")
 
 

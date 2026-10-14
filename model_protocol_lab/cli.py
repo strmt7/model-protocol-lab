@@ -147,6 +147,69 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="New fixture JSON file; an existing path is never overwritten",
     )
+    # ANCHOR: new top-level subparsers are registered here (one block per command).
+    diff_cmd = sub.add_parser(
+        "diff-backends",
+        help="Differential-test emulated backend stop semantics on one token sequence",
+        allow_abbrev=False,
+    )
+    diff_cmd.add_argument(
+        "--model",
+        required=True,
+        type=Path,
+        help="Local checkpoint directory (tokenizer only; weights are never loaded)",
+    )
+    diff_cmd.add_argument(
+        "--prompt-text",
+        required=True,
+        help="Prompt text (encoded with add_special_tokens=False)",
+    )
+    diff_cmd.add_argument(
+        "--output-text",
+        required=True,
+        help="Recorded output text (encoded with add_special_tokens=False)",
+    )
+    diff_cmd.add_argument(
+        "--stops",
+        required=True,
+        help='Comma-separated stop texts, e.g. "STOP,</answer>"',
+    )
+    diff_cmd.add_argument(
+        "--eos-id",
+        type=int,
+        default=None,
+        help="EOS token id for the eos_appended cell",
+    )
+    diff_cmd.add_argument(
+        "--min-tokens",
+        type=int,
+        default=0,
+        help="vLLM min_tokens gating applied to the holdback cells",
+    )
+    debug_cmd = sub.add_parser(
+        "debug",
+        help="Interactive protocol debugger REPL (offline; tokenizer-only)",
+        allow_abbrev=False,
+    )
+    debug_cmd.add_argument(
+        "--dataset",
+        required=True,
+        type=Path,
+        help="Fixture JSON file loaded via datasets.load_dataset",
+    )
+    debug_cmd.add_argument(
+        "--model",
+        type=Path,
+        default=None,
+        help="Local checkpoint directory; attaches its tokenizer only "
+        "(never loads model weights) for exact token IDs",
+    )
+    debug_cmd.add_argument(
+        "--script",
+        type=Path,
+        default=None,
+        help="Run a .read script non-interactively and exit",
+    )
     return parser
 
 
@@ -231,6 +294,15 @@ def main(argv=None) -> int:
         if args.command == "catalog":
             print(json.dumps([asdict(fmt) for fmt in CATALOG.values()], indent=2))
             return 0
+        # ANCHOR: new top-level command dispatch goes here (one block per command).
+        if args.command == "diff-backends":
+            from .diffbackends import run_diff_backends
+
+            return run_diff_backends(args, parser)
+        if args.command == "debug":
+            from .debug import run_debug
+
+            return run_debug(args)
         if args.command == "inspect":
             try:
                 split = load_dataset(args.dataset)  # nosec B615 -- own bounded JSON reader
@@ -274,6 +346,8 @@ def main(argv=None) -> int:
             return 0 if result["verdict"] == "ok" else 1
         if args.command == "fixtures":
             from .fixtures import (
+                audit_findings_json,
+                audit_special_token_literals,
                 parse_fixture_csv,
                 read_authoring_file,
                 split_to_json_text,
@@ -290,7 +364,44 @@ def main(argv=None) -> int:
                         "these pass vacuously",
                         file=sys.stderr,
                     )
+                # Fixture hygiene (advisory GHSA-g5f9-3xfg-p9mf): a literal
+                # special token in fixture text would forge a role boundary
+                # when the fixture is composed into a prompt. The inventory
+                # comes from the base catalog formats; mutated candidates
+                # derive from the same framing strings, so the base
+                # inventory covers them. Findings warn only -- the build
+                # still succeeds and the exit code is unchanged.
+                findings = audit_special_token_literals(split, tuple(CATALOG.values()))
+                for finding in findings:
+                    print(
+                        "fixtures: warning: special-token literal "
+                        f"{finding.literal!r} in fixture "
+                        f"{_display_id(finding.fixture_id)!r} field "
+                        f"{finding.field!r} at offset {finding.offset} "
+                        f"collides with format {finding.format_name!r}",
+                        file=sys.stderr,
+                    )
+                # The strict fixture schema rejects extra top-level keys, so
+                # findings are recorded in a sidecar, never in the fixture
+                # file itself. Pre-check the sidecar path so a collision is
+                # reported before the fixture file is written.
+                sidecar = Path(str(args.output) + ".audit.json")
+                if sidecar.exists():
+                    raise ValueError("audit sidecar already exists; use a fresh path")
                 written = write_fixture_file(split_to_json_text(split), args.output)
+                try:
+                    write_fixture_file(audit_findings_json(findings, source=str(written)), sidecar)
+                except ValueError as sidecar_exc:
+                    # A concurrent writer won the sidecar race after our
+                    # pre-check: remove the fixture just written so no
+                    # half-built pair is left, and report the collision
+                    # distinctly from authoring-source errors.
+                    written.unlink(missing_ok=True)
+                    print(
+                        f"fixtures: output collision, nothing written: {sidecar_exc}",
+                        file=sys.stderr,
+                    )
+                    return 1
             except ValueError as exc:
                 # fixtures exists to diagnose authoring input; show the reason.
                 print(f"fixtures: invalid authoring source: {exc}", file=sys.stderr)
@@ -301,6 +412,8 @@ def main(argv=None) -> int:
                         "search_cases": len(split.search),
                         "held_out_cases": len(split.held_out),
                         "output": str(written),
+                        "audit_findings": len(findings),
+                        "audit_path": str(sidecar),
                     }
                 )
             )
@@ -468,6 +581,48 @@ def main(argv=None) -> int:
                         "search": search_rows,
                         "held_out": held_rows,
                     }
+                    # Backend-divergence diagnosis: differential-test the
+                    # emulated stop semantics over the winner's recorded
+                    # observations (search and held_out), with the decoded
+                    # boundary as the stop text -- mirroring how the
+                    # stop-matrix path derives it. Omitted when no
+                    # observations are usable; like every diagnosis here,
+                    # this must not fail the run.
+                    _divergence_obs: list[dict[str, Any]] = []
+                    for _entry in result.get("search") or []:
+                        if (
+                            type(_entry) is dict
+                            and type(_entry.get("format")) is dict
+                            and _entry["format"].get("name") == winner
+                            and type(_entry.get("observations")) is list
+                        ):
+                            _divergence_obs.extend(
+                                _obs for _obs in _entry["observations"] if type(_obs) is dict
+                            )
+                            break
+                    _held = result.get("held_out")
+                    _held_obs = _held.get("observations") if type(_held) is dict else None
+                    if type(_held_obs) is list:
+                        _divergence_obs.extend(_obs for _obs in _held_obs if type(_obs) is dict)
+                    try:
+                        _boundary_text: Any = backend.decode(winner_boundary)
+                    except Exception:  # noqa: BLE001 -- string cells degrade, never fail
+                        _boundary_text = None
+                    if type(_boundary_text) is str and _boundary_text and _divergence_obs:
+                        from .diffbackends import divergence_section_data
+
+                        try:
+                            _divergence = divergence_section_data(
+                                observations=_divergence_obs,
+                                stop_texts=(_boundary_text,),
+                                eos_id=eos_id,
+                                min_tokens=0,
+                                backend=backend,
+                            )
+                        except Exception:  # noqa: BLE001 -- new section degrades alone
+                            _divergence = None
+                        if _divergence is not None:
+                            result["backend_divergences"] = _divergence
                 # Token-budget frontier: post-hoc, exact, no model calls.
                 # Kept out of the stop-matrix's `if` so ambiguous and
                 # no-candidate runs get one too; it degrades to an
