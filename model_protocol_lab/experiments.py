@@ -104,9 +104,22 @@ def failure_taxonomy(result: dict[str, Any], eos_id: int | None) -> dict[str, An
 
 
 def _stop_cell(
-    backend: Backend, fixture: Fixture, boundary: tuple[int, ...], outcome: StopOutcome
+    backend: Backend,
+    fixture: Fixture,
+    boundary: tuple[int, ...],
+    outcome: StopOutcome,
+    *,
+    stop_text: str | None = None,
 ) -> dict[str, Any]:
-    """Recompute the lab's pass rule on one emulated truncation."""
+    """Recompute the lab's pass rule on one emulated truncation.
+
+    ``stop_text`` records the kept-vs-stripped disposition of the stop
+    text for text-based stop semantics: ``"kept"`` when the competitor
+    keeps the stop string in its returned output (HF always does),
+    ``"stripped"`` when it removes it (vLLM's default). It is reported only
+    when the stop actually fired -- ``None`` when the stop did not fire or
+    the semantic is not text-based. Additive: old callers are unaffected.
+    """
     if not outcome.available:
         return {"available": False, "detail": outcome.detail}
     truncated = outcome.truncated_ids
@@ -123,6 +136,7 @@ def _stop_cell(
         "pass": bool(cut is not None and answer == fixture.expected),
         "fired": outcome.fired,
         "detail": outcome.detail,
+        "stop_text": stop_text if outcome.fired else None,
     }
 
 
@@ -135,6 +149,8 @@ def stop_matrix(
     boundary: tuple[int, ...],
     eos_id: int | None = None,
     token_bytes: Callable[[int], bytes | None] | None = None,
+    vllm_include_stop_str_in_output: bool = False,
+    vllm_min_tokens: int = 0,
 ) -> list[dict[str, Any]]:
     """Per-fixture stop-semantics matrix for one candidate.
 
@@ -149,7 +165,15 @@ def stop_matrix(
     instead of failing. ``token_bytes`` selects the byte-space HF match for
     byte-level/byte-fallback tokenizers (see
     ``backends.emulate_hf_stop_string``); without it the classic string path
-    is used.
+    is used. ``vllm_include_stop_str_in_output`` and ``vllm_min_tokens``
+    pass through to ``emulate_vllm_holdback`` (defaults match vLLM's
+    upstream defaults: strip the stop string, no minimum). Each available
+    cell carries a ``stop_text`` field surfacing the kept-vs-stripped
+    distinction: ``"kept"`` when the fired semantic keeps the stop text in
+    its returned output (HF always does), ``"stripped"`` when it removes it
+    (vLLM's default ``include_stop_str_in_output=False``), ``None`` when
+    the stop did not fire or the semantic is not text-based. Additive: the
+    existing row schema is unchanged apart from this field.
     """
     if type(candidate_name) is not str or not candidate_name:
         raise ValueError("candidate_name must be a nonblank string")
@@ -167,6 +191,10 @@ def stop_matrix(
         raise ValueError("eos_id must be a nonnegative integer or None")
     if token_bytes is not None and not callable(token_bytes):
         raise ValueError("token_bytes must be callable or None")
+    if type(vllm_include_stop_str_in_output) is not bool:
+        raise ValueError("vllm_include_stop_str_in_output must be a bool")
+    if type(vllm_min_tokens) is not int or vllm_min_tokens < 0:
+        raise ValueError("vllm_min_tokens must be a nonnegative integer")
     try:
         boundary_text: Any = backend.decode(boundary)
     except Exception:  # noqa: BLE001 -- string cells degrade, never fail
@@ -189,11 +217,24 @@ def stop_matrix(
                 "hf_stop_string": emulate_hf_stop_string(
                     backend, prompt_ids, output_ids, boundary_text or "", token_bytes=token_bytes
                 ),
-                "vllm_holdback": emulate_vllm_holdback(backend, output_ids, boundary_text or ""),
+                "vllm_holdback": emulate_vllm_holdback(
+                    backend,
+                    output_ids,
+                    boundary_text or "",
+                    include_stop_str_in_output=vllm_include_stop_str_in_output,
+                    min_tokens=vllm_min_tokens,
+                ),
                 "eos_appended": emulate_eos_stop(output_ids, eos_id),
             }
+            dispositions = {
+                "hf_stop_string": "kept",
+                "vllm_holdback": "kept" if vllm_include_stop_str_in_output else "stripped",
+                "eos_appended": None,
+            }
             for semantic, outcome in outcomes.items():
-                cells[semantic] = _stop_cell(backend, fixture, boundary, outcome)
+                cells[semantic] = _stop_cell(
+                    backend, fixture, boundary, outcome, stop_text=dispositions[semantic]
+                )
         else:
             for semantic in STOP_SEMANTICS[1:]:
                 cells[semantic] = {"available": False, "detail": "observation_incomplete"}
