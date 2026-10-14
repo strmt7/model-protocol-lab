@@ -9,6 +9,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 from threading import Event
+from typing import Any
 
 from .catalog import CATALOG, candidates
 from .datasets import load_dataset
@@ -42,6 +43,19 @@ def parse_boundary(value: str) -> tuple[int, ...]:
     return result
 
 
+def parse_boundary_map(value: str) -> tuple[str, tuple[int, ...]]:
+    """Parse one NAME=ID,ID per-candidate boundary override.
+
+    Candidate names may contain "/" (e.g. "chatml/toggle-bos") but never
+    "=", so the split is on the first "=".
+    """
+    name, separator, ids = value.partition("=")
+    name = name.strip()
+    if not separator or not name:
+        raise argparse.ArgumentTypeError("Use NAME=ID,ID (for example chatml=198)")
+    return name, parse_boundary(ids)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="model-protocol-lab", allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -58,6 +72,21 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_cmd.add_argument("--model", required=True, type=Path)
     doctor_cmd.add_argument("--dataset", type=Path, default=None)
     doctor_cmd.add_argument("--boundary-ids", type=parse_boundary, default=None)
+    doctor_cmd.add_argument(
+        "--boundary-map",
+        type=parse_boundary_map,
+        action="append",
+        default=None,
+        help="Per-candidate boundary override as NAME=ID,ID (repeatable); "
+        "validated against the checkpoint vocabulary like --boundary-ids",
+    )
+    doctor_cmd.add_argument(
+        "--reference-model",
+        type=Path,
+        default=None,
+        help="Optional second local checkpoint: its tokenizer re-encodes the "
+        "boundary marker to check cross-tokenizer boundary portability",
+    )
     run = sub.add_parser(
         "run", help="Evaluate a local checkpoint and save a report", allow_abbrev=False
     )
@@ -66,6 +95,17 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--family", choices=sorted(CATALOG), required=True)
     run.add_argument("--mutate", action="store_true", help="Include bounded local repairs")
     run.add_argument("--boundary-ids", type=parse_boundary, required=True)
+    run.add_argument(
+        "--boundary-map",
+        type=parse_boundary_map,
+        action="append",
+        default=None,
+        help="Per-candidate boundary override as NAME=ID,ID (repeatable). "
+        "Each candidate is measured with its own boundary; the default "
+        "--boundary-ids applies to candidates without an entry. Names must "
+        "match the evaluated candidates (see `catalog`, plus /toggle-bos, "
+        "/no-bos, /prefix-newline, /prefix-trim with --mutate).",
+    )
     run.add_argument("--max-new-tokens", type=int, default=64)
     run.add_argument("--max-context", type=int, default=2048)
     run.add_argument("--seed", type=int, default=0)
@@ -76,7 +116,112 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
     )
+    run.add_argument(
+        "--sensitivity-sweep",
+        action="store_true",
+        help="Re-run search with the prompt truncated mid-token at each depth "
+        "(1..--max-drop-bytes) to measure boundary sensitivity; multiplies "
+        "search compute",
+    )
+    run.add_argument(
+        "--max-drop-bytes",
+        type=int,
+        default=3,
+        help="Truncation depths for --sensitivity-sweep (1-8)",
+    )
+    fixtures_cmd = sub.add_parser(
+        "fixtures",
+        help="Authoring tools for fixture files (never loads a model)",
+        allow_abbrev=False,
+    )
+    fixtures_sub = fixtures_cmd.add_subparsers(dest="fixtures_command", required=True)
+    fixtures_build = fixtures_sub.add_parser(
+        "build",
+        help="Build a strict fixture JSON file from a compact authoring CSV",
+        allow_abbrev=False,
+    )
+    fixtures_build.add_argument("source", type=Path, help="Authoring CSV file")
+    fixtures_build.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="New fixture JSON file; an existing path is never overwritten",
+    )
     return parser
+
+
+def _backend_eos_id(backend: Any) -> int | None:
+    """EOS token ID from a backend that exposes one, else None."""
+    eos = getattr(backend, "eos_token_id", None)
+    return eos if type(eos) is int and eos >= 0 else None
+
+
+def _resolve_boundary_map(
+    entries: list[tuple[str, tuple[int, ...]]] | None,
+    candidate_names: set[str] | None,
+    parser: argparse.ArgumentParser,
+) -> dict[str, tuple[int, ...]] | None:
+    """Validate repeatable --boundary-map flags.
+
+    Fails fast (exit 2) on duplicate names; when the candidate set is known
+    (``run``), unknown names also fail fast so a typo cannot silently run a
+    whole experiment with the default boundary. ``doctor`` does not know the
+    candidate set, so it checks duplicates only. The returned dict maps
+    candidate name to its override boundary IDs.
+    """
+    if not entries:
+        return None
+    resolved: dict[str, tuple[int, ...]] = {}
+    for name, ids in entries:
+        if name in resolved:
+            parser.error(f"Duplicate --boundary-map candidate: {name!r}")
+        if candidate_names is not None and name not in candidate_names:
+            parser.error(
+                f"--boundary-map names unknown candidate {name!r}; "
+                f"valid names: {', '.join(sorted(candidate_names))}"
+            )
+        resolved[name] = ids
+    return resolved
+
+
+def _matrix_stage_rows(
+    result: dict[str, Any],
+    stage_key: str,
+    winner_name: str,
+    cases: tuple[Any, ...],
+    backend: Any,
+    boundary: tuple[int, ...],
+    eos_id: int | None,
+    token_bytes: Any = None,
+) -> list[dict[str, Any]] | None:
+    """Build stop-matrix rows for one stage from a run_experiment result."""
+    if stage_key == "search":
+        entries = result.get("search") or []
+        observations: list | None = None
+        for entry in entries:
+            if (
+                type(entry) is dict
+                and type(entry.get("format")) is dict
+                and entry["format"].get("name") == winner_name
+            ):
+                observations = entry.get("observations")
+                break
+    else:
+        held = result.get("held_out")
+        observations = held.get("observations") if type(held) is dict else None
+    if type(observations) is not list or len(observations) != len(cases):
+        return None
+    from .experiments import stop_matrix
+
+    return stop_matrix(
+        backend,
+        winner_name,
+        cases,
+        tuple(observations),
+        boundary=boundary,
+        eos_id=eos_id,
+        token_bytes=token_bytes,
+    )
 
 
 def main(argv=None) -> int:
@@ -118,9 +263,48 @@ def main(argv=None) -> int:
         if args.command == "doctor":
             from .doctor import doctor
 
-            result = doctor(args.model, args.dataset, boundary_ids=args.boundary_ids)
+            result = doctor(
+                args.model,
+                args.dataset,
+                boundary_ids=args.boundary_ids,
+                boundary_map=_resolve_boundary_map(args.boundary_map, None, parser),
+                reference_model_path=args.reference_model,
+            )
             print(json.dumps(result, indent=2))
             return 0 if result["verdict"] == "ok" else 1
+        if args.command == "fixtures":
+            from .fixtures import (
+                parse_fixture_csv,
+                read_authoring_file,
+                split_to_json_text,
+                write_fixture_file,
+            )
+
+            try:
+                authoring = read_authoring_file(args.source)  # nosec B615 -- own bounded reader
+                split, empty_expected = parse_fixture_csv(authoring)
+                if empty_expected:
+                    print(
+                        "fixtures: warning: empty expected answer in fixture(s) "
+                        f"{', '.join(_display_id(i) for i in empty_expected)}; "
+                        "these pass vacuously",
+                        file=sys.stderr,
+                    )
+                written = write_fixture_file(split_to_json_text(split), args.output)
+            except ValueError as exc:
+                # fixtures exists to diagnose authoring input; show the reason.
+                print(f"fixtures: invalid authoring source: {exc}", file=sys.stderr)
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "search_cases": len(split.search),
+                        "held_out_cases": len(split.held_out),
+                        "output": str(written),
+                    }
+                )
+            )
+            return 0
         if not 1 <= args.max_new_tokens <= 4096 or not 1 <= args.max_context <= 32768:
             parser.error(
                 "Token/context limits are outside supported ranges: "
@@ -128,8 +312,17 @@ def main(argv=None) -> int:
             )
         if not 0 <= args.seed < 2**64:
             parser.error("Seed must be an unsigned 64-bit integer")
+        if not 1 <= args.max_drop_bytes <= 8:
+            parser.error("--max-drop-bytes must be between 1 and 8")
         if args.output.exists():
             parser.error("Output path already exists; use a fresh directory")
+        # The candidate set is pure (no model involved): compute it before
+        # any expensive work so a mistyped --boundary-map name fails fast
+        # instead of silently running with the default boundary.
+        formats = candidates(args.family, mutate=args.mutate)
+        boundary_map = _resolve_boundary_map(
+            args.boundary_map, {fmt.name for fmt in formats}, parser
+        )
         # Claim the output directory BEFORE the expensive backend init and
         # experiment run: an unwritable parent or a path through a regular
         # file fails here, cheaply, instead of discarding hours of compute
@@ -166,22 +359,162 @@ def main(argv=None) -> int:
             from .backends import LocalHFBackend
 
             backend = LocalHFBackend(args.model, device=args.device, max_context=args.max_context)
+            eos_id = _backend_eos_id(backend)
             cancel = Event()
             previous = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, lambda _signum, _frame: cancel.set())
             try:
                 result = run_experiment(
                     backend,
-                    candidates(args.family, mutate=args.mutate),
+                    formats,
                     split,
                     boundary=args.boundary_ids,
+                    boundary_map=boundary_map,
                     max_new_tokens=args.max_new_tokens,
                     seed=args.seed,
                     cancel=cancel,
+                    eos_id=eos_id,
                 )
             finally:
                 signal.signal(signal.SIGINT, previous)
-            save_report(
+            # Diagnosis sections; none of these may fail the run.
+            try:
+                from .doctor import template_conformance
+
+                # Byte-space HF stop matching when the backend's tokenizer is
+                # byte-oriented; otherwise the classic string path is used.
+                token_bytes = getattr(backend, "hf_stop_token_bytes", None)
+                if not callable(token_bytes):
+                    token_bytes = None
+                result["template_conformance"] = template_conformance(
+                    args.model, formats, split.search
+                )
+                if result["selected_candidate"] is not None:
+                    winner = result["selected_candidate"]
+                    # The stop matrix re-measures the winner under its own
+                    # boundary (per-candidate boundaries, Cycle 2).
+                    winner_boundary = (
+                        boundary_map.get(winner, args.boundary_ids)
+                        if boundary_map
+                        else args.boundary_ids
+                    )
+                    search_rows = _matrix_stage_rows(
+                        result,
+                        "search",
+                        winner,
+                        split.search,
+                        backend,
+                        winner_boundary,
+                        eos_id,
+                        token_bytes,
+                    )
+                    held_rows = _matrix_stage_rows(
+                        result,
+                        "held_out",
+                        winner,
+                        split.held_out,
+                        backend,
+                        winner_boundary,
+                        eos_id,
+                        token_bytes,
+                    )
+                    result["stop_matrix"] = {
+                        "candidate": result["selected_candidate"],
+                        "semantics": [
+                            {
+                                "id": "native",
+                                "label": "Native (lab)",
+                                "description": (
+                                    "The lab's own behavior: the full requested "
+                                    "token cap is generated with no stop; the "
+                                    "boundary is found by token-ID subsequence "
+                                    "match afterwards."
+                                ),
+                            },
+                            {
+                                "id": "hf_stop_string",
+                                "label": "HF StopStringCriteria",
+                                "description": (
+                                    "Emulates HF transformers' StopStringCriteria "
+                                    "overhang matching on the decoded boundary "
+                                    "text -- byte-space matching for byte-level "
+                                    "or byte-fallback tokenizers, mirroring "
+                                    "current transformers: generation stops "
+                                    "after the token that completes the stop "
+                                    "string."
+                                ),
+                            },
+                            {
+                                "id": "vllm_holdback",
+                                "label": "vLLM detokenizer",
+                                "description": (
+                                    "Emulates vLLM's detokenizer stop handling: "
+                                    "the earliest-completing stop string in the "
+                                    "decoded text truncates the output before it "
+                                    "(exclude semantics)."
+                                ),
+                            },
+                            {
+                                "id": "eos_appended",
+                                "label": "EOS-appended",
+                                "description": (
+                                    "Emulates a competitor that stops on EOS "
+                                    "(lm-eval appends EOS to its stops; vLLM and "
+                                    "llama.cpp stop on EOS by default): truncates "
+                                    "before the first EOS token."
+                                ),
+                            },
+                        ],
+                        "search": search_rows,
+                        "held_out": held_rows,
+                    }
+                # Token-budget frontier: post-hoc, exact, no model calls.
+                # Kept out of the stop-matrix's `if` so ambiguous and
+                # no-candidate runs get one too; it degrades to an
+                # "unavailable" marker instead of failing the run.
+                try:
+                    from .experiments import budget_frontier
+
+                    if result["decision"] in (
+                        "compatible_on_fixture_set",
+                        "held_out_failed",
+                        "ambiguous",
+                        "no_candidate",
+                    ):
+                        result["budget_frontier"] = budget_frontier(
+                            result.get("search") or [],
+                            boundary=args.boundary_ids,
+                            max_new_tokens=args.max_new_tokens,
+                            native_decision=result["decision"],
+                            native_winner=result.get("selected_candidate"),
+                        )
+                    else:
+                        result["budget_frontier"] = {
+                            "available": False,
+                            "detail": "search_incomplete",
+                        }
+                except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                    result["budget_frontier"] = {
+                        "available": False,
+                        "detail": "frontier_unavailable",
+                    }
+                if args.sensitivity_sweep:
+                    from .experiments import prompt_sensitivity_sweep
+
+                    result["sensitivity_sweep"] = prompt_sensitivity_sweep(
+                        backend,
+                        formats,
+                        split,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_drop_bytes=args.max_drop_bytes,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+            except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                result["diagnostics_unavailable"] = True
+            results_path, report_path = save_report(
                 result,
                 args.output,
                 include_evidence=args.include_evidence,
@@ -202,7 +535,15 @@ def main(argv=None) -> int:
                             _component.rmdir()
         print(
             json.dumps(
-                {"decision": result["decision"], "selected_candidate": result["selected_candidate"]}
+                {
+                    "decision": result["decision"],
+                    "selected_candidate": result["selected_candidate"],
+                    # Point the operator at the artifacts: the first-run
+                    # walk showed the bare decision JSON left new users
+                    # guessing where the report went.
+                    "results": str(results_path),
+                    "report": str(report_path),
+                }
             )
         )
         if result["decision"] == "cancelled":

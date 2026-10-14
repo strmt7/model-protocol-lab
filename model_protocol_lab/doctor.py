@@ -8,10 +8,13 @@ a clear report instead of mid-run.
 
 from __future__ import annotations
 
+import contextlib
+import shlex
 from pathlib import Path
 from typing import Any
 
 from .backends import _directory, _manifest, _member, _model_assets, _read_json
+from .core import Fixture, Format, check_boundary_portability, template_diff
 from .datasets import load_dataset
 
 _SUPPORTED_TYPES = ("gpt2", "llama")
@@ -21,6 +24,29 @@ _REJECTED_CONFIG_KEYS = (
     "is_encoder_decoder",
     "add_cross_attention",
 )
+# Same 128 MB bound the backend enforces before its own HF load: the loader
+# re-reads tokenizer.json after our capped _read_json parse, so the size is
+# re-checked immediately before handing the path to transformers. Without
+# this a swapped-in oversized tokenizer.json is parsed into memory uncapped.
+_TOKENIZER_JSON_CAP = 128 * 1024 * 1024
+# Bounds for the checkpoint-controlled Jinja chat template. Real templates
+# are a few KB; a hostile one can render unbounded text (e.g.
+# "{{ 'x' * 10**9 }}"), so the template source and its rendered output are
+# both capped and oversized pairs degrade to "unavailable" instead of
+# feeding a memory bomb to the encoder. (The Jinja render itself still runs
+# inside transformers' sandbox; a hostile template can burn CPU there --
+# the same exposure as HF's own apply_chat_template. Run unfamiliar
+# checkpoints with resource limits.)
+_CHAT_TEMPLATE_MAX_CHARS = 1_000_000
+_RENDERED_MAX_CHARS = 1_000_000
+
+
+def _tokenizer_file(root: Path) -> Path:
+    """tokenizer.json member, with the pre-load size cap enforced."""
+    path = _member(root, "tokenizer.json")
+    if path.stat().st_size > _TOKENIZER_JSON_CAP:
+        raise ValueError("oversized_tokenizer_file")
+    return path
 
 
 def _check(status: str, detail: str = "") -> dict[str, str]:
@@ -34,12 +60,16 @@ def _model_result(
     assets: list[dict] | None = None,
     special_tokens: dict[str, int] | None = None,
     added_tokens: dict[str, int] | None = None,
+    context_window: int | None = None,
 ) -> dict[str, Any]:
     """Every examine_model return carries the same keys.
 
     Early-failure returns previously omitted "assets"/"special_tokens"/
     "added_tokens", so consumers can key on them unconditionally; the
     collections are simply empty when the corresponding stage never ran.
+    "context_window" is the checkpoint's declared window
+    (``n_positions``/``max_position_embeddings``) when the config supplied
+    one, else None.
     """
     return {
         "verdict": verdict,
@@ -48,12 +78,70 @@ def _model_result(
             "assets": assets if assets is not None else [],
             "special_tokens": special_tokens if special_tokens is not None else {},
             "added_tokens": added_tokens if added_tokens is not None else {},
+            "context_window": context_window,
         },
     }
 
 
+def _portability_check(
+    reference_model_path: str | Path,
+    boundary_ids: tuple[int, ...] | None,
+    primary_tokenizer: Any,
+) -> dict[str, str]:
+    """Cross-tokenizer boundary portability against a reference checkpoint.
+
+    Decodes the boundary IDs with the primary tokenizer and re-encodes the
+    marker text with the reference checkpoint's tokenizer (tokenizer only,
+    never weights). Informational: "mismatch" does not fail the verdict,
+    because boundary IDs are per-checkpoint by design. Never raises.
+    """
+    if primary_tokenizer is None:
+        return _check("skipped", "primary tokenizer unavailable")
+    if boundary_ids is None:
+        return _check("skipped", "needs --boundary-ids")
+    try:
+        clean_ids = tuple(boundary_ids)
+    except TypeError:
+        clean_ids = ()
+    if not clean_ids or any(type(token) is not int or token < 0 for token in clean_ids):
+        return _check("skipped", "invalid boundary ids")
+    try:
+        boundary_text = primary_tokenizer.decode(list(clean_ids))
+    except Exception:  # noqa: BLE001 -- auxiliary check degrades, never fails
+        return _check("skipped", "boundary_decode_failed")
+    if type(boundary_text) is not str or not boundary_text:
+        return _check("skipped", "boundary_decode_failed")
+    try:
+        ref_root = _directory(reference_model_path)
+        from transformers import PreTrainedTokenizerFast
+
+        ref_tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file=str(_tokenizer_file(ref_root)),
+            clean_up_tokenization_spaces=False,
+        )
+
+        def encode(text: str) -> tuple[int, ...]:
+            return tuple(ref_tokenizer.encode(text, add_special_tokens=False))
+
+        outcome = check_boundary_portability(boundary_text, clean_ids, encode)
+    except Exception:  # noqa: BLE001 -- auxiliary check degrades, never fails
+        return _check("skipped", "reference_tokenizer_unavailable")
+    if outcome["detail"] == "identical":
+        return _check("ok", "boundary ids identical under reference tokenizer")
+    if outcome["detail"] in ("secondary_encode_failed", "secondary_encode_invalid"):
+        return _check("skipped", "reference_tokenizer_unavailable")
+    return _check(
+        "mismatch",
+        f"primary={outcome['primary_ids']} reference={outcome['secondary_ids']}",
+    )
+
+
 def examine_model(
-    model_path: str | Path, *, boundary_ids: tuple[int, ...] | None = None
+    model_path: str | Path,
+    *,
+    boundary_ids: tuple[int, ...] | None = None,
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    reference_model_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Validate a local checkpoint directory; never loads weights."""
     checks: dict[str, dict[str, str]] = {}
@@ -81,7 +169,7 @@ def examine_model(
         config = _read_json(_member(root, "config.json"))
     except ValueError as exc:
         checks["config"] = _check("failed", str(exc))
-        return {"verdict": "failed", "model": {"checks": checks}}
+        return _model_result("failed", checks, assets=manifest)
     model_type = config.get("model_type")
     rejected = [key for key in _REJECTED_CONFIG_KEYS if config.get(key)]
     if model_type not in _SUPPORTED_TYPES:
@@ -92,12 +180,19 @@ def examine_model(
         checks["config"] = _check("ok", f"model_type={model_type}")
     if checks["config"]["status"] == "failed":
         return _model_result("failed", checks, assets=manifest)
+    # The declared context window feeds the backend's max_context gate and
+    # the post-check `run` suggestion; a missing or malformed value leaves
+    # it unknown rather than failing the check.
+    declared = (
+        config.get("n_positions") if model_type == "gpt2" else config.get("max_position_embeddings")
+    )
+    context_window = declared if type(declared) is int and declared > 0 else None
 
     try:
         tokenizer_doc = _read_json(_member(root, "tokenizer.json"))
     except ValueError as exc:
         checks["tokenizer_file"] = _check("failed", str(exc))
-        return _model_result("failed", checks, assets=manifest)
+        return _model_result("failed", checks, assets=manifest, context_window=context_window)
     token_model = tokenizer_doc.get("model")
     if type(token_model) is not dict:
         checks["tokenizer_file"] = _check("failed", "tokenizer model section missing")
@@ -109,6 +204,7 @@ def examine_model(
     vocab_size: int | None = None
     specials: dict[str, int] = {}
     added_tokens: dict[str, int] = {}
+    primary_tokenizer: Any = None
     # Added tokens are read from the document itself: transformers does not
     # reliably surface them when loading from tokenizer_file alone, and the
     # file is the authority for what the checkpoint ships.
@@ -122,40 +218,35 @@ def examine_model(
             ):
                 added_tokens[entry["content"]] = entry["id"]
     try:
-        from transformers import PreTrainedTokenizerFast
+        tokenizer = _build_primary_tokenizer(root)
+        primary_tokenizer = tokenizer
+        vocab = tokenizer.get_vocab()
+        vocab_size = len(vocab)
+        for attr in (
+            "unk_token",
+            "bos_token",
+            "eos_token",
+            "pad_token",
+            "sep_token",
+            "cls_token",
+            "mask_token",
+        ):
+            token = getattr(tokenizer, attr, None)
+            if token is not None:
+                token_id = tokenizer.convert_tokens_to_ids(token)
+                if type(token_id) is int:
+                    specials[attr] = token_id
+        checks["tokenizer_deep"] = _check(
+            "ok", f"vocab_size={vocab_size}, {len(added_tokens)} added tokens"
+        )
     except ImportError:
         checks["tokenizer_deep"] = _check(
             "skipped", "transformers not installed; install the 'hf' extra for deep checks"
         )
-    else:
-        try:
-            tokenizer = PreTrainedTokenizerFast(
-                tokenizer_file=str(_member(root, "tokenizer.json")),
-                clean_up_tokenization_spaces=False,
-            )
-            vocab = tokenizer.get_vocab()
-            vocab_size = len(vocab)
-            for attr in (
-                "unk_token",
-                "bos_token",
-                "eos_token",
-                "pad_token",
-                "sep_token",
-                "cls_token",
-                "mask_token",
-            ):
-                token = getattr(tokenizer, attr, None)
-                if token is not None:
-                    token_id = tokenizer.convert_tokens_to_ids(token)
-                    if type(token_id) is int:
-                        specials[attr] = token_id
-            checks["tokenizer_deep"] = _check(
-                "ok", f"vocab_size={vocab_size}, {len(added_tokens)} added tokens"
-            )
-        except Exception:  # noqa: BLE001 -- deep check must fail closed
-            # Sanitized vocabulary: never interpolate raw dependency exception
-            # text (controlled by the inspected tokenizer.json) into output.
-            checks["tokenizer_deep"] = _check("failed", "tokenizer_deep_check_failed")
+    except Exception:  # noqa: BLE001 -- deep check must fail closed
+        # Sanitized vocabulary: never interpolate raw dependency exception
+        # text (controlled by the inspected tokenizer.json) into output.
+        checks["tokenizer_deep"] = _check("failed", "tokenizer_deep_check_failed")
 
     if boundary_ids is not None:
         if vocab_size is None:
@@ -175,6 +266,39 @@ def examine_model(
             else:
                 checks["boundary_ids"] = _check("failed", "invalid boundary ids")
 
+    if boundary_map is not None:
+        # Per-candidate boundaries (Cycle 2): every mapped candidate's IDs
+        # are verified against the same vocabulary, reported under a
+        # per-name check so one bad mapping cannot hide behind the default.
+        if type(boundary_map) is not dict:
+            checks["boundary_map"] = _check("failed", "invalid boundary map")
+        elif vocab_size is None:
+            for name in boundary_map:
+                checks[f"boundary_ids:{name}"] = _check(
+                    "skipped", "vocabulary size unknown without the 'hf' extra"
+                )
+        else:
+            for name, mapped in boundary_map.items():
+                try:
+                    ids = tuple(mapped)
+                except TypeError:
+                    ids = ()
+                label = f"boundary_ids:{name}"
+                if (
+                    type(name) is str
+                    and name
+                    and ids
+                    and all(type(token) is int and 0 <= token < vocab_size for token in ids)
+                ):
+                    checks[label] = _check("ok", f"{len(ids)} ids within vocabulary")
+                else:
+                    checks[label] = _check("failed", "invalid boundary ids")
+
+    if reference_model_path is not None:
+        checks["boundary_portability"] = _portability_check(
+            reference_model_path, boundary_ids, primary_tokenizer
+        )
+
     verdict = "failed" if any(c["status"] == "failed" for c in checks.values()) else "ok"
     return _model_result(
         verdict,
@@ -182,6 +306,7 @@ def examine_model(
         assets=manifest,
         special_tokens=specials,
         added_tokens=added_tokens,
+        context_window=context_window,
     )
 
 
@@ -205,17 +330,289 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
     }
 
 
+def template_conformance(
+    model_path: str | Path,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+) -> dict[str, Any]:
+    """Diff hand-rendered hypotheses against the checkpoint's own chat template.
+
+    Loads only the tokenizer (never model weights): reads the Jinja chat
+    template from ``tokenizer_config.json``, renders it over each case's
+    messages with ``add_generation_prompt=True`` (the template analogue of
+    the lab's open-assistant-tail render), encodes both sides with
+    ``add_special_tokens=False``, and reports the token-ID diff per
+    (format, fixture) via ``core.template_diff``. ``tokenize=False`` plus an
+    explicit ``encode`` is used instead of ``apply_chat_template``'s
+    ``tokenize=True`` so the return type does not depend on the transformers
+    version. Never raises: a missing template reports
+    ``"no_template_declared"``; any other problem reports ``"unavailable"``
+    with a fixed-vocabulary detail, so a run is never failed by this check.
+    """
+    if (
+        type(formats) is not tuple
+        or not formats
+        or any(type(fmt) is not Format for fmt in formats)
+        or type(cases) is not tuple
+        or not cases
+        or any(type(case) is not Fixture for case in cases)
+    ):
+        raise ValueError("template_conformance needs nonempty tuples of Format and Fixture")
+    try:
+        root = _directory(model_path)
+        try:
+            config_doc = _read_json(_member(root, "tokenizer_config.json"))
+        except ValueError:
+            return {
+                "status": "no_template_declared",
+                "detail": "tokenizer_config_unreadable",
+                "diffs": [],
+            }
+        template = config_doc.get("chat_template")
+        if type(template) is not str or not template.strip():
+            return {
+                "status": "no_template_declared",
+                "detail": "no_chat_template_in_config",
+                "diffs": [],
+            }
+        if len(template) > _CHAT_TEMPLATE_MAX_CHARS:
+            return {
+                "status": "unavailable",
+                "detail": "chat_template_too_large",
+                "diffs": [],
+            }
+        from transformers import PreTrainedTokenizerFast
+
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file=str(_tokenizer_file(root)),
+            clean_up_tokenization_spaces=False,
+        )
+        tokenizer.chat_template = template
+        # The template may reference bos_token; take it from the same config
+        # document when it is a plain string (or a {"content": ...} mapping).
+        bos_token = config_doc.get("bos_token")
+        if type(bos_token) is dict:
+            bos_token = bos_token.get("content")
+        if type(bos_token) is str and bos_token:
+            # The template may not reference bos_token; a setter failure
+            # must not fail the check.
+            with contextlib.suppress(Exception):
+                tokenizer.bos_token = bos_token
+    except ImportError:
+        return {"status": "unavailable", "detail": "transformers_not_installed", "diffs": []}
+    except Exception:  # noqa: BLE001 -- conformance must not fail the run
+        return {"status": "unavailable", "detail": "tokenizer_load_failed", "diffs": []}
+
+    diffs: list[dict[str, Any]] = []
+    for fmt in formats:
+        for case in cases:
+            entry: dict[str, Any] = {
+                "format": fmt.name,
+                "fixture": case.id,
+                "status": "ok",
+                "diff": [],
+                "hand_tokens": 0,
+                "template_tokens": 0,
+            }
+            try:
+                hand_ids = tuple(
+                    tokenizer.encode(fmt.render(case.messages), add_special_tokens=False)
+                )
+                rendered = tokenizer.apply_chat_template(
+                    [{"role": m.role, "content": m.content} for m in case.messages],
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+                if type(rendered) is not str or len(rendered) > _RENDERED_MAX_CHARS:
+                    # Checkpoint-controlled template rendered unbounded text;
+                    # degrade the pair instead of encoding a memory bomb.
+                    entry["status"] = "unavailable"
+                else:
+                    template_ids = tuple(tokenizer.encode(rendered, add_special_tokens=False))
+                    entry["diff"] = list(template_diff(hand_ids, template_ids))
+                    entry["hand_tokens"] = len(hand_ids)
+                    entry["template_tokens"] = len(template_ids)
+            except Exception:  # noqa: BLE001 -- one bad pair degrades, not the run
+                entry["status"] = "unavailable"
+            diffs.append(entry)
+    return {"status": "ok", "diffs": diffs}
+
+
+def _build_primary_tokenizer(root: Path) -> Any:
+    """Load the checkpoint's tokenizer for measurement (never weights).
+
+    Raises ImportError when transformers is unavailable, anything else when
+    the tokenizer cannot be built. Callers decide the check status; the
+    128 MB pre-load cap from ``_tokenizer_file`` applies.
+    """
+    from transformers import PreTrainedTokenizerFast
+
+    return PreTrainedTokenizerFast(
+        tokenizer_file=str(_tokenizer_file(root)),
+        clean_up_tokenization_spaces=False,
+    )
+
+
+_DEFAULT_NEW_TOKENS = 64
+
+
+def _prompt_token_count(tokenizer: Any, fmt: Any, case: Any) -> int | None:
+    """Encode one rendered fixture prompt; None when it cannot be measured."""
+    try:
+        text = fmt.render(tuple(case.messages))
+        return len(
+            tokenizer.encode(text, add_special_tokens=False, truncation=False, padding=False)
+        )
+    except Exception:  # noqa: BLE001 -- one bad pair degrades
+        return None
+
+
+def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | None:
+    """Longest fixture prompt in tokens, over every catalog candidate.
+
+    Renders each fixture's messages with every candidate of every format
+    family (both mutate states) and encodes with the checkpoint tokenizer,
+    so a budget derived from it fits whichever family the operator later
+    picks. Mirrors the backend's ``encode`` (no special tokens added).
+    Returns None when it cannot be measured; the caller keeps the default
+    budget.
+    """
+    try:
+        from .catalog import CATALOG, candidates
+        from .datasets import load_dataset
+
+        split = load_dataset(Path(dataset_path))  # nosec B615 -- own bounded JSON reader, not HF datasets
+        fixtures = (*split.search, *split.held_out)
+        longest = 0
+        for family in CATALOG:
+            for mutate in (False, True):
+                for fmt in candidates(family, mutate=mutate):
+                    for case in fixtures:
+                        count = _prompt_token_count(tokenizer, fmt, case)
+                        if count is not None:
+                            longest = max(longest, count)
+        return longest if longest > 0 else None
+    except Exception:  # noqa: BLE001 -- measurement aid; degrade silently
+        return None
+
+
+def _next_command(
+    model_path: str | Path,
+    dataset_path: str | Path | None,
+    boundary_ids: tuple[int, ...] | None,
+    report: dict[str, Any],
+    *,
+    tokenizer: Any = None,
+) -> dict[str, str] | None:
+    """The exact `run` invocation implied by a clean pre-flight report.
+
+    Emitted only when the verdict is ok and a dataset plus boundary IDs were
+    supplied: every remaining choice is then determined except the format
+    family, which stays an explicit placeholder (the family is the
+    hypothesis under test, not something doctor can infer).
+    ``--max-context`` comes from the checkpoint's declared window -- the
+    value operators most often get wrong. ``--max-new-tokens`` is sized so
+    the longest fixture prompt (over every catalog candidate) still fits
+    that window; without a measurable tokenizer it keeps the default 64.
+    Paths are shell-quoted. Returns None whenever the suggestion would be
+    misleading.
+    """
+    if report.get("verdict") != "ok" or dataset_path is None:
+        return None
+    try:
+        ids = tuple(boundary_ids or ())
+    except TypeError:
+        return None
+    if not ids or any(type(token) is not int or token < 0 for token in ids):
+        return None
+    model = report.get("model")
+    window = model.get("context_window") if type(model) is dict else None
+    if type(window) is not int:
+        return None
+    from .catalog import CATALOG
+
+    new_tokens = _DEFAULT_NEW_TOKENS
+    longest: int | None = None
+    if tokenizer is not None:
+        longest = _longest_prompt_tokens(tokenizer, dataset_path)
+        if longest is not None:
+            # The backend refuses generation when prompt tokens plus new
+            # tokens exceed the declared window; size the suggestion to fit.
+            new_tokens = max(1, min(_DEFAULT_NEW_TOKENS, window - longest))
+    families = ", ".join(sorted(CATALOG))
+    command = (
+        "python -m model_protocol_lab run"
+        f" --model {shlex.quote(str(model_path))}"
+        f" --dataset {shlex.quote(str(dataset_path))}"
+        f" --family FAMILY --mutate --boundary-ids {','.join(str(token) for token in ids)}"
+        f" --max-new-tokens {new_tokens} --max-context {window} --device cpu"
+        " --output NEW_REPORT_DIRECTORY"
+    )
+    note = (
+        f"Replace FAMILY with one of: {families} (see the `catalog` command). "
+        f"--max-context {window} is this checkpoint's declared window; "
+    )
+    if longest is not None:
+        note += (
+            f"--max-new-tokens {new_tokens} is sized so the longest fixture "
+            f"prompt ({longest} tokens) fits that window; "
+        )
+    if longest is not None and longest >= window:
+        note += (
+            f"WARNING: the longest fixture prompt ({longest} tokens) already "
+            f"fills the declared window ({window}) -- shorten the fixtures or "
+            "use a checkpoint with a larger window before running; "
+        )
+    note += (
+        "--output must be a fresh directory. "
+        "Candidates that need a different boundary sequence take a repeatable "
+        "--boundary-map NAME=ID,ID flag (see docs/USAGE.md section 4)."
+    )
+    return {"next_command": command, "note": note}
+
+
+def _suggestion_tokenizer(report: dict[str, Any], model_path: str | Path) -> Any:
+    """Tokenizer for sizing the suggested --max-new-tokens, or None.
+
+    Only attempted when the deep tokenizer check passed; any failure
+    degrades to None and the suggestion keeps the default budget.
+    """
+    try:
+        model = report.get("model")
+        checks = model.get("checks") if type(model) is dict else None
+        deep = checks.get("tokenizer_deep") if type(checks) is dict else None
+        if not (type(deep) is dict and deep.get("status") == "ok"):
+            return None
+        return _build_primary_tokenizer(_directory(model_path))
+    except Exception:  # noqa: BLE001 -- suggestion aid; degrade silently
+        return None
+
+
 def doctor(
     model_path: str | Path,
     dataset_path: str | Path | None = None,
     *,
     boundary_ids: tuple[int, ...] | None = None,
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    reference_model_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Combined pre-flight report for a model directory and fixture file."""
-    report = examine_model(model_path, boundary_ids=boundary_ids)
+    report = examine_model(
+        model_path,
+        boundary_ids=boundary_ids,
+        boundary_map=boundary_map,
+        reference_model_path=reference_model_path,
+    )
     if dataset_path is not None:
         dataset_report = examine_dataset(dataset_path)
         report["dataset"] = dataset_report["dataset"]
         if dataset_report["verdict"] == "failed":
             report["verdict"] = "failed"
+    report["suggestion"] = _next_command(
+        model_path,
+        dataset_path,
+        boundary_ids,
+        report,
+        tokenizer=_suggestion_tokenizer(report, model_path),
+    )
     return report

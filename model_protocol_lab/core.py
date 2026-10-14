@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import difflib
+import time
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from threading import Event
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -287,6 +290,152 @@ def first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None
     return None
 
 
+def template_diff(
+    hand_ids: tuple[int, ...], template_ids: tuple[int, ...], *, _deadline_s: float = 10.0
+) -> tuple[dict[str, Any], ...]:
+    """Token-ID-level diff of a hand rendering vs the checkpoint's own template.
+
+    Compares the exact token sequences a hand-rendered format hypothesis
+    produces against what the checkpoint tokenizer's ``apply_chat_template``
+    renders for the same messages, making "sequences its own template would
+    never produce" mechanically checkable. Returns one segment per maximal
+    divergent block (difflib opcodes, ``autojunk=False`` for determinism):
+    each carries the hand/template spans and the divergent ID slices.
+    Applying every segment's template slice over its hand span reconstructs
+    ``template_ids`` exactly; identical inputs yield an empty tuple. Pure
+    function: no tokenizer access, no I/O.
+
+    The matching-blocks loop is difflib's algorithm with a wall-clock
+    budget (default 10 s): highly fragmented adversarial inputs make
+    ``SequenceMatcher`` super-quadratic (minutes at a few thousand tokens),
+    so the budget is checked between ``find_longest_match`` calls and the
+    diff degrades to ``ValueError("template_diff_too_fragmented")`` instead
+    of hanging the caller. Ordinary inputs -- localized differences even in
+    tens of thousands of tokens -- finish in well under a second and produce
+    byte-identical output to unbounded difflib.
+    """
+    if not _valid_token_ids(hand_ids) or not _valid_token_ids(template_ids):
+        raise ValueError("template_diff needs tuples of token IDs")
+    if hand_ids == template_ids:
+        return ()
+    hand, template = list(hand_ids), list(template_ids)
+    matcher = difflib.SequenceMatcher(None, hand, template, autojunk=False)
+    # difflib exposes no hook inside get_matching_blocks(), so the queue loop
+    # is replicated here with a deadline: each find_longest_match call is
+    # linear in its range, so checking the clock between calls bounds the
+    # total work even for adversarially fragmented inputs.
+    deadline = time.monotonic() + _deadline_s
+    queue = [(0, len(hand), 0, len(template))]
+    blocks: list[tuple[int, int, int]] = []
+    while queue:
+        if time.monotonic() > deadline:
+            raise ValueError("template_diff_too_fragmented")
+        alo, ahi, blo, bhi = queue.pop()
+        i, j, size = matcher.find_longest_match(alo, ahi, blo, bhi)
+        if size:
+            blocks.append((i, j, size))
+            if alo < i and blo < j:
+                queue.append((alo, i, blo, j))
+            if i + size < ahi and j + size < bhi:
+                queue.append((i + size, ahi, j + size, bhi))
+    blocks.sort()
+    # Merge adjacent blocks and emit opcodes, mirroring difflib.
+    merged: list[tuple[int, int, int]] = []
+    for i, j, size in blocks:
+        if merged and merged[-1][0] + merged[-1][2] == i and merged[-1][1] + merged[-1][2] == j:
+            prev_i, prev_j, prev_size = merged[-1]
+            merged[-1] = (prev_i, prev_j, prev_size + size)
+        else:
+            merged.append((i, j, size))
+    merged.append((len(hand), len(template), 0))
+    segments: list[dict[str, Any]] = []
+    hand_pos = template_pos = 0
+    for block_i, block_j, size in merged:
+        if hand_pos < block_i and template_pos < block_j:
+            tag = "replace"
+        elif hand_pos < block_i:
+            tag = "delete"
+        elif template_pos < block_j:
+            tag = "insert"
+        else:
+            tag = ""
+        if tag:
+            segments.append(
+                {
+                    "hand_span": [hand_pos, block_i],
+                    "template_span": [template_pos, block_j],
+                    "hand_ids": hand[hand_pos:block_i],
+                    "template_ids": template[template_pos:block_j],
+                }
+            )
+        hand_pos, template_pos = block_i + size, block_j + size
+    return tuple(segments)
+
+
+def check_boundary_portability(
+    boundary_text: str,
+    primary_ids: tuple[int, ...],
+    secondary_encode: Callable[[str], tuple[int, ...]],
+) -> dict[str, Any]:
+    """Cross-tokenizer portability of a boundary marker string.
+
+    Re-encodes ``boundary_text`` with a second tokenizer and reports whether
+    the primary token-ID subsequence is reproduced exactly. A divergent
+    encoding means the boundary IDs are tokenizer-specific and will not
+    transfer to the second tokenizer. ``secondary_encode`` failures are
+    reported, never raised.
+    """
+    if type(boundary_text) is not str or not boundary_text:
+        raise ValueError("boundary_text must be a nonempty string")
+    if not _valid_token_ids(primary_ids, nonempty=True):
+        raise ValueError("primary_ids must be a nonempty tuple of token IDs")
+    if not callable(secondary_encode):
+        raise ValueError("secondary_encode must be callable")
+    try:
+        secondary_ids = secondary_encode(boundary_text)
+    except Exception:  # noqa: BLE001 -- portability probe must not fail its caller
+        return {
+            "portable": False,
+            "primary_ids": list(primary_ids),
+            "secondary_ids": None,
+            "detail": "secondary_encode_failed",
+        }
+    if not _valid_token_ids(secondary_ids):
+        return {
+            "portable": False,
+            "primary_ids": list(primary_ids),
+            "secondary_ids": None,
+            "detail": "secondary_encode_invalid",
+        }
+    portable = secondary_ids == primary_ids
+    return {
+        "portable": portable,
+        "primary_ids": list(primary_ids),
+        "secondary_ids": list(secondary_ids),
+        "detail": "identical" if portable else "divergent_ids",
+    }
+
+
+def truncate_text_tail(text: str, drop_bytes: int) -> str | None:
+    """Drop ``drop_bytes`` trailing bytes from text for mid-token truncation.
+
+    Returns the truncated text, or None when the cut would split a UTF-8
+    codepoint: the sensitivity sweep stays at whole-character granularity
+    there rather than fabricating replacement characters. Truncating the
+    rendered prompt this way and re-encoding evaluates boundary sensitivity
+    to prompt-final tokenization.
+    """
+    if type(text) is not str or type(drop_bytes) is not int:
+        raise ValueError("truncate_text_tail needs a string and an integer")
+    raw = text.encode("utf-8")
+    if not 1 <= drop_bytes < len(raw):
+        raise ValueError("drop_bytes must lie within the text's byte length")
+    try:
+        return raw[:-drop_bytes].decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def _boundary_text_match(
     backend: Backend,
     output_ids: tuple[int, ...],
@@ -320,6 +469,23 @@ def _boundary_text_match(
     return retained_text.endswith(boundary_text)
 
 
+# Fixed-vocabulary backend error codes that may be recorded verbatim in an
+# Observation. Anything else a backend reports in ``Generation.error``
+# (None, the empty string, or arbitrary text) collapses to
+# "backend_reported_error": the sanitization boundary holds (no
+# backend-controlled text enters the records), while the built-in backend's
+# specific codes stay actionable in reports.
+_BACKEND_ERROR_CODES = frozenset(
+    {
+        "invalid_or_empty_input",
+        "invalid_output_cap",
+        "invalid_seed",
+        "invalid_cancellation_event",
+        "context_limit_exceeded",
+    }
+)
+
+
 def evaluate(
     backend: Backend,
     candidate: Format,
@@ -342,7 +508,9 @@ def evaluate(
         raise ValueError("candidate must be a Format")
     if type(cases) is not tuple or not cases or any(type(case) is not Fixture for case in cases):
         raise ValueError("cases must be a nonempty tuple of Fixture")
-    if len({case.id for case in cases}) != len(cases):
+    if len({unicodedata.normalize("NFC", case.id) for case in cases}) != len(cases):
+        # NFC-normalized like Split's global uniqueness check, so canonically
+        # equivalent IDs (NFD vs NFC) cannot evade this check either.
         raise ValueError("Evaluation fixture IDs must be unique")
     if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
         raise ValueError("Output cap must be an integer between 1 and 4096")
@@ -446,6 +614,14 @@ def evaluate(
         raw_reason = result.reason
         cut = first_boundary(output_ids, boundary)
         if result.reason == "error":
+            # Pass through only allowlisted fixed-vocabulary codes; anything
+            # else (including arbitrary backend text) collapses to the
+            # sanitized "backend_reported_error".
+            code = (
+                result.error
+                if type(result.error) is str and result.error in _BACKEND_ERROR_CODES
+                else "backend_reported_error"
+            )
             return terminate(
                 "failed",
                 case,
@@ -454,7 +630,7 @@ def evaluate(
                 answer,
                 cut,
                 raw_reason,
-                "backend_reported_error",
+                code,
             )
         if result.reason == "cancelled" or event.is_set():
             return terminate("cancelled", case, input_ids, output_ids, answer, cut, raw_reason)
