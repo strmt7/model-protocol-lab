@@ -1,12 +1,69 @@
 """Local JSON and escaped HTML reports with no external assets."""
 
+import base64
+import hashlib
 import json
 import os
 from html import escape
 from pathlib import Path
 from typing import Any
 
-_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+# Table sorting: the only script in the report, and the zero-JS -> tiny-JS
+# change. The report is fully readable with scripting disabled (plain
+# tables, <details> accordions, SVG sparklines); with scripting enabled,
+# headers of <table class="sortable"> sort their rows on click using each
+# cell's data-sort key (numeric when both keys parse as numbers). Vanilla
+# JS, no frameworks, no network, no new DOM nodes -- it only reorders rows
+# and sets aria-sort (▲▼ indicators are pure CSS ::after). It is allowlisted
+# in the Content-Security-Policy by its SHA-256 hash (computed below), so
+# the policy stays byte-deterministic and the script cannot be swapped
+# without invalidating the hash. The source must never contain the literal
+# "</script>" sequence, which would break out of the script element.
+_SCRIPT = """/* Sortable tables (progressive enhancement): inert without JavaScript --
+   the report is unchanged and fully readable; with it, <table class="sortable">
+   headers sort rows on click by each cell's data-sort key (numeric when both
+   keys parse as numbers). No frameworks, no network, no new DOM nodes. */
+(function () {
+  if (!document.querySelectorAll) return;
+  document.documentElement.classList.add("has-js");
+  function key(cell) {
+    if (!cell) return "";
+    var k = cell.getAttribute("data-sort");
+    return k === null ? cell.textContent.trim() : k;
+  }
+  function cmp(x, y) {
+    var a = parseFloat(x), b = parseFloat(y);
+    if (x !== "" && y !== "" && !isNaN(a) && !isNaN(b)) return a - b;
+    return x < y ? -1 : x > y ? 1 : 0;
+  }
+  document.querySelectorAll("table.sortable").forEach(function (table) {
+    var body = table.tBodies[0];
+    if (!body) return;
+    table.querySelectorAll("thead th").forEach(function (th, index) {
+      th.addEventListener("click", function () {
+        var asc = th.getAttribute("aria-sort") !== "ascending";
+        var rows = Array.prototype.slice.call(body.rows).sort(function (r, s) {
+          return cmp(key(r.cells[index]), key(s.cells[index]));
+        });
+        if (!asc) rows.reverse();
+        rows.forEach(function (r) { body.appendChild(r); });
+        table.querySelectorAll("thead th").forEach(function (h) {
+          h.removeAttribute("aria-sort");
+        });
+        th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      });
+    });
+  });
+})();
+"""
+
+_SCRIPT_SHA256 = base64.b64encode(hashlib.sha256(_SCRIPT.encode("utf-8")).digest()).decode("ascii")
+
+_CSP = (
+    "default-src 'none'; script-src 'sha256-"
+    + _SCRIPT_SHA256
+    + "'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+)
 
 _CSS = (
     ":root{color-scheme:dark}"
@@ -75,8 +132,23 @@ _CSS = (
     "footer p{max-width:75ch}"
     "@media (max-width:640px){body{padding:1.25rem .75rem}"
     "dl.config{grid-template-columns:1fr}}"
+    "html.has-js table.sortable thead th{cursor:pointer}"
+    "html.has-js table.sortable thead th:hover{text-decoration:underline}"
+    "table.sortable thead th:focus-visible{outline:2px solid #38bdf8;outline-offset:-2px}"
+    'table.sortable thead th[aria-sort=ascending]::after{content:" \\25B2"}'
+    'table.sortable thead th[aria-sort=descending]::after{content:" \\25BC"}'
+    "nav.toc{position:sticky;top:0;z-index:1;background:#0f172a;"
+    "border:1px solid #334155;border-radius:.75rem;padding:.75rem 1.25rem;margin:0 0 2rem}"
+    "nav.toc ul{list-style:none;display:flex;flex-wrap:wrap;gap:.2rem 1.25rem;"
+    "margin:0;padding:0}"
+    "nav.toc a{color:#a9bcd2;font-size:.9rem}"
+    "section{scroll-margin-top:6rem}"
+    "section:target{outline:2px solid #38bdf8;outline-offset:.4rem;border-radius:.25rem}"
+    ".spark-svg{display:block;max-width:100%;height:auto}"
+    ".spark-svg rect{fill:#38bdf8}"
     "@media print{:root{color-scheme:light}"
     "body{background:#fff;color:#111;max-width:none}"
+    "nav.toc{position:static}"
     ".decision{border:2px solid #111;background:#fff!important}"
     ".decision-help,.subtitle,footer,dl.config dt{color:#333}"
     "table{background:#fff}th,td{border-color:#999}thead th{background:#eee;color:#111}}"
@@ -211,6 +283,36 @@ def _short_fingerprint(value: object) -> str:
     return short + "\u2026" if len(text) > 19 else short
 
 
+def _sort_key(value: Any) -> str:
+    """Lexicographic data-sort key for a sortable table cell.
+
+    Ints and floats are emitted plain so the inline sorter compares them
+    numerically; anything else sorts as text. The "?" placeholder used for
+    missing values sorts as empty.
+    """
+    if type(value) is int or type(value) is float:
+        return str(value)
+    text = str(value)
+    return "" if text == "?" else text
+
+
+def _toc(entries: list[tuple[str, str, str]]) -> str:
+    """Sticky table of contents linking to the sections actually rendered.
+
+    Each entry is (anchor, title, section HTML); entries whose section
+    rendered empty are skipped, so the TOC never points at a missing id.
+    Anchors and titles are fixed literals, never model-derived text.
+    """
+    items = "".join(
+        '<li><a href="#' + anchor + '">' + title + "</a></li>"
+        for anchor, title, html in entries
+        if html
+    )
+    if not items:
+        return ""
+    return '<nav class="toc" aria-label="Report sections"><ul>' + items + "</ul></nav>"
+
+
 def _taxonomy_note(result: dict[str, Any]) -> str:
     """One-line failure-taxonomy citation for the decision banner."""
     taxonomy = result.get("failure_taxonomy")
@@ -267,10 +369,12 @@ def _conformance_section(result: dict[str, Any]) -> str:
                 continue
             if entry.get("status") != "ok":
                 cell = '<span class="badge neutral">unavailable</span>'
+                diff_key = "unavailable"
             else:
                 segments = entry.get("diff") or []
                 if not segments:
                     cell = '<span class="badge pass">identical</span>'
+                    diff_key = "identical"
                 else:
                     detail_items = []
                     for segment in segments:
@@ -290,20 +394,31 @@ def _conformance_section(result: dict[str, Any]) -> str:
                         '<span class="badge fail">'
                         + escape(f"{len(segments)} divergent segment(s)")
                         + "</span>"
-                        + '<details><summary class="mono">segments</summary><p class="mono">'
-                        + "<br>".join(detail_items)
-                        + "</p></details>"
+                        + '<details name="conformance-details">'
+                        + '<summary class="mono">segments</summary>'
+                        '<p class="mono">' + "<br>".join(detail_items) + "</p></details>"
                     )
+                    diff_key = "divergent"
             rows.append(
-                '<tr><th scope="row">'
+                '<tr><th scope="row" data-sort="'
                 + escape(str(entry.get("format", "?")))
-                + "</th><td>"
+                + '">'
+                + escape(str(entry.get("format", "?")))
+                + '</th><td data-sort="'
                 + escape(str(entry.get("fixture", "?")))
-                + "</td><td>"
+                + '">'
+                + escape(str(entry.get("fixture", "?")))
+                + '</td><td data-sort="'
+                + escape(_sort_key(entry.get("hand_tokens")))
+                + '">'
                 + escape(str(entry.get("hand_tokens", "?")))
-                + "</td><td>"
+                + '</td><td data-sort="'
+                + escape(_sort_key(entry.get("template_tokens")))
+                + '">'
                 + escape(str(entry.get("template_tokens", "?")))
-                + "</td><td>"
+                + '</td><td data-sort="'
+                + diff_key
+                + '">'
                 + cell
                 + "</td></tr>"
             )
@@ -311,7 +426,7 @@ def _conformance_section(result: dict[str, Any]) -> str:
             body = "<p>No format/fixture pairs were checked.</p>"
         else:
             body = (
-                '<div class="table-wrap"><table>'
+                '<div class="table-wrap"><table class="sortable">'
                 "<caption>Hand-rendered hypothesis vs the checkpoint tokenizer's "
                 "own chat-template rendering, compared as exact token-ID "
                 "sequences.</caption>"
@@ -322,7 +437,9 @@ def _conformance_section(result: dict[str, Any]) -> str:
                 + "</tbody></table></div>"
             )
     return (
-        "<section><h2>Template conformance</h2>" + body + "<p>Each hand-rendered "
+        '<section id="template-conformance"><h2>Template conformance</h2>'
+        + body
+        + "<p>Each hand-rendered "
         'hypothesis is encoded with <span class="mono">add_special_tokens=False</span> '
         "and compared token-ID by token-ID against the checkpoint's own "
         '<span class="mono">apply_chat_template</span> output for the same '
@@ -425,13 +542,180 @@ def _stop_matrix_section(result: dict[str, Any]) -> str:
             stage, rows
         )
     return (
-        "<section><h2>Stop-behavior isolation matrix</h2>"
+        '<section id="stop-behavior-matrix"><h2>Stop-behavior isolation matrix</h2>'
         "<p>The frozen winner's recorded outputs, re-measured under emulated "
         "competitor stop semantics. Each cell recomputes the lab's pass rule "
         "(exact answer and token-ID boundary) on the output as truncated by "
         "that semantic; a flip means the semantic would have changed the "
         "verdict. Emulations are post-hoc truncations of the greedy "
         "N-token outputs.</p>" + sections + '<dl class="config">' + legend + "</dl></section>"
+    )
+
+
+def _backend_divergence_section(result: dict[str, Any]) -> str:
+    """Backend stop-semantics divergence section.
+
+    Renders ``result["backend_divergences"]`` (built by
+    ``diffbackends.divergence_section_data`` from the winner's recorded
+    observations): the one-line verdict, a divergence-class x semantic
+    count matrix with severity badges, and one ``<details>`` callout per
+    divergence. Returns "" when the key is missing, so runs without the
+    diagnosis render exactly as before (the sample-report golden test).
+    Every model/fixture-derived string (fixture names, stop texts,
+    detail lines) is escaped; severities, classes and counts are the
+    module's fixed vocabulary. Severity badges reuse the existing badge
+    palette (high: fail-red; medium/low: neutral slate, with the severity
+    word in the badge text) -- no new CSS, so byte-identical rendering
+    for reports without the section is preserved.
+    """
+    section = result.get("backend_divergences")
+    if type(section) is not dict:
+        return ""
+    pairs_verdict = section.get("pairs_verdict")
+    if type(pairs_verdict) is not str or not pairs_verdict:
+        return ""
+    per_fixture = section.get("per_fixture")
+    matrix = section.get("matrix")
+    severities = section.get("severities")
+    if type(per_fixture) is not list or type(matrix) is not dict:
+        return ""
+    if type(severities) is not dict:
+        severities = {}
+    verdict = section.get("verdict")
+    verdict_badge = (
+        '<span class="badge fail">diverge</span>'
+        if verdict == "diverge"
+        else '<span class="badge pass">agree</span>'
+    )
+
+    # Divergence-class x semantic count matrix: fixed row order (severity
+    # descending), fixed column order, sortable like the other tables.
+    class_order = (
+        "KEPT_VS_STRIPPED",
+        "EOS_PRECEDENCE",
+        "FIRING_STEP_DIFFERS",
+        "MIN_TOKENS_GATED",
+        "HARNESS_NORMALIZATION_RELIED",
+    )
+    semantic_order = (
+        ("hf_stop_string", "HF stop string"),
+        ("vllm_holdback_strip", "vLLM strip"),
+        ("vllm_holdback_keep", "vLLM keep"),
+        ("eos_appended", "EOS-appended"),
+    )
+    severity_badge = {"high": "fail", "medium": "neutral", "low": "neutral"}
+    matrix_rows = []
+    for kind in class_order:
+        counts = matrix.get(kind)
+        if type(counts) is not dict:
+            continue
+        severity = severities.get(kind)
+        sev_badge = (
+            '<span class="badge '
+            + severity_badge.get(str(severity), "neutral")
+            + '">'
+            + escape(str(severity) if type(severity) is str else "?")
+            + "</span>"
+        )
+        matrix_rows.append(
+            '<tr><th scope="row" data-sort="'
+            + escape(kind)
+            + '">'
+            + sev_badge
+            + " "
+            + '<span class="mono">'
+            + escape(kind)
+            + "</span></th>"
+            + "".join(
+                '<td data-sort="'
+                + escape(_sort_key(counts.get(sid, 0)))
+                + '">'
+                + escape(str(counts.get(sid, 0)))
+                + "</td>"
+                for sid, _label in semantic_order
+            )
+            + "</tr>"
+        )
+    matrix_table = (
+        '<div class="table-wrap"><table class="sortable">'
+        "<caption>Divergence-class \u00d7 emulated-semantic counts: each cell counts "
+        "the recorded observations whose stop-semantics differential test fired "
+        "that divergence class for that semantic.</caption>"
+        '<thead><tr><th scope="col">Divergence class</th>'
+        + "".join('<th scope="col">' + label + "</th>" for _sid, label in semantic_order)
+        + "</tr></thead><tbody>"
+        + "".join(matrix_rows)
+        + "</tbody></table></div>"
+        if matrix_rows
+        else "<p>No divergences fired: every recorded observation agreed across "
+        "the emulated stop semantics.</p>"
+    )
+
+    # One <details> callout per divergence: fixture, class with severity,
+    # the stop text, and the recorded detail (which names the semantics
+    # and firing steps that disagreed, plus the kept-vs-stripped text
+    # contrast).
+    callouts = []
+    for entry in per_fixture:
+        if type(entry) is not dict:
+            continue
+        fixture = entry.get("fixture")
+        findings = entry.get("divergences")
+        if type(findings) is not list:
+            continue
+        for finding in findings:
+            if type(finding) is not dict:
+                continue
+            finding_class = finding.get("class")
+            finding_severity = finding.get("severity")
+            finding_stop_text = finding.get("stop_text")
+            finding_detail = finding.get("detail")
+            callouts.append(
+                "<details><summary>"
+                + '<span class="badge '
+                + severity_badge.get(str(finding_severity), "neutral")
+                + '">'
+                + escape(str(finding_severity) if type(finding_severity) is str else "?")
+                + "</span> "
+                + '<span class="mono">'
+                + escape(str(finding_class))
+                + "</span>"
+                + " on "
+                + '<span class="mono">'
+                + escape(str(fixture))
+                + "</span>"
+                + "</summary><p>Stop text: "
+                + '<span class="mono">'
+                + escape("\u2014" if finding_stop_text is None else str(finding_stop_text))
+                + "</span></p><p>"
+                + escape(str(finding_detail))
+                + "</p></details>"
+            )
+
+    stop_texts = section.get("stop_texts")
+    params = ""
+    if type(stop_texts) is list and stop_texts:
+        params = (
+            "<p>Stop text(s): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(stop)) + "</span>" for stop in stop_texts
+            )
+            + ".</p>"
+        )
+    return (
+        '<section id="backend-divergence"><h2>Backend divergence</h2>'
+        "<p>Differential test of the emulated backend stop semantics "
+        "(HF stop-string, vLLM detokenizer strip/keep, EOS-appended) over "
+        "the frozen winner's recorded token sequences -- the same "
+        "post-hoc truncation measurement the stop-behavior matrix uses. "
+        + verdict_badge
+        + " "
+        + escape(pairs_verdict)
+        + ".</p>"
+        + params
+        + matrix_table
+        + ("<h3>Divergences</h3>" + "".join(callouts) if callouts else "")
+        + "</section>"
     )
 
 
@@ -444,14 +728,23 @@ def _sweep_section(result: dict[str, Any]) -> str:
         if type(depth) is not dict:
             continue
         changed = depth.get("winner_changed")
+        drop = depth.get("drop_bytes")
         rows.append(
-            '<tr><th scope="row">'
+            '<tr><th scope="row" data-sort="'
+            + escape(str(drop) if type(drop) is int else "")
+            + '">'
             + escape(str(depth.get("drop_bytes", "?")))
-            + "</th><td>"
+            + '</th><td data-sort="'
             + escape(str(depth.get("decision", "?")))
-            + "</td><td>"
+            + '">'
+            + escape(str(depth.get("decision", "?")))
+            + '</td><td data-sort="'
             + escape(str(depth.get("selected_candidate", "?")))
-            + "</td><td>"
+            + '">'
+            + escape(str(depth.get("selected_candidate", "?")))
+            + '</td><td data-sort="'
+            + ("changed" if changed else "stable")
+            + '">'
             + (
                 '<span class="badge fail">changed</span>'
                 if changed
@@ -460,7 +753,7 @@ def _sweep_section(result: dict[str, Any]) -> str:
             + "</td></tr>"
         )
     table = (
-        '<div class="table-wrap"><table>'
+        '<div class="table-wrap"><table class="sortable">'
         "<caption>Search re-run with the prompt truncated mid-token.</caption>"
         '<thead><tr><th scope="col">Dropped bytes</th><th scope="col">Decision</th>'
         '<th scope="col">Selected</th><th scope="col">Vs native</th></tr></thead><tbody>'
@@ -470,7 +763,7 @@ def _sweep_section(result: dict[str, Any]) -> str:
         else "<p>No depths were evaluated.</p>"
     )
     return (
-        "<section><h2>Prompt-boundary sensitivity sweep</h2>"
+        '<section id="sensitivity-sweep"><h2>Prompt-boundary sensitivity sweep</h2>'
         "<p>Each depth drops that many trailing bytes from the rendered prompt "
         "and re-encodes it, truncating the prompt in the middle of its final "
         "token, then re-runs the full search. Native winner: "
@@ -543,15 +836,29 @@ def _outcome_grid_section(result: dict[str, Any]) -> str:
         for name in names:
             outcome = per_candidate[name].get(fid)
             if outcome is True:
-                cells.append('<td><span class="glyph-ok" title="pass">\u2713</span></td>')
+                cells.append(
+                    '<td data-sort="2"><span class="glyph-ok" title="pass">\u2713</span></td>'
+                )
             elif outcome is False:
-                cells.append('<td><span class="glyph-bad" title="fail">\u2717</span></td>')
+                cells.append(
+                    '<td data-sort="1"><span class="glyph-bad" title="fail">\u2717</span></td>'
+                )
             else:
-                cells.append('<td><span class="glyph-na" title="incomplete">\u2013</span></td>')
-        rows.append('<tr><th scope="row">' + escape(fid) + "</th>" + "".join(cells) + "</tr>")
+                cells.append(
+                    '<td data-sort="0"><span class="glyph-na" title="incomplete">\u2013</span></td>'
+                )
+        rows.append(
+            '<tr><th scope="row" data-sort="'
+            + escape(fid)
+            + '">'
+            + escape(fid)
+            + "</th>"
+            + "".join(cells)
+            + "</tr>"
+        )
     return (
-        "<section><h2>Per-fixture outcomes</h2>"
-        '<div class="table-wrap"><table>'
+        '<section id="per-fixture-outcomes"><h2>Per-fixture outcomes</h2>'
+        '<div class="table-wrap"><table class="sortable">'
         "<caption>Search-stage outcome per candidate and fixture: "
         "\u2713 exact answer and boundary, \u2717 completed without passing, "
         "\u2013 incomplete or missing observation. \u2605 marks the selected "
@@ -601,7 +908,7 @@ def _decisive_section(result: dict[str, Any]) -> str:
             + items
             + "</ul>"
         )
-    return "<section><h2>Decisive fixtures</h2>" + body + "</section>"
+    return '<section id="decisive-fixtures"><h2>Decisive fixtures</h2>' + body + "</section>"
 
 
 def _search_rows(result: dict[str, Any]) -> str:
@@ -645,20 +952,35 @@ def _search_rows(result: dict[str, Any]) -> str:
                 + "</span>"
             )
         fingerprint = _short_fingerprint(run.get("candidate_fingerprint"))
+        rate_key = f"{rate:.6f}" if rate is not None else ""
+        attempted = summary.get("attempted")
+        attempted_key = str(attempted) if type(attempted) is int else ""
         rows.append(
-            '<tr><th scope="row">'
+            '<tr><th scope="row" data-sort="'
             + escape(str(name))
-            + "</th><td>"
+            + '">'
+            + escape(str(name))
+            + '</th><td data-sort="'
+            + escape(rate_key)
+            + '">'
             + bar
             + cell
-            + "</td><td>"
+            + '</td><td data-sort="'
             + escape(str(summary.get("status", "?")))
-            + "</td><td>"
+            + '">'
+            + escape(str(summary.get("status", "?")))
+            + '</td><td data-sort="'
+            + escape(attempted_key)
+            + '">'
             + escape(f"{summary.get('attempted', '?')}/{summary.get('planned', '?')}")
-            + '</td><td class="mono">'
+            + '</td><td class="mono" data-sort="'
             + escape(boundary_text)
-            + "</td><td>"
-            + '<details><summary class="mono">'
+            + '">'
+            + escape(boundary_text)
+            + '</td><td data-sort="'
+            + escape(str(run.get("candidate_fingerprint", "")))
+            + '">'
+            + '<details name="candidate-details"><summary class="mono">'
             + escape(fingerprint)
             + "</summary>"
             + '<p class="mono">'
@@ -711,11 +1033,12 @@ def _config_section(result: dict[str, Any]) -> str:
         "<dt>" + escape(key) + "</dt><dd>" + escape(value) + "</dd>" for key, value in items
     )
     return (
-        "<section><h2>Run configuration</h2>"
+        '<section id="run-configuration"><h2>Run configuration</h2>'
         '<dl class="config">'
         + terms
         + "</dl>"
-        + '<details><summary>Full backend fingerprint</summary><p class="mono">'
+        + '<details name="config-details">'
+        + '<summary>Full backend fingerprint</summary><p class="mono">'
         + escape(str(result.get("backend_fingerprint", "")))
         + "</p></details></section>"
     )
@@ -725,7 +1048,7 @@ def _held_out_section(result: dict[str, Any]) -> str:
     held = result.get("held_out")
     if type(held) is not dict:
         return (
-            "<section><h2>Held-out stage</h2>"
+            '<section id="held-out-stage"><h2>Held-out stage</h2>'
             "<p>Not evaluated &mdash; no candidate was promoted from search.</p>"
             "</section>"
         )
@@ -749,7 +1072,7 @@ def _held_out_section(result: dict[str, Any]) -> str:
         )
     )
     return (
-        "<section><h2>Held-out stage</h2>"
+        '<section id="held-out-stage"><h2>Held-out stage</h2>'
         '<div class="cards">' + cards + "</div>"
         "<p>Held-out observations are excluded from this HTML view; "
         "see results.json with --include-evidence for the raw records.</p>"
@@ -768,6 +1091,44 @@ def _sparkline(counts: list[int], total: int) -> str:
     if not counts or total <= 0:
         return "?"
     return "".join(levels[min(7, round(count / total * 7))] for count in counts)
+
+
+def _spark_svg(counts: list[int], total: int, label: str) -> str:
+    """Inline-SVG step curve: one rect per sampled budget, 8 integer levels.
+
+    The same quantized pass-count data as the text sparkline (counts
+    0..``total`` mapped to 8 levels), drawn as SVG rects so the curve
+    prints and scales without relying on block-element glyph coverage in
+    the viewing font. All geometry is integer arithmetic over recorded
+    observation counts, so the output is byte-deterministic; the accessible
+    name states the exact data rather than describing the picture.
+    """
+    if not counts or total <= 0:
+        return "?"
+    bars: list[str] = []
+    for index, count in enumerate(counts):
+        level = min(8, round(count / total * 8))
+        bars.append(
+            '<rect x="'
+            + str(index)
+            + '" y="'
+            + str(8 - level)
+            + '" width="0.9" height="'
+            + str(level)
+            + '"/>'
+        )
+    width = len(counts)
+    return (
+        '<svg class="spark-svg" width="'
+        + str(3 * width)
+        + '" height="24" viewBox="0 0 '
+        + str(width)
+        + ' 8" role="img" aria-label="'
+        + escape(label)
+        + '">'
+        + "".join(bars)
+        + "</svg>"
+    )
 
 
 def _frontier_spark_table(frontier: dict[str, Any]) -> str:
@@ -792,19 +1153,21 @@ def _frontier_spark_table(frontier: dict[str, Any]) -> str:
         total = len(fixture_ids)
         mins = data.get("min_budget_per_fixture") or []
         counts = [sum(1 for mb in mins if type(mb) is int and mb <= budget) for budget in budgets]
-        spark = _sparkline(counts, total)
+        label = f"pass count {counts[0]} to {counts[-1]} of {total} over budgets 1 to {max_tokens}"
+        spark = _spark_svg(counts, total, label)
         full = data.get("full_pass_budget")
         rows.append(
-            '<tr><th scope="row">'
+            '<tr><th scope="row" data-sort="'
             + escape(name)
-            + "</th><td>"
-            + '<span class="spark" role="img" aria-label="'
-            + escape(
-                f"pass count {counts[0]} to {counts[-1]} of {total} over budgets 1 to {max_tokens}"
-            )
+            + '">'
+            + escape(name)
+            + '</th><td data-sort="'
+            + str(counts[-1])
             + '">'
             + spark
-            + "</span></td><td>"
+            + '</td><td data-sort="'
+            + (str(full) if type(full) is int else "")
+            + '">'
             + escape(str(full) if full is not None else "\u2014")
             + "</td></tr>"
         )
@@ -812,7 +1175,7 @@ def _frontier_spark_table(frontier: dict[str, Any]) -> str:
         return ""
     return (
         "<h3>Pass curves by candidate</h3>"
-        '<div class="table-wrap"><table>'
+        '<div class="table-wrap"><table class="sortable">'
         "<caption>Search fixtures passing at or below each token budget, "
         "sampled left to right from budget 1 to " + escape(str(max_tokens)) + ".</caption>"
         '<thead><tr><th scope="col">Candidate</th>'
@@ -833,7 +1196,7 @@ def _frontier_section(result: dict[str, Any]) -> str:
         return ""
     max_tokens = frontier.get("max_new_tokens", "?")
     parts = [
-        "<section><h2>Token-budget frontier</h2>",
+        '<section id="token-budget-frontier"><h2>Token-budget frontier</h2>',
         "<p>Post-hoc recomputation of the search-stage decision at every "
         "smaller token budget, from the recorded outputs alone (exact under "
         "greedy decoding; no extra model calls). Passing at budget <i>b</i> "
@@ -925,6 +1288,41 @@ def render_html(result: dict[str, Any]) -> str:
         + ('</p><p class="decision-help">' + escape(taxonomy_note) if taxonomy_note else "")
         + ('</p><p class="decision-help">' + escape(diagnosis) if diagnosis else "")
     )
+    config_html = _config_section(result)
+    search_html = (
+        '<section id="search-candidates"><h2>Search-stage candidates</h2>'
+        '<div class="table-wrap">'
+        '<table class="sortable">'
+        "<caption>Candidate summary: exact answer plus explicit boundary pass "
+        "rate across search fixtures.</caption>"
+        '<thead><tr><th scope="col">Candidate</th>'
+        '<th scope="col">Pass rate</th><th scope="col">Status</th>'
+        '<th scope="col">Attempts</th><th scope="col">Boundary IDs</th>'
+        '<th scope="col">Details</th>'
+        "</tr></thead><tbody>" + _search_rows(result) + "</tbody></table></div></section>"
+    )
+    outcome_html = _outcome_grid_section(result)
+    decisive_html = _decisive_section(result)
+    conformance_html = _conformance_section(result)
+    stop_matrix_html = _stop_matrix_section(result)
+    divergence_html = _backend_divergence_section(result)
+    frontier_html = _frontier_section(result)
+    sweep_html = _sweep_section(result)
+    held_out_html = _held_out_section(result)
+    toc = _toc(
+        [
+            ("run-configuration", "Run configuration", config_html),
+            ("search-candidates", "Search-stage candidates", search_html),
+            ("per-fixture-outcomes", "Per-fixture outcomes", outcome_html),
+            ("decisive-fixtures", "Decisive fixtures", decisive_html),
+            ("template-conformance", "Template conformance", conformance_html),
+            ("stop-behavior-matrix", "Stop-behavior isolation matrix", stop_matrix_html),
+            ("backend-divergence", "Backend divergence", divergence_html),
+            ("token-budget-frontier", "Token-budget frontier", frontier_html),
+            ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
+            ("held-out-stage", "Held-out stage", held_out_html),
+        ]
+    )
     return (
         "<!doctype html>"
         '<html lang="en">'
@@ -939,31 +1337,25 @@ def render_html(result: dict[str, Any]) -> str:
         "<header><h1>Model Protocol Lab</h1>"
         '<p class="subtitle">Exact-answer and explicit-boundary measurements '
         "on the supplied fixtures.</p></header>"
-        '<section class="decision ' + dclass + '" aria-label="Run decision">'
+        + toc
+        + '<section class="decision '
+        + dclass
+        + '" aria-label="Run decision">'
         '<div class="decision-label">Decision</div>'
         '<div class="decision-value">' + escape(decision) + "</div>"
         '<p class="decision-help">'
         + banner_help
         + "</p></section>"
-        + _config_section(result)
-        + '<section><h2>Search-stage candidates</h2><div class="table-wrap">'
-        "<table>"
-        "<caption>Candidate summary: exact answer plus explicit boundary pass "
-        "rate across search fixtures.</caption>"
-        '<thead><tr><th scope="col">Candidate</th>'
-        '<th scope="col">Pass rate</th><th scope="col">Status</th>'
-        '<th scope="col">Attempts</th><th scope="col">Boundary IDs</th>'
-        '<th scope="col">Details</th>'
-        "</tr></thead><tbody>"
-        + _search_rows(result)
-        + "</tbody></table></div></section>"
-        + _outcome_grid_section(result)
-        + _decisive_section(result)
-        + _conformance_section(result)
-        + _stop_matrix_section(result)
-        + _frontier_section(result)
-        + _sweep_section(result)
-        + _held_out_section(result)
+        + config_html
+        + search_html
+        + outcome_html
+        + decisive_html
+        + conformance_html
+        + stop_matrix_html
+        + divergence_html
+        + frontier_html
+        + sweep_html
+        + held_out_html
         + "<footer>"
         "<p>This report provides no confidence interval, universal "
         "compatibility guarantee, or equal-compute claim. Token counts are "
@@ -971,6 +1363,7 @@ def render_html(result: dict[str, Any]) -> str:
         "<p>Raw prompts, answers and token traces are excluded from this HTML "
         "view.</p>"
         "</footer></main>"
+        "<script>" + _SCRIPT + "</script>"
         "</body></html>"
     )
 
