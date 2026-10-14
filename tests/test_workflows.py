@@ -15,7 +15,7 @@ from model_protocol_lab.cli import main, parse_boundary
 from model_protocol_lab.core import Generation, Split
 from model_protocol_lab.datasets import MAX_BYTES, load_dataset, parse_dataset
 from model_protocol_lab.experiments import run_experiment
-from model_protocol_lab.reporting import render_html, save_report
+from model_protocol_lab.reporting import _SCRIPT, render_html, save_report
 from tests.test_core import BASE, GOOD, RAW, FakeBackend, case, ids
 
 
@@ -188,7 +188,9 @@ class ReportTests(unittest.TestCase):
         result["search"][0]["summary"]["attempted"] = "<img src=x>"
         result["search"][0]["summary"]["planned"] = "<script>x</script>"
         html = render_html(result)
-        self.assertNotIn("<script>", html)
+        # The only <script> permitted is the allowlisted inline table sorter.
+        scrubbed = html.replace("<script>" + _SCRIPT + "</script>", "")
+        self.assertNotIn("<script>", scrubbed)
         self.assertNotIn("<img", html)
         self.assertIn("&lt;script&gt;", html)
         self.assertIn("default-src 'none'", html)
