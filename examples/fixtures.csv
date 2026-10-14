@@ -1,0 +1,5 @@
+id,group,partition,expected,user_1,assistant_1,user_2
+search-copy-blue,copy-colors,search,BLUE,Reply with exactly BLUE and nothing else.,,
+search-latest-green,latest-colors,search,GREEN,Reply with RED.,RED,Now reply with exactly GREEN and nothing else.
+held-number,held-integer,held_out,7,Return only the numeral 7.,,
+held-latest-word,held-latest-noun,held_out,SOUTH,Say NORTH.,NORTH,Replace that answer with the single word SOUTH.
