@@ -44,7 +44,7 @@ from model_protocol_lab.datasets import (
     parse_dataset,
 )
 from model_protocol_lab.experiments import run_experiment
-from model_protocol_lab.reporting import render_html, save_report
+from model_protocol_lab.reporting import _SCRIPT, render_html, save_report
 from tests.test_core import BASE, GOOD, RAW, FakeBackend, case, ids
 from tests.test_workflows import dataset_object, experiment, split
 
@@ -875,7 +875,9 @@ class RenderRobustnessTests(unittest.TestCase):
             }
         )
         self.assertIn("123", html)  # int name coerced, escaped
-        self.assertNotIn("<script>", html)
+        # No script element beyond the single allowlisted inline table sorter.
+        scrubbed = html.replace("<script>" + _SCRIPT + "</script>", "")
+        self.assertNotIn("<script>", scrubbed)
 
     def test_cli_shows_sanitized_error_code(self):
         with TemporaryDirectory() as tmp:
