@@ -82,6 +82,32 @@ reports written directly with `O_EXCL`). Two genuine findings, both fixed:
 strings there are always emitted through `json.dumps` (`ensure_ascii=True`),
 which neutralizes terminal escapes — no change needed.
 
+### Red-team round 3 (2026-10-13)
+
+A third adversarial round targeted the five new round-3 capabilities plus
+re-verification of every documented command. Novel vectors only; round-1/2
+vectors were covered by the regression suite. Five genuine findings, all
+fixed with regression tests:
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| H3-1 | High | `_hf_overhang_match` (the `StopStringCriteria` port behind the stop matrix) missed the tensor implementation's end-overlap class where the stop string ends *inside* the final token (e.g. token `" world"`, stop `"or"`; token `"xstop"`, stop `"stop"`). The port only tried prefix overhangs (`stop[-i:] == token[:i]`), so the stop matrix systematically under-reported HF stops. Found by differential testing against the real `transformers` criterion (18/300 random trials diverged, all lab-miss-real-fire). | Fixed: the port now mirrors `_stop_string_get_matching_positions` exactly (every end-overlap from dropping `k` trailing chars of the final token, then the valid-position walk backwards). Re-verified: 1500/1500 random trials agree on a byte-level BPE tokenizer, plus an exhaustive 256-combination scan on a second vocab with zero divergences. Residual (documented): token texts come from per-token `decode` while HF matches on cleaned vocab strings / raw bytes, so UTF-8-fragment tokens can still diverge — unfixable through the `Backend` protocol. |
+| H3-2 | Medium | `template_diff` is super-quadratic on adversarially fragmented inputs: an alternating equal/divergent token pattern of just n=2000 takes ~45 s (≈cubic scaling — ~6 min at n=4000), hanging `template_conformance` per (format, fixture) pair. Reachable via a hostile checkpoint template + hostile fixture. | Fixed: the difflib matching-blocks loop is replicated with a 10 s wall-clock budget checked between `find_longest_match` calls (each call is linear, so the total is bounded); on expiry it raises `ValueError("template_diff_too_fragmented")`, which the existing per-pair handler degrades to `"unavailable"`. Output is byte-identical to unbounded difflib on 400 randomized inputs; ordinary 20K-token diffs still complete in ~0.1 s. |
+| H3-3 | Medium | `doctor`'s reference-model path (`_portability_check`) and `template_conformance` loaded `tokenizer.json` through `PreTrainedTokenizerFast` with **no** 128 MB pre-load cap — the round-1 fix applied only to `LocalHFBackend`. A swapped-in oversized `tokenizer.json` in a reference checkpoint is parsed into memory uncapped (PoC: 200 MB sparse file triggered a real loader call). | Fixed: new `_tokenizer_file()` helper enforces the cap before every HF loader call site (reference portability, primary deep check, conformance); oversized files degrade to the fixed `"skipped"`/`"unavailable"` codes without parsing. Sparse-file regression tests assert the loader is never invoked. |
+| H3-4 | High | A hostile Jinja `chat_template` in `tokenizer_config.json` renders unbounded text: `{{ 'x' * 100000000 }}` OOM-killed the `template_conformance` worker (exit 137) during render/encode — no exception, the process dies. | Fixed: the template source is capped at 1 MB chars (`"unavailable"` / `"chat_template_too_large"`) and every rendered output at 1 MB chars (pair degrades to `"unavailable"` instead of encoding the bomb). Regression tests assert both degradations and that the loader/encoder never sees the bomb. Residual: CPU burn *inside* the Jinja render itself is the same exposure as HF's own `apply_chat_template` — run unfamiliar checkpoints with resource limits (see trust boundaries). |
+| H3-5 | Medium | The round-3 test file broke the `[dev]`-only suite: 7 test classes import `tokenizers`/`transformers` at test time with no skip guard, so the README quick-start path (`pip install -e ".[dev]"`) errored instead of skipping. (Round 2 had validated that path green before `test_round3.py` existed.) | Fixed: `HAS_HF` module guard + `@unittest.skipUnless` on the seven HF-dependent classes, restoring `[dev]`-only to skip-clean. |
+
+Probed and verified defended (PoC evidence, no change needed):
+
+- **XSS via hostile candidate names:** 5 hostile payloads (`<script>`, `<img onerror>`, `<svg onload>`, entity/quote breaking, `{{7*7}}`) through `run_experiment` → `save_report` → `render_html`, plus hostile names injected into all four new sections (conformance, stop matrix, sweep, taxonomy banner): zero raw payloads in `report.html`; `{{7*7}}` renders as inert text (no HTML metacharacters). New regression test pins this.
+- **`doctor --reference-model` traversal/symlink:** the asset name is the fixed literal `"tokenizer.json"` (`_member` rejects `..`/separators/symlinks); a symlinked `tokenizer.json` → `"skipped"`; a symlink loop → `"skipped"` (no hang); a symlinked *directory* resolves per operator choice and works. No traversal possible by construction.
+- **`truncate_text_tail`:** 20 adversarial cases (multi-byte splits, emoji, flag grapheme clusters, combining marks, empty/negative/bool inputs, lone-surrogate input): never emits lone surrogates (decode either succeeds to a valid `str` or the cut degrades to `None`); lone-surrogate input raises `UnicodeEncodeError`, a `ValueError` subclass, consistent with the contract. Grapheme-cluster splits stay at codepoint granularity as documented.
+- **`prompt_sensitivity_sweep`:** compute bounded (`max_drop_bytes` 1–8 enforced in CLI and function; depth count == bound); pre-cancelled sweep returns in 0.00 s (cancellation honored through every `run_experiment`); codepoint-splitting depths record the documented `"failed"` decision.
+- **`failure_taxonomy`:** 17 adversarial observation shapes (backend-error priority, cancelled grouping, mismatch-before-EOS priority, corrupt `output_ids`, empty dict, falsy non-bools) all classify as documented; non-dict input rejected.
+- **`check_boundary_portability`:** raising/lying `secondary_encode` callables degrade to the fixed `secondary_encode_failed` / `secondary_encode_invalid` codes, never raise.
+- **vLLM emulation vs the real `vllm/v1/engine/detokenizer.py`:** the `find` window, earliest-completion selection, `bisect_left` truncation and `stop_buffer_length` semantics all match the fetched upstream source; the `new_char_count == 0` early-return cannot observably diverge (an empty-decoding token cannot complete a non-empty stop, and a present stop would already have fired). Approximation documented: per-prefix batch decodes vs incremental `DecodeStream` (can differ on UTF-8 fragments), `min_tokens=0` assumed.
+- **Old surfaces:** fixture-loading hostile inputs, report-dir permissions and the sanitized error vocabulary re-verified via the full suite (361 tests); new code paths emit only fixed-vocabulary details (int step counts, int ID lists) — no raw checkpoint/backend text.
+
 ### Proven safe (adversarial PoCs, observed not inferred)
 
 - **XSS:** hostile payloads in every dynamic `render_html` field render fully
@@ -117,6 +143,20 @@ which neutralizes terminal escapes — no change needed.
    socket firewall (zero `connect` attempts across `doctor`, backend init and
    generation); guarded by
    `test_no_network_access_during_doctor_and_backend_init`.
+5. The HF stop emulation matches on per-token `decode` strings while real HF
+   matches on cleaned vocab strings / raw bytes: UTF-8-fragment tokens can
+   make real HF fire where the emulation does not (verified: no divergence
+   on 1500 random byte-level trials or an exhaustive 256-combination scan
+   outside the fragment case). Unfixable through the `Backend` protocol;
+   documented in `docs/USAGE.md` §8.2.
+6. A hostile Jinja chat template can still burn CPU inside the render itself
+   (transformers' sandbox restricts code execution, not resource use) — the
+   same exposure as HF's own `apply_chat_template`. Template source and
+   rendered output are capped at 1 MB each (round-3 fix); run unfamiliar
+   checkpoints with resource limits.
+7. `template_diff` degrades (not hangs) after a 10 s budget per
+   (format, fixture) pair on adversarially fragmented inputs; a fully
+   hostile checkpoint can still cost ~10 s per pair before each degrades.
 
 ## Data disclosure
 
