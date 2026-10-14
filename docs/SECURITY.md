@@ -111,8 +111,10 @@ Probed and verified defended (PoC evidence, no change needed):
 ### Proven safe (adversarial PoCs, observed not inferred)
 
 - **XSS:** hostile payloads in every dynamic `render_html` field render fully
-  neutralized (`html.escape`, `quote=True`); CSS classes from internal dicts;
-  CSP `default-src 'none'`; no external assets, no `<script>`.
+  neutralized (`html.escape`, `quote=True`), including inside `data-sort`
+  attribute values; CSS classes from internal dicts; CSP `default-src 'none'`
+  with `script-src` allowlisting only the SHA-256 hash of the single fixed
+  inline table sorter; no external assets, no other `<script>`.
 - **Path traversal:** `_member` rejects `..`/separators/symlinks (regex
   `^[A-Za-z0-9_.-]+$` + `is_symlink`/`is_file` checks); shard names constrained
   to `[A-Za-z0-9_.-]+\.safetensors`; `save_report` writes only fixed filenames.
@@ -164,7 +166,7 @@ No network reporting or telemetry is implemented in this package. Dependency beh
 
 Do not publish actual prompts, outputs, datasets, weights, local paths, credentials, account configuration or dependency diagnostic logs without reviewing them. The source archive contains synthetic examples only. `.gitignore` is a convenience, not a secret scanner or access-control boundary.
 
-The report renderer escapes displayed strings and uses a restrictive content-security policy. Browser behavior and hostile-content rendering still require testing. Do not expand it to render model output as HTML or execute supplied JavaScript.
+The report renderer escapes displayed strings and uses a restrictive content-security policy. Browser behavior and hostile-content rendering still require testing. Do not expand it to render model output as HTML or execute supplied JavaScript. The one inline script is fixed, author-controlled and hash-pinned in the CSP; it never touches model-derived text.
 
 ## Operational limits
 
