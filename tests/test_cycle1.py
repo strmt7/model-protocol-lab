@@ -34,7 +34,7 @@ from model_protocol_lab.cli import _matrix_stage_rows, main
 from model_protocol_lab.core import Fixture, Message, first_boundary
 from model_protocol_lab.doctor import _next_command, doctor, examine_model
 from model_protocol_lab.experiments import budget_frontier, stop_matrix
-from model_protocol_lab.reporting import render_html
+from model_protocol_lab.reporting import _SCRIPT, render_html
 from tests.test_core import FakeBackend
 from tests.test_doctor import write_model_dir
 
@@ -922,8 +922,11 @@ class FrontierReportTests(unittest.TestCase):
                 "search": [],
             }
         )
-        self.assertNotIn("<script>", html)
         self.assertIn("&lt;script&gt;", html)
+        # The hostile name must not introduce any script element beyond the
+        # single allowlisted inline table sorter.
+        scrubbed = html.replace("<script>" + _SCRIPT + "</script>", "")
+        self.assertNotIn("<script>", scrubbed)
 
     def test_section_absent_when_unavailable(self):
         html = render_html({"decision": "failed", "search": []})

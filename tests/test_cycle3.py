@@ -62,19 +62,24 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
     def test_suggestion_sizes_new_tokens_to_fit_declared_window(self):
         from model_protocol_lab.doctor import _build_primary_tokenizer, _longest_prompt_tokens
 
-        report = self._doctor(self.base)
+        # A window comfortably larger than the catalog's longest render, so
+        # the fit (not warning) path is exercised regardless of catalog size.
+        window = 512
+        report = self._doctor(self._variant(window))
         self.assertEqual(report["verdict"], "ok")
         suggestion = report["suggestion"]
         self.assertIsNotNone(suggestion)
         new_tokens = _suggested_new_tokens(suggestion["next_command"])
-        self.assertLessEqual(new_tokens, 64)
-        self.assertGreaterEqual(new_tokens, 1)
-        tokenizer = _build_primary_tokenizer(self.base)
+        tokenizer = _build_primary_tokenizer(self._variant(window))
         longest = _longest_prompt_tokens(tokenizer, FIXTURES)
         self.assertIsNotNone(longest)
+        # Pins the exact sizing formula: largest budget (up to 64) such that
+        # prompt + budget still fits the declared window.
+        self.assertEqual(new_tokens, max(1, min(64, window - longest)))
         # The backend refuses generation when prompt + new tokens exceed the
         # window; the suggestion must fit.
-        self.assertLessEqual(longest + new_tokens, 64)
+        self.assertLessEqual(longest + new_tokens, window)
+        self.assertNotIn("WARNING", suggestion["note"])
         self.assertIn("sized so the longest fixture prompt", suggestion["note"])
 
     def test_suggestion_keeps_default_for_large_window(self):
