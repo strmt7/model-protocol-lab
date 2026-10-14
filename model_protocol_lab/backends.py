@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import re
+from bisect import bisect_left
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from hashlib import sha256
 from importlib.metadata import version
 from pathlib import Path
 from threading import Event, RLock
-from typing import Any
+from typing import Any, TypeVar
 
-from .core import Generation
+from .core import Backend, Generation, _valid_token_ids, truncate_text_tail
 
 
 def _directory(value: str | Path) -> Path:
@@ -41,7 +44,14 @@ def _read_json(path: Path) -> dict:
         content = handle.read(128 * 1024 * 1024 + 1)
     if len(content) > 128 * 1024 * 1024:
         raise ValueError("oversized_asset_json")
-    value = json.loads(content.decode("utf-8"))
+    try:
+        value = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        # Keep the fixed error vocabulary: raw codec/parser text (which
+        # reflects the inspected file's bytes) must not reach doctor check
+        # details. Mirrors datasets.parse_dataset, which maps the same
+        # failure modes to its own vocabulary.
+        raise ValueError("invalid_asset_json") from None
     if type(value) is not dict:
         raise ValueError("invalid_asset_json")
     return value
@@ -96,6 +106,389 @@ def _ids_valid(value: object, vocab_size: int) -> bool:
     return type(value) is tuple and all(
         type(token) is int and 0 <= token < vocab_size for token in value
     )
+
+
+@dataclass(frozen=True)
+class StopOutcome:
+    """Result of emulating one competitor stop semantic on a recorded output.
+
+    ``available=False`` means the emulation could not run (e.g. a decode it
+    needed failed); ``detail`` uses a fixed vocabulary, never raw backend
+    text. ``truncated_ids`` is the token sequence the competitor would have
+    returned: a prefix of the recorded output.
+    """
+
+    available: bool
+    fired: bool
+    truncated_ids: tuple[int, ...]
+    detail: str
+
+
+# Token representations for the HF stop-string port: decoded strings on the
+# classic path, raw token bytes on the byte-space path (see
+# _hf_byte_token_mapper). The overlap algorithm only uses len(), slicing and
+# prefix/suffix tests, which behave identically on both.
+_TokSeq = TypeVar("_TokSeq", str, bytes)
+
+
+def _hf_overhang_match(token_texts: Sequence[_TokSeq], stop: _TokSeq) -> bool:
+    """Port of HF transformers' ``StopStringCriteria`` match rule.
+
+    A match fires only when the stop string overlaps the FINAL token
+    representation. The end-overlaps mirror the tensor implementation's
+    ``_stop_string_get_matching_positions`` exactly: for every ``k`` in
+    ``0..len(last)-1`` (units dropped from the token's end), letting
+    ``L = len(last) - k``, an end-overlap of ``min(L, len(stop))`` is
+    recorded when ``last[:L]`` ends with the stop string (``L >= len(stop)``)
+    or with its length-``L`` suffix (``L < len(stop)``). In particular the
+    stop string need only *occur* in the final token -- e.g. token
+    ``" world"`` with stop ``"or"`` fires in real HF, as does the
+    prefix-overhang ``stop[-i:] == last[:i]`` from the documented string
+    algorithm. Every such end-overlap is then walked backwards, consuming
+    each earlier token's full length when its suffix matches the remaining
+    stop-string suffix (the tensor implementation's valid-position check),
+    and the string counts as matched once consumption reaches its length.
+    This mirrors both the documented string algorithm and the tensor
+    implementation's parallel end-overlap paths (``stopping_criteria.py``,
+    ``StopStringCriteria``); the docstring's "impossible to construct"
+    claim does not hold for the implementation, which is what is ported
+    here. A match can therefore fire when the stop string never appears as
+    a literal suffix of the decoded text -- the token-boundary "overhang"
+    cases from the HF docstring, e.g. ``["las", "topper"]`` matching
+    ``"stop"``.
+
+    The units are whatever the caller supplies: pass per-token decoded
+    strings for the classic path, or raw token bytes (with the stop string
+    UTF-8-encoded) for the byte-space path that current transformers uses
+    for byte-level and byte-fallback decoders (see
+    ``_hf_byte_token_mapper``). HF matches on *cleaned vocab strings* on the
+    classic path; this port matches on per-token ``decode`` strings there,
+    which agree except on exotic spacing edge cases.
+    """
+    if not stop or not token_texts:
+        return False
+    last = token_texts[-1]
+    if type(last) is not type(stop):
+        return False
+    target = len(stop)
+    token_len = len(last)
+    end_overlaps: set[int] = set()
+    for dropped in range(token_len):
+        width = token_len - dropped
+        # The token with ``dropped`` trailing units removed ends with the
+        # stop string, or -- when shorter than the stop string -- with the
+        # stop string's trailing ``width`` units (the prefix-overhang case).
+        suffix = stop if width >= target else stop[target - width :]
+        if last[:width].endswith(suffix):
+            end_overlaps.add(min(width, target))
+    for overlap in sorted(end_overlaps, reverse=True):
+        matched = overlap
+        index = len(token_texts) - 2
+        while matched < target and index >= 0:
+            token = token_texts[index]
+            if type(token) is not type(stop):
+                break
+            remainder = stop[: target - matched]
+            width = min(len(token), len(remainder))
+            if width == 0 or token[len(token) - width :] != remainder[len(remainder) - width :]:
+                break
+            matched += len(token)
+            index -= 1
+        if matched >= target:
+            return True
+    return False
+
+
+def _first_firing_step(
+    token_texts: Sequence[_TokSeq], stop: _TokSeq, base: int, total: int
+) -> int | None:
+    """1-based output step at which the stop first completes, if any."""
+    for step in range(1, total + 1):
+        if _hf_overhang_match(token_texts[: base + step], stop):
+            return step
+    return None
+
+
+def _bytes_to_unicode() -> dict[int, str]:
+    """Port of ``transformers.convert_slow_tokenizer.bytes_to_unicode``.
+
+    The GPT-2 byte-level BPE alphabet: maps each byte value to the unicode
+    character the ByteLevel pre-tokenizer represents it with. Inlined
+    (rather than imported) so byte-space stop matching works without the HF
+    stack; it is a fixed spec mapping, cross-checked against the real
+    implementation whenever transformers is available (see tests).
+    """
+    byte_values = (
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    chars = byte_values[:]
+    extra = 0
+    for byte in range(256):
+        if byte not in byte_values:
+            byte_values.append(byte)
+            chars.append(256 + extra)
+            extra += 1
+    return dict(zip(byte_values, (chr(char) for char in chars), strict=True))
+
+
+def _decoder_config_has_type(config: Any, decoder_type: str) -> bool:
+    """Port of ``StopStringCriteria._decoder_has_type``: does the tokenizers
+    decoder config tree contain a decoder of the given type?"""
+    if isinstance(config, dict):
+        if config.get("type") == decoder_type:
+            return True
+        return any(_decoder_config_has_type(value, decoder_type) for value in config.values())
+    if isinstance(config, list):
+        return any(_decoder_config_has_type(value, decoder_type) for value in config)
+    return False
+
+
+def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | None:
+    """Byte-space token mapping mirroring HF ``StopStringCriteria``'s table build.
+
+    Ports ``StopStringCriteria._get_stop_string_matching_mode`` and
+    ``_token_to_bytes`` (the byte-space fix for transformers issue #46519):
+    for byte-level and byte-fallback decoders, current transformers matches
+    stop strings on raw token *bytes*, not decoded strings -- a stop string
+    split across UTF-8-fragment tokens fires there while a decode-string
+    port stays silent. Returns a per-token-id mapping, or None when the
+    tokenizer does not use a byte-oriented decoder (the classic string path
+    applies) or the mode cannot be determined. A per-token None means
+    "unmappable in byte space" (e.g. special tokens under a byte-level
+    decoder): the caller falls back to the isolated decode encoded as
+    UTF-8, approximating HF's cleaned-vocab-string fallback for such
+    tokens. Out-of-vocabulary ids map to ``b""``, which can never match --
+    mirroring HF clamping them to a dummy table row. Never raises:
+    anything unexpected degrades to None (string path).
+    """
+    try:
+        decoder = getattr(getattr(tokenizer, "backend_tokenizer", None), "decoder", None)
+        if decoder is None:
+            return None
+        if decoder.__class__.__name__ == "ByteLevel":
+            mode = "byte_level"
+        else:
+            state = getattr(decoder, "__getstate__", lambda: None)()
+            if isinstance(state, str):
+                state = state.encode()
+            config = None
+            if isinstance(state, bytes):
+                try:
+                    config = json.loads(state)
+                except ValueError:
+                    config = None
+            # Upstream prefers explicit "<0xNN>" byte-fallback tokens when
+            # both markers appear.
+            if _decoder_config_has_type(config, "ByteFallback"):
+                mode = "byte_fallback"
+            elif _decoder_config_has_type(config, "ByteLevel"):
+                mode = "byte_level"
+            else:
+                return None
+        byte_decoder: dict[str, int] | None = None
+        if mode == "byte_level":
+            byte_decoder = {char: byte for byte, char in _bytes_to_unicode().items()}
+        vocab = tokenizer.get_vocab()
+        vocab_size = len(vocab) if isinstance(vocab, dict) else 0
+        if vocab_size <= 0:
+            return None
+    except Exception:  # noqa: BLE001 -- byte path is optional; degrade silently
+        return None
+
+    def _map(token_id: int) -> bytes | None:
+        if type(token_id) is not int or token_id < 0:
+            raise ValueError("token id must be a nonnegative integer")
+        if token_id >= vocab_size:
+            return b""
+        token = tokenizer.convert_ids_to_tokens(token_id)
+        if type(token) is not str:
+            return None
+        if mode == "byte_level":
+            if byte_decoder is not None and all(char in byte_decoder for char in token):
+                return bytes(byte_decoder[char] for char in token)
+            return None
+        # byte_fallback: only explicit "<0xNN>" tokens map directly; the
+        # caller falls back to the decoded string for everything else.
+        if (
+            len(token) == 6
+            and token.startswith("<0x")
+            and token.endswith(">")
+            and all(char in "0123456789abcdefABCDEF" for char in token[3:5])
+        ):
+            return bytes([int(token[3:5], 16)])
+        return None
+
+    return _map
+
+
+def emulate_hf_stop_string(
+    backend: Backend,
+    prompt_ids: tuple[int, ...],
+    output_ids: tuple[int, ...],
+    stop_text: str,
+    *,
+    token_bytes: Callable[[int], bytes | None] | None = None,
+) -> StopOutcome:
+    """Emulate HF transformers' ``StopStringCriteria`` over a recorded output.
+
+    Steps through the recorded output token by token, as ``generate()``
+    would, checking the overhang match after each new token against the
+    prompt plus generated token texts (the prompt supplies context for
+    overhangs off the start, exactly as HF's full-``input_ids`` check does).
+    On fire the output is truncated after the firing token, mirroring HF
+    returning the sequence that completed the stop string.
+
+    With ``token_bytes`` (a per-token-id byte mapping, e.g.
+    ``LocalHFBackend.hf_stop_token_bytes``), matching runs in byte space --
+    mirroring current transformers for byte-level and byte-fallback
+    decoders, where the match table is built from raw token bytes and the
+    stop string is UTF-8-encoded. Tokens the mapping cannot represent fall
+    back to the isolated decode encoded as UTF-8 (an approximation of HF's
+    cleaned-vocab-string fallback). Without ``token_bytes`` the classic
+    string path is used: token texts come from per-token
+    ``backend.decode``, an approximation of HF's cleaned vocab strings.
+    """
+    if (
+        not _valid_token_ids(prompt_ids)
+        or not _valid_token_ids(output_ids)
+        or type(stop_text) is not str
+        or not stop_text
+    ):
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    if token_bytes is not None and not callable(token_bytes):
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    base = len(prompt_ids)
+    try:
+        if token_bytes is None:
+            texts = [backend.decode((token,)) for token in (*prompt_ids, *output_ids)]
+            if any(type(text) is not str for text in texts):
+                return StopOutcome(False, False, tuple(output_ids), "token_text_unavailable")
+            step = _first_firing_step(texts, stop_text, base, len(output_ids))
+        else:
+            byte_texts: list[bytes] = []
+            for token in (*prompt_ids, *output_ids):
+                mapped = token_bytes(token)
+                if mapped is None:
+                    decoded = backend.decode((token,))
+                    if type(decoded) is not str:
+                        return StopOutcome(
+                            False, False, tuple(output_ids), "token_text_unavailable"
+                        )
+                    mapped = decoded.encode("utf-8")
+                if type(mapped) is not bytes:
+                    return StopOutcome(False, False, tuple(output_ids), "token_text_unavailable")
+                byte_texts.append(mapped)
+            step = _first_firing_step(byte_texts, stop_text.encode("utf-8"), base, len(output_ids))
+    except Exception:  # noqa: BLE001 -- emulation degrades, never fails the run
+        return StopOutcome(False, False, tuple(output_ids), "token_text_unavailable")
+    if step is None:
+        return StopOutcome(True, False, tuple(output_ids), "no_stop_within_cap")
+    return StopOutcome(True, True, tuple(output_ids[:step]), f"fired_at_step_{step}")
+
+
+def emulate_vllm_holdback(
+    backend: Backend, output_ids: tuple[int, ...], stop_text: str
+) -> StopOutcome:
+    """Emulate vLLM's detokenizer stop handling over a recorded output.
+
+    Ports ``vllm/v1/engine/detokenizer.py`` ``check_stop_strings``: after
+    each new token the decoded text is searched with the same
+    ``find(stop, 1 - new_char_count - stop_len)`` window, and the
+    earliest-completing stop string wins (one stop string here, so no
+    tie-break applies). On fire the text is truncated to the stop-string
+    start -- vLLM's default ``include_stop_str_in_output=False`` -- and
+    tokens after the one completing the stop string are dropped via
+    ``bisect_left`` over per-token text offsets, which for single-token
+    updates keeps exactly the firing prefix. The incremental text comes
+    from ``backend.decode`` of each prefix, an approximation of vLLM's
+    ``DecodeStream``; the ``stop_buffer_length`` holdback only withholds
+    streamed deltas and does not change this final truncation.
+    """
+    if not _valid_token_ids(output_ids) or type(stop_text) is not str or not stop_text:
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    stop_len = len(stop_text)
+    texts: list[str] = []
+    try:
+        for step in range(1, len(output_ids) + 1):
+            text = backend.decode(tuple(output_ids[:step]))
+            if type(text) is not str:
+                return StopOutcome(False, False, tuple(output_ids), "decode_unavailable")
+            texts.append(text)
+    except Exception:  # noqa: BLE001 -- emulation degrades, never fails the run
+        return StopOutcome(False, False, tuple(output_ids), "decode_unavailable")
+    offsets = [0]
+    for text in texts:
+        offsets.append(len(text))
+    for step, text in enumerate(texts, start=1):
+        new_char_count = len(text) - (len(texts[step - 2]) if step > 1 else 0)
+        # Same window as vLLM: already-searched text is excluded; a negative
+        # start searches from 0, exactly like vLLM's str.find call.
+        index = text.find(stop_text, 1 - new_char_count - stop_len)
+        if index == -1:
+            continue
+        stop_end = index + stop_len
+        kept = bisect_left(offsets, stop_end, lo=1)
+        return StopOutcome(True, True, tuple(output_ids[:kept]), f"fired_at_step_{step}")
+    return StopOutcome(True, False, tuple(output_ids), "no_stop_within_cap")
+
+
+def emulate_eos_stop(output_ids: tuple[int, ...], eos_id: int | None) -> StopOutcome:
+    """Emulate an EOS-terminated competitor (lm-eval appends EOS to its stop
+    sequences; vLLM and llama.cpp stop on EOS by default): truncate before
+    the first EOS token. The lab itself generates through EOS, so this cell
+    shows what changes if it had not.
+    """
+    ids = tuple(output_ids)
+    if eos_id is None:
+        return StopOutcome(False, False, ids, "eos_id_unavailable")
+    if type(eos_id) is not int or eos_id < 0:
+        return StopOutcome(False, False, ids, "invalid_eos_id")
+    for index, token in enumerate(ids):
+        if token == eos_id:
+            return StopOutcome(True, True, ids[:index], f"fired_at_step_{index + 1}")
+    return StopOutcome(True, False, ids, "no_stop_within_cap")
+
+
+class TruncatedPromptBackend:
+    """Wrap a backend, truncating every encoded prompt mid-token.
+
+    ``encode(text)`` drops ``drop_bytes`` trailing bytes (whole-UTF-8-char
+    granularity; see ``core.truncate_text_tail``) and re-encodes, so the
+    model sees a prompt truncated in the middle of its final token.
+    ``decode`` and ``generate`` pass through untouched. Used by the
+    prompt-boundary sensitivity sweep.
+    """
+
+    def __init__(self, inner: Backend, drop_bytes: int) -> None:
+        if type(drop_bytes) is not int or drop_bytes < 1:
+            raise ValueError("drop_bytes must be a positive integer")
+        inner_fingerprint = getattr(inner, "fingerprint", None)
+        if type(inner_fingerprint) is not str:
+            raise ValueError("Backend fingerprint must be a string")
+        self._inner = inner
+        self._drop_bytes = drop_bytes
+        self.fingerprint = f"{inner_fingerprint}+prompt-trunc-{drop_bytes}b"
+        # Truncation only rewrites prompts; the stop-string byte mapping is a
+        # pure tokenizer property, so it forwards unchanged.
+        self.hf_stop_token_bytes = getattr(inner, "hf_stop_token_bytes", None)
+
+    def encode(self, text: str) -> tuple[int, ...]:
+        mutated = truncate_text_tail(text, self._drop_bytes)
+        if mutated is None:
+            raise ValueError("prompt_truncation_splits_codepoint")
+        return self._inner.encode(mutated)
+
+    def decode(self, token_ids: tuple[int, ...]) -> str:
+        return self._inner.decode(token_ids)
+
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        return self._inner.generate(
+            input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
+        )
 
 
 class _ContextWindowError(Exception):
@@ -240,8 +633,18 @@ class LocalHFBackend:
             payload = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
             self.fingerprint = "sha256:" + sha256(payload).hexdigest()
             self.seed_used_for_selection = False
+            raw_eos = tokenizer.eos_token_id
+            self.eos_token_id: int | None = raw_eos if type(raw_eos) is int else None
             self._context_limit, self._vocab_size = max_context, vocab_size
             self._tokenizer_ids, self._tokenizer, self._model = tokenizer_ids, tokenizer, model
+            # Byte-space stop-string matching is optional diagnostics: if the
+            # mode cannot be determined the HF emulation falls back to the
+            # classic string path, so a mapper failure must never fail init.
+            self.hf_stop_token_bytes: Callable[[int], bytes | None] | None
+            try:
+                self.hf_stop_token_bytes = _hf_byte_token_mapper(tokenizer)
+            except Exception:  # noqa: BLE001 -- byte path is optional diagnostics
+                self.hf_stop_token_bytes = None
         except _ContextWindowError:
             self._model = self._tokenizer = None
             raise RuntimeError("local_context_limit_exceeds_declared_window") from None

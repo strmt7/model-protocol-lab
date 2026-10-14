@@ -7,6 +7,7 @@
   "boundary_token_ids": [
     124
   ],
+  "eos_token_id": null,
   "backend_fingerprint": "synthetic-demo-backend-v1-not-a-model",
   "statistical_confidence": "not_estimated",
   "compute_comparison": "not_equal_compute_certified",
@@ -22,6 +23,9 @@
         "repeat_bos": false
       },
       "candidate_fingerprint": "sha256:b5bcfd60e28c3472af9989469e6ed70361ebdcc4821b36a457a0970edea5933c",
+      "boundary_token_ids": [
+        124
+      ],
       "summary": {
         "status": "completed",
         "planned": 2,
@@ -30,7 +34,8 @@
         "exact_and_boundary_passes": 2,
         "rate": 1.0,
         "encoded_input_tokens": 446,
-        "retained_output_tokens": 32
+        "retained_output_tokens": 32,
+        "failure_code": null
       }
     },
     {
@@ -43,6 +48,9 @@
         "repeat_bos": true
       },
       "candidate_fingerprint": "sha256:b2ba1718c692a8c92e6b88cdbd0d1c72e9348d58ba1889144cf63c7bc28a667f",
+      "boundary_token_ids": [
+        124
+      ],
       "summary": {
         "status": "completed",
         "planned": 2,
@@ -51,7 +59,8 @@
         "exact_and_boundary_passes": 0,
         "rate": 0.0,
         "encoded_input_tokens": 514,
-        "retained_output_tokens": 32
+        "retained_output_tokens": 32,
+        "failure_code": null
       }
     },
     {
@@ -64,6 +73,9 @@
         "repeat_bos": false
       },
       "candidate_fingerprint": "sha256:1b14d265044d796ab8503dad6b871a810209d0e0f10fcbb5f45c34ba7a972d41",
+      "boundary_token_ids": [
+        124
+      ],
       "summary": {
         "status": "completed",
         "planned": 2,
@@ -72,7 +84,8 @@
         "exact_and_boundary_passes": 0,
         "rate": 0.0,
         "encoded_input_tokens": 412,
-        "retained_output_tokens": 32
+        "retained_output_tokens": 32,
+        "failure_code": null
       }
     },
     {
@@ -85,6 +98,9 @@
         "repeat_bos": false
       },
       "candidate_fingerprint": "sha256:4106eb906eebd5cb0b22a2b93629bc7c7e0bc627eb02ced1129fd06adb92d8bb",
+      "boundary_token_ids": [
+        124
+      ],
       "summary": {
         "status": "completed",
         "planned": 2,
@@ -93,7 +109,8 @@
         "exact_and_boundary_passes": 0,
         "rate": 0.0,
         "encoded_input_tokens": 449,
-        "retained_output_tokens": 32
+        "retained_output_tokens": 32,
+        "failure_code": null
       }
     },
     {
@@ -106,6 +123,9 @@
         "repeat_bos": false
       },
       "candidate_fingerprint": "sha256:9207b25899b92f89dde3c3e8cd3aeefde7082db8cea281f924368ff82c2cbd1b",
+      "boundary_token_ids": [
+        124
+      ],
       "summary": {
         "status": "completed",
         "planned": 2,
@@ -114,7 +134,8 @@
         "exact_and_boundary_passes": 0,
         "rate": 0.0,
         "encoded_input_tokens": 440,
-        "retained_output_tokens": 32
+        "retained_output_tokens": 32,
+        "failure_code": null
       }
     }
   ],
@@ -127,9 +148,61 @@
       "exact_and_boundary_passes": 2,
       "rate": 1.0,
       "encoded_input_tokens": 429,
-      "retained_output_tokens": 32
+      "retained_output_tokens": 32,
+      "failure_code": null
     }
   },
   "selected_candidate": "llama3",
+  "selected_boundary_token_ids": [
+    124
+  ],
+  "failure_taxonomy": {
+    "modes": [
+      "no-boundary-in-N",
+      "boundary-text-mismatch",
+      "eos-without-boundary",
+      "held-out-divergence",
+      "backend-error"
+    ],
+    "per_candidate": {
+      "llama3": {
+        "no-boundary-in-N": 0,
+        "boundary-text-mismatch": 0,
+        "eos-without-boundary": 0,
+        "held-out-divergence": 0,
+        "backend-error": 0
+      },
+      "llama3/toggle-bos": {
+        "no-boundary-in-N": 2,
+        "boundary-text-mismatch": 0,
+        "eos-without-boundary": 0,
+        "held-out-divergence": 0,
+        "backend-error": 0
+      },
+      "llama3/no-bos": {
+        "no-boundary-in-N": 2,
+        "boundary-text-mismatch": 0,
+        "eos-without-boundary": 0,
+        "held-out-divergence": 0,
+        "backend-error": 0
+      },
+      "llama3/prefix-newline": {
+        "no-boundary-in-N": 2,
+        "boundary-text-mismatch": 0,
+        "eos-without-boundary": 0,
+        "held-out-divergence": 0,
+        "backend-error": 0
+      },
+      "llama3/prefix-trim": {
+        "no-boundary-in-N": 2,
+        "boundary-text-mismatch": 0,
+        "eos-without-boundary": 0,
+        "held-out-divergence": 0,
+        "backend-error": 0
+      }
+    },
+    "held_out": null,
+    "eos_id_considered": false
+  },
   "raw_evidence_included": false
 }
