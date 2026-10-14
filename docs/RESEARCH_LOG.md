@@ -993,3 +993,440 @@ substantial improvements (the evaluation-heart sample killed 100% of
 non-equivalent mutants). The cycles stop here; the remaining mutation
 work is a known, scoped, optional follow-up, not a reason to continue
 cycling.
+
+## Round 4 — Cycle 1 research (2026-10-14, restarted by owner mandate)
+
+All sources observed 2026-10-14. Three parallel research passes fed this cycle.
+
+### R1 — Exact chat-template structures for 2025–2026 model families
+
+Primary sources: huggingface.co model cards / tokenizer_config.json / chat_template.jinja
+raw files, HF transformers repo, meta-llama/llama-models prompt_format.md. Plain-text,
+no-tools renders (hand-renderable core); `·` = literal.
+
+- **Qwen3** (`Qwen/Qwen3-8B`, tokenizer_config.json): `<|im_start|>{role}\n{content}<|im_end|>\n`
+  per message; no BOS; open suffix `<|im_start|>assistant\n`. Qwen2.5 differs only in
+  always injecting a default system prompt (dropped in Qwen3). Source:
+  https://huggingface.co/Qwen/Qwen3-8B
+- **DeepSeek V3/R1** (deepseek-ai/DeepSeek-V3, DeepSeek-R1): BOS `<｜begin▁of▁sentence｜>`
+  (full-width bars, U+2581), user = `<｜User｜>{content}` (**no closing token**),
+  assistant = `<｜Assistant｜>{content}<｜end▁of▁sentence｜>`; system concatenated raw
+  with no framing. Open suffix: V3 `<｜Assistant｜>`, R1 `<｜Assistant｜><think>\n`.
+  Source: https://huggingface.co/deepseek-ai/DeepSeek-V3
+- **Mistral v0.3 release** (2024-05-22 revision): `<s>[INST] {u} [/INST]{a}</s>[INST] {u2} [/INST]`
+  — note space before `[/INST]`, no leading space on assistant. The Hub file was
+  rewritten post-release (2024-07-17/2024-08-02: system merging, leading-space
+  assistant, tool blocks) — version-dependent, pin to the release revision.
+  Source: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
+- **Phi-4** (microsoft/phi-4): `<|im_start|>{role}<|im_sep|>{content}<|im_end|>` — `<|im_sep|>`,
+  no trailing newlines. No BOS in template. Open suffix `<|im_start|>assistant<|im_sep|>`.
+  Phi-5 not released as of 2026-10-14. Source: https://huggingface.co/microsoft/phi-4
+- **Gemma 3** (HF transformers `tests/models/gemma3/test_processing_gemma3.py` @ main —
+  authoritative; repo gated): `<bos>\n<start_of_turn>{role}\n{content}<end_of_turn>\n`,
+  assistant→model. Vs Gemma 2: system folds into first user turn, 262K tokenizer.
+  Sources: https://github.com/huggingface/transformers, https://ai.google.dev/gemma/docs/formatting
+- **Llama 4** (meta-llama/llama-models `models/llama4/prompt_format.md`): `<|header_start|>`/
+  `<|header_end|>` replace `<|start_header_id|>`/`<|end_header_id|>`; `<|eot|>` replaces
+  `<|eot_id|>`; new `` token. BOS `<|begin_of_text|>`. Open suffix
+  `<|header_start|>assistant<|header_end|>\n\n`. Stop-token selection (`<|eot|>` vs ``)
+  not fully verifiable (HF template gated).
+  Source: https://github.com/meta-llama/llama-models/blob/main/models/llama4/prompt_format.md
+- **GLM-4-9B** (THUDM/glm-4-9b-chat): prefix `[gMASK]<sop>`, frames `<|{role}|>\n{content}`
+  concatenated with no separators. Open suffix `<|assistant|>`.
+  GLM-4.5/4.6 (zai-org): `[gMASK]<sop>\n`, per-message trailing `\n`, mandatory empty
+  `<think></think>` blocks; GLM-5.3-Flash (Aug 2026, MIT): auto-injected
+  `<|system|>Reasoning Effort: Max`, open suffix `<|assistant|><think>`.
+  Sources: https://huggingface.co/THUDM/glm-4-9b-chat, https://huggingface.co/zai-org/GLM-4.6
+- **Kimi K2** (moonshotai/Kimi-K2-Instruct, chat_template.jinja): `<|im_{role}|>{role_name}<|im_middle|>{content}<|im_end|>`
+  (role name twice); default Kimi system injected if missing; no BOS emitted.
+  Kimi K3 (Jul 2026): abandoned K2 format for Python-built XTML
+  (`<|open|>message role="user"<|sep|>…<|end_of_msg|>`).
+  Sources: https://huggingface.co/moonshotai/Kimi-K2-Instruct, https://huggingface.co/moonshotai/Kimi-K3
+- **DeepSeek V4.1-Flash** (Oct 2026, MIT): same BOS/EOS as V3; `<｜System｜>` framing,
+  `｜DSML｜` tool markup, auto "Reasoning Effort: 75" preamble, `<｜Assistant｜>` as a
+  post-user transition token. Source: https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash
+
+All are hand-renderable without Jinja for short plain-text conversations (deterministic
+once branches are fixed: no tools, no images, thinking on/off, system or not).
+Version-dependent flags: Mistral v0.3 rewrite, Gemma 3 `<bos>` newline (HF test says
+yes, third-party docs simplify away), Kimi K2 `[BOS]` declared-but-unused, Llama 4
+stop-token selection, Phi-4 deployment-dependent BOS.
+
+### R2 — HF transformers vs vLLM stop/boundary semantics (primary: transformers `main` stopping_criteria.py, vLLM `main` v1/engine/detokenizer.py, both docs)
+
+- **HF StopStringCriteria** (wired via `generate(..., stop_strings=[...], tokenizer=...)`):
+  matching over **token IDs** with the match table built in string or byte space.
+  Byte-mode selection (`_get_stop_string_matching_mode`): `ByteLevel` decoder → byte-level,
+  `ByteFallback` in decoder config → byte-fallback, else plain string. Table precomputes
+  end-overlaps + valid positions per token **including overhangs off either end**
+  (`["st","opera"]`, `["las","topper"]`, `["s","to","pped"]` all fire on stop `"stop"`);
+  runtime fires only on a **suffix** match. **2026 change: PR #46530** (fixing #46519)
+  added the byte-space path — before it, isolated per-token decodes yielded U+FFFD and
+  silently missed stop strings split across byte-fragment tokens. Stop token is always
+  **kept** in returned ids; there is no include/exclude option.
+  Source: https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/generation/stopping_criteria.py
+- **vLLM** (V1 detokenizer `check_stop_strings`): `stop` strings matched **purely in text
+  space** on incrementally detokenized output; window start `len(output_text) - new_char_count - len(stop) + 1`.
+  **Stop strings are stripped by default** (`include_stop_str_in_output=False`) — hard
+  divergence from HF, which always keeps them. Overshoot: completing token is kept in
+  `token_ids` while text truncates to stop start (token_ids/text can disagree).
+  Earliest-completing stop wins (PR #49391; ties → list order); **`min_tokens` gates all
+  stops** (PR #22014); reasoning-parser stop scoping (#45846, 2026).
+  Source: https://raw.githubusercontent.com/vllm-project/vllm/main/vllm/v1/engine/detokenizer.py
+- **Determinism**: HF greedy deterministic under controlled config; vLLM greedy has a
+  documented practical nondeterminism source — continuous batching (batch-sensitive
+  kernels; Thinking Machines Lab, "Defeating Nondeterminism in LLM Inference", Nov 2025).
+  Implication: emulate the *stop algorithm*, never the token sequence.
+- **Flag**: both backends stop on EOS **by default** (HF `EosTokenCriteria` auto-added;
+  vLLM `ignore_eos=False`); the lab's "exactly N tokens, no implicit EOS stop" discipline
+  matches neither out of the box and must be configured explicitly on both sides
+  (HF: `eos_token_id=None`; vLLM: `ignore_eos=True, stop=[], stop_token_ids=[], min_tokens=0`).
+
+### R3 — Property-based fuzz testing + single-file HTML reports
+
+- **Hypothesis best practices** (official docs, v6.168.x): `st.text()` defaults exclude
+  surrogates; use bare `characters()` to hunt encode/decode asymmetries; composite
+  strategies for (text, byte-split-index) pairs; `RuleBasedStateMachine` for streaming
+  decoders; `assume()` over filtering; `derandomize=True` for deterministic CI.
+  Source: https://hypothesis.readthedocs.io/en/latest/reference/strategies.html
+- **Real tokenizer edge cases**: mid-token UTF-8 splits break incremental decode
+  (COLM 2025, "UTF-8 Plumbing: Byte-level Tokenizers Unavoidably Enable LLMs to Generate
+  Ill-formed UTF-8", https://arxiv.org/pdf/2511.05578.pdf); BPE merge fragments spanning
+  stops (HF StopStringCriteria docs overhang cases); SentencePiece byte-fallback
+  (google/sentencepiece api.md); special-token/regular-token ID collisions
+  (tokenizers CHANGELOG v0.10.0, issue #1544); NFC/NFKC normalization shifting byte
+  offsets (tokenizers components docs).
+- **Advisory**: GHSA-g5f9-3xfg-p9mf (Decepticon v1.1.17, CVE pending, CVSS 9.8) —
+  role-boundary forgery via chat-template special-token literals in untrusted input
+  composed into LLM context (small-vendor source; concept itself well-established in
+  prompt-injection literature). Actionable as a **fixture-hygiene audit**: flag
+  special-token literals in fixture inputs that collide with candidate formats'
+  special tokens. llama.cpp GHSA (tokenize heap overflow, memory-safety) noted.
+- **Report techniques** (zero external assets): the lab's report is currently zero-JS;
+  adding small inline JS is an extension, not continuation. Adoptable: CSS-only
+  tabs/`<details name>` exclusive accordions, sticky anchor TOC, inline **SVG**
+  heatmaps/sparklines (print-safe), ~15-line sortable tables on `data-sort` keys
+  (ptyunit pattern), pytest-html-style self-contained guarantee as a **tested property**
+  (assert no remote URLs in output). Models: pytest-html/pytest-reporter-html1,
+  enes-ak/covsnap single-file report (inline CSS/JS, SVG charts).
+
+### Cycle 1 build decisions
+
+1. Expand catalog to 11 families (qwen3, deepseek, mistral-v0.3-release, phi4, gemma3,
+   llama4, glm4, kimi2) with exact hand-renders and per-family tests.
+2. Hypothesis property-based fuzz tests for boundary detection (overhang property,
+   UTF-8 byte-split property, NFC property), `derandomize=True`.
+3. Stop-matrix hardening: vLLM strip-vs-HF-keep text semantics (`include_stop_str_in_output`),
+   `min_tokens` gating emulation, documented no-EOS-discipline divergence; regression tests.
+4. Special-token literal injection audit in `fixtures build` + `doctor` + report diagnostics.
+5. Report upgrades: sortable tables (small inline JS), sticky anchor TOC, `<details name>`
+   accordions, tested self-contained-asset property.
+
+## Round 4 — Cycle 1 build summary (2026-10-14, VERIFIED)
+
+**Loud cycle.** 509 -> 610 tests, all green; ruff check + format clean (42
+files); mypy clean (11 files); bandit clean; pip-audit clean (torch `+cpu`
+tag unauditable, pre-existing); 98% line coverage; README/VALIDATION test
+counts updated (610); CHANGELOG updated; no "early development" framing
+anywhere.
+
+Built (5 parallel agents + coordinator fixes):
+1. Catalog 3 -> 11 families (qwen3, deepseek, mistral-v0.3-release, phi4,
+   gemma3, llama4, glm4, kimi2), exact hand-renders from R1 primary sources.
+   `Format` gained optional `user_turn_end` / `assistant_turn_end` /
+   `open_suffix` (backwards-compatible). Drive-by: fixed a pre-existing
+   `UnboundLocalError` breaking the `catalog` subcommand.
+2. Hypothesis property-based fuzz tests (13, derandomized): overhang,
+   first-firing-step, UTF-8 splits, NFC, byte-fallback. Two briefed
+   properties turned out false against the port's documented HF behavior;
+   tests assert the true one-way invariants.
+3. Stop-matrix hardening: vLLM strip-vs-HF-keep text semantics
+   (`StopOutcome.returned_text`, per-cell `stop_text`), `min_tokens`
+   gating verified upstream-exact against vLLM `main`
+   `v1/engine/detokenizer.py` (negative `find` start counts from the end;
+   straddling-update offset logic; a stop fully completed during the gate
+   is NOT refound). FAQ documents the no-EOS-discipline divergence.
+4. Special-token literal audit (GHSA-g5f9-3xfg-p9mf): `fixtures build`
+   warns + writes `.audit.json` sidecar; `doctor` warns.
+5. Report upgrades (still single self-contained file, no remote assets):
+   sortable tables (tiny inline JS, CSP sha256-allowlisted), sticky TOC,
+   exclusive accordions, SVG frontier sparkline, tested no-remote-asset
+   property.
+
+Red-team (adversarial, all new code): verdict SHIP-WITH-FIXES, 3 lows, all
+fixed with regression tests: (a) data-sort attribute-escaping pinning test
+(the bug class had escaped once mid-build); (b) audit-sidecar TOCTOU --
+fixture unlinked on lost race, distinct error message; (c) empty-output
+`min_tokens=0` labeled `no_stop_within_cap` not `gated_by_min_tokens`.
+
+Coordinator correction worth recording: the first `min_tokens`
+implementation used never-fire semantics per the task brief; a
+source-level re-read of vLLM `main` showed the check is *skipped* while
+gated (not never-fire) with the find window covering only the tail --
+fixed to upstream-exact with boundary-spanning and not-refound tests.
+
+## Round 4 — Cycle 2 research (2026-10-14)
+
+### R2a — Differential testing of inference-backend stop/boundary behavior
+
+Finding: **no published methodology specifically differential-tests stop/boundary
+semantics across backends** (firing step, kept-vs-stripped text, stop-reason
+precedence). Closest tools diff whole outputs, not stop events: `infer-check`
+(2026-03-09, https://github.com/nullpointerdepressivedisorder/infer-check,
+`diff` command, identical/minor/moderate/severe buckets) and `inferlint`
+(engine-specific T1-T14 behavioral tests, no stop focus). The gap is real;
+the vendors' own bug trackers are the primary-source evidence:
+
+- vLLM #49391 (2026-07): earliest-completing vs list-order stop selection
+  under speculative decoding (streaming vs non-streaming diverged).
+- vLLM #46113 (2026-06): Rust frontend `rposition()` vs Python `find()` --
+  rightmost vs leftmost match on repeated stop strings leaked the stop.
+- vLLM #47137 (2026-06): streaming vs non-streaming tool-parser/stop
+  divergence (kept-vs-dropped content).
+- SGLang #28802 (2026-06): stop-string vs EOS precedence in one step
+  (speculative decoding); ports vLLM #23938 -- both engines shipped the same
+  bug independently.
+- vLLM #3672 (2024): multi-token stop string not excluded in streaming.
+- lm-eval #3587 (2026-02): wrong `until` reuse across requests -> near-zero
+  task accuracy (stop-handling bug destroying a benchmark verdict).
+- tnguyen9210/llm-reasoning-methods 8752906 (2026-07): kept `"\n\n"` stop
+  string produced a bogus empty PRM step, replacing the true last-step
+  score (0.30 vs 0.51).
+- TorchTrade #233 (2026-07): stripped `</answer>` stop string broke an
+  action parser (live agent defaulted to action 0; mocks passed).
+- vLLM-Omni #4260 (2026-06): stripped `</recaption>` broke downstream
+  truncation, losing ~30% of CoT.
+- lm-eval belt-and-suspenders: `vllm_causallms` passes `stop=until` AND
+  re-strips client-side via `postprocess_generated_text`; swiss-ai docs
+  note HF-vs-vLLM stop-string visibility differences silently corrupting
+  per-turn responses, plus ~0.5-1pp kernel drift at T=0 bf16.
+- Spec anchors: vLLM/SGLang default strip (`include_stop_str_in_output=False`);
+  HF keeps the completing token; OpenVINO Model Server documents a
+  streaming-dependent default (excluded when stream=false, included when
+  stream=true).
+
+Recommended divergence classes for `mpl diff-backends`: firing order,
+match position (leftmost/rightmost), kept-vs-stripped, stop-vs-EOS
+precedence, streaming vs non-streaming, min_tokens gating, harness-side
+normalization reliance.
+
+### R2b — Template drift check + protocol-debugger REPL prior art (2026-10-14)
+
+**Drift: none.** All 11 catalog families re-verified against live primary
+sources (HF Hub `lastModified`; 0 merged "chat template" PRs in transformers
+since 2026-10-10; 0 commits to the Gemma-3/Llama-4 authoritative sources
+since 2026-10-13). No new releases today affecting the catalog (Phi-5 still
+unreleased). Caveat: `THUDM/glm-4-9b-chat` now redirects to
+`zai-org/glm-4-9b-chat` (namespace migration; catalog URL comment updated).
+
+**REPL prior art -- the gap is real.** No existing tool combines
+format-hypothesis switching + exact per-segment token IDs + stepped
+boundary detection + special-token audit in an offline terminal REPL:
+- mohitpandeycs/token-visualizer (browser, js-tiktoken): token IDs +
+  chat-template preview for 90+ models, but no segment-level IDs,
+  hypothesis switching, boundary stepping, or audit; needs a browser.
+- vLLM Render APIs (`/v1/chat/completions/render`): closest "render over
+  messages" surface, but needs a running GPU server; no segment IDs,
+  stepping, or audit.
+- llama.cpp `tokenize` CLI / `/tokenize` endpoints: one-shot, needs GGUF.
+- Ollama / LM Studio: aggregate counts only, no inspector.
+
+**Build guidance:** stdlib `cmd.Cmd` (dot-command dispatch, help,
+completion, `cmdqueue` scripting) over `code.InteractiveConsole`; steal
+sqlite3 CLI conventions verbatim: dot-command meta namespace, abbreviations,
+multiline with continuation prompt, `.help PATTERN`, `#` comments,
+`.read FILE` for scripted sessions, startup banner with context prompt.
+Sources: https://github.com/mohitpandeycs/token-visualizer,
+https://docs.python.org/3/library/cmd.html, https://sqlite.org/cli.html.
+
+### Cycle 1 -> 2 transition fix (coordinator, 2026-10-14)
+
+`test_cycle3.DoctorSuggestionSizingTests.test_suggestion_sizes_new_tokens_to_fit_declared_window`
+started failing after the catalog grew to 14 families: the longest render
+(kimi3 XTML, verbose) now tokenizes to 106 tokens on the tiny test model's
+GPT-2 BPE, exceeding its 64-token window, so `doctor` correctly takes the
+documented warning path (`--max-new-tokens 1` + WARNING) instead of the fit
+path the test asserted. This is NOT transformers drift and NOT environmental
+(two builder agents misdiagnosed it; it fails deterministically in
+isolation): it is catalog growth meeting a fixed-size synthetic window, and
+the product behavior is correct per the documented design
+(`_longest_prompt_tokens` deliberately measures over every catalog
+candidate). Fix was test-only: the fit-path test now uses a 512-window
+variant and pins the exact sizing formula
+`new_tokens = max(1, min(64, window - longest))`; the warning path remains
+covered by `test_suggestion_warns_when_prompt_fills_window`.
+
+### R2b provenance spot-check (coordinator, 2026-10-14)
+
+Kimi K3 XTML structure verified against the live
+`moonshotai/Kimi-K3` `encoding_k3.py` (raw file, observed 2026-10-14):
+`_open_tag` = OPEN + tag + attrs + SEP, `_close_tag` = CLOSE + tag + SEP,
+`_end_of_msg` terminates; assistant = open(message) + open(think) +
+reasoning + close(think) + open(response) + content + close(response) +
+close(message) + end_of_msg; the generation prompt opens the `think`
+channel when thinking (line ~920). The catalog's `kimi3` hypothesis
+(empty think block, open suffix ending inside think) matches this
+structure. (Page-text fetch redacts the token literal constants; the
+literal values `<|open|>`/`<|sep|>`/`<|close|>`/`<|end_of_msg|>` rest on
+the R1 raw-file read.)
+
+## Round 4 — Cycle 2 build summary (2026-10-14, VERIFIED)
+
+**Loud cycle.** 610 -> 685 tests, all green; ruff check + format clean (47
+files); mypy clean (13 files); bandit clean; pip-audit clean; 96% line
+coverage (new modules); README/VALIDATION counts updated (685, 96%);
+CHANGELOG updated.
+
+Built (3 parallel agents + coordinator fixes):
+1. Catalog 11 -> 14 families: `kimi3` (K3 XTML, empty think block, open
+   suffix inside think -- structure spot-checked against live
+   `encoding_k3.py`), `deepseek41` (V4.1-Flash chat mode; Reasoning Effort
+   preamble deliberately omitted, documented), `glm45` (GLM-4.5/4.6 think
+   variant); zai-org URL migration noted. Template drift re-checked: none.
+2. `mpl debug`: stdlib-cmd REPL, sqlite3 dot-command conventions,
+   hypothesis switching, per-segment token-ID maps, stepped boundary
+   detection, special-token audit, tokenizer-without-weights attach,
+   `--script` mode. Coordinator-added: terminal-escape sanitization of all
+   fixture-derived output (with regression tests).
+3. `mpl diff-backends`: differential stop-semantics testing over a recorded
+   token sequence, 5 divergence classes grounded in vendors' bug trackers
+   (vLLM #49391/#46113/#47137, SGLang #28802, lm-eval #3587). Coordinator
+   correction: HARNESS_NORMALIZATION_RELIED rescoped to failed strips only
+   (it made "agree" unreachable otherwise), with a genuine-anomaly test
+   (gated stop reappearing in stripped text).
+
+Red-team (cycle 2): SHIP-WITH-FIXES -- 1 medium + 5 lows + 1 info, all
+addressed: HARNESS rescoping, `.read` non-regular-file guard, transcript
+and `.say` memory caps, `.save` path documentation, diffbackends input
+caps (1MB texts, 131072 IDs), K3 provenance spot-check. Each fix has a
+regression test.
+
+Also fixed (coordinator): doctor suggestion-sizing test for the 14-family
+catalog -- longest render (106 tokens) exceeds the tiny test model's
+64-token window; the test now pins the exact sizing formula on a
+512-window variant. Two builders misdiagnosed this as transformers drift;
+it is deterministic catalog growth, product behavior correct.
+
+## Round 4 — Cycle 3 research (2026-10-14)
+
+### Drift re-check (Mistral-Large-2411, GLM-5.3-Flash)
+
+- **Mistral-Large-Instruct-2411**: CONFIRMED against the live model card
+  ("Basic Instruct Template (V7)"):
+  `<s>[SYSTEM_PROMPT] <sys>[/SYSTEM_PROMPT][INST] <u>[/INST] <a></s>[INST] <u2>[/INST]`
+  -- [SYSTEM_PROMPT] frame, leading-space assistant, generation prompt ends
+  after `[/INST]` with no trailing marker. Card warns about subtle
+  whitespaces; `mistral-common` is the source of truth.
+  Source: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411
+- **GLM-5.3-Flash** (zai-org/GLM-5.3-Flash): CONFIRMED against the live
+  `chat_template.jinja` (rendered with transformers' exact Jinja settings)
+  with **two whitespace deltas** vs the R1 record: NO newline after
+  `[gMASK]<sop>` (whitespace-trimmed away), NO newline after
+  `<|assistant|>`; user `<|user|>{content}`; assistant
+  `<|assistant|><think>{reasoning}</think>{content}`; open suffix
+  `<|assistant|><think>`; auto-injected `<|system|>Reasoning Effort: Max`
+  confirmed (effort defaults to max).
+  Source: https://huggingface.co/zai-org/GLM-5.3-Flash
+
+### Presentation research (cross-backend comparison in static reports)
+
+- **infer-check** (https://github.com/nullpointerdepressivedisorder/infer-check):
+  severity-bucketed sweep matrix (identical/minor/moderate/severe + n/N
+  cells), one-line cross-backend verdict
+  ("mlx-lm vs vllm-mlx at temperature=0: 50/50 identical ... Zero
+  serving-layer divergence detected").
+- **Csmith-family differential testing**: variant × defect-class matrix;
+  per-divergence callout entries (seed, what diverged, repro, disposition);
+  "83 agree, 0 mismatch" summary lines.
+- Recommended for the lab's "backend divergence" section: (1)
+  divergence-class × semantics matrix with severity badges, (2) one-line
+  verdict per backend pair, (3) `<details>` callout boxes per divergence.
+  Nothing found presenting *stop-semantics* differentials specifically --
+  the methodology gap (R2a) extends to presentation.
+
+## Round 4 — Cycle 3 build summary (2026-10-14, VERIFIED)
+
+**Loud cycle.** 685 -> 708 tests, all green; ruff check + format clean (49
+files); mypy clean (13 files); bandit clean (one B615 false positive on the
+lab's own load_dataset marked nosec, matching existing practice); pip-audit
+clean; 95% line coverage; README/VALIDATION counts updated (708, 95%);
+CHANGELOG updated.
+
+Built (2 parallel agents + coordinator fixes):
+1. Catalog 14 -> 16 families: `mistral_large` (V7, explicit empty-string
+   open_suffix overriding the " " fallback) and `glm53` (whitespace deltas
+   applied; auto-injected system line deliberately omitted, documented).
+2. Report "Backend divergence" section: `run` classifies the winner's
+   recorded generations via the diff-backends taxonomy and renders a
+   verdict badge, a divergence-class x semantics matrix with severity
+   badges, and <details> callouts -- presentation per infer-check/Csmith
+   research. Degrades to absent (byte-identical report) without usable
+   observations; additive results.json schema.
+
+Red-team (cycle 3): SHIP -- no blocking findings. Verified: aggregation
+attribution correct (not double-counting), CLI decode-failure degradation
+genuinely taken, escaping probed safe, section-absent byte-identity
+empirical, catalog renders match research, determinism verified, DoS
+bounded by experiment caps, schema additive. One LOW suggestion adopted:
+narrowed the exception scope around the divergence wiring so a future bug
+there degrades only that section.
+
+Cycle 4 kicked off: docs debt (debug/diff-backends undocumented, README
+still says "ChatML, Llama 3, Gemma") + hypothesis property tests for the
+divergence classifier. Template drift re-checked 2026-10-14: none (10/12
+Hub repos returned identical lastModified; 2 timed out, previously
+verified).
+
+## Round 4 — Cycle 4 build summary (2026-10-14, VERIFIED)
+
+**Medium cycle (docs + hardening).** 708 -> 714 tests, all green; ruff
+check + format clean (50 files); mypy clean (13 files); bandit clean;
+pip-audit clean; 95% line coverage; README count updated (714);
+CHANGELOG updated; no "early development" framing.
+
+Built (2 parallel agents):
+1. Documentation debt closed: README describes all 16 families + both new
+   commands; docs/USAGE.md gained §10 (`mpl debug`, every dot-command
+   verified against --help, real session transcript) and §11
+   (`mpl diff-backends`, flags, 5 divergence classes, JSON guide, scope
+   limits, real KEPT_VS_STRIPPED example).
+2. Hypothesis property tests for the divergence classifier (6,
+   derandomized, stable across runs): verdict consistency,
+   well-formedness, severity totality, aggregation invariants, length
+   bound, empty-input safety.
+
+No red-team agent this cycle (no source-code changes; docs verified
+against live --help by the builder; coordinator self-reviewed the
+property tests). Template drift re-checked: none.
+
+## Round 4 — Cycle 5 build summary (2026-10-14, VERIFIED)
+
+**Small hardening cycle — closed the last deferred residual.** 714 -> 716
+tests, all green; ruff check + format clean (51 files); mypy clean (13
+files); bandit clean; pip-audit clean; 95% line coverage; README count
+updated (716); CHANGELOG updated.
+
+Context: Round 3's log named exactly one honest residual —
+mutation-testing `experiments.py`'s selection/abstention logic. A
+cosmic-ray run was infeasible (~2 min/mutant sequential), so this cycle
+did targeted adversarial probes of the decision code instead. Two
+genuine behavioral gaps found and pinned
+(`tests/test_cycle8_selection.py`): (1) a failed search evaluation in a
+later-listed candidate vetoes selection even when an earlier candidate
+would be the unique winner -- decision "failed", no held-out (the
+conservative veto ordering had no test); (2) on held-out failure the
+unique search winner is still named in `selected_candidate` while
+`decision` records where it failed -- selection and decision are separate
+records (previously unpinned). Probes confirmed behavior before pinning;
+both tests pass deterministically.
+
+**Deferred list: exhausted.** Every prior rejection stands (llama.cpp
+cell killed with docs; init-fixtures superseded; histogram subsumed;
+confidence intervals violate not_estimated; per-fixture SVG strip
+conflicts with the no-raw-text privacy design; multi-stop emulation a
+deliberate scope exclusion; `--family` a deliberate placeholder;
+per-commit mutation gate infeasible). The selection-logic residual was
+the final item. No significant research-justified work remains; further
+cycles would manufacture busywork. Stopping per the two-quiet-cycle
+rule's intent — there is nothing left to improve without violating a
+documented design decision or a hard constraint.
