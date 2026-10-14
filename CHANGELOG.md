@@ -8,6 +8,125 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Selection-rule veto pins (`tests/test_cycle8_selection.py`): a failed
+  search evaluation in any candidate vetoes selection even when an
+  earlier-listed candidate would be the unique winner; a held-out failure
+  still names the unique search winner while the decision records where
+  it failed.
+
+### Added
+
+- Operator docs for the two new commands: README capabilities now describe
+  all 16 format families plus `mpl debug` and `mpl diff-backends`;
+  `docs/USAGE.md` gained §10 (`mpl debug`: every dot-command, flags, a
+  real session transcript) and §11 (`mpl diff-backends`: flags, the 5
+  divergence classes, JSON reading guide, scope limits) — every flag
+  verified against live `--help`.
+- Hypothesis property tests for the divergence classifier
+  (`tests/test_cycle7_properties.py`, derandomized): verdict ⟺
+  divergences-empty, divergence well-formedness, severity totality,
+  section-aggregation invariants, input-length bound, empty-input safety.
+
+### Added
+
+- Report "Backend divergence" section: the `run` flow now classifies the
+  winner's recorded generations with the diff-backends divergence taxonomy
+  and renders a verdict badge, a divergence-class × semantics matrix with
+  severity badges, and `<details>` callout boxes per divergence
+  (presentation: infer-check/Csmith style). Degrades to absent when no
+  usable observations exist; the committed sample report is byte-identical.
+- Format catalog expanded to 16 families: `mistral_large`
+  (Mistral-Large-Instruct-2411 V7, re-verified against the live model card)
+  and `glm53` (GLM-5.3-Flash with the confirmed whitespace deltas; the
+  auto-injected system line is deliberately omitted like deepseek41's
+  preamble).
+
+### Fixed
+
+- Narrowed the exception scope around the new divergence wiring so a future
+  bug there degrades only that section, not the whole diagnosis block
+  (red-team suggestion).
+
+### Added
+
+- `mpl debug`: an interactive protocol-debugger REPL on stdlib `cmd`
+  (sqlite3-style dot-commands: `.use`, `.render` with per-segment maps,
+  `.tokens`, `.step` for walking boundary detection, `.audit`, `.say`
+  multiline entry, `.save`, bounded `.read`, `.quit`; `--script` for
+  non-interactive runs). Attaches a checkpoint tokenizer without loading
+  weights; operator-visible strings are terminal-escape sanitized.
+- `mpl diff-backends`: differential-testing of the emulated stop semantics
+  (HF stop-string, vLLM strip/keep, EOS) over one recorded token sequence,
+  classifying divergences (`KEPT_VS_STRIPPED`, `FIRING_STEP_DIFFERS`,
+  `MIN_TOKENS_GATED`, `EOS_PRECEDENCE`, `HARNESS_NORMALIZATION_RELIED` --
+  the last scoped to failed strips so the `agree` verdict is meaningful).
+  Grounded in vendors' bug trackers (vLLM #49391/#46113/#47137, SGLang
+  #28802, lm-eval #3587); see `docs/RESEARCH_LOG.md` Round 4 Cycle 2.
+- Format catalog expanded to 14 families: `kimi3` (K3 XTML, structure
+  spot-checked against the live `encoding_k3.py`), `deepseek41`
+  (V4.1-Flash chat mode), `glm45` (GLM-4.5/4.6 think variant).
+
+### Fixed
+
+- `HARNESS_NORMALIZATION_RELIED` no longer fires tautologically on
+  kept-disposition cells (red-team: it made `verdict="agree"` unreachable
+  whenever any stop fired); now reports only failed strips, with a
+  regression test for the genuine anomaly.
+- `mpl debug` hardening (red-team): terminal-escape sanitization of all
+  fixture-derived output, `.read` refuses non-regular files, transcript
+  and `.say` buffer memory caps, `.save` path behavior documented.
+- `diff-backends` input caps (1MB texts, 131072 token IDs).
+- Doctor suggestion-sizing test updated for the 14-family catalog (the
+  longest render now exceeds the tiny test model's 64-token window; the
+  test pins the exact sizing formula on a 512-window variant).
+
+### Added
+
+- Format catalog expanded from 3 to 11 families, each hand-rendered from
+  primary sources (see `docs/RESEARCH_LOG.md` Round 4): `qwen3`, `deepseek`
+  (V3/R1 framing), `mistral` (v0.3 release revision), `phi4`, `gemma3`,
+  `llama4`, `glm4` (4-9B), `kimi2`. `Format` gained optional
+  `user_turn_end` / `assistant_turn_end` / `open_suffix` overrides for
+  families whose per-role terminators differ (e.g. DeepSeek's unterminated
+  user turn, GLM-4's bare `<|assistant|>` generation prompt). Also fixed a
+  pre-existing `UnboundLocalError` that broke the `catalog` subcommand.
+- Hypothesis property-based fuzz tests (`tests/test_fuzz_boundary.py`,
+  derandomized): stop-overhang suffix completeness, first-firing-step
+  minimality against a naive reference, UTF-8 incremental-decode
+  round-trips, NFC byte-offset disagreement, byte-fallback token chunks.
+- Stop-matrix hardening: the vLLM cell now exposes the competitor's text
+  (`StopOutcome.returned_text`), strips the stop string by default
+  (`include_stop_str_in_output=False`, the upstream default -- HF always
+  keeps it, surfaced per cell as `stop_text: kept|stripped`), and models
+  `min_tokens` gating upstream-exact (check skipped while
+  `num_output_tokens <= min_tokens`; the find window's negative start
+  counts from the end of the text, so a stop fully completed during the
+  gate is not refound). FAQ documents the lab's no-implicit-EOS discipline
+  vs both backends' defaults and how to match it per backend.
+- Special-token literal audit (GHSA-g5f9-3xfg-p9mf): `fixtures build`
+  warns on stderr and writes a `<output>.audit.json` sidecar when fixture
+  text contains literals colliding with candidate formats' special tokens
+  (role-boundary forgery hygiene); `doctor` reports the same as a warning.
+- Report upgrades (still one self-contained file, no external assets):
+  sortable tables (small inline script, inert-safe), sticky anchor TOC,
+  exclusive `<details name>` accordions, SVG budget-frontier sparkline, and
+  a tested no-remote-asset property.
+
+### Fixed
+
+- vLLM `min_tokens` emulation corrected to upstream-exact semantics after
+  a source-level re-check of `vllm/main` `v1/engine/detokenizer.py`
+  (negative `find` start counts from the end; straddling-update offset
+  logic), replacing an earlier never-fire approximation.
+- Report `data-sort` attributes now escape hostile strings (attribute
+  injection caught by cross-agent review before release); a regression test
+  pins the fix.
+- `fixtures build` no longer leaves an orphan fixture file if the audit
+  sidecar loses a concurrent-creation race: the just-written fixture is
+  unlinked and the collision is reported distinctly from authoring errors.
+- Empty output with `min_tokens=0` in the vLLM emulation is labeled
+  `no_stop_within_cap`, not `gated_by_min_tokens` (nothing was gated).
+
 - `run` stdout now names the written artifacts: the final JSON line is
   `{"decision": ..., "selected_candidate": ..., "results": "<dir>/results.json",
   "report": "<dir>/report.html"}` so a first run points the operator at the
@@ -123,6 +242,13 @@ All notable changes to this project are documented here. The format follows
   `CITATION.cff`, `CONTRIBUTING.md`, issue and PR templates.
 - Property-based tests (hypothesis) for dataset loading, fixture separation,
   boundary parsing, and adversarial JSON inputs.
+- HTML report upgrades, still a single self-contained file with no external
+  assets: sticky section table of contents with `:target` highlighting;
+  click-to-sort tables via one small inline script (SHA-256 hash-allowlisted
+  in the report's Content-Security-Policy -- the report reads identically
+  with scripting disabled); mutually exclusive `<details>` accordions via
+  `name=`; inline-SVG pass-curve sparklines for the token-budget frontier
+  (same quantized data as the text sparklines, prints and scales reliably).
 
 ### Changed
 

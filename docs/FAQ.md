@@ -62,10 +62,33 @@ reproductions. The HF cell mirrors `StopStringCriteria`'s matching rule
 including its byte-space tables for byte-level tokenizers, but token texts
 for unmappable tokens fall back to isolated decodes, and the truncation is
 post-hoc (exact only for greedy decoding). The vLLM cell approximates
-incremental `DecodeStream` detokenization with per-prefix batch decodes and
-assumes `min_tokens=0`. Disagreements are expected at these edges; the
-matrix answers "which semantics *could* flip this verdict", not "what vLLM
-would print" (USAGE §8.2).
+incremental `DecodeStream` detokenization with per-prefix batch decodes,
+strips the stop string from the returned text by default
+(`include_stop_str_in_output=False`, the upstream default -- HF always
+keeps it), and models `min_tokens` gating (default 0). Disagreements are
+expected at these edges; the matrix answers "which semantics *could* flip
+this verdict", not "what vLLM would print" (USAGE §8.2).
+
+## The lab generates straight through EOS — how do I match that in HF / vLLM?
+
+The lab's decoding discipline is "exactly N tokens, no implicit EOS stop":
+generation runs to the token cap even when EOS appears. Both competitors
+stop on EOS by default -- HF's `generate()` auto-adds `EosTokenCriteria`,
+and vLLM defaults to `ignore_eos=False` -- so neither matches the lab out
+of the box. To make each backend behave like the lab:
+
+- HF: pass `eos_token_id=None` to `generate()` (disables the auto-added
+  `EosTokenCriteria`; no other stop source is on unless you pass stop
+  strings).
+- vLLM: pass `ignore_eos=True`, `stop=[]`, `stop_token_ids=[]` and
+  `min_tokens=0` (every stop source explicitly disabled).
+
+Sources: transformers `main` `stopping_criteria.py`
+(https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/generation/stopping_criteria.py),
+vLLM `main` `v1/engine/detokenizer.py`
+(https://raw.githubusercontent.com/vllm-project/vllm/main/vllm/v1/engine/detokenizer.py),
+vLLM PR #22014 (`min_tokens` gating). See docs/RESEARCH_LOG.md "R2" for the
+full divergence write-up.
 
 ## What happens if I interrupt a run with Ctrl+C?
 
