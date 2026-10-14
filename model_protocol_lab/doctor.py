@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from .backends import _directory, _manifest, _member, _model_assets, _read_json
+from .catalog import CATALOG
 from .core import Fixture, Format, check_boundary_portability, template_diff
 from .datasets import load_dataset
+from .fixtures import audit_special_token_literals
 
 _SUPPORTED_TYPES = ("gpt2", "llama")
 _REJECTED_CONFIG_KEYS = (
@@ -311,7 +313,16 @@ def examine_model(
 
 
 def examine_dataset(path: str | Path) -> dict[str, Any]:
-    """Validate a fixture file; reports counts only."""
+    """Validate a fixture file; reports counts plus a special-token audit.
+
+    The audit scans fixture message text for special-token literals that
+    collide with the catalog formats' special tokens (advisory
+    GHSA-g5f9-3xfg-p9mf: such a literal can forge a role boundary when the
+    fixture is composed into a prompt). Findings are reported under the
+    ``special_token_audit`` check with status ``"warning"`` and never fail
+    the verdict -- fixture hygiene is advisory, exactly as in ``fixtures
+    build``.
+    """
     try:
         # a bounded local JSON reader; not huggingface_hub.datasets.
         split = load_dataset(path)  # nosec B615 -- own bounded JSON reader, not HF datasets
@@ -320,12 +331,35 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
             "verdict": "failed",
             "dataset": {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"},
         }
+    findings = audit_special_token_literals(split, tuple(CATALOG.values()))
+    audit: dict[str, Any] = {
+        "status": "warning" if findings else "ok",
+        "detail": (
+            f"{len(findings)} special-token literal(s) in fixture text; a literal "
+            "that collides with a candidate format's special token can forge a "
+            "role boundary when the fixture is composed into a prompt "
+            "(advisory GHSA-g5f9-3xfg-p9mf)"
+            if findings
+            else "no special-token literals in fixture text"
+        ),
+        "findings": [
+            {
+                "fixture_id": finding.fixture_id,
+                "field": finding.field,
+                "literal": finding.literal,
+                "format_name": finding.format_name,
+                "offset": finding.offset,
+            }
+            for finding in findings
+        ],
+    }
     return {
         "verdict": "ok",
         "dataset": {
             "status": "ok",
             "search_cases": len(split.search),
             "held_out_cases": len(split.held_out),
+            "special_token_audit": audit,
         },
     }
 
