@@ -26,6 +26,14 @@ message content is not expressible here -- use JSON for that). Cells are
 used verbatim: no whitespace stripping, no formula evaluation. Quoted cells
 may contain newlines. Limits mirror the runtime schema (2 MB source, 100
 fixtures per partition, 21 messages, 16,384 characters per cell).
+
+``fixtures build`` also runs a special-token literal audit over the built
+split (see :func:`audit_special_token_literals`) and records the findings
+in a ``<output>.audit.json`` sidecar next to the fixture file. The findings
+cannot live inside the fixture JSON itself: the strict runtime schema
+(:func:`datasets.parse_dataset`) rejects any top-level key beyond
+``search``/``held_out``, so an in-file ``_audit`` key would make the built
+file unloadable. Findings are warnings only and never block the build.
 """
 
 import contextlib
@@ -35,10 +43,11 @@ import json
 import os
 import re
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .core import Fixture, Message, Split
+from .core import Fixture, Format, Message, Split
 from .datasets import MAX_BYTES, MAX_CASES_PER_SPLIT, MAX_MESSAGES, MAX_TEXT, parse_dataset
 
 _FIXED_COLUMNS = ("id", "group", "partition", "expected")
@@ -259,3 +268,215 @@ def write_fixture_file(text: str, path: str | Path) -> Path:
             os.unlink(target)
         raise
     return target
+
+
+# ---------------------------------------------------------------------------
+# Special-token literal audit (fixture hygiene).
+#
+# Advisory GHSA-g5f9-3xfg-p9mf (Decepticon v1.1.17): role-boundary forgery via
+# chat-template special-token literals embedded in untrusted input that is
+# later composed into an LLM context. For the lab this is a fixture-hygiene
+# property: a fixture whose message text contains a literal such as
+# ``<|im_start|>`` would poison the experiment, because the measured
+# "boundary" would come from the fixture text rather than the model.
+#
+# The audit scans fixture message contents for exact, case-sensitive
+# substring matches against the special-token inventory of the candidate
+# formats under test. The inventory is *derived from the formats
+# themselves* (their bos/user_prefix/assistant_prefix/turn_end framing
+# fields, plus the optional per-role turn terminators and open suffix when
+# set), never from a hardcoded token list, so the audit stays in sync with
+# whatever catalog the operator audits against. The extractor is
+# deliberately conservative: it recognizes only four fixed token shapes --
+# ``<|...|>``, ``<...>``, ``[...]`` (letter- or slash-leading, e.g.
+# ``[INST]``, ``[/INST]``, ``[s]``), and the full-width DeepSeek-style
+# ``＜｜...｜＞`` -- matched as literal substrings, case-sensitive, with no
+# regex heuristics beyond those four shapes. Anything not token-shaped in
+# the format fields is not audited (plain words like ``user`` or trailing
+# newlines are ordinary text, not special tokens).
+
+
+@dataclass(frozen=True)
+class AuditFinding:
+    """One special-token literal found in audited text.
+
+    ``fixture_id`` identifies the fixture ("" for raw-string input);
+    ``field`` locates the text: ``"<role>_<n>"`` per message for fixtures
+    (``user_1``, ``assistant_1``, ``user_2``, ...), ``"text"`` for a single
+    raw string, ``"text_<n>"`` for each item of a raw-string tuple.
+    ``literal`` is the exact matched substring, ``format_name`` the
+    candidate format whose inventory contains it, and ``offset`` the
+    character offset of the match within the field text.
+    """
+
+    fixture_id: str
+    field: str
+    literal: str
+    format_name: str
+    offset: int
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.fixture_id) is not str
+            or type(self.field) is not str
+            or type(self.literal) is not str
+            or type(self.format_name) is not str
+        ):
+            raise ValueError("AuditFinding text fields must be strings")
+        if not self.field.strip() or not self.literal or not self.format_name.strip():
+            raise ValueError("AuditFinding field, literal and format_name must be nonblank")
+        if type(self.offset) is not int or self.offset < 0:
+            raise ValueError("AuditFinding offset must be a nonnegative int")
+
+
+# Fixed token shapes, most specific first so ``<|...|>`` is extracted as one
+# token rather than also matching the looser ``<...>`` shape (the inventory
+# dedupes by string anyway; the order only keeps first-seen order stable).
+_TOKEN_SHAPES = (
+    re.compile(r"＜｜[^＜＞\n]+｜＞"),  # full-width DeepSeek-style ＜｜...｜＞
+    re.compile(r"<\|[^<>\n]+\|>"),  # <|im_start|> style
+    re.compile(r"\[[A-Za-z/][^\[\]\n]*\]"),  # [INST], [/INST], [s]
+    re.compile(r"<[^<>\n]+>"),  # <bos>, <s>, <start_of_turn>
+)
+
+
+def _extract_special_tokens(fmt: Format) -> tuple[str, ...]:
+    """Token-shaped substrings of a format's framing fields, deduplicated.
+
+    Scans bos, user_prefix, assistant_prefix, turn_end, then the optional
+    per-role turn terminators and open suffix when set (each falls back to
+    an already-scanned field when None, so only non-None overrides add
+    text). First-seen order is the inventory order the audit reports in.
+    """
+    if type(fmt) is not Format:
+        raise ValueError("_extract_special_tokens needs a Format")
+    seen: list[str] = []
+    fields = (
+        fmt.bos,
+        fmt.user_prefix,
+        fmt.assistant_prefix,
+        fmt.turn_end,
+        fmt.user_turn_end,
+        fmt.assistant_turn_end,
+        fmt.open_suffix,
+    )
+    for text in fields:
+        if text is None:
+            continue
+        for shape in _TOKEN_SHAPES:
+            for match in shape.finditer(text):
+                token = match.group(0)
+                if token not in seen:
+                    seen.append(token)
+    return tuple(seen)
+
+
+def _audit_targets(
+    fixture_or_texts: Fixture | Split | tuple[Fixture | str, ...] | str,
+) -> tuple[tuple[str, str, str], ...]:
+    """Normalize audit input to (fixture_id, field, text) triples."""
+    targets: list[tuple[str, str, str]] = []
+
+    def add_fixture(case: Fixture) -> None:
+        for index, message in enumerate(case.messages):
+            targets.append((case.id, f"{message.role}_{index // 2 + 1}", message.content))
+
+    if type(fixture_or_texts) is Fixture:
+        add_fixture(fixture_or_texts)
+    elif type(fixture_or_texts) is Split:
+        for case in (*fixture_or_texts.search, *fixture_or_texts.held_out):
+            add_fixture(case)
+    elif type(fixture_or_texts) is str:
+        targets.append(("", "text", fixture_or_texts))
+    elif type(fixture_or_texts) is tuple:
+        for position, item in enumerate(fixture_or_texts):
+            if type(item) is Fixture:
+                add_fixture(item)
+            elif type(item) is str:
+                targets.append(("", f"text_{position + 1}", item))
+            else:
+                raise ValueError("audit input tuple must hold Fixture or str items")
+    else:
+        raise ValueError("audit input must be a Fixture, Split, str, or tuple of Fixture/str")
+    return tuple(targets)
+
+
+def audit_special_token_literals(
+    fixture_or_texts: Fixture | Split | tuple[Fixture | str, ...] | str,
+    formats: tuple[Format, ...],
+) -> tuple[AuditFinding, ...]:
+    """Scan fixture message text for special-token literals.
+
+    Advisory GHSA-g5f9-3xfg-p9mf: a special-token literal (e.g.
+    ``<|im_start|>``, ``＜｜User｜＞``, ``[INST]``) embedded in untrusted
+    fixture text can forge a role boundary when the fixture is composed
+    into a prompt, poisoning the experiment. This audit flags exact,
+    case-sensitive substring collisions between message contents and the
+    special-token inventory derived from each given format's framing
+    fields (bos, user_prefix, assistant_prefix, turn_end, plus non-None
+    per-role turn terminators and open suffix -- see
+    :func:`_extract_special_tokens`).
+
+    ``fixture_or_texts`` is a Fixture, a Split (both partitions scanned),
+    a raw string, or a tuple mixing Fixtures and raw strings. ``formats``
+    is a nonempty tuple of Format. Returns findings in deterministic
+    order: fixtures and messages in input order, then formats in the given
+    order, then each format's inventory order, then ascending offsets
+    (overlapping occurrences of one literal each get a finding).
+    """
+    if type(formats) is not tuple or not formats or any(type(fmt) is not Format for fmt in formats):
+        raise ValueError("audit needs a nonempty tuple of Format")
+    inventories = tuple((fmt.name, _extract_special_tokens(fmt)) for fmt in formats)
+    findings: list[AuditFinding] = []
+    for fixture_id, field, text in _audit_targets(fixture_or_texts):
+        for format_name, tokens in inventories:
+            for token in tokens:
+                start = 0
+                while True:
+                    offset = text.find(token, start)
+                    if offset < 0:
+                        break
+                    findings.append(
+                        AuditFinding(
+                            fixture_id=fixture_id,
+                            field=field,
+                            literal=token,
+                            format_name=format_name,
+                            offset=offset,
+                        )
+                    )
+                    start = offset + 1
+    return tuple(findings)
+
+
+_AUDIT_SCHEMA = "model-protocol-lab.audit/v1"
+
+
+def audit_findings_json(findings: tuple[AuditFinding, ...], *, source: str) -> str:
+    """Serialize audit findings to the sidecar document for a built fixture.
+
+    The strict fixture JSON schema (:func:`datasets.parse_dataset`) rejects
+    any top-level key beyond ``search``/``held_out``, so findings cannot be
+    embedded in the fixture file without breaking the loader; ``fixtures
+    build`` writes this document to ``<output>.audit.json`` instead.
+    ``source`` names the fixture file the findings belong to.
+    """
+    if type(findings) is not tuple or any(type(item) is not AuditFinding for item in findings):
+        raise ValueError("audit_findings_json needs a tuple of AuditFinding")
+    if type(source) is not str:
+        raise ValueError("audit sidecar source must be a string")
+    payload = {
+        "schema": _AUDIT_SCHEMA,
+        "source": source,
+        "findings": [
+            {
+                "fixture_id": finding.fixture_id,
+                "field": finding.field,
+                "literal": finding.literal,
+                "format_name": finding.format_name,
+                "offset": finding.offset,
+            }
+            for finding in findings
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
