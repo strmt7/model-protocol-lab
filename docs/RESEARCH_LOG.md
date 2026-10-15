@@ -2866,3 +2866,22 @@ cycle-1 FAQ line (12 Q&As) is an archival claim about the creation
 state, left as-is. Environment, CLI surface, CI YAML, CITATION.cff,
 USAGE.md technical sections, and the "Not established" section all
 verified accurate. README test count updated to 3374.
+
+## 2026-10-15 (cycle 45: run_experiment core-loop differential re-verification)
+
+Differential re-audit of the run_experiment core loop
+(tests/test_cycle45_run_experiment_audit.py, 13 tests): hand-rolled
+independent oracle (own subsequence search, summary math, taxonomy,
+result assembly) vs the real loop, 200-iteration fuzz over fixtures,
+budgets, families, boundaries, eos ids, seeds. Verified: conservative
+unique-winner rule (2-way/3-way/all-pass ties -> ambiguous, zero
+held-out calls), search/held-out separation under adversarial layouts,
+exact budget accounting (no off-by-one, cap=1 edge), determinism
+(byte-identical JSON on same seed), boundary handling incl.
+classify_observation unit contract, failure paths with allowlisted
+error codes. No real bugs found (zero oracle divergences). Mutation
+gate: 6/6 caught (search budget +1, ties-select-first, held-out gating
+removed, winner held-out with default boundary -> decode_failed
+cascade, lax >=1 winner, inverted held-out verdict); unmutated control
+clean. Source untouched (sha256 61dcc509... verified before/after).
+README test count updated to 3387.
