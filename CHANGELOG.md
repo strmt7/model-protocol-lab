@@ -8,6 +8,43 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `mpl diff-reports OLD_RESULTS NEW_RESULTS`: deterministic comparison of
+  two experiment result directories (or two `results.json` paths) for the
+  iterate-and-compare operator loop. Reports the decision flip, the winner
+  change, per-candidate verdict flips on search and held-out, per-fixture
+  outcome diffs (changed-only by default, `--all` lists every compared
+  fixture), and a loud config-drift warning section when the runs used
+  different candidate families, candidate sets, per-candidate boundaries,
+  `--max-new-tokens`, backend fingerprints, or fixture sets. JSON goes to
+  stdout, a human-readable summary to stderr; identical runs report "no
+  differences". Per-fixture comparison needs `--include-evidence` on both
+  runs and degrades loudly otherwise. Exit 0 on a successful comparison
+  even when differences are found. Hostile inputs (oversized, malformed,
+  non-regular files, duplicate JSON fields) collapse to fixed error codes
+  with no tracebacks. See `docs/USAGE.md` section 12.
+- Format catalog expanded to 23 families: `ling` (inclusionAI
+  Ling-3.1-flash, released 2026-10-15, MIT; evidence tier 1 -- the official
+  chat_template.jinja "Bailing V3", preserved at
+  docs/evidence/ling31-chat-template.jinja, derived line-by-line in the
+  catalog comment). The plain-text no-tools core: an always-emitted system
+  block (documented, not modeled -- the lab's Format renders user/assistant
+  turns only), user turns `<role>HUMAN</role>{content}<|role_end|>`,
+  assistant history turns `<role>ASSISTANT</role>\n<think></think>{content}
+  <|role_end|>`, and -- thinking defaults ON (the lab models the default;
+  the thinking_option dependence is documented) -- a generation prompt
+  `<role>ASSISTANT</role>\n<think>`. BOS `<|startoftext|>` is tier-1
+  verified from the official tokenizer_config.json bos_token field; the
+  template itself emits no BOS literal and add_bos_token is false. EOS
+  caveat documented, not modeled: the official eos_token field is
+  `<|role_end|>`, NOT `<|endoftext|>` (that token is the pad_token and a
+  special added token). The thinking-off branch (generation prompt
+  prefills an empty `<think></think>` block) rides the `--mutate` path as
+  `ling/thinking-off` (kolibri/thinking-off convention). Tool-call
+  branches, reasoning-content branches, and the multi-step tool scan are
+  out of scope for the plain-text core. `tests/test_cycle13_families.py`
+  pins byte-exact renders, the thinking-off mutation, the dedup-key
+  no-collision, diffs-vs-all-other-families, and the README naming/count
+  (22 -> 23).
 - Format catalog expanded to 22 families: `nemotron35` (NVIDIA Nemotron 3.5
   Lightning, released 2026-08-11; evidence tier 2 -- official HF model card,
   NeMo SFT docs, community osaurus renderer), `muse_glimmer` (Meta Muse

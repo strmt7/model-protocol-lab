@@ -676,3 +676,88 @@ first 512 are differential-tested in input order and the section records
 the fixed-vocabulary `observations_truncated: true` with the recorded
 count (`observations_total`) -- the run degrades by omission, never by
 exception, and the HTML report names the bound explicitly.
+
+## 12. Comparing two runs (`diff-reports`)
+
+The core operator loop is iterate-and-compare: tweak a template or a
+fixture, re-run, and see exactly what changed. `diff-reports` replaces
+eyeballing two HTML reports with a precise, deterministic comparison of
+two `results.json` files (or the report directories holding them). No
+model is loaded, no network is used, and the same two inputs always
+produce byte-identical output:
+
+```sh
+python -m model_protocol_lab diff-reports run-baseline run-fixed-template
+```
+
+Each argument is a report directory (containing `results.json`) or a
+`results.json` path directly. The JSON comparison goes to stdout; a
+human-readable summary goes to stderr. A real example -- the baseline run
+selected no candidate, the fixed run selected `llama3`:
+
+```
+$ python -m model_protocol_lab diff-reports run-baseline run-fixed-template
+diff-reports: run-baseline vs run-fixed-template
+WARNING: run configurations differ -- results may not be comparable:
+  - fixtures:held_out: [] -> ["h1", "h2"]
+Decision: no_candidate -> compatible_on_fixture_set
+Winner: (none) -> llama3
+Candidate verdict changes (2):
+  search/llama3: fail -> pass
+  held_out/llama3: absent -> pass
+Fixture outcome diffs (4 changed):
+  held_out/llama3/h1: absent -> pass
+  held_out/llama3/h2: absent -> pass
+  search/llama3/f1: fail -> pass
+  search/llama3/f2: fail -> pass
+Summary: decision CHANGED, winner CHANGED, 1 candidate(s) changed verdict, 2 fixture(s) flipped, 1 config drift warning(s).
+```
+
+The stdout JSON carries the same information in machine form: `decision`
+and `winner` (old/new/changed), `config_drift` (the comparability
+warnings), `candidate_verdicts` (per-candidate pass/fail flips on search
+and held-out), `fixture_diffs` (per-fixture old/new outcomes per
+candidate), `evidence` (whether each side carried `--include-evidence`
+observations), and a `summary` with counts (`fixtures_flipped`,
+`candidates_changed_status`, `config_drift_warnings`, `identical`).
+
+What it compares, exactly:
+
+- **Decision and winner**: old decision -> new decision, and the
+  `selected_candidate` change if any. Exact string comparison, no fuzzy
+  matching.
+- **Candidate verdicts**: which candidates changed pass/fail status on
+  search and on held-out (held-out verdicts exist only for each run's
+  winner; every other candidate is `absent` there).
+- **Fixture outcomes**: for each fixture and candidate, old vs new outcome
+  (`pass` requires both the exact answer and the boundary token match --
+  the same criterion `run` uses). Only *changed* fixtures are listed by
+  default; `--all` lists every compared fixture.
+- **Config drift**: the classic operator mistake -- comparing runs that
+  were never comparable. The tool warns loudly when the runs used
+  different candidate families (derived from candidate base names; the
+  `--family` flag is not stored in `results.json`), different candidate
+  sets, different per-candidate boundary token IDs, different
+  `--max-new-tokens`, different backend fingerprints (model identity), or
+  different fixture sets.
+
+Per-fixture comparison needs per-fixture evidence: `results.json` carries
+`observations` only when the run used `--include-evidence`. When either
+side lacks it, the tool says so plainly on stderr and still compares
+everything else (decisions, verdicts, config) instead of guessing.
+
+Exit code is 0 whenever the comparison succeeds -- differences are the
+tool's useful output, not a failure. Exit 1 means an input problem, with a
+fixed error code on stderr and no traceback. Input bounds (all fixed
+codes): at most 32 MB per `results.json` (`results_too_large`); the path
+must be a regular file -- FIFOs, devices, sockets and directories are
+refused (`results_not_regular_file`); duplicate JSON fields and non-finite
+numbers are rejected (`results_duplicate_field`, `results_nonfinite_number`);
+operator-visible identifiers (fixture IDs, candidate names) are stripped
+of control characters before they reach stderr.
+
+Deliberate non-features: the comparison is exact -- there is no fuzzy
+fixture matching and no verdict inference from missing summaries (a
+malformed summary degrades to the verdict `unknown`, shown as such). HTML
+reports are not compared; the structured `results.json` is the source of
+truth.
