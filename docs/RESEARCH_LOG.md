@@ -3146,3 +3146,28 @@ raises UnicodeEncodeError; downstream evaluate collapses it to
 encode_failed and the sweep records the failed decision (documented
 fallback). Mutation gate 6/6 caught on /tmp copies; repo source
 sha256-verified untouched. README test count updated to 3657.
+
+## 2026-10-15 (cycle 57: budget_frontier adversarial audit)
+
+Adversarial re-verification of experiments.budget_frontier
+(tests/test_cycle57_budget_frontier_audit.py, 14 tests): 11
+hand-pinned adversarial cases (step functions, flat regions,
+flip-at-budget-1 as initial point, multi-flip non-monotonic decisions,
+singleton ranges, min-budget-beyond-max, first-occurrence counting,
+malformed outputs, per-candidate boundary_token_ids overrides,
+flip-flip-back range merging, held_out_failed native comparison) plus a
+60-seed differential fuzz against an independent reference (naive
+subsequence scan, per-budget truncation re-evaluation). Invariants
+pinned: sorted/strictly-increasing/minimal decision steps, exact flip
+convention at N>1 vs N-1, completeness, maximally-merged disjoint flip
+ranges, budget_robust iff no ranges, determinism. Sharp edge pinned:
+budget 0 is never evaluated (sweep is 1..max_new_tokens), so a frontier
+point at budget 1 is an initial point, not a flip vs budget 0. No real
+bugs (4 initially mis-derived hand expectations were oracle arithmetic
+errors -- implementation and independent reference agreed). Mutation
+gate 6/6 caught on /tmp copies (off-by-one min budget, drop first/last
+decision step, inverted pass-step detection, inverted flip_ranges
+native comparison, off-by-one flip-range end); repo source
+sha256-verified untouched. Not in scope: HTML/markdown rendering,
+exhaustive validation paths, max-scale perf, the truncation-equals-
+regeneration modeling assumption. README test count updated to 3671.
