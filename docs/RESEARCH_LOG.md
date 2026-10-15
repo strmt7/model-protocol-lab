@@ -2995,3 +2995,35 @@ per-stop composition. Tie-break verified: transformers has literally
 no selection code (torch.any); earliest-completing wins by
 construction, same-step ties outcome-identical. Mutation gate 6/6
 caught on /tmp copies. README test count updated to 3535.
+
+## 2026-10-15 (cycle 51: upstream drift re-check)
+
+Re-checked all standing watch items against primary sources
+(github.com PR/release pages read in full, huggingface.co model
+pages, GitHub release-tag API for publish dates):
+- SGLang PR #42466 (multi-stop earliest-occurrence): STILL OPEN, CI
+  still red (PR Test Base/Extra/AMD ROCm all failing). No action;
+  keep watch. Proposed semantics if merged: earliest occurrence in
+  decoded text wins, ties keep list order.
+- vLLM PR #49391 equivalent check: NO FIDELITY GAP -- the repo
+  already models and pins earliest-completing selection with
+  list-order ties (emulate_vllm_holdback docstring;
+  tests/test_cycle10_sglang.py, test_cycle15_divergence_verify.py,
+  test_cycle37_diffbackends_verify.py). Released vLLM v0.27.0+
+  behavior matches the emulation.
+- Mistral Large 4 (mistralai/Mistral-Large-4-1T-A52B): still
+  "Upcoming release", ETA October 31, 2026. Reflection Beam: no
+  weights (org lists zero models; "later in October"). No action.
+- transformers v5.20.0 published 2026-10-15T18:05:36Z: stopping_criteria.py
+  byte-identical to v5.19.0 (34,389 bytes each; last change 2026-09-18
+  docstring-only). No stop-semantics drift. No action.
+- vLLM latest v0.31.0 (2026-10-05), SGLang latest v0.5.21 (2026-10-02):
+  no stop-string/detokenizer changes in the window. No action.
+- NEW FAMILY LEAD: **Muse Spark Open** (Meta) -- weights released
+  2026-10-15 (816B total / 42B active MoE, 1M context, multimodal,
+  BF16 ~1.5TB / NVFP4 ~530GB, Muse Model License). Repo has
+  muse_glimmer but not muse_spark. Top of the catalog research queue;
+  chat template must be verified from the HF model card before adding
+  (cycle 52). Also flagged: repo `ling` entry vs Ling 3.0's official
+  template (native transformers support landed today); Qwen3.8 as a
+  known out-of-window catalog gap.
