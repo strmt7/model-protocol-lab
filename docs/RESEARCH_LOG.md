@@ -2667,3 +2667,16 @@ rejection, determinism, and decision->exit-code mapping with a fake
 backend. Mutation sensitivity: 9/9 mutants caught on hermetic /tmp
 copies. No help-text discrepancies (4 consistency notes pinned in the
 test-file docstring). README test count updated to 2506.
+
+## 2026-10-15 (cycle 32: core.py Message/Format differential verification)
+
+Differential verification of the `Message`/`Format` data layer against an
+independent oracle written from the docstrings (tests/
+test_cycle32_core_verify.py, 37 tests + 178 subtests): NO functional bug
+found. Renders all 25 real CATALOG families through both oracle and
+implementation (byte-exact); exact-type vs equality-based validation
+asymmetries pinned (str-subclass roles accepted, str-subclass content
+rejected). Mutation sensitivity: 15/15 mutants caught on hermetic /tmp
+copies. No doc contradictions (code enforces more than docstrings
+state; documented in the test-file docstring D1-D5). README test count
+updated to 2543.
