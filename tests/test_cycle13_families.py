@@ -211,10 +211,10 @@ class LingDiffTests(unittest.TestCase):
     def test_ling_differs_from_every_other_family(self) -> None:
         # ling's frames share no opener/terminator literals with any other
         # catalog family; on the same messages the full render must be
-        # byte-different from all 23 other families' renders.
+        # byte-different from every other family's render (dynamic count).
         mine = CATALOG["ling"].render(_MESSAGES)
         others = [name for name in CATALOG if name != "ling"]
-        self.assertEqual(len(others), 23)
+        self.assertEqual(len(others), len(CATALOG) - 1)
         collisions = [name for name in others if CATALOG[name].render(_MESSAGES) == mine]
         self.assertEqual(collisions, [])
 
@@ -246,7 +246,7 @@ class ReadmeLingTests(unittest.TestCase):
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 24)
+        self.assertEqual(len(CATALOG), 27)
 
 
 if __name__ == "__main__":

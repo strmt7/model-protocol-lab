@@ -325,17 +325,17 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         self.assertIn("user_1", stderr)
         self.assertIn("chatml", stderr)
         # <|im_start|> collides with every catalog family that uses it
-        # (chatml, qwen3, phi4, kolibri, lfm25, nemotron35): one finding per
-        # colliding format.
+        # (chatml, qwen3, phi4, kolibri, lfm25, nemotron35, nanbeige42): one
+        # finding per colliding format.
         summary = json.loads(stdout)
-        self.assertEqual(summary["audit_findings"], 6)
+        self.assertEqual(summary["audit_findings"], 7)
         sidecar = Path(summary["audit_path"])
         self.assertTrue(sidecar.is_file())
         doc = json.loads(sidecar.read_text(encoding="utf-8"))
-        self.assertEqual(len(doc["findings"]), 6)
+        self.assertEqual(len(doc["findings"]), 7)
         self.assertEqual(
             {entry["format_name"] for entry in doc["findings"]},
-            {"chatml", "qwen3", "phi4", "kolibri", "lfm25", "nemotron35"},
+            {"chatml", "qwen3", "phi4", "kolibri", "lfm25", "nemotron35", "nanbeige42"},
         )
         self.assertTrue(all(entry["literal"] == "<|im_start|>" for entry in doc["findings"]))
 
@@ -415,12 +415,12 @@ class DoctorAuditTests(unittest.TestCase):
         audit = report["dataset"]["special_token_audit"]
         self.assertEqual(audit["status"], "warning")
         self.assertIn("GHSA-g5f9-3xfg-p9mf", audit["detail"])
-        # <|im_start|> collides with chatml, qwen3, phi4, kolibri, lfm25 and
-        # nemotron35.
-        self.assertEqual(len(audit["findings"]), 6)
+        # <|im_start|> collides with chatml, qwen3, phi4, kolibri, lfm25,
+        # nemotron35 and nanbeige42.
+        self.assertEqual(len(audit["findings"]), 7)
         self.assertEqual(
             {finding["format_name"] for finding in audit["findings"]},
-            {"chatml", "qwen3", "phi4", "kolibri", "lfm25", "nemotron35"},
+            {"chatml", "qwen3", "phi4", "kolibri", "lfm25", "nemotron35", "nanbeige42"},
         )
         finding = audit["findings"][0]
         self.assertEqual(

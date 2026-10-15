@@ -443,11 +443,11 @@ class ThinkingBranchInvariantTests(unittest.TestCase):
     def test_thinking_branches_exist_exactly_where_expected(self) -> None:
         # Thinking-off branches ride the mutate path for exactly the three
         # families whose templates prefill an empty think block when
-        # thinking is disabled (kolibri, nemotron35, ling); thinking-on
-        # rides it for exactly laguna (S-2.1's default). No other family
-        # gains either branch. (tests/test_cycle10_families.py pins the
-        # same invariant from the kolibri side with the nemotron35 and ling
-        # exceptions.)
+        # thinking is disabled (kolibri, nemotron35, ling, nanbeige42);
+        # thinking-on rides it for exactly laguna (S-2.1's default). No
+        # other family gains either branch. (tests/test_cycle10_families.py
+        # pins the same invariant from the kolibri side with the nemotron35,
+        # ling and nanbeige42 exceptions.)
         off_families = {
             family
             for family in CATALOG
@@ -460,7 +460,7 @@ class ThinkingBranchInvariantTests(unittest.TestCase):
             if f"{family}/thinking-on"
             in {variant.name for variant in candidates(family, mutate=True)}
         }
-        self.assertEqual(off_families, {"kolibri", "nemotron35", "ling"})
+        self.assertEqual(off_families, {"kolibri", "nemotron35", "ling", "nanbeige42"})
         self.assertEqual(on_families, {"laguna"})
 
 
@@ -506,13 +506,13 @@ class ReadmeNewFamiliesTests(unittest.TestCase):
 
     def test_readme_count_claim_matches_catalog(self) -> None:
         # Belt-and-braces alongside the cycle-10 pin: the README's
-        # "N-family catalog" claims must track len(CATALOG) == 24.
+        # "N-family catalog" claims must track len(CATALOG) == 27.
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         matches = re.findall(r"(\d+)-family catalog", text)
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 24)
+        self.assertEqual(len(CATALOG), 27)
 
 
 if __name__ == "__main__":

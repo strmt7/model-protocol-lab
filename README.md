@@ -7,13 +7,13 @@
 
 **Is a local language model failing because of its weights, or because its conversations are formatted incorrectly?**
 
-Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — a 24-family catalog (ChatML; Llama 3 and 4; Gemma 2 and 3; Qwen3; DeepSeek V3/R1 and V4.1; Mistral v0.3 and Large; Phi-4; GLM-4, 4.5 and 5.3; Kimi K2 and K3; Kolibri-1; LFM2.5; Nemotron 3.5; Muse Glimmer; Laguna 2.1; Ling-3.1; K2-Horizon), plus bounded BOS, prefix and thinking-mode mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
+Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — a 27-family catalog (ChatML; Llama 3 and 4; Gemma 2 and 3; Qwen3; DeepSeek V3/R1 and V4.1; Mistral v0.3 and Large; Phi-4; GLM-4, 4.5 and 5.3; Kimi K2 and K3; Kolibri-1; LFM2.5; Nemotron 3.5; Muse Glimmer; Laguna 2.1; Ling-3.1; K2-Horizon; Hy4; MiniMax-M3; Nanbeige 4.2), plus bounded BOS, prefix and thinking-mode mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
 
 What sets it apart: it measures checkpoints on token sequences their own chat templates would never produce; it detects response boundaries as token-ID subsequences rather than string stop-sequences; it generates exactly N tokens with no implicit EOS stop; and it abstains on ties instead of crowning a leaderboard winner. The differences are verifiable design decisions, documented with sources in [How this differs](#how-this-differs-from-nearby-tools) — not marketing claims.
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (1120 tests, 95% line coverage), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (1147 tests, 95% line coverage), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -77,7 +77,7 @@ raw prompts or generations.
 
 **Exact-token measurement.**
 - Strict, bounded JSON fixture loading with search/held-out separation checks (IDs, groups and message inputs cannot leak across the split; NFC-normalized).
-- Text-only serialization hypotheses across a 24-family catalog — ChatML; Llama 3/4; Gemma 2/3; Qwen3; DeepSeek V3/R1/V4.1; Mistral v0.3/Large; Phi-4; GLM-4/4.5/5.3; Kimi K2/K3; Kolibri-1; LFM2.5; Nemotron 3.5; Muse Glimmer; Laguna 2.1; Ling-3.1; K2-Horizon — plus bounded BOS, prefix and thinking-mode mutations (`catalog` lists every family with its source).
+- Text-only serialization hypotheses across a 27-family catalog — ChatML; Llama 3/4; Gemma 2/3; Qwen3; DeepSeek V3/R1/V4.1; Mistral v0.3/Large; Phi-4; GLM-4/4.5/5.3; Kimi K2/K3; Kolibri-1; LFM2.5; Nemotron 3.5; Muse Glimmer; Laguna 2.1; Ling-3.1; K2-Horizon; Hy4; MiniMax-M3; Nanbeige 4.2 — plus bounded BOS, prefix and thinking-mode mutations (`catalog` lists every family with its source).
 - Raw token evaluation (`add_special_tokens=False`): explicit token-ID boundary detection with a text-level mismatch diagnostic, cooperative cancellation, and sanitized failure records.
 - Per-candidate response boundaries (`run --boundary-map`): each format hypothesis is measured with its own end-of-turn marker.
 

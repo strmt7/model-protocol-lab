@@ -2478,3 +2478,136 @@ pins (pre-existing -- catalog was already at 23 before this cycle),
 test_e2e catalog-set pin (missing "k2horizon"), and the new
 ReadmeK2HorizonTests pin (README lacks "K2-Horizon"). No README/
 CHANGELOG/VALIDATION edits made (coordinator handles).
+
+## 2026-10-15 (cycle 15 Hy4/MiniMax-M3/Nanbeige family research)
+
+Catalog 24 -> 27 families: `hy4` (Tencent Hy4 preview), `minimax3`
+(MiniMax-M3), `nanbeige42` (Nanbeige 4.2-3B). All three were triaged as
+pinnable in the cycle-14 research; this round re-verified every template
+fact against the primary source (raw HF URLs, fetched with curl per the
+cycle-14 fetch warning -- browser.open mangles chat_template.jinja text;
+small text files only, no weights downloaded). All three repos are
+ungated (HTTP 200 on the raw files). All three templates VERIFIED
+pinnable -- none skipped.
+
+**Primary sources read this round (URL + what was read):**
+- https://huggingface.co/tencent/Hy4-preview/raw/main/chat_template.jinja
+  -- the official template, 309 lines, md5
+  a0b7e28386487d804009340155e7be2b (preserved byte-identical at
+  docs/evidence/hy4-chat-template.jinja). Compiles under stock Jinja2:
+  `raise_exception` (lines 36/38) is render-time only. Fullwidth bar
+  ｜ = U+FF5C verified at the byte level (0x3c 0xff5c 0x68 ...).
+- https://huggingface.co/tencent/Hy4-preview/raw/main/tokenizer_config.json
+  -- bos_token `<｜hy_start:opensource｜>`, eos_token
+  `<｜hy_end:opensource｜>`, pad_token `<｜hy_pad:opensource｜>`.
+- https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/chat_template.jinja
+  -- the official template, 247 lines, md5
+  455403f9cba16ea73388aeb8898da752 (preserved byte-identical at
+  docs/evidence/minimax-chat-template.jinja). `raise_exception` (line
+  203) is render-time only.
+- https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/tokenizer_config.json
+  -- bos_token `]~b]`, eos_token `[e~[`, pad_token `]!p~[`,
+  unk_token `[e~[`, PreTrainedTokenizerFast.
+- https://huggingface.co/Nanbeige/Nanbeige4.2-3B/raw/main/tokenizer_config.json
+  -- 103 lines; no standalone chat_template.jinja (verified 404). The
+  embedded `chat_template` (7961 chars) is the primary source, preserved
+  at docs/evidence/nanbeige-chat-template.jinja (195 lines, exact
+  extraction of the JSON string). Config: bos_token `<|im_start|>`,
+  eos_token `<|im_end|>`, pad_token `<unk>`, tokenizer_class
+  LlamaTokenizer.
+- https://huggingface.co/Nanbeige/Nanbeige4.2-3B/raw/main/chat_template.jinja
+  -- fetched only to confirm the 404 (no standalone template).
+
+**Template decisions (plain-text, no-tools core; line numbers in the
+preserved files):**
+
+hy4 (token suffix ':opensource'): user
+`<｜hy_start:opensource｜>user<｜hy_middle:opensource｜>{content}<｜hy_end:opensource｜>`
+(line 227); history assistant with EMPTY think tags
+`<｜hy_start:opensource｜>assistant<｜hy_middle:opensource｜><think:opensource></think:opensource>{content}<｜hy_end:opensource｜>`
+(line 243, the lab's deterministic no-reasoning hypothesis; the
+reasoned-content branch, line 241, is not a hypothesis); generation
+prompt `...<think:opensource>` for the default reasoning_effort='high'
+(line 306; default set line 33) and `...<think:opensource></think:opensource>`
+for 'no_think' (line 304 -- rides the mutate path as `hy4/no-think`).
+The template ALWAYS synthesizes a system block when messages[0] is not
+system (lines 196-204:
+`<｜hy_start:opensource｜>system<｜hy_middle:opensource｜><｜reasoning_mode:opensource｜>reasoning_effort:{effort}<｜hy_end:opensource｜>`)
+-- documented-not-modeled (kolibri convention). BOS: the template emits
+no BOS literal, so the entry's bos is "" (phi4/qwen3 convention); the
+config bos_token is deployment-dependent and not modeled. Out of scope:
+the tool prompt/render macros (lines 74-99), tool_call/tool_response
+blocks, raw_last_assistant prefill, fallback_strategy retry.
+
+minimax3 (template-local tokens bod `]~!b[`, bos `]~b[`, eos `[e~[`;
+think `<mm:think>...</mm:think>`, lines 2-11): user `]~b]user\n{content}[e~[\n`
+(line 228); history assistant with the think_end-prefix branch
+`]~b]ai\n</mm:think>{content}[e~[\n` (lines 167-168, the lab's
+deterministic no-reasoning hypothesis; the reasoned-content branch,
+line 164, is not a hypothesis); generation prompt `]~b]ai\n` with NO
+prefix for thinking_mode undefined/adaptive (the default, lines
+234-241), `]~b]ai\n</mm:think>` for 'disabled' (line 238),
+`]~b]ai\n<mm:think>` for 'enabled' (line 242) -- the disabled/enabled
+branches ride the mutate path as `minimax3/thinking-disabled` /
+`minimax3/thinking-enabled`. The template ALWAYS emits a system
+super-prompt (`]~!b[]~b]system\n` + default identity + the
+`<thinking_instructions>` block + `[e~[\n`, lines 113-117) and a
+developer super-prompt (`]~b]developer\nYou are a helpful assistant.
+[e~[\n`, lines 120-121) -- both documented-not-modeled. BOS: the
+template emits no BOS literal (the `]~b[` frame prefixes are message
+prefixes, not a BOS; the bod token prefixes only the system
+super-prompt), so the entry's bos is "" (phi4/qwen3 convention). Out of
+scope: the XML tool-call renderer, tool-role turns, the thinking-mode
+instruction text.
+
+nanbeige42 (ChatML-like with mandatory think blocks): user
+`<|im_start|>user\n{content}<|im_end|>\n` (line 150); history assistant
+`<|im_start|>assistant\n<think>\n\n</think>\n\n{content}<|im_end|>\n`
+(line 99, the empty-think branch -- the lab's deterministic no-reasoning
+hypothesis; the reasoned-content branch, line 101, is not a hypothesis);
+generation prompt `<|im_start|>assistant\n<think>\n` (default, line 187)
+and `<|im_start|>assistant\n<think>\n\n</think>\n\n` with
+enable_thinking=false (line 185 -- rides the mutate path as
+`nanbeige42/thinking-off`, kolibri convention). The default Chinese
+Nanbeige identity system prompt (`<|im_start|>system\n` + identity line
++ `<|im_end|>\n`, lines 59-62) is ALWAYS emitted without a leading
+system message -- documented-not-modeled. BOS: the template emits no
+BOS literal, so the entry's bos is "" (phi4/qwen3 convention). Out of
+scope: the tools system prompt (lines 34-51), tool_call/tool_response
+rendering, preserve_thinking compaction, the multimodal reminder.
+
+**Render cross-check (this round).** Every catalog entry and every
+mutate variant was rendered with stock Jinja2 (+ a raise_exception shim)
+against the official templates and found BYTE-IDENTICAL on the modeled
+core (1-turn, 2-turn, and each thinking-branch variant; the
+documented-not-modeled super-prompts/system blocks stripped before
+comparison). Note: hy4's synthesized system block is
+reasoning_effort-dependent (the no_think variant's block reads
+`reasoning_effort:no_think`) -- verified per-variant.
+
+**Built this cycle.** Three catalog entries + four mutate branches
+(`hy4/no-think`, `minimax3/thinking-disabled`,
+`minimax3/thinking-enabled`, `nanbeige42/thinking-off`) in
+model_protocol_lab/catalog.py with tier-1 comment blocks (primary-source
+URLs, jinja line numbers, caveats); docs/evidence/hy4-chat-template.jinja,
+docs/evidence/minimax-chat-template.jinja,
+docs/evidence/nanbeige-chat-template.jinja preserved; tests/
+test_cycle15_hy4_minimax_nanbeige_families.py (26 tests: byte-exact
+1-turn/2-turn renders, character-exact marker pins including the U+FF5C
+pin, system-block/super-prompt/EOS documentation pins, branch mutation
++ dedup pins, per-family diff-vs-all-others pins with dynamic
+len(CATALOG)-1 counts; deliberately no README pin -- coordinator owns
+README counts/naming). Pin updates for the new total: the sorted key
+lists in test_cycle5/6/7 (new keys land `hy4` after `glm53`, `minimax3`
+after `llama4`, `nanbeige42` after `muse_glimmer` -- verified with
+sorted()), `len(CATALOG) == 27` in test_cycle11/13, the thinking-off
+invariant sets in test_cycle10/11 (+ `nanbeige42`), the ling/k2horizon
+diff pins made dynamic, the e2e catalog-set pin, and the cycle5 audit
+pins (`<|im_start|>` now collides with 7 families -- nanbeige42 added).
+ruff check + format clean on the whole repo; mypy clean on all touched
+files (20 pre-existing mypy errors in untouched files remain). Full
+suite: 1140 passed, 5 failed, 1 skipped, 6110 subtests passed -- all 5
+failures are README count/naming pins (test_cycle10/11/13/14 README
+tests + test_cycle4 README test-count pin) because the README still
+claims the 24-family catalog; README/CHANGELOG/VALIDATION untouched
+(coordinator handles). No pushes made.

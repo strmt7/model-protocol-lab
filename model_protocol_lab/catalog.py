@@ -18,6 +18,11 @@ from .core import Format, local_repairs
 _DS_BAR = "\uff5c"
 _DS_BLK = "\u2581"
 
+# U+FF5C FULLWIDTH VERTICAL BAR, used by the Tencent Hy4 template's
+# special tokens (<｜hy_start:opensource｜> etc.); spelled as an escape for
+# the same exactness reason as _DS_BAR.
+_HY_BAR = "\uff5c"
+
 CATALOG = {
     "chatml": Format("chatml", "", "<|im_start|>user\n", "<|im_start|>assistant\n", "<|im_end|>\n"),
     "llama3": Format(
@@ -569,6 +574,158 @@ CATALOG = {
         "<|ifm|im_end|>",
         open_suffix="<|ifm|im_start|>assistant\n<ifm|think>\n",
     ),
+    # Tencent Hy4 preview (tencent/Hy4-preview, released 2026-08-28, Apache
+    # 2.0): DeepSeek-style fullwidth-bar frames with an ":opensource" token
+    # suffix. Evidence tier 1: the official chat_template.jinja (preserved
+    # byte-identical at docs/evidence/hy4-chat-template.jinja, md5
+    # a0b7e28386487d804009340155e7be2b, read 2026-10-15). The template is
+    # 309 lines and compiles under stock Jinja2 (raise_exception, lines
+    # 36/38, is render-time only). Every string below is derived from the
+    # template's plain-text, no-tools branch, cited by line number in the
+    # preserved file, and cross-checked by rendering the official template
+    # byte-exact (1-turn, 2-turn, no_think variant):
+    # - special-token variables (lines 2-21): hy_start <｜hy_start:
+    #   opensource｜>, hy_middle <｜hy_middle:opensource｜>, hy_end
+    #   <｜hy_end:opensource｜>, think_begin <think:opensource>, think_end
+    #   </think:opensource>, reasoning_mode <｜reasoning_mode:opensource｜>
+    #   (｜ = U+FF5C, spelled via the _HY_BAR escape).
+    # - system synthesis (lines 196-204): with no leading system message
+    #   the template ALWAYS synthesizes a system block:
+    #   <｜hy_start:opensource｜>system<｜hy_middle:opensource｜>
+    #   <｜reasoning_mode:opensource｜>reasoning_effort:{effort}
+    #   <｜hy_end:opensource｜> -- documented, not modeled (kolibri
+    #   convention); pinned as a documented constant in
+    #   tests/test_cycle15_hy4_minimax_nanbeige_families.py.
+    #   reasoning_effort defaults to 'high' (line 33); anything else raises.
+    # - user (line 227): <｜hy_start:opensource｜>user
+    #   <｜hy_middle:opensource｜>{content}<｜hy_end:opensource｜>.
+    # - assistant history (lines 231-244): the lab's deterministic
+    #   no-reasoning hypothesis is the empty-think branch (line 243):
+    #   <｜hy_start:opensource｜>assistant<｜hy_middle:opensource｜>
+    #   <think:opensource></think:opensource>{content}
+    #   <｜hy_end:opensource｜>. The reasoned-content branch (line 241:
+    #   think_begin + reasoning + think_end + content) is not a hypothesis.
+    # - generation prompt (lines 299-308): reasoning_effort='high' (default)
+    #   -> <｜hy_start:opensource｜>assistant<｜hy_middle:opensource｜>
+    #   <think:opensource> (this base entry's open_suffix); 'no_think' ->
+    #   <｜hy_start:opensource｜>assistant<｜hy_middle:opensource｜>
+    #   <think:opensource></think:opensource> (line 304) -- rides the mutate
+    #   path as "hy4/no-think" (kolibri/thinking-off convention).
+    # - BOS (tokenizer_config.json): bos_token <｜hy_start:opensource｜>,
+    #   eos_token <｜hy_end:opensource｜> -- tier-1 verified 2026-10-15. The
+    #   template emits no BOS literal, so the entry's bos is "" -- the
+    #   config bos_token is deployment-dependent and not modeled (phi4/
+    #   qwen3 convention; eos documented, not modeled -- Format has no EOS
+    #   field).
+    # Out of scope for the plain-text core: the tools prompt/render macros
+    # (lines 74-99), tool_call/tool_response blocks, raw_last_assistant
+    # prefill (line 287), and the fallback_strategy retry override.
+    # Sources: https://huggingface.co/tencent/Hy4-preview,
+    # https://huggingface.co/tencent/Hy4-preview/raw/main/chat_template.jinja
+    "hy4": Format(
+        "hy4",
+        "",
+        f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>user<{_HY_BAR}hy_middle:opensource{_HY_BAR}>",
+        f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>assistant<{_HY_BAR}hy_middle:opensource{_HY_BAR}><think:opensource></think:opensource>",
+        f"<{_HY_BAR}hy_end:opensource{_HY_BAR}>",
+        open_suffix=f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>assistant<{_HY_BAR}hy_middle:opensource{_HY_BAR}><think:opensource>",
+    ),
+    # MiniMax-M3 (MiniMaxAI/MiniMax-M3, released 2026-06, MiniMax Community
+    # License): MiniMax's own bracket-tilde token dialect. Evidence tier 1:
+    # the official chat_template.jinja (preserved byte-identical at
+    # docs/evidence/minimax-chat-template.jinja, md5
+    # 455403f9cba16ea73388aeb8898da752, read 2026-10-15). The template is
+    # 247 lines; template-local tokens: bod_token ]~!b[, bos ]~b[, eos [e~[,
+    # think_begin <mm:think>, think_end </mm:think> (lines 2-11). Every string below is
+    # derived from the template's plain-text, no-tools branch, cited by line
+    # number in the preserved file, and cross-checked by rendering the
+    # official template byte-exact (1-turn, 2-turn, thinking-mode variants):
+    # - system super-prompt (lines 113-117): ALWAYS emitted, even with no
+    #   messages: ]~!b[]~b]system\n + default identity (or the root system
+    #   message) + <thinking_instructions> block + [e~[\n -- documented, not
+    #   modeled (kolibri convention); pinned as a documented constant in
+    #   tests/test_cycle15_hy4_minimax_nanbeige_families.py. The default
+    #   identity is "Your model version is MiniMax-M3, developed by MiniMax.
+    #   Knowledge cutoff: January 2026. ..." (lines 79-82).
+    # - developer super-prompt (lines 120-121): ]~b]developer\n + "You are
+    #   a helpful assistant." (or the system/developer message, lines 88-95)
+    #   + [e~[\n -- also documented, not modeled.
+    # - user (line 228): ]~b]user\n{content}[e~[\n.
+    # - assistant history (lines 149-176): reasoning-capable; the lab's
+    #   deterministic no-reasoning hypothesis is the think_end-prefix branch
+    #   (lines 167-168): ]~b]ai\n</mm:think>{content}[e~[\n. The
+    #   reasoned-content branch (line 164: <mm:think>{reasoning}
+    #   </mm:think>{content}) is not a hypothesis.
+    # - generation prompt (lines 234-245): thinking_mode undefined (the
+    #   lab's default) or 'adaptive' -> ]~b]ai\n with NO prefix (this base
+    #   entry's open_suffix); 'disabled' -> ]~b]ai\n</mm:think> (line 238);
+    #   'enabled' -> ]~b]ai\n<mm:think> (line 242) -- the disabled/enabled
+    #   branches ride the mutate path as "minimax3/thinking-disabled" and
+    #   "minimax3/thinking-enabled" (kolibri/thinking-off convention).
+    # - BOS (tokenizer_config.json): bos_token ]~b], eos_token [e~[,
+    #   pad_token ]!p~[ -- tier-1 verified 2026-10-15. The template emits no
+    #   BOS literal (the ]~b[ frame prefixes are message prefixes, not a
+    #   BOS), so the entry's bos is "" (phi4/qwen3 convention); the
+    #   template's bod token ]~!b[ prefixes only the always-emitted system
+    #   super-prompt (eos documented, not modeled -- Format has no EOS
+    #   field).
+    # Out of scope for the plain-text core: the XML tool-call renderer
+    # (lines 18-36, 37-73), tool-role turns (lines 197-219), and the
+    # thinking-mode instruction text attached to the system super-prompt.
+    # Sources: https://huggingface.co/MiniMaxAI/MiniMax-M3,
+    # https://huggingface.co/MiniMaxAI/MiniMax-M3/raw/main/chat_template.jinja
+    "minimax3": Format(
+        "minimax3",
+        "",
+        "]~b]user\n",
+        "]~b]ai\n</mm:think>",
+        "[e~[\n",
+        open_suffix="]~b]ai\n",
+    ),
+    # Nanbeige 4.2-3B (Nanbeige/Nanbeige4.2-3B, Nanbeige LLM Lab / Boss
+    # Zhipin, paper 2026-07-27): ChatML-like with mandatory think blocks.
+    # Evidence tier 1: the full chat_template embedded in the official
+    # tokenizer_config.json (there is NO standalone chat_template.jinja --
+    # verified 404 2026-10-15; the embedded template is preserved at
+    # docs/evidence/nanbeige-chat-template.jinja, read 2026-10-15). Config
+    # fields: bos_token <|im_start|>, eos_token <|im_end|>, tokenizer_class
+    # LlamaTokenizer. Every string below is derived from the template's
+    # plain-text, no-tools branch, cited by line number in the preserved
+    # file, and cross-checked by rendering the embedded template byte-exact
+    # (1-turn, 2-turn, enable_thinking=false variant):
+    # - default system prompt (lines 59-62, no tools): ALWAYS emitted:
+    #   <|im_start|>system\n你是南北阁，一款由BOSS直聘自主研发并训练的
+    #   专业大语言模型。<|im_end|>\n (a leading system message replaces it,
+    #   lines 57-58) -- documented, not modeled (kolibri convention); pinned
+    #   as a documented constant in
+    #   tests/test_cycle15_hy4_minimax_nanbeige_families.py.
+    # - user (line 150): <|im_start|>user\n{content}<|im_end|>\n.
+    # - assistant history (lines 99-101): the lab's deterministic
+    #   no-reasoning hypothesis is the empty-think branch:
+    #   <|im_start|>assistant\n<think>\n\n</think>\n\n{content}
+    #   <|im_end|>\n. The reasoned-content branch (line 101:
+    #   <think>\n{reasoning}\n</think>\n\n{content}) is not a hypothesis.
+    # - generation prompt (lines 181-187): default (thinking on) ->
+    #   <|im_start|>assistant\n<think>\n (this base entry's open_suffix);
+    #   enable_thinking=false -> <|im_start|>assistant\n<think>\n\n</think>
+    #   \n\n (line 185) -- rides the mutate path as
+    #   "nanbeige42/thinking-off" (kolibri convention).
+    # - BOS: config bos_token is <|im_start|>; the template emits no BOS
+    #   literal, so the entry's bos is "" (phi4/qwen3 convention; eos
+    #   <|im_end|> documented, not modeled -- Format has no EOS field).
+    # Out of scope for the plain-text core: the tools system prompt (lines
+    # 34-51), tool_call/tool_response rendering (lines 102-141),
+    #   preserve_thinking compaction (line 99), and the multimodal reminder
+    #   injection (line 17).
+    # Source: https://huggingface.co/Nanbeige/Nanbeige4.2-3B
+    "nanbeige42": Format(
+        "nanbeige42",
+        "",
+        "<|im_start|>user\n",
+        "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+        "<|im_end|>\n",
+        open_suffix="<|im_start|>assistant\n<think>\n",
+    ),
 }
 
 
@@ -597,6 +754,31 @@ _LING_THINKING_OFF_SUFFIX = "<role>ASSISTANT</role>\n<think></think>"
 # tests/test_cycle14_k2horizon_families.py.
 _K2HORIZON_EFFORT_MEDIUM_SUFFIX = "<|ifm|im_start|>assistant\n<ifm|think_fast>\n"
 _K2HORIZON_EFFORT_LOW_SUFFIX = "<|ifm|im_start|>assistant\n<ifm|think_faster>\n"
+
+# Tencent Hy4 reasoning_effort='no_think' branch: same frames as the base
+# entry, but the generation prompt closes the think block immediately
+# (official chat_template.jinja line 304; the base entry models the default
+# 'high', line 306). Deterministic string; pinned byte-exact in
+# tests/test_cycle15_hy4_minimax_nanbeige_families.py.
+_HY4_NO_THINK_SUFFIX = (
+    f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>assistant<{_HY_BAR}hy_middle:opensource{_HY_BAR}>"
+    "<think:opensource></think:opensource>"
+)
+
+# MiniMax-M3 thinking_mode branches: same frames as the base entry; only
+# the generation prompt prefix changes (official chat_template.jinja lines
+# 234-245; the base entry models the default undefined/adaptive, which
+# emits no prefix). Deterministic strings; pinned byte-exact in
+# tests/test_cycle15_hy4_minimax_nanbeige_families.py.
+_MINIMAX3_DISABLED_SUFFIX = "]~b]ai\n</mm:think>"
+_MINIMAX3_ENABLED_SUFFIX = "]~b]ai\n<mm:think>"
+
+# Nanbeige enable_thinking=false branch: same frames as the base entry,
+# but the generation prompt prefills an empty <think> block (embedded
+# template line 185; the base entry models the default thinking-on).
+# Deterministic string; pinned byte-exact in
+# tests/test_cycle15_hy4_minimax_nanbeige_families.py.
+_NANBEIGE42_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
@@ -682,6 +864,55 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
                 base,
                 name=base.name + "/effort-low",
                 open_suffix=_K2HORIZON_EFFORT_LOW_SUFFIX,
+            ),
+        )
+    if family == "hy4":
+        # reasoning_effort='no_think' is a generation-prompt branch of the
+        # same template (official chat_template.jinja line 304; the base
+        # entry models the default 'high', line 306), so it rides the
+        # mutate path like kolibri/thinking-off rather than becoming a new
+        # catalog entry. Only the generation prompt changes -- the think
+        # block closes immediately. The new open_suffix cannot collide with
+        # local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/no-think",
+                open_suffix=_HY4_NO_THINK_SUFFIX,
+            ),
+        )
+    if family == "minimax3":
+        # thinking_mode 'disabled'/'enabled' are generation-prompt branches
+        # of the same template (official chat_template.jinja lines 238/242;
+        # the base entry models the default undefined/adaptive, which emits
+        # no prefix), so they ride the mutate path like kolibri/thinking-off
+        # rather than becoming new catalog entries. Only the generation
+        # prompt changes -- the think tag closes or opens. The new
+        # open_suffixes cannot collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-disabled",
+                open_suffix=_MINIMAX3_DISABLED_SUFFIX,
+            ),
+            replace(
+                base,
+                name=base.name + "/thinking-enabled",
+                open_suffix=_MINIMAX3_ENABLED_SUFFIX,
+            ),
+        )
+    if family == "nanbeige42":
+        # enable_thinking=false is a generation-prompt branch of the same
+        # template (embedded template line 185; the base entry models the
+        # default thinking-on), so it rides the mutate path like
+        # kolibri/thinking-off rather than becoming a new catalog entry: the
+        # gen prompt prefills an empty <think> block (thinking disabled).
+        # The new open_suffix cannot collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-off",
+                open_suffix=_NANBEIGE42_THINKING_OFF_SUFFIX,
             ),
         )
     return variants

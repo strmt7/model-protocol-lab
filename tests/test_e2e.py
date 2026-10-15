@@ -68,6 +68,9 @@ class ModuleEntryTests(unittest.TestCase):
                 "nemotron35",
                 "muse_glimmer",
                 "laguna",
+                "hy4",
+                "minimax3",
+                "nanbeige42",
             },
         )
 
