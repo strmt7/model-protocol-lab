@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import struct
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,6 +18,18 @@ HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 HAS_TOKENIZERS = importlib.util.find_spec("tokenizers") is not None
 
 
+def write_minimal_safetensors(path: Path) -> None:
+    """Write a structurally valid, minimal safetensors file.
+
+    Real 8-byte little-endian header length + JSON header + one tiny F32
+    tensor -- enough for doctor's byte-level header validation, without
+    any real weights.
+    """
+    header = {"__metadata__": {}, "weight": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}}
+    header_bytes = json.dumps(header).encode("utf-8")
+    path.write_bytes(struct.pack("<Q", len(header_bytes)) + header_bytes + b"\x00" * 4)
+
+
 def write_model_dir(
     root: Path,
     *,
@@ -30,7 +43,7 @@ def write_model_dir(
     config.update(extra_config or {})
     (root / "config.json").write_text(json.dumps(config), encoding="utf-8")
     if weights:
-        (root / "model.safetensors").write_bytes(b"synthetic weights, not a model")
+        write_minimal_safetensors(root / "model.safetensors")
     if tokenizer_model is None:
         # Prefer a genuinely loadable tokenizer when the library is present;
         # otherwise fall back to a structurally valid document (deep checks

@@ -1002,7 +1002,9 @@ class RenderRobustnessTests(unittest.TestCase):
             (root / "config.json").write_text(
                 json.dumps({"model_type": "gpt2", "architectures": ["GPT2LMHeadModel"]})
             )
-            (root / "model.safetensors").write_bytes(b"")
+            from tests.test_doctor import write_minimal_safetensors
+
+            write_minimal_safetensors(root / "model.safetensors")
             # Valid JSON shape but unusable as a tokenizer -> deep check fails.
             (root / "tokenizer.json").write_text(json.dumps({"version": "1.0"}))
             report = examine_model(root)

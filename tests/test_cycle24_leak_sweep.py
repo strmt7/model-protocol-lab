@@ -95,6 +95,7 @@ from model_protocol_lab.diffreports import diff_reports, render_summary
 from model_protocol_lab.doctor import doctor, examine_dataset
 from model_protocol_lab.experiments import run_experiment
 from model_protocol_lab.reporting import save_report
+from tests.test_doctor import write_minimal_safetensors
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -353,7 +354,7 @@ def _write_checkpoint(root: Path, *, real_tokenizer: bool) -> Path:
     (root / "config.json").write_text(
         json.dumps({"model_type": "gpt2", "n_positions": 1024}), encoding="utf-8"
     )
-    (root / "model.safetensors").write_bytes(b"")
+    write_minimal_safetensors(root / "model.safetensors")
     if real_tokenizer:
         from tokenizers import Tokenizer
         from tokenizers.models import BPE

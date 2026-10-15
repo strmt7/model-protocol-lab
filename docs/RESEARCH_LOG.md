@@ -2611,3 +2611,9 @@ failures are README count/naming pins (test_cycle10/11/13/14 README
 tests + test_cycle4 README test-count pin) because the README still
 claims the 24-family catalog; README/CHANGELOG/VALIDATION untouched
 (coordinator handles). No pushes made.
+
+## 2026-10-15 (cycle 25 drift re-check)
+
+SGLang PR #42466 re-read this round (https://github.com/sgl-project/sglang/pull/42466):
+still OPEN, not merged; all three CI runs still failing (Base/Extra/AMD ROCm 10).
+No change to the repo's SGLang multi-stop modeling; stays on the WATCH list.
