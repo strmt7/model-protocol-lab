@@ -210,12 +210,15 @@ def _fixture_outcomes(observations: Any) -> tuple[dict[str, str], int]:
     NOTE (documented inconsistency, behavior deliberately unchanged): a
     duplicate fixture id inside one candidate's observations is last-wins
     (each row overwrites the previous one), while a duplicate candidate
-    name in "search" is first-wins (``_search_verdicts`` and
-    ``_stage_evidence`` skip repeat names). The two conventions were written
-    at different times against different assumptions; ``mpl run`` never
-    emits either duplicate, so reconciling them would change only
-    hostile-input behavior. Left as-is rather than inventing a tie-break
-    rule a future reader might mistake for a guarantee.
+    name in "search" is first-wins for *verdicts* (``_search_verdicts``
+    skips repeat names) but last-wins for *evidence* (``_stage_evidence``
+    has no repeat-name guard, so a later entry with usable observations
+    overwrites the earlier entry's outcomes; a later entry with none
+    silently leaves the earlier outcomes in place). The two conventions
+    were written at different times against different assumptions; ``mpl run`` never emits either
+    duplicate, so reconciling them would change only hostile-input
+    behavior. Left as-is rather than inventing a tie-break rule a future
+    reader might mistake for a guarantee.
     """
     outcomes: dict[str, str] = {}
     skipped = 0
@@ -311,11 +314,17 @@ def _fixture_set_drift(
     old_evidence: dict[str, dict[str, dict[str, str]]],
     new_evidence: dict[str, dict[str, dict[str, str]]],
 ) -> list[dict[str, Any]]:
-    """Fixture-set drift, only when both sides carry evidence.
+    """Fixture-set drift, gated on evidence presence on both sides.
 
     Comparing runs measured on different fixture files is the same class
     of operator mistake as config drift, so it is flagged here rather than
     silently unioning the sets.
+
+    NOTE: the gate lives in ``diff_reports`` as one any-stage flag per side
+    (search or held-out), not per-stage. When one side carries search
+    evidence and the other only held-out evidence, the drift entries and
+    "absent" fixture diffs for the empty stages are still emitted with an
+    empty id list on that side.
     """
     entries: list[dict[str, Any]] = []
     for stage in ("search", "held_out"):

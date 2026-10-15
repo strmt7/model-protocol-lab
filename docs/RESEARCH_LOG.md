@@ -2617,3 +2617,19 @@ claims the 24-family catalog; README/CHANGELOG/VALIDATION untouched
 SGLang PR #42466 re-read this round (https://github.com/sgl-project/sglang/pull/42466):
 still OPEN, not merged; all three CI runs still failing (Base/Extra/AMD ROCm 10).
 No change to the repo's SGLang multi-stop modeling; stays on the WATCH list.
+
+## 2026-10-15 (cycle 28 drift re-check)
+
+SGLang PR #42466 (multi-stop earliest-occurrence): re-check attempted via web
+search this round -- no direct hit on the PR page, so status could NOT be
+re-verified this round. Last confirmed state: OPEN, CI still failing
+(checked 2026-10-15 ~12:30Z). Remains on the WATCH list; if merged, the
+`emulate_sglang_stop` tie-break becomes: same firing step -> earliest
+occurrence in decoded text -> list order.
+
+Mistral Large 4 / Reflection Beam weights: still unshipped as of
+2026-10-15 (sources: https://trendintech.com/ai-open-source-bet-beam-mistral-2026/,
+https://blog.codercops.com/blog/mistral-large-4-open-weight-preview-2026,
+https://beam.ai/agentic-insights/mistral-large-4-open-weights -- weights
+promised for end of October 2026 / reported date October 27, 2026; both
+still API previews). Remains on the WATCH list.
