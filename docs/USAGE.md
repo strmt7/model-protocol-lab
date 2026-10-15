@@ -495,7 +495,7 @@ like `.help ren`, `.help PATTERN` search, `#` comments):
 |---|---|
 | `.help [COMMAND\|PATTERN]` | List every dot-command, or full help for one |
 | `.use <family>` | Switch the format hypothesis (validated against the catalog) |
-| `.families` | List the 28 catalog families |
+| `.families` | List the 29 catalog families |
 | `.fixtures` | List loaded fixture ids (search, then held-out); current one marked `*` |
 | `.fixture <n\|id>` | Select the active fixture by number or id |
 | `.render` | Render the hypothesis over the active messages, with a per-segment char-span map (plus exact token IDs per segment when `--model` is given) |

@@ -246,7 +246,7 @@ class ReadmeLingTests(unittest.TestCase):
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 28)
+        self.assertEqual(len(CATALOG), 29)
 
 
 if __name__ == "__main__":

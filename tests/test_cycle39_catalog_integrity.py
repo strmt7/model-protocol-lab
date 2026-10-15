@@ -1,9 +1,9 @@
 """Cycle 39: whole-catalog integrity cross-check for ``catalog.py``.
 
 Unlike cycles 10/11/13/14/15 (per-family byte-exact template pins), this
-sweep verifies WHOLE-CATALOG invariants across all 28 families:
+sweep verifies WHOLE-CATALOG invariants across all 29 families:
 
-* key-set pin (exact 28 keys; sorted order is stable across runs),
+* key-set pin (exact 29 keys; sorted order is stable across runs),
 * every family renders deterministically for 1-turn and multi-turn
   conversations (byte-identical across runs),
 * independent oracle: a from-first-principles re-implementation of the
@@ -65,7 +65,7 @@ from dataclasses import FrozenInstanceError, replace
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Format, Message
 
-# Exact 28-family key pin, sorted (the declaration order in catalog.py is
+# Exact 29-family key pin, sorted (the declaration order in catalog.py is
 # NOT sorted; the sorted order must be stable across runs).
 EXPECTED_KEYS_SORTED = [
     "chatml",
@@ -96,6 +96,7 @@ EXPECTED_KEYS_SORTED = [
     "nemotron35",
     "phi4",
     "qwen3",
+    "qwen38",
 ]
 
 # Families with an explicit open_suffix (everyone else falls back to
@@ -117,6 +118,7 @@ EXPLICIT_OPEN_SUFFIX = {
     "muse_spark",
     "nanbeige42",
     "nemotron35",
+    "qwen38",
 }
 
 # Families with explicit per-role turn terminators (both roles set).
@@ -140,6 +142,7 @@ EXPECTED_BRANCHES = {
     "hy4": {"no-think"},
     "minimax3": {"thinking-disabled", "thinking-enabled"},
     "nanbeige42": {"thinking-off"},
+    "qwen38": {"thinking-off"},
 }
 
 
@@ -218,9 +221,9 @@ def _framing_key(fmt: Format) -> tuple:
 
 
 class KeySetTests(unittest.TestCase):
-    def test_exact_28_keys(self):
+    def test_exact_29_keys(self):
         self.assertEqual(set(CATALOG.keys()), set(EXPECTED_KEYS_SORTED))
-        self.assertEqual(len(CATALOG), 28)
+        self.assertEqual(len(CATALOG), 29)
 
     def test_sorted_order_stable(self):
         self.assertEqual(sorted(CATALOG.keys()), EXPECTED_KEYS_SORTED)
@@ -514,6 +517,14 @@ class DuplicateGroupTests(unittest.TestCase):
         # Kolibri-1's user/assistant turns are standard ChatML (its deltas
         # are the always-emitted system block and thinking branches, which
         # Format does not model). Any other convergence is a bug.
+        # DISCREPANCY-3 (cycle 54): nemotron35/qwen38 are framing-identical
+        # BY VERIFICATION -- both are thinking-by-default models whose
+        # official templates open the generation prompt with
+        # <|im_start|>assistant\n<think>\n over ChatML frames (nemotron35:
+        # NVIDIA Nemotron-3.5 docs; qwen38: official chat_template.jinja).
+        # Their deltas are the thinking-off tails (nemotron35:
+        # "<think></think>"; qwen38: "<think>\n\n</think>\n\n"), which ride
+        # the mutate path, not the base framing.
         groups: dict[tuple, list[str]] = {}
         for key, fmt in CATALOG.items():
             groups.setdefault(_framing_key(fmt), []).append(key)
@@ -521,7 +532,7 @@ class DuplicateGroupTests(unittest.TestCase):
             (sorted(names) for names in groups.values() if len(names) > 1),
             key=lambda names: names[0],
         )
-        self.assertEqual(multi, [["chatml", "kolibri", "qwen3"]])
+        self.assertEqual(multi, [["chatml", "kolibri", "qwen3"], ["nemotron35", "qwen38"]])
 
     def test_duplicate_group_renders_byte_identical(self):
         messages = (
@@ -531,6 +542,8 @@ class DuplicateGroupTests(unittest.TestCase):
         )
         renders = {CATALOG[key].render(messages) for key in ("chatml", "qwen3", "kolibri")}
         self.assertEqual(len(renders), 1)
+        renders2 = {CATALOG[key].render(messages) for key in ("nemotron35", "qwen38")}
+        self.assertEqual(len(renders2), 1)
 
     def test_near_duplicates_differ_as_documented(self):
         # deepseek vs deepseek41 differ ONLY in open_suffix; gemma vs gemma3

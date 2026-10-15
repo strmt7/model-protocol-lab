@@ -47,6 +47,53 @@ CATALOG = {
         "<|im_start|>assistant\n",
         "<|im_end|>\n",
     ),
+    # Qwen3.8 (Qwen/Qwen3.8-27B, Aug 2026). Evidence tier 1: the official
+    # chat_template.jinja at main (verified commit 412f8b6). Plain-text
+    # no-tools core. Per-turn frames are ChatML, byte-identical to qwen3:
+    # <|im_start|>{role}\n{content}<|im_end|>\n, no BOS. Deltas vs qwen3
+    # (why this is a separate family, not a qwen3 alias):
+    #   1. Thinking ON is the default (enable_thinking defaults true) and
+    #      the generation prompt OPENS the think block:
+    #      <|im_start|>assistant\n<think>\n (jinja lines 341-355) -- qwen3's
+    #      generation prompt ends at <|im_start|>assistant\n. This is the
+    #      base entry's open_suffix (nemotron35/lfm25 convention: the
+    #      default thinking-on branch is the base entry).
+    #   2. Thinking OFF (enable_thinking=false): the generation prompt
+    #      prefills an EMPTY think block,
+    #      <|im_start|>assistant\n<think>\n\n</think>\n\n (jinja lines
+    #      345-347) -- modeled as the "qwen38/thinking-off" variant in the
+    #      mutate path (see candidates()), the kolibri/thinking-off
+    #      convention (same tail as kolibri and nanbeige42, unlike
+    #      nemotron35's "<think></think>").
+    #   3. Thinking enabled (default): the template AUTO-INJECTS a system
+    #      block carrying a reasoning-effort sentence when the caller sends
+    #      no system message (jinja lines 183-186), or PREPENDS the sentence
+    #      to a caller system message (jinja line 175); reasoning_effort
+    #      defaults to 'xhigh' (jinja line 102). DELIBERATELY OMITTED from
+    #      this base hypothesis -- the system role is not modeled in Format
+    #      (lab convention: mistral_large/gemma4/kolibri/glm53), and the
+    #      effort-steering branch belongs in a separate hypothesis (glm53
+    #      convention). The verified xhigh sentence is pinned as a
+    #      documented constant in tests/test_cycle54_qwen38.py.
+    #   4. Assistant history turns render
+    #      <|im_start|>assistant\n<think>\n{reasoning}\n</think>\n\n{content}
+    #      while preserve_thinking holds (default true -- jinja line 247;
+    #      note qwen3.8 keys this on preserve_thinking, not
+    #      enable_thinking). The lab's deterministic no-reasoning
+    #      hypothesis does not render reasoning content (the
+    #      reasoned-content branch is not a hypothesis -- kimi3/laguna
+    #      convention), so assistant turns stay plain
+    #      <|im_start|>assistant\n{content} here.
+    # EOS is <|im_end|> (a generation stop, not a Format field).
+    # Source: https://huggingface.co/Qwen/Qwen3.8-27B
+    "qwen38": Format(
+        "qwen38",
+        "",
+        "<|im_start|>user\n",
+        "<|im_start|>assistant\n",
+        "<|im_end|>\n",
+        open_suffix="<|im_start|>assistant\n<think>\n",
+    ),
     # DeepSeek V3/R1 (deepseek-ai/DeepSeek-V3, DeepSeek-R1): BOS
     # <begin of sentence> with full-width bars, user = <User>{content}
     # with NO closing token, assistant = <Assistant>{content}<end of
@@ -847,6 +894,14 @@ _MINIMAX3_ENABLED_SUFFIX = "]~b]ai\n<mm:think>"
 # tests/test_cycle15_hy4_minimax_nanbeige_families.py.
 _NANBEIGE42_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
 
+# Qwen3.8 enable_thinking=false branch: same frames as the base entry, but
+# the generation prompt prefills an empty <think> block (official
+# chat_template.jinja lines 345-347; the base entry models the default
+# thinking-on, jinja lines 349-353). Same "<think>\n\n</think>\n\n" tail as
+# kolibri and nanbeige42, unlike nemotron35's "<think></think>".
+# Deterministic string; pinned byte-exact in tests/test_cycle54_qwen38.py.
+_QWEN38_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
     if type(family) is not str or family not in CATALOG:
@@ -980,6 +1035,21 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
                 base,
                 name=base.name + "/thinking-off",
                 open_suffix=_NANBEIGE42_THINKING_OFF_SUFFIX,
+            ),
+        )
+    if family == "qwen38":
+        # enable_thinking=false is a generation-prompt branch of the same
+        # template (official chat_template.jinja lines 345-347; the base
+        # entry models the default thinking-on, jinja lines 349-353), so it
+        # rides the mutate path like kolibri/thinking-off rather than
+        # becoming a new catalog entry: the gen prompt prefills an empty
+        # <think> block (thinking disabled). The new open_suffix cannot
+        # collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-off",
+                open_suffix=_QWEN38_THINKING_OFF_SUFFIX,
             ),
         )
     return variants

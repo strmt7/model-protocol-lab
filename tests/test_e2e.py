@@ -72,6 +72,7 @@ class ModuleEntryTests(unittest.TestCase):
                 "minimax3",
                 "nanbeige42",
                 "muse_spark",
+                "qwen38",
             },
         )
 

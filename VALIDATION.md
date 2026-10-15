@@ -9,9 +9,9 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
 
 - `python -m pytest -q -p no:cacheprovider` — **3374 tests + 43319 subtests,
   all passing**, across **3 consecutive green executions** (no variance, no
-  flakiness). Includes 28 format families (kolibri, lfm25, nemotron35,
-  muse_glimmer, laguna, ling, gemma4, deepseek41, kimi2, kimi3, muse_spark
-  added this period), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
+  flakiness). Includes 29 format families (kolibri, lfm25, nemotron35,
+  muse_glimmer, laguna, ling, gemma4, deepseek41, kimi2, kimi3, muse_spark,
+  qwen38 added this period), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
   `diff-reports`, `doctor --portability-matrix`, the teacher-forced
   log-likelihood diagnostic, and differential-verification suites with
   mutation gates for every module.

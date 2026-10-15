@@ -79,7 +79,7 @@ N2. docs/USAGE.md section 10 shows the `.step 1,2,8,3` output elided as
   overlap and empty-cell-then-content are refused; audit sidecar written.
 - USAGE section 10 debug: banner text, live prompt, .fixture by
   number/id, .render segment map (chars=91 on the documented fixture),
-  .boundary/.step output lines, .families listing 28 families,
+  .boundary/.step output lines, .families listing 29 families,
   abbreviations, # comments, .help PATTERN, .audit, .say/.render,
   .tokens with and without --model, .save, .read bounds (1 MB/10k
   lines/depth 5), EOF exit.
@@ -477,11 +477,11 @@ class DocumentedFlagsTest(unittest.TestCase):
 class CatalogInspectTest(unittest.TestCase):
     """USAGE sec 1 + README quick start: catalog / inspect."""
 
-    def test_catalog_lists_28_families_with_framing_fields(self):
+    def test_catalog_lists_29_families_with_framing_fields(self):
         code, out, _ = run_cli(["catalog"])
         self.assertEqual(code, 0)
         families = json.loads(out)
-        self.assertEqual(len(families), 28)
+        self.assertEqual(len(families), 29)
         self.assertEqual(len(families), len(CATALOG))
         names = {entry["name"] for entry in families}
         self.assertEqual(names, set(CATALOG))
@@ -1010,12 +1010,12 @@ class DebugTest(unittest.TestCase):
         self.assertIn("Enter .help for usage hints.", proc.stdout)
         self.assertIn("mpl:chatml fixture-1 >", proc.stdout)
 
-    def test_families_lists_28(self):
-        # USAGE sec 10: "`.families` | List the 28 catalog families".
+    def test_families_lists_29(self):
+        # USAGE sec 10: "`.families` | List the 29 catalog families".
         code, out, _ = self._script_run([".families", ".quit"])
         self.assertEqual(code, 0)
         names = [line.strip() for line in out.splitlines() if line.strip()]
-        self.assertEqual(len(names), 28)
+        self.assertEqual(len(names), 29)
         self.assertEqual(set(names), set(CATALOG))
 
     def test_abbreviations_comments_and_help_search(self):
