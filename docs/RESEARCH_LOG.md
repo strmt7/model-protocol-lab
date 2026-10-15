@@ -3027,3 +3027,30 @@ pages, GitHub release-tag API for publish dates):
   (cycle 52). Also flagged: repo `ling` entry vs Ling 3.0's official
   template (native transformers support landed today); Qwen3.8 as a
   known out-of-window catalog gap.
+
+## 2026-10-15 (cycle 52: Muse Spark Open catalog family)
+
+Added the 28th catalog family `muse_spark` (Meta Muse Spark Open,
+meta-models/Muse-Spark-Open-816B-A42B, weights released 2026-10-15;
+816B total / 42B active MoE, 1M context, Muse Model License).
+Template verified byte-exact against the primary sources this round:
+the official chat_template.jinja (230 lines) from
+hf-internal-testing/tiny-muse-spark (HF-official test mirror of the
+gated release tokenizer; reference template in transformers PR
+#49644), cross-checked by rendering under stock Jinja2. Modeled
+deterministic core: BOS <|begin_of_text|>, user
+<|start|>user<|message|>{content}<|eot|>, assistant history
+<|start|>assistant to=user<|message|>{content}<|eot|>, generation
+prompt <|start|>assistant (bare); the always-emitted system block,
+tool/reasoning branches, multimodal placeholders and per-message
+timestamps are documented-not-modeled (lab convention); <|eot|> is the
+end-of-message marker, not a stop token (EOS <|end_of_text|> not
+modeled; Format has no EOS field). 15 byte-exact tests
+(tests/test_cycle52_muse_spark.py). Count pins updated for 27->28
+families / 110->114 doctor candidates: test_cycle39 (key set, sorted
+order, open-suffix pin), test_cycle5/6/7 (sorted family lists),
+test_cycle11/13 (README N-family claim), test_cycle36 (REPL count),
+test_cycle40 (portability matrix 114), test_cycle41 (EXPECTED_FAMILIES
++ renames), test_cycle44 (28-not-23), test_cycle46 (catalog/REPL
+counts); README enumerations and USAGE.md `.families` row updated to
+28. README test count updated to 3550.

@@ -29,10 +29,10 @@ the honest framings. It does NOT modify VALIDATION.md itself.
    was never updated after the fix.
 
 4. Format families: "23 format families" -> `CATALOG` in
-   model_protocol_lab/catalog.py holds 27 families. The six families the
+   model_protocol_lab/catalog.py holds 28 families. The six families the
    doc names as added in the period (kolibri, lfm25, nemotron35,
-   muse_glimmer, laguna, ling) are all present; the four added later are
-   gemma4, deepseek41, kimi2, kimi3.
+   muse_glimmer, laguna, ling) are all present; the five added later are
+   gemma4, deepseek41, kimi2, kimi3, muse_spark.
 
 5. FAQ: "docs/FAQ.md (12 Q&As)" -> docs/FAQ.md has 15 `##` Q&A headings.
 
@@ -236,11 +236,12 @@ class ValidationCliSurfaceTests(unittest.TestCase):
 
 
 class ValidationFormatFamilyTests(unittest.TestCase):
-    def test_family_count_is_27_not_23(self):
-        # Doc claims 23; the catalog grew through later cycles.
+    def test_family_count_is_28_not_23(self):
+        # Doc claimed 23; the catalog grew through later cycles (28 now,
+        # with muse_spark added in cycle 52).
         from model_protocol_lab.catalog import CATALOG
 
-        self.assertEqual(len(CATALOG), 27)
+        self.assertEqual(len(CATALOG), 28)
 
     def test_six_period_families_present(self):
         # The six families the doc names as added in the period.

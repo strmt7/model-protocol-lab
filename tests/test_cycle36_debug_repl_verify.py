@@ -23,9 +23,9 @@ nothing to disk except through the explicit ``.save`` command (verified by
 Doc/code discrepancies found (source behavior NOT changed; documented here):
 
 1. docs/USAGE.md section 10's command table says ``.families`` lists "the
-   16 catalog families", but the catalog now holds 27 families (it grew in
+   16 catalog families", but the catalog now holds 28 families (it grew in
    later cycles; the section-10 text was never updated). The REPL itself
-   correctly lists all 27.
+   correctly lists all 28.
 2. ``.help`` with an *ambiguous* abbreviation (e.g. ``.help .fi``) falls
    through to the PATTERN search and lists the matches instead of reporting
    the ambiguity. sqlite3-flavored and harmless, but the docstring's
@@ -346,11 +346,11 @@ class TestUseAndFamilies(unittest.TestCase):
 
     def test_families_count_matches_catalog(self) -> None:
         # USAGE.md section 10 still says "16 catalog families"; the catalog
-        # has grown to 27 (see module docstring discrepancy 1).
-        self.assertEqual(len(CATALOG), 27)
+        # has grown to 28 (see module docstring discrepancy 1).
+        self.assertEqual(len(CATALOG), 28)
         shell, buf = _make_shell()
         out = _run(shell, buf, ".families", ".quit")
-        self.assertEqual(len(_tail_lines(out)), 27)
+        self.assertEqual(len(_tail_lines(out)), 28)
 
     def test_families_rejects_arguments(self) -> None:
         shell, buf = _make_shell()

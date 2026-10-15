@@ -40,7 +40,7 @@ changed; all are documentation precision notes, none are bugs):
   easy to miss.
 * ``portability_matrix``'s docstring promises "A format whose inventory is
   empty reports 'unknown', never 'compatible'." -- the current catalog has no
-  empty-inventory format (all 110 candidates carry at least one token-shaped
+  empty-inventory format (all 114 candidates carry at least one token-shaped
   literal), so that branch is unreachable from the matrix today; the
   underlying ``core.template_tokenizer_compatibility`` contract still holds.
 * ``doctor`` docstring calls the result a "combined pre-flight report" but
@@ -890,11 +890,11 @@ class PortabilityMatrixTests(_TmpTestCase):
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
         self.assertEqual(section["status"], "ok")
-        self.assertEqual(section["detail"], "110 candidates checked (tokenizer only, no weights)")
+        self.assertEqual(section["detail"], "114 candidates checked (tokenizer only, no weights)")
         self.assertEqual(section["second_checkpoint"], str(root.resolve()))
         self.assertEqual(section["asymmetry"], doctor_mod._PORTABILITY_ASYMMETRY)
         rows = section["rows"]
-        self.assertEqual(len(rows), 110)
+        self.assertEqual(len(rows), 114)
         expected_names = [
             fmt.name for family in sorted(CATALOG) for fmt in candidates(family, mutate=True)
         ]
@@ -953,7 +953,7 @@ class RenderPortabilityTableTests(_TmpTestCase):
         lines = text.split("\n")
         self.assertTrue(
             lines[0].startswith("portability matrix vs ")
-            and lines[0].endswith(": 110 candidates (tokenizer-only; no weights loaded)")
+            and lines[0].endswith(": 114 candidates (tokenizer-only; no weights loaded)")
         )
         header = next(line for line in lines if line.startswith("format"))
         self.assertIn("verdict", header)
@@ -1170,7 +1170,7 @@ class DoctorIntegrationTests(_TmpTestCase):
         _write_wordlevel_tokenizer(second)
         report = doctor_mod.doctor(root, portability_matrix_path=second)
         self.assertEqual(report["portability_matrix"]["status"], "ok")
-        self.assertEqual(len(report["portability_matrix"]["rows"]), 110)
+        self.assertEqual(len(report["portability_matrix"]["rows"]), 114)
 
     def test_matrix_never_fails_verdict(self) -> None:
         root = self.ckpt()
