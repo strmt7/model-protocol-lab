@@ -2645,3 +2645,14 @@ Two docstring claims corrected in fixtures.py (behavior unchanged):
 errors -- only per-row errors carry a row number; (2) `_extract_special_tokens`
 parenthetical reworded (None optional fields are skipped, covered by the
 already-scanned base field). README test count updated to 1644.
+
+## 2026-10-15 (cycle 30: datasets.py differential verification)
+
+Differential verification of `model_protocol_lab/datasets.py` against an
+independent oracle written from the docstrings (tests/
+test_cycle30_datasets_verify.py, 779 passed + 1 skipped): NO functional
+bug found. Mutation sensitivity: 20/20 mutants caught on hermetic /tmp
+copies. Doc discrepancies D1/D2 (str-subclass size-limit message; lone
+surrogate UnicodeEncodeError vocabulary) are cosmetic error-message
+quirks, pinned by tests -- no source change made. README test count
+updated to 2424.
