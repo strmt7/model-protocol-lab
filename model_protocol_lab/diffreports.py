@@ -168,14 +168,27 @@ def _verdict(summary: Any) -> str:
     return "pass" if passes == planned else "fail"
 
 
-def _search_verdicts(result: dict[str, Any]) -> dict[str, str]:
+def _search_verdicts(result: dict[str, Any]) -> tuple[dict[str, str], dict[str, int | None]]:
+    """Per-candidate search verdicts plus per-candidate planned counts.
+
+    Both come from the candidate's first "search" entry (duplicate names
+    are first-wins). The planned count matters because a "pass" verdict
+    means "all *planned* fixtures passed" -- planned 2 vs 50 with no
+    evidence on either side must not compare as silently identical.
+    ``None`` marks a malformed/missing summary; it compares as its own
+    distinct value so it still shows up in drift.
+    """
     verdicts: dict[str, str] = {}
+    planned_counts: dict[str, int | None] = {}
     for entry in result.get("search") or []:
         name = _candidate_name(entry)
         if name is None or name in verdicts:
             continue
-        verdicts[name] = _verdict(entry.get("summary") if type(entry) is dict else None)
-    return verdicts
+        summary = entry.get("summary") if type(entry) is dict else None
+        verdicts[name] = _verdict(summary)
+        planned = summary.get("planned") if type(summary) is dict else None
+        planned_counts[name] = planned if type(planned) is int else None
+    return verdicts, planned_counts
 
 
 def _held_verdict(result: dict[str, Any]) -> tuple[str | None, str]:
@@ -193,6 +206,16 @@ def _fixture_outcomes(observations: Any) -> tuple[dict[str, str], int]:
     pass requires both the exact answer and the boundary token match (the
     same criterion ``mpl run`` uses). Malformed observations are skipped
     and counted so the skip is visible, never silent.
+
+    NOTE (documented inconsistency, behavior deliberately unchanged): a
+    duplicate fixture id inside one candidate's observations is last-wins
+    (each row overwrites the previous one), while a duplicate candidate
+    name in "search" is first-wins (``_search_verdicts`` and
+    ``_stage_evidence`` skip repeat names). The two conventions were written
+    at different times against different assumptions; ``mpl run`` never
+    emits either duplicate, so reconciling them would change only
+    hostile-input behavior. Left as-is rather than inventing a tie-break
+    rule a future reader might mistake for a guarantee.
     """
     outcomes: dict[str, str] = {}
     skipped = 0
@@ -247,10 +270,15 @@ def _stage_evidence(
 
 def _config_snapshot(result: dict[str, Any]) -> dict[str, Any]:
     """The comparability-relevant configuration of one run."""
+    # Set-based dedup: the old `name not in names` list scan was O(n^2) and
+    # hung ~1.5h on 800k candidate names. First-occurrence order is kept for
+    # stability of the sorted() output contract.
     names: list[str] = []
+    seen: set[str] = set()
     for entry in result.get("search") or []:
         name = _candidate_name(entry)
-        if name is not None and name not in names:
+        if name is not None and name not in seen:
+            seen.add(name)
             names.append(name)
     boundaries: dict[str, list[int]] = {}
     for entry in result.get("search") or []:
@@ -326,7 +354,8 @@ def diff_reports(
     new_winner = new_winner if type(new_winner) is str else None
 
     # Candidate verdict flips on search and held-out.
-    old_search, new_search = _search_verdicts(old), _search_verdicts(new)
+    old_search, old_planned = _search_verdicts(old)
+    new_search, new_planned = _search_verdicts(new)
     old_held_name, old_held = _held_verdict(old)
     new_held_name, new_held = _held_verdict(new)
     verdict_changes: list[dict[str, str]] = []
@@ -393,17 +422,36 @@ def diff_reports(
     ]
 
     config_drift = _drift(old, new)
+    # Per-candidate planned-fixture counts: a "pass" verdict means "all
+    # *planned* fixtures passed", so planned 2 vs 50 silently comparing
+    # identical would be a lie of omission. Candidates present on only one
+    # side already produce a verdict flip ("absent"), so this covers only
+    # the both-sides intersection. Field order is fixed: after the
+    # _drift() fields, sorted by candidate name.
+    for name in sorted(set(old_planned) & set(new_planned)):
+        if old_planned[name] != new_planned[name]:
+            config_drift.append(
+                {"field": f"planned:{name}", "old": old_planned[name], "new": new_planned[name]}
+            )
     if evidence_present["old"] and evidence_present["new"]:
         config_drift.extend(_fixture_set_drift(old_evidence, new_evidence))
 
     decision_changed = old_decision != new_decision
     winner_changed = old_winner != new_winner
+    # Evidence-presence asymmetry feeds the identical verdict: when only one
+    # side carries --include-evidence observations there is a whole axis
+    # (per-fixture outcomes) that could not be compared, so the runs are
+    # not "identical on every compared axis" -- and the summary line below
+    # now names the axes that were actually compared instead of asserting a
+    # totality that may not hold.
+    evidence_asymmetric = evidence_present["old"] != evidence_present["new"]
     identical = (
         not decision_changed
         and not winner_changed
         and not verdict_changes
         and not changed_fixture_diffs
         and not config_drift
+        and not evidence_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -411,6 +459,7 @@ def diff_reports(
         "candidates_changed_status": len(changed_candidates),
         "fixtures_flipped": len(flips),
         "config_drift_warnings": len(config_drift),
+        "evidence_asymmetric": evidence_asymmetric,
         "identical": identical,
     }
     return {
@@ -440,7 +489,12 @@ def _compact(value: Any) -> str:
 def render_summary(diff: dict[str, Any]) -> str:
     """Human-readable summary for stderr; stdout stays parseable JSON."""
     lines = [
-        f"diff-reports: {diff['old']['source']} vs {diff['new']['source']}",
+        # Source labels arrive from the compared files' caller (CLI paths
+        # by default) and decisions arrive from the compared files
+        # themselves; both are sanitized like every other
+        # operator-visible identifier.
+        f"diff-reports: {_display_id(diff['old']['source'])} vs "
+        f"{_display_id(diff['new']['source'])}",
     ]
     drift = diff["config_drift"]
     if drift:
@@ -450,7 +504,7 @@ def render_summary(diff: dict[str, Any]) -> str:
                 f"  - {entry['field']}: {_compact(entry['old'])} -> {_compact(entry['new'])}"
             )
     decision = diff["decision"]
-    lines.append(f"Decision: {decision['old']} -> {decision['new']}")
+    lines.append(f"Decision: {_display_id(decision['old'])} -> {_display_id(decision['new'])}")
     winner = diff["winner"]
     old_w = winner["old"] if winner["old"] is not None else "(none)"
     new_w = winner["new"] if winner["new"] is not None else "(none)"
@@ -483,7 +537,13 @@ def render_summary(diff: dict[str, Any]) -> str:
             + ", ".join(f"{side} run has no --include-evidence observations" for side in missing)
         )
     if summary["identical"]:
-        lines.append("No differences: the two runs are identical on every compared axis.")
+        axes = ["decision", "winner", "candidate verdicts", "configuration"]
+        if evidence["old"] and evidence["new"]:
+            axes.append("per-fixture evidence")
+        lines.append(
+            "No differences: the two runs are identical on every compared axis "
+            f"({', '.join(axes)})."
+        )
     else:
         lines.append(
             "Summary: "

@@ -18,12 +18,14 @@ All result files are synthetic dicts; no model, no network.
 
 import json
 import os
+import time
 
 import pytest
 
 from model_protocol_lab.cli import main
 from model_protocol_lab.diffreports import (
     MAX_RESULTS_BYTES,
+    _config_snapshot,
     diff_reports,
     load_results,
     render_summary,
@@ -365,6 +367,8 @@ def test_missing_evidence_degrades_loudly():
     assert payload["fixture_diffs"] == []
     # verdicts still compare (summaries are always present)
     assert payload["candidate_verdicts"] == []
+    # but the runs are not "identical": the per-fixture axis was never compared
+    assert payload["summary"]["identical"] is False
     rendered = render_summary(payload)
     assert "Per-fixture comparison unavailable" in rendered
     assert "new run has no --include-evidence observations" in rendered
@@ -576,3 +580,97 @@ def test_cli_all_flag(tmp_path, capsys):
     assert code == 0
     assert payload["fixture_diffs_include_unchanged"] is True
     assert len(payload["fixture_diffs"]) == 5
+
+
+# ---------------------------------------------------------------------------
+# Red-team findings 2-5 (cycle 13): regression pins
+# ---------------------------------------------------------------------------
+
+
+def test_stderr_sanitizes_hostile_decision_strings():
+    # Finding 2: decision values come from the hostile results.json and were
+    # interpolated raw into the stderr summary (ANSI/OSC injection).
+    old = _results(decision="compatible_on_fixture_set\x1b[31mPWNED\x1b[0m")
+    new = _results(decision="\x1b]0;pwned\x07no_candidate")
+    payload = diff_reports(old, new)
+    rendered = render_summary(payload)
+    assert "\x1b" not in rendered
+    assert "\x07" not in rendered
+    assert "PWNED" in rendered  # readable text survives; escapes do not
+    assert "Decision:" in rendered
+
+
+def test_stderr_sanitizes_hostile_source_labels():
+    # Finding 2: source path labels were likewise raw (attacker-chosen CLI
+    # paths or diff_reports labels reach stderr unfiltered).
+    old = _results()
+    new = _results()
+    payload = diff_reports(old, new, old_label="old\x1b[2J", new_label="new\x07evil")
+    rendered = render_summary(payload)
+    assert "\x1b" not in rendered
+    assert "\x07" not in rendered
+    assert "evil" in rendered
+
+
+def test_config_snapshot_dedup_scales():
+    # Finding 3: the O(n^2) `name not in names` list scan hung ~1.5h on
+    # 800k candidate names. 50k distinct names must complete well under
+    # 10s with the set-based dedup (and stay correct).
+    count = 50_000
+    result = {
+        "decision": "compatible_on_fixture_set",
+        "search": [{"format": {"name": f"cand-{i:06d}"}} for i in range(count)],
+    }
+    start = time.perf_counter()
+    snapshot = _config_snapshot(result)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 10, f"_config_snapshot took {elapsed:.1f}s on {count} names"
+    assert len(snapshot["candidates"]) == count
+    assert snapshot["candidates"] == sorted(f"cand-{i:06d}" for i in range(count))
+    assert snapshot["families"] == sorted({f"cand-{i:06d}" for i in range(count)})
+
+
+def test_planned_count_drift_flags_silent_mismatch():
+    # Finding 4: planned 2 vs 50 (no evidence) used to report
+    # identical=True because _search_verdicts dropped the planned counts.
+    # Both sides "pass" (all planned fixtures passed), so without the
+    # planned comparison every other axis matches.
+    old = _results(planned=2, passes=(2, 2))
+    new = _results(planned=50, passes=(50, 50))
+    payload = diff_reports(old, new)
+    drift = _drift_fields(payload)
+    assert drift["planned:llama3"] == {"field": "planned:llama3", "old": 2, "new": 50}
+    assert drift["planned:chatml"] == {"field": "planned:chatml", "old": 2, "new": 50}
+    assert payload["summary"]["identical"] is False
+    assert payload["summary"]["config_drift_warnings"] == 2
+    rendered = render_summary(payload)
+    assert "planned:llama3" in rendered
+    assert "2 -> 50" in rendered
+
+
+def test_evidence_asymmetry_is_not_identical():
+    # Finding 5: evidence on exactly one side used to report identical=True
+    # with "identical on every compared axis" -- a whole axis was never
+    # compared at all. The asymmetry now sinks identical and the summary
+    # names the axes that were actually compared.
+    old = _results()
+    new = _results()
+    for entry in new["search"]:
+        entry.pop("observations", None)
+    new["held_out"].pop("observations", None)
+    payload = diff_reports(old, new)
+    assert payload["summary"]["identical"] is False
+    assert payload["summary"]["evidence_asymmetric"] is True
+    rendered = render_summary(payload)
+    assert "Per-fixture comparison unavailable" in rendered
+    assert "new run has no --include-evidence observations" in rendered
+
+
+def test_identical_summary_names_compared_axes():
+    # Finding 5 (second half): the identical-run line names the axes that
+    # were actually compared instead of asserting an unqualified totality.
+    run = _results()
+    rendered = render_summary(diff_reports(run, json.loads(json.dumps(run))))
+    assert "No differences: the two runs are identical on every compared axis" in rendered
+    assert "per-fixture evidence" in rendered  # both sides carry evidence
+    assert "decision" in rendered and "configuration" in rendered

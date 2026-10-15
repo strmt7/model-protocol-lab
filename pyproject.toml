@@ -27,7 +27,7 @@ dependencies = []
 
 [project.optional-dependencies]
 hf = ["torch>=2.6", "transformers>=4.57.1,<6", "safetensors>=0.6"]
-dev = ["ruff>=0.14", "mypy>=1.18", "coverage>=7.10", "hypothesis>=6.140"]
+dev = ["ruff>=0.14", "mypy>=1.18", "coverage>=7.10", "hypothesis>=6.140", "pytest>=8.0"]
 
 [project.scripts]
 model-protocol-lab = "model_protocol_lab.cli:main"

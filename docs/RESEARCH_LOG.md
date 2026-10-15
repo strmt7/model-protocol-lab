@@ -2118,3 +2118,69 @@ truth); no verdict inference from missing summaries (degrades to
 `unknown`, shown as such); the `--family` flag is not recovered (not
 stored in `results.json` -- candidate base names are the exact available
 signal, documented as such).
+
+## 2026-10-15 -- Red-team fix round: diffreports H1/M1-M3/L1 + finding 6 documentation
+
+What changed and why:
+
+A red-team pass over the cycle-13 `mpl diff-reports` code found six
+findings; findings 1-5 were fixed (each pinned by a regression test in
+`tests/test_cycle13_diffreports.py`), finding 6 documented in a code
+comment with no behavior change.
+
+- **H1 (CI-blocking):** the README test-count pin test shells out to
+  `python -m pytest --collect-only`, but `pytest` was not in the
+  `pyproject.toml` dev extras or installed by `.github/workflows/ci.yml`
+  -- the pin test would fail deterministically in CI. Fix: added
+  `pytest>=8.0` to the `dev` extras (pytest is the suite's actual
+  runner; it belongs there). Verified from the workflow file that both
+  jobs installing the suite (`static` installs `.[dev]`, `test` installs
+  `.[dev,hf]`) pull the dev extra, so pytest is present wherever the
+  suite runs. No skip guard added -- the conditional did not trigger.
+  Pin test verified passing in the repo venv (README count updated
+  994 -> 1000 for the 6 new tests).
+
+- **M1:** `render_summary` interpolated `decision["old"]`/`["new"]`
+  (hostile results.json strings) and the source path labels raw into
+  stderr -- ANSI escape / OSC sequence injection. Fix: both now pass
+  through the existing `_display_id` sanitizer, like every other
+  operator-visible identifier.
+
+- **M2:** `_config_snapshot`'s `name not in names` list-scan dedup was
+  O(n^2) and hung ~1.5h on 800k candidate names. Fix: set-based dedup
+  preserving first-occurrence order. Regression test holds 50k
+  distinct names to <10s (measured well under 1s).
+
+- **M3:** `_search_verdicts` dropped per-candidate `planned` counts, so
+  planned 2 vs 50 (no evidence) reported `identical: True` -- a "pass"
+  verdict means "all *planned* fixtures passed", making the comparison
+  a lie of omission. Fix: `_search_verdicts` now also returns the
+  per-candidate planned counts (first-entry wins, `None` for
+  malformed/missing summaries), and the diff emits `planned:<candidate>`
+  config-drift entries (fixed order, after the five `_drift` fields)
+  which render in the stderr drift section.
+
+- **L1:** `identical: True` plus "identical on every compared axis" was
+  reported when evidence existed on only one side -- a whole axis was
+  never compared. Fix: evidence-presence asymmetry now sinks
+  `identical` (with a new machine-readable
+  `summary["evidence_asymmetric"]` flag), and the identical-run stderr
+  line names the axes actually compared (decision, winner, candidate
+  verdicts, configuration, plus per-fixture evidence only when both
+  sides carry it).
+
+- **Finding 6 (theoretical):** duplicate fixture IDs inside one
+  candidate's observations are last-wins, while duplicate candidate
+  names in "search" are first-wins. Documented in a comment at
+  `_fixture_outcomes`; behavior deliberately unchanged -- `mpl run`
+  never emits either duplicate, so reconciling the conventions would
+  change only hostile-input behavior.
+
+Verification: 6 new tests in `tests/test_cycle13_diffreports.py`
+(hostile decision/label sanitization with ANSI + OSC payloads,
+config-snapshot scaling, planned-count drift, evidence-asymmetry
+sinks identical, identical summary names compared axes) plus one
+assertion added to the existing missing-evidence test. Full suite:
+964 unittest-discovered tests OK (README pin: 1000 pytest-collected).
+ruff check + format clean; mypy clean on all 15 source files.
+Docs: `CHANGELOG.md` [Unreleased] `### Fixed`, this entry.

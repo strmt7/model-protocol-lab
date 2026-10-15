@@ -229,6 +229,34 @@ All notable changes to this project are documented here. The format follows
   checkpoint bytes can no longer reach the terminal, and non-ValueError
   parse failures no longer produce a traceback. The debug REPL's error
   path strips terminal-control characters from exception text.
+- Red-team cycle 13, `diff-reports` (all pinned by new
+  `tests/test_cycle13_diffreports.py` regression tests):
+  - **H1 (CI-blocking):** `pytest` added to the `dev` extras in
+    `pyproject.toml` (`pytest>=8.0`) -- it is the suite's actual runner
+    (the README test-count pin test shells out to `python -m pytest
+    --collect-only`), and CI's `static`/`test` jobs install `.[dev]` /
+    `.[dev,hf]`, so the dev extra is exactly what CI installs. Pin test
+    verified passing in the repo venv.
+  - **M1:** `render_summary` now runs the existing `_display_id`
+    sanitizer over the decision strings and the source labels before
+    they reach stderr -- hostile `decision` values (ANSI escapes, OSC
+    sequences) can no longer inject terminal control bytes.
+  - **M2:** `_config_snapshot` candidate-name dedup is now set-based
+    (linear) instead of an O(n^2) list scan -- the old code hung ~1.5h
+    on 800k candidate names.
+  - **M3:** `_search_verdicts` now also returns per-candidate `planned`
+    counts, and the diff emits `planned:<candidate>` config-drift
+    entries (surfaced in the stderr drift section) when they differ --
+    planned 2 vs 50 no longer compares as silently identical.
+  - **L1:** evidence-presence asymmetry now sinks `identical` (new
+    machine-readable `summary["evidence_asymmetric"]` flag), and the
+    "no differences" stderr line names the axes actually compared
+    (decision, winner, candidate verdicts, configuration, plus
+    per-fixture evidence only when both sides carry it).
+  - Documented (comment at `_fixture_outcomes`, no behavior change): the
+    duplicate-fixture-ID last-wins vs duplicate-candidate first-wins
+    inconsistency is deliberate -- reconciling it would change only
+    hostile-input behavior.
 
 ### Added
 
