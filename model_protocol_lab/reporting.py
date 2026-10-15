@@ -273,8 +273,64 @@ def _public_view(result: dict[str, Any], include_evidence: bool) -> dict[str, An
             run.pop("observations", None)
         if clean.get("held_out") is not None:
             clean["held_out"].pop("observations", None)
+        _strip_raw_diagnostics(clean)
     clean["raw_evidence_included"] = include_evidence
     return clean
+
+
+#: Replacement for diagnostic free text that can carry raw prompts or
+#: generations in an evidence-excluded public view. The divergence class
+#: (fixed vocabulary) stays on the record; only the free text is withheld.
+_WITHHELD_DIAGNOSTIC_DETAIL = "[withheld without --include-evidence]"
+
+
+def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
+    """Remove raw-evidence carriers from an evidence-excluded public view.
+
+    ``observations`` (stripped by the caller) are not the only place raw
+    content hides in a result dict:
+
+    - ``template_conformance`` records, per divergent segment, the token-ID
+      subsequences of the rendered prompt (``hand_ids``/``template_ids``) --
+      decoding them reconstructs the prompt text;
+    - ``backend_divergences`` embeds the decoded stop text (the expected
+      answer) in ``stop_texts``/``stop_text``, and raw generated text in the
+      free-text ``detail`` of kept-vs-stripped findings.
+
+    None of these may reach the public JSON without ``--include-evidence``.
+    Spans, counts, classes and severities stay: they carry no raw content.
+    The evidence-included path is untouched.
+    """
+    conformance = clean.get("template_conformance")
+    if type(conformance) is dict:
+        diffs = conformance.get("diffs")
+        if type(diffs) is list:
+            for entry in diffs:
+                if type(entry) is not dict:
+                    continue
+                segments = entry.get("diff")
+                if type(segments) is list:
+                    for segment in segments:
+                        if type(segment) is not dict:
+                            continue
+                        segment.pop("hand_ids", None)
+                        segment.pop("template_ids", None)
+    divergences = clean.get("backend_divergences")
+    if type(divergences) is dict:
+        divergences.pop("stop_texts", None)
+        per_fixture = divergences.get("per_fixture")
+        if type(per_fixture) is list:
+            for entry in per_fixture:
+                if type(entry) is not dict:
+                    continue
+                findings = entry.get("divergences")
+                if type(findings) is list:
+                    for finding in findings:
+                        if type(finding) is not dict:
+                            continue
+                        finding.pop("stop_text", None)
+                        if "detail" in finding:
+                            finding["detail"] = _WITHHELD_DIAGNOSTIC_DETAIL
 
 
 def _short_fingerprint(value: object) -> str:
@@ -380,15 +436,14 @@ def _conformance_section(result: dict[str, Any]) -> str:
                     for segment in segments:
                         if type(segment) is not dict:
                             continue
+                        # Spans only: the token-ID subsequences would
+                        # reconstruct the rendered prompt, so they are never
+                        # embedded in this HTML view (see docs/USAGE.md).
                         detail_items.append(
                             "hand "
                             + escape(str(segment.get("hand_span")))
-                            + " "
-                            + escape(str(segment.get("hand_ids")))
                             + " \u2194 template "
                             + escape(str(segment.get("template_span")))
-                            + " "
-                            + escape(str(segment.get("template_ids")))
                         )
                     cell = (
                         '<span class="badge fail">'
@@ -443,8 +498,9 @@ def _conformance_section(result: dict[str, Any]) -> str:
         'hypothesis is encoded with <span class="mono">add_special_tokens=False</span> '
         "and compared token-ID by token-ID against the checkpoint's own "
         '<span class="mono">apply_chat_template</span> output for the same '
-        "messages. A divergent segment lists the token-ID subsequences that "
-        "differ and their positions; an identical rendering reports an empty "
+        "messages. A divergent segment lists the positions that differ -- the "
+        "token-ID subsequences themselves are withheld from this HTML view; "
+        "an identical rendering reports an empty "
         "diff.</p></section>"
     )
 
@@ -563,9 +619,11 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
     a fixed-vocabulary note names how many observations were recorded and
     how many were actually tested. Returns "" when the key is missing, so runs without the
     diagnosis render exactly as before (the sample-report golden test).
-    Every model/fixture-derived string (fixture names, stop texts,
-    detail lines) is escaped; severities, classes and counts are the
-    module's fixed vocabulary. Severity badges reuse the existing badge
+    Fixture names are escaped; severities, classes and counts are the
+    module's fixed vocabulary. Stop texts and free-text detail lines are
+    withheld from this HTML view entirely (they can carry raw prompts or
+    generations) -- only the fixed-vocabulary markers render. Severity
+    badges reuse the existing badge
     palette (high: fail-red; medium/low: neutral slate, with the severity
     word in the badge text) -- no new CSS, so byte-identical rendering
     for reports without the section is preserved.
@@ -657,10 +715,11 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
         "the emulated stop semantics.</p>"
     )
 
-    # One <details> callout per divergence: fixture, class with severity,
-    # the stop text, and the recorded detail (which names the semantics
-    # and firing steps that disagreed, plus the kept-vs-stripped text
-    # contrast).
+    # One <details> callout per divergence: fixture, class with severity.
+    # The stop text and the recorded detail are withheld from this HTML view
+    # (the stop text is the decoded expected answer; the detail can carry raw
+    # generated text) -- the class, severity and matrix counts keep the
+    # diagnostic signal, and --include-evidence keeps the full record in JSON.
     callouts = []
     for entry in per_fixture:
         if type(entry) is not dict:
@@ -674,8 +733,10 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
                 continue
             finding_class = finding.get("class")
             finding_severity = finding.get("severity")
-            finding_stop_text = finding.get("stop_text")
-            finding_detail = finding.get("detail")
+            # The stop text (the decoded expected answer) and the free-text
+            # detail (which can carry raw generated text) are never embedded
+            # in this HTML view; the class, severity and fixture identify the
+            # finding, and --include-evidence keeps the full record in JSON.
             callouts.append(
                 "<details><summary>"
                 + '<span class="badge '
@@ -690,24 +751,16 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
                 + '<span class="mono">'
                 + escape(str(fixture))
                 + "</span>"
-                + "</summary><p>Stop text: "
-                + '<span class="mono">'
-                + escape("\u2014" if finding_stop_text is None else str(finding_stop_text))
-                + "</span></p><p>"
-                + escape(str(finding_detail))
-                + "</p></details>"
+                + "</summary>"
+                + '<p class="mono">[stop text and diagnostic detail withheld '
+                "from this HTML view]</p>" + "</details>"
             )
 
     stop_texts = section.get("stop_texts")
     params = ""
     if type(stop_texts) is list and stop_texts:
-        params = (
-            "<p>Stop text(s): "
-            + ", ".join(
-                '<span class="mono">' + escape(str(stop)) + "</span>" for stop in stop_texts
-            )
-            + ".</p>"
-        )
+        # The stop text is the decoded expected answer: never rendered here.
+        params = '<p>Stop text(s): <span class="mono">[withheld from this HTML view]</span>.</p>'
     # Observation-count bound note (fixed vocabulary): the diagnosis
     # processed only the first MAX_DIVERGENCE_OBSERVATIONS observations
     # when the run recorded more than that. Numbers are ints by
