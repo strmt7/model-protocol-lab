@@ -2694,3 +2694,18 @@ caught on hermetic /tmp copies. Two documentation fixes in reporting.py:
 (1) matrix row-order comment clarified (hardcoded class_order; unknown
 classes get no matrix row); (2) `_held_out_section` docstring added,
 noting absent/malformed conflation. README test count updated to 2554.
+
+## 2026-10-15 (cycle 34: experiments.py internals differential verification)
+
+Differential verification of `model_protocol_lab/experiments.py`
+internals against independent oracles written from the docstrings (tests/
+test_cycle34_experiments_verify.py, 59 tests + 2718 subtests): NO
+functional bug found. Covers classify_observation/failure_taxonomy,
+budget_frontier, _resolve_boundaries/candidate_fingerprint,
+_stop_cell/stop_matrix, logprob internals, prompt_sensitivity_sweep, and
+seed handling (one seed reaches every generate call; per-fixture request
+seeds equal the independently recomputed sha256 values). Mutation
+sensitivity: 15/15 mutants caught on hermetic /tmp copies. One docstring
+fix: `_stop_cell` now documents that unavailable outcomes omit the
+`stop_text` key entirely (was: claimed None). README test count updated
+to 2613.
