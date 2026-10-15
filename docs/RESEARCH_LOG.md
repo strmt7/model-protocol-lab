@@ -2924,3 +2924,22 @@ regenerated output is byte-identical to the committed
 examples/sample-report/ (no schema drift). No real bugs. Deliberately
 not verified: actual browser rendering, CSP script-src hash
 re-derivation, pip-audit/CI. README test count updated to 3446.
+
+## 2026-10-15 (cycle 48: third canary evidence-leak sweep)
+
+Third canary sweep of all public report surfaces
+(tests/test_cycle48_evidence_leak_sweep3.py, 14 tests + 2 subtests):
+unique canary CANARY48-LEAKSWEEP3-ZK2 planted in raw text, expected
+answers, and token sequences; every public surface swept with
+include_evidence=False (run JSON via save_report, run HTML, CLI
+run --output end-to-end against a toy GPT-2 checkpoint incl. stdout/
+stderr, diff-reports function+CLI+render_summary, debug saved
+transcript, doctor function+CLI, committed examples/sample-report/).
+Verdict: CLEAN -- all carriers stripped (observations popped,
+hand_ids/template_ids gone, stop texts gone, detail withheld,
+raw_evidence_included false). Controls prove the canaries were planted
+(evidence=True runs contain them; debug .render echo by design).
+Mutation gate 3/3 caught on a /tmp package copy (_strip_raw_diagnostics
+bypass, _cmd_save token-ID leak, diff_reports answer_probe leak);
+repo source sha256-verified untouched. README test count updated
+to 3460.
