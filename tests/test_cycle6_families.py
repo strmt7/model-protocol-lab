@@ -179,6 +179,7 @@ class CatalogListingTests(unittest.TestCase):
                 "glm4",
                 "glm45",
                 "glm53",
+                "k2horizon",
                 "kimi2",
                 "kimi3",
                 "kolibri",

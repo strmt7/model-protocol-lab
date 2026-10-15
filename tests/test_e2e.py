@@ -64,6 +64,7 @@ class ModuleEntryTests(unittest.TestCase):
                 "kolibri",
                 "lfm25",
                 "ling",
+                "k2horizon",
                 "nemotron35",
                 "muse_glimmer",
                 "laguna",

@@ -2332,3 +2332,149 @@ change, CB cache/attention work, no generation stopping-criteria items.)
 Net: no repo change warranted on any item this round. Keep the SGLang
 #42466 WATCH and add Mistral Large 4 / Reflection Beam weights to the
 watch list for the next drift sweep.
+
+## 2026-10-15 (cycle 14 K2-Horizon family research)
+
+Catalog 23 -> 24 families: `k2horizon` (IFM K2-Horizon fleet, Institute of
+Foundation Models launched by MBZUAI, released 2026-09-03, Apache 2.0).
+Evidence TIER-1: the official `chat_template.jinja`, read and derived by
+hand (preserved at docs/evidence/k2horizon-chat-template.jinja); the
+tokenizer_config.json `bos_token`/`eos_token` fields verified live
+against the HF repos (read 2026-10-15).
+
+**Org + fleet verification (primary: HF API + model cards).** The HF org
+is `IFM` (not "IFM/MBZUAI" as the backlog note guessed). All six fleet
+repos verified present, ungated, with download counts, via the HF API
+author listing: IFM/K2-Horizon-375B-A23B, IFM/K2-Horizon-MoVA-36B-A4B
+(note: "MoVA" is in the repo name), IFM/K2-Horizon-32B, IFM/K2-Horizon-7B,
+IFM/K2-Horizon-3.7B, IFM/K2-Horizon-0.9B. Safetensors weights publicly
+downloadable: the 375B-A23B repo file listing shows all 61
+model-*-of-00061.safetensors shards. License Apache 2.0 and 2026-09-03
+release confirmed on the official model card
+(https://huggingface.co/IFM/K2-Horizon-375B-A23B).
+
+**Primary sources read this round (URL + what was read):**
+- https://huggingface.co/IFM/K2-Horizon-375B-A23B -- model card: fleet
+  composition, Apache-2.0 license, vLLM/SGLang day-zero recipes,
+  reasoning_effort high/medium/low via chat_template_kwargs, k2_horizon
+  reasoning/tool-call parsers.
+- https://huggingface.co/IFM/K2-Horizon-375B-A23B/raw/main/tokenizer_config.json
+  -- bos_token `<|ifm|begin_of_text|>`, eos_token `<|ifm|endoftext|>`,
+  PreTrainedTokenizerFast.
+- https://huggingface.co/IFM/K2-Horizon-MoVA-36B-A4B/raw/main/tokenizer_config.json
+  -- byte-identical bos/eos fields (fleet shares the tokenizer config).
+- https://huggingface.co/IFM/K2-Horizon-375B-A23B/raw/main/chat_template.jinja
+  -- the full official template (1014 lines), downloaded and preserved at
+  docs/evidence/k2horizon-chat-template.jinja. md5-verified byte-identical
+  across the 375B-A23B, 7B and MoVA-36B-A4B repos
+  (150b0fd46f7babfc6bfd8b769ad0475c) -- one template for the fleet.
+- https://huggingface.co/IFM/K2-Horizon-375B-A23B/raw/main/generation_config.json
+  -- eos_token_id [1, 250019] (250019 = `<|ifm|im_end|>` per the 7B
+  added_tokens_decoder).
+- https://huggingface.co/IFM/K2-Horizon-375B-A23B/raw/main/modeling_k2_horizon.py
+  -- confirms no chat-template handling in modeling code (the template is
+  the whole story).
+
+**Template decisions (plain-text, no-tools core; line numbers in the
+preserved 1014-line file):** BOS `{{- bos_token }}` (line 1) =
+`<|ifm|begin_of_text|>`; user `<|ifm|im_start|>user\n{content}<|ifm|im_end|>`
+(line 959, no trailing newline); assistant history
+`<|ifm|im_start|>assistant\n<ifm|think>\n</ifm|think>{content}<|ifm|im_end|>`
+(lines 983-997) -- the template REQUIRES a thinking field on assistant
+messages (think/think_fast/think_faster/reasoning_content/reasoning as a
+string, lines 962-976; a content-only assistant message raises), so the
+lab's deterministic no-reasoning hypothesis is an EMPTY think field
+(line 989), kimi3/laguna/ling convention; generation prompt
+`<|ifm|im_start|>assistant\n<ifm|think>\n` for the default
+reasoning_effort='high' (lines 1005-1006), `<ifm|think_fast>` for medium
+(line 1008), `<ifm|think_faster>` for low (line 1010) -- the medium/low
+branches ride the `--mutate` path as `k2horizon/effort-medium` /
+`k2horizon/effort-low` (kolibri/thinking-off convention); system block
+`<|ifm|im_start|>system\n{content}<|ifm|im_end|>` (line 948) documented,
+not modeled. The catalog entry's render was verified byte-identical
+against the official template rendered with a no-op Jinja extension for
+the custom tag (1-turn, 2-turn, effort variants, system block).
+
+**{% generation %} caveat (verified, not assumed).** The official
+template wraps the assistant's inner content in {% generation %} /
+{% endgeneration %} block tags (lines 984, 998), which are NOT valid
+stock Jinja2 -- verified TemplateSyntaxError ("unknown tag
+'generation'") with jinja2 3.1.6 AND the exact
+ImmutableSandboxedEnvironment(trim_blocks/lstrip_blocks) transformers
+5.19.0 uses for apply_chat_template. They emit no bytes; serving stacks
+must supply the extension. The \n after "assistant" in the history frame
+is the source line break inside the {% generation %} block under
+standard Jinja block-extension semantics -- the only render consistent
+with the template's own explicit generation prompt
+(`<|ifm|im_start|>assistant\n<ifm|think>\n`, line 1006). Community
+renderers that strip the tags textually emit the frame WITHOUT that \n
+-- a known, documented ecosystem divergence. The template was last
+touched 2026-10-14 ("Support OpenAI-style text content lists (#8)"),
+so the md5 above is the revision pin.
+
+**Fetch warning for future cycles.** browser.open's text extraction
+MANGLES this template (it dropped `</...>` closing-tag fragments and
+whole think-tag literals, showing 1830 phantom lines vs the real 1014):
+for chat_template.jinja files, always curl the raw bytes and derive from
+the file, never from the browser text view.
+
+**Triage of the other backlog models (all pinnable from primary sources
+today; deferred to a later cycle -- this cycle's test file is
+k2horizon-scoped):**
+- Tencent Hy4 preview (2026-08-28, Apache 2.0): HF org `tencent`, repo
+  tencent/Hy4-preview; chat_template.jinja publicly readable (309 lines,
+  compiles under stock Jinja). Plain core: frames
+  `<｜hy_start:opensource｜>{role}<｜hy_middle:opensource｜>{content}<｜hy_end:opensource｜>`
+  (｜ = U+FF5C fullwidth bar, DeepSeek-style); history assistant
+  `<｜hy_start:opensource｜>assistant<｜hy_middle:opensource｜><think:opensource></think:opensource>{content}<｜hy_end:opensource｜>`
+  (empty think for plain messages); generation prompt
+  `...<think:opensource>` for the default reasoning_effort='high',
+  `...<think:opensource></think:opensource>` for `no_think`; a system
+  block is ALWAYS synthesized when no leading system message
+  (`<｜hy_start:opensource｜>system<｜hy_middle:opensource｜><｜reasoning_mode:opensource｜>reasoning_effort:{effort}<｜hy_end:opensource｜>`)
+  -- documented-not-modeled, kolibri convention. Config bos_token
+  `<｜hy_start:opensource｜>`, eos `<｜hy_end:opensource｜>`; the template
+  emits no BOS literal. Template + tokenizer_config.json both read
+  2026-10-15. READY TO ADD.
+- MiniMax-M3 (2026-06, MiniMax Community License): HF org `MiniMaxAI`,
+  repo MiniMaxAI/MiniMax-M3; chat_template.jinja publicly readable (247
+  lines). Plain core: template-local tokens bod `]~!b[`, bos-var `]~b]`,
+  eos-var `[e~[`; ALWAYS-emitted system super-prompt
+  (`]~!b[]~b]system\n` + default identity + `<thinking_instructions>`
+  block) and developer super-prompt (`]~b]developer\nYou are a helpful
+  assistant.`) -- both documented-not-modeled; user `]~b]user\n{content}
+  [e~[\n`; history assistant `]~b]ai\n</mm:think>{content}[e~[\n`
+  (think_end prefix when no reasoning); generation prompt `]~b]ai\n`
+  (thinking_mode undefined/adaptive), `]~b]ai\n</mm:think>` (disabled),
+  `]~b]ai\n<mm:think>` (enabled). Template read 2026-10-15. READY TO
+  ADD.
+- Nanbeige4.2-3B (Nanbeige LLM Lab / Boss Zhipin; paper 2026-07-27):
+  HF org `Nanbeige`, repo Nanbeige/Nanbeige4.2-3B; no standalone
+  chat_template.jinja (404) but tokenizer_config.json embeds a full
+  `chat_template` (primary source, read 2026-10-15). Plain core:
+  ChatML-like with mandatory think blocks -- ALWAYS-emitted default
+  system prompt `<|im_start|>system\n` + Chinese Nanbeige identity line +
+  `<|im_end|>\n` (documented-not-modeled); user
+  `<|im_start|>user\n{content}<|im_end|>\n`; history assistant
+  `<|im_start|>assistant\n<think>\n\n</think>\n\n{content}<|im_end|>\n`;
+  generation prompt `<|im_start|>assistant\n<think>\n` (default),
+  `<|im_start|>assistant\n<think>\n\n</think>\n\n` with
+  enable_thinking=false (mutate-path branch). Config bos `<|im_start|>`,
+  eos `<|im_end|>`; template emits no BOS literal. READY TO ADD.
+
+**Built this cycle.** `k2horizon` catalog entry + `k2horizon/effort-medium`
++ `k2horizon/effort-low` mutate variants in model_protocol_lab/catalog.py;
+tests/test_cycle14_k2horizon_families.py (12 tests: byte-exact 1-turn and
+2-turn renders, character-exact marker pins, system-block/EOS
+documentation pins, effort-branch mutation + dedup pins,
+diff-vs-all-23-others pin, README naming pin); docs/evidence/
+k2horizon-chat-template.jinja preserved. ruff check + format clean, mypy
+clean. Full suite: 1109 passed, 10 failed, 1 skipped, 5994 subtests
+passed. The 10 failures are all count/README pins for the coordinator:
+test_cycle10/11 README count pins (23 vs 24), test_cycle13 ling diff pin
+(22 vs 23 others) + README count pin (23 vs 24), test_cycle4 README
+test-count pin (1108 vs 1120 discovered), test_cycle5/6/7 twenty-two
+pins (pre-existing -- catalog was already at 23 before this cycle),
+test_e2e catalog-set pin (missing "k2horizon"), and the new
+ReadmeK2HorizonTests pin (README lacks "K2-Horizon"). No README/
+CHANGELOG/VALIDATION edits made (coordinator handles).

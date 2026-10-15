@@ -492,6 +492,83 @@ CATALOG = {
         "<|role_end|>",
         open_suffix="<role>ASSISTANT</role>\n<think>",
     ),
+    # IFM K2-Horizon fleet (Institute of Foundation Models, launched by
+    # MBZUAI; released 2026-09-03, Apache 2.0): six models sharing one
+    # chat template -- K2-Horizon-375B-A23B, K2-Horizon-MoVA-36B-A4B,
+    # K2-Horizon-32B, K2-Horizon-7B, K2-Horizon-3.7B, K2-Horizon-0.9B
+    # (all six verified present and ungated on the IFM HF org; safetensors
+    # weights publicly downloadable -- e.g. 61 shards listed for the 375B).
+    # Evidence tier 1: the official chat_template.jinja (preserved at
+    # docs/evidence/k2horizon-chat-template.jinja), read 2026-10-15 from the
+    # official HF repos -- byte-identical across 375B-A23B, 7B and
+    # MoVA-36B-A4B (md5 150b0fd46f7babfc6bfd8b769ad0475c). Every string below
+    # is derived from the template's plain-text, no-tools branch, cited by
+    # line number in the preserved 1014-line file, and cross-checked by
+    # rendering the official template with a no-op Jinja extension for the
+    # custom tag (see the {% generation %} caveat):
+    # - BOS (line 1): {{- bos_token }} -- <|ifm|begin_of_text|>, tier-1
+    #   verified from the official tokenizer_config.json bos_token field
+    #   (read 2026-10-15 on the 375B-A23B and MoVA-36B-A4B repos; the two
+    #   configs are identical).
+    # - user (line 959): <|ifm|im_start|>user\n{content}<|ifm|im_end|> (no
+    #   trailing newline).
+    # - assistant history (lines 983-997): <|ifm|im_start|>assistant\n<ifm|
+    #   think>\n</ifm|think>{content}<|ifm|im_end|>. The template REQUIRES a
+    #   thinking field on assistant messages (message.think / think_fast /
+    #   think_faster / reasoning_content / reasoning as a string, lines
+    #   962-976); a plain content-only assistant message raises "Assistant
+    #   message is missing a thinking field." The lab's deterministic
+    #   no-reasoning hypothesis is an EMPTY think field (defined string,
+    #   falsy -> line 989): <ifm|think>\n</ifm|think> (kimi3/laguna/ling
+    #   empty-think convention). The reasoned-content branch (line 987:
+    #   <ifm|think>\n{thinking}</ifm|think>{content}) is not a hypothesis.
+    #   The \n after "assistant" comes from the source line break inside the
+    #   {% generation %} block under standard Jinja block-extension
+    #   semantics (trim_blocks/lstrip_blocks, the transformers chat-template
+    #   env) -- it is the only render consistent with the template's own
+    #   explicit generation prompt below.
+    # - generation prompt (lines 1003-1011): reasoning_effort defaults to
+    #   'high' (line 1005); high -> <|ifm|im_start|>assistant\n<ifm|think>\n
+    #   (line 1006, this base entry's open_suffix); medium ->
+    #   <|ifm|im_start|>assistant\n<ifm|think_fast>\n (line 1008); low ->
+    #   <|ifm|im_start|>assistant\n<ifm|think_faster>\n (line 1010). The
+    #   medium/low effort branches ride the mutate path as
+    #   "k2horizon/effort-medium" and "k2horizon/effort-low"
+    #   (kolibri/thinking-off convention).
+    # - system block (line 948, no tools): <|ifm|im_start|>system\n{content}
+    #   <|ifm|im_end|> -- emitted for a leading system message. The system
+    #   role is not modeled in Format (same convention as
+    #   mistral_large/gemma4/kolibri); the block is pinned as a documented
+    #   constant in tests/test_cycle14_k2horizon_families.py.
+    # CAVEAT -- {% generation %} tags (lines 984, 998): the official
+    # template wraps the assistant's inner content in {% generation %} /
+    # {% endgeneration %} block tags, which are NOT valid stock Jinja2 --
+    # verified TemplateSyntaxError ("unknown tag 'generation'") with jinja2
+    # 3.1.6 and the same ImmutableSandboxedEnvironment (trim_blocks /
+    #   lstrip_blocks) transformers 5.19.0 uses for apply_chat_template.
+    # They emit no bytes; serving stacks must provide the extension (vLLM's
+    # k2_horizon parsers) or strip the tags. Community renderers that strip
+    # the tags textually emit the assistant frame WITHOUT the \n after
+    # "assistant" -- a known ecosystem divergence; this entry models the
+    # proper-extension render, the only one consistent with the template's
+    # explicit generation prompt.
+    # EOS caveat: the official eos_token field is <|ifm|endoftext|>, and
+    # generation_config.json lists eos_token_id [1, 250019] (250019 =
+    # <|ifm|im_end|> per the 7B added_tokens_decoder) -- both stop
+    # generation; documented, not modeled (Format has no EOS field). Out of
+    # scope for the plain-text core: the tool-presentation/call branches
+    # (lines 20-34, 407+, 1537+), tool turns (<|ifm|im_start|>tool\n...),
+    # and the think_fast/think_faster history fields.
+    # Sources: https://huggingface.co/IFM/K2-Horizon-375B-A23B,
+    # https://huggingface.co/IFM/K2-Horizon-MoVA-36B-A4B
+    "k2horizon": Format(
+        "k2horizon",
+        "<|ifm|begin_of_text|>",
+        "<|ifm|im_start|>user\n",
+        "<|ifm|im_start|>assistant\n<ifm|think>\n</ifm|think>",
+        "<|ifm|im_end|>",
+        open_suffix="<|ifm|im_start|>assistant\n<ifm|think>\n",
+    ),
 }
 
 
@@ -512,6 +589,14 @@ _NEMOTRON35_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think></think>"
 # disabled, jinja lines 127-128). Deterministic string; pinned byte-exact
 # in tests/test_cycle13_families.py.
 _LING_THINKING_OFF_SUFFIX = "<role>ASSISTANT</role>\n<think></think>"
+
+# K2-Horizon reasoning-effort branches: same frames as the base entry, but
+# the generation prompt opens the effort-matched think tag (official
+# chat_template.jinja lines 1008/1010; the base entry models the default
+# 'high', line 1006). Deterministic strings; pinned byte-exact in
+# tests/test_cycle14_k2horizon_families.py.
+_K2HORIZON_EFFORT_MEDIUM_SUFFIX = "<|ifm|im_start|>assistant\n<ifm|think_fast>\n"
+_K2HORIZON_EFFORT_LOW_SUFFIX = "<|ifm|im_start|>assistant\n<ifm|think_faster>\n"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
@@ -577,6 +662,26 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
                 name=base.name + "/thinking-on",
                 open_suffix="<assistant><think>",
                 assistant_prefix="<assistant><think></think>",
+            ),
+        )
+    if family == "k2horizon":
+        # reasoning_effort medium/low are generation-prompt branches of the
+        # same template (official chat_template.jinja lines 1008/1010; the
+        # base entry models the default 'high', line 1006), so they ride
+        # the mutate path like kolibri/thinking-off rather than becoming
+        # new catalog entries. Only the generation prompt changes -- the
+        # effort-matched think tag opens in place of <ifm|think>. The new
+        # open_suffixes cannot collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/effort-medium",
+                open_suffix=_K2HORIZON_EFFORT_MEDIUM_SUFFIX,
+            ),
+            replace(
+                base,
+                name=base.name + "/effort-low",
+                open_suffix=_K2HORIZON_EFFORT_LOW_SUFFIX,
             ),
         )
     return variants
