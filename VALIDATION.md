@@ -1,30 +1,34 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–13 + fix rounds (executed 2026-10-15, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–44 + fix rounds (executed 2026-10-15, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-15). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **1001 tests + 3142 subtests,
+- `python -m pytest -q -p no:cacheprovider` — **3374 tests + 43319 subtests,
   all passing**, across **3 consecutive green executions** (no variance, no
-  flakiness). Includes 23 format families (kolibri, lfm25, nemotron35,
-  muse_glimmer, laguna, ling added this period), the `debug` REPL,
-  `diff-backends` (HF/vLLM/SGLang), `diff-reports`, `doctor
-  --portability-matrix`, and the teacher-forced log-likelihood diagnostic.
-- `ruff check` — clean; `ruff format --check` — clean (66 files).
+  flakiness). Includes 27 format families (kolibri, lfm25, nemotron35,
+  muse_glimmer, laguna, ling, gemma4, deepseek41, kimi2, kimi3 added this
+  period), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
+  `diff-reports`, `doctor --portability-matrix`, the teacher-forced
+  log-likelihood diagnostic, and differential-verification suites with
+  mutation gates for every module.
+- `ruff check` — clean; `ruff format --check` — clean (101 files).
 - `mypy model_protocol_lab` — clean (15 source files).
-- `bandit -r model_protocol_lab` — 0 issues above Low; 1 Low/Medium-confidence
-  B105 false positive (`"scored_token_count": 0` literal, pre-existing).
+- `bandit -r model_protocol_lab` — **no issues identified** at any
+  severity/confidence (the two B105 false positives on report-schema
+  fields carry targeted `# nosec B105` suppressions).
 - `pip-audit` — no known vulnerabilities in auditable dependencies;
   `torch 2.14.1+cpu` keeps its local version tag (invisible to the OSV DB —
   the accepted residual, unchanged).
 - Red-team: 3 findings fixed with regression tests (quadratic hang in
   vLLM holdback emulation → split input caps; unbounded stop texts →
   length/count bounds; hostile terminal text → fixed vocabulary), plus
-  8 follow-up findings across two more passes (all fixed with regression
-  tests). No genuine finding left open.
+  8 follow-up findings across two more passes (7 fixed with regression
+  tests; 1 documented in a code comment with no behavior change). No
+  genuine finding left open.
 - GitHub Actions CI on `main` — green on the pushed tree (tests on
   3.11/3.12/3.13, lint+typecheck, security audit, build check).
 
