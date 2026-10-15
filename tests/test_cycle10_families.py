@@ -196,9 +196,12 @@ class KolibriRenderTests(unittest.TestCase):
         # pair.
         self.assertTrue(any(name.startswith("kolibri/prefix-newline") for name in names))
         self.assertTrue(any(name.startswith("kolibri/prefix-trim") for name in names))
-        # No other family gains a thinking-off branch.
+        # No other family gains a thinking-off branch -- except nemotron35
+        # (tests/test_cycle11_families.py): Nemotron 3.5 Lightning also
+        # prefills an empty <think> block when thinking is disabled, so it
+        # legitimately rides the same mutate-path branch.
         for family in CATALOG:
-            if family == "kolibri":
+            if family in ("kolibri", "nemotron35"):
                 continue
             with self.subTest(family=family):
                 self.assertNotIn(
