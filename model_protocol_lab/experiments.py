@@ -135,7 +135,8 @@ def _stop_cell(
     keeps the stop string in its returned output (HF always does),
     ``"stripped"`` when it removes it (vLLM's default). It is reported only
     when the stop actually fired -- ``None`` when the stop did not fire or
-    the semantic is not text-based. Additive: old callers are unaffected.
+    the semantic is not text-based. Unavailable outcomes omit the
+    ``stop_text`` key entirely. Additive: old callers are unaffected.
     """
     if not outcome.available:
         return {"available": False, "detail": outcome.detail}
