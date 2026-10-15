@@ -2756,3 +2756,18 @@ only when no other stop cell fires strictly before the tie step
 (counterexample pinned); module docstring and code comment corrected;
 (2) the diff_backends return-key list now names prompt_tokens/
 output_tokens. README test count updated to 2976.
+
+## 2026-10-15 (cycle 38: scoring.py internals verification)
+
+Verification of `model_protocol_lab/scoring.py` internals (excluding
+the cycle-12-verified `score_target_logprobs` engine; tests/
+test_cycle38_scoring_verify.py, 86 tests + 500 subtests): NO functional
+bug found. Covers _f32 IEEE-754 semantics vs struct oracle,
+score_span_from_logits (8 rejection codes + precedence, masking
+discipline, float64 accumulation of unrounded values),
+_safe_decode/_safe_encode, check_alignment, _provider_code,
+_unavailable reason vocabulary, _require_torch. Mutation sensitivity:
+12/12 mutants caught on hermetic /tmp copies. One docstring fix:
+`score_span_from_logits` now documents that non-tensor logits raise
+TypeError("logits_must_be_tensor") (was: claimed all rejections are
+ValueError). README test count updated to 3062.

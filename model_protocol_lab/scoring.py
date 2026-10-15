@@ -162,7 +162,9 @@ def score_span_from_logits(
     values in target order, the float64-accumulated total, and the mean per
     scored token (None for an empty target span). Reported values are
     float32-rounded. Rejections raise ValueError with a fixed code; nothing
-    is silently masked or guessed.
+    is silently masked or guessed. The one exception is a non-tensor
+    ``logits``, which raises ``TypeError("logits_must_be_tensor")`` --
+    wrong-type input is a caller bug, not a rejected measurement.
     """
     torch = _require_torch()
     if not isinstance(logits, torch.Tensor):
