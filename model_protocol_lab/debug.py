@@ -261,15 +261,18 @@ class DebugShell(cmd.Cmd):
         # the truncation so a saved transcript never silently loses its head.
         total = sum(len(chunk) for chunk in self._transcript)
         if total > _MAX_SAVE_BYTES:
+            marker = "[... transcript truncated ...]\n"
             kept: list[str] = []
-            remaining = _MAX_SAVE_BYTES
+            # Budget the marker itself so the truncated transcript still
+            # fits under _MAX_SAVE_BYTES and .save stays usable.
+            remaining = _MAX_SAVE_BYTES - len(marker)
             for chunk in reversed(self._transcript):
                 if remaining <= 0:
                     break
                 kept.append(chunk[-remaining:] if len(chunk) > remaining else chunk)
                 remaining -= len(kept[-1])
             kept.reverse()
-            self._transcript = ["[... transcript truncated ...]\n", *kept]
+            self._transcript = [marker, *kept]
             self._transcript_truncated = True
         self.stdout.write(text)
         return stop

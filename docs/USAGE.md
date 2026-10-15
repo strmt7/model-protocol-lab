@@ -495,7 +495,7 @@ like `.help ren`, `.help PATTERN` search, `#` comments):
 |---|---|
 | `.help [COMMAND\|PATTERN]` | List every dot-command, or full help for one |
 | `.use <family>` | Switch the format hypothesis (validated against the catalog) |
-| `.families` | List the 16 catalog families |
+| `.families` | List the 27 catalog families |
 | `.fixtures` | List loaded fixture ids (search, then held-out); current one marked `*` |
 | `.fixture <n\|id>` | Select the active fixture by number or id |
 | `.render` | Render the hypothesis over the active messages, with a per-segment char-span map (plus exact token IDs per segment when `--model` is given) |
@@ -507,7 +507,7 @@ like `.help ren`, `.help PATTERN` search, `#` comments):
 | `.say` | Enter ad-hoc messages multiline (one per line; an optional `user:`/`assistant:` prefix sets the role, otherwise roles alternate starting with user); a lone `.` ends entry, and `.render` then uses the buffered messages instead of the fixture's |
 | `.save <path>` | Append the session transcript (command echoes plus output) to a file |
 | `.read <path>` | Execute a scripted command file (bounded: refused over 1 MB or 10k lines; nesting capped at 5) |
-| `.quit`, `.q` | Exit |
+| `.quit`, `.q` | Exit (the literal line `EOF` also exits, e.g. end of piped input) |
 
 Example session (real output; the segment map names every char span of the
 render, so the "extra" control tokens stop being invisible):

@@ -2726,3 +2726,20 @@ quirk -- `Path("")` IS `Path(".")`, indistinguishable from an explicit
 cwd, and rejecting it would break the legitimate case; D2-D7 are
 behavioral nuances, not doc contradictions. README test count updated
 to 2797.
+
+## 2026-10-15 (cycle 36: debug.py REPL verification + 1 real bug fixed)
+
+Verification of the `mpl debug` REPL command loop (tests/
+test_cycle36_debug_repl_verify.py, 140 tests + 10 subtests): found ONE
+REAL BUG -- truncated transcripts could never be saved (truncation kept
+_MAX_SAVE_BYTES of content then prepended the 29-char marker, pushing
+the total back over the bound so .save always refused). FIXED in
+debug.py: the marker is now budgeted inside the truncation
+(remaining = _MAX_SAVE_BYTES - len(marker)); regression test
+TestTranscript.test_truncated_transcript_save_succeeds pins the fix.
+Also fixed two doc stalenesses in docs/USAGE.md: `.families` row said
+"16 catalog families" (catalog has 27); `.quit` row now documents the
+literal `EOF` line. Mutation sensitivity: 16/16 mutants caught on
+hermetic /tmp copies. Security: no leaks beyond the documented
+USAGE.md section 10 contract (operator content by design). README test
+count updated to 2937.
