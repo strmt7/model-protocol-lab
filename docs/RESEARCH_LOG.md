@@ -3122,3 +3122,27 @@ endswith); repo source sha256-verified untouched. Not in scope:
 check_boundary_portability, candidate ranking/selection, real backends,
 thread-safety/perf, first_boundary's no-validation paths. README test
 count updated to 3627.
+
+## 2026-10-15 (cycle 56: prompt-sensitivity sweep audit)
+
+Adversarial re-verification of the prompt-sensitivity sweep machinery
+(core.truncate_text_tail, backends.TruncatedPromptBackend,
+experiments.prompt_sensitivity_sweep;
+tests/test_cycle56_sensitivity_sweep_audit.py, 30 tests + 9640
+subtests): exact output pins on adversarial inputs (empty, 1-byte,
+combining marks, emoji, 100k-char, length caps); invariants (byte
+length, strict whole-character prefix, None-iff-codepoint-split via an
+independent backward-continuation-byte oracle, no U+FFFD fabrication,
+determinism); 1205-prompt x drops-1..8 seeded fuzz; operator algebra
+(documented non-idempotency, non-composition of depths); wrapper
+contract (prompt_truncation_splits_codepoint code, passthrough,
+fingerprint, constructor validation); sweep aggregation truth table
+incl. winner-same/decision-differs branch, per-depth independence via a
+recording backend, max_drop_bytes validation. Scope correction: the
+sweep has exactly ONE perturbation operator (tail byte-truncation);
+unicode enters only through the granularity rule. No real bugs. One
+documented edge (not a bug): truncate_text_tail on lone surrogates
+raises UnicodeEncodeError; downstream evaluate collapses it to
+encode_failed and the sweep records the failed decision (documented
+fallback). Mutation gate 6/6 caught on /tmp copies; repo source
+sha256-verified untouched. README test count updated to 3657.
