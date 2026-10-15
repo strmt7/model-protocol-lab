@@ -249,7 +249,11 @@ class BackendDivergenceReportTests(unittest.TestCase):
         # One <details> callout per divergence.
         self.assertEqual(html.count("<details>"), 1)
         self.assertIn("fx-div", html)
-        self.assertIn(escape("STOP"), html)
+        # The stop text (decoded expected answer) and the free-text detail
+        # are withheld from the HTML view -- only the withheld markers render.
+        self.assertNotIn(escape("STOP"), html)
+        self.assertIn("[withheld from this HTML view]", html)
+        self.assertIn("[stop text and diagnostic detail withheld from this HTML view]", html)
 
     def test_hostile_strings_escaped(self) -> None:
         hostile_fixture = "<img src=x onerror=alert(1)>"
@@ -292,9 +296,15 @@ class BackendDivergenceReportTests(unittest.TestCase):
             "min_tokens": 0,
         }
         html = self._render(self._section_result(hostile_section))
-        for raw in (hostile_fixture, hostile_stop, hostile_detail):
+        # Fixture names still render, escaped. The stop text and free-text
+        # detail are withheld from the HTML view entirely (neither raw nor
+        # escaped may appear): they can carry raw prompts/generations.
+        self.assertNotIn(hostile_fixture, html)
+        self.assertIn(escape(hostile_fixture), html)
+        for raw in (hostile_stop, hostile_detail):
             self.assertNotIn(raw, html)
-            self.assertIn(escape(raw), html)
+            self.assertNotIn(escape(raw), html)
+        self.assertIn("[withheld from this HTML view]", html)
         # The builder-level fixture name is escaped too.
         builder_html = self._render(self._section_result(section))
         self.assertNotIn(hostile_fixture, builder_html)

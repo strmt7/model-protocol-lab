@@ -500,9 +500,14 @@ class SglangReportTests(unittest.TestCase):
         html = render_html(
             {"decision": "compatible_on_fixture_set", "backend_divergences": section}
         )
-        for raw in (hostile_stop, hostile_fixture):
-            self.assertNotIn(raw, html)
-            self.assertIn(escape(raw), html)
+        # The fixture name still renders, escaped. The stop text is withheld
+        # from the HTML view entirely (neither raw nor escaped may appear):
+        # it can carry raw prompts/generations.
+        self.assertNotIn(hostile_fixture, html)
+        self.assertIn(escape(hostile_fixture), html)
+        self.assertNotIn(hostile_stop, html)
+        self.assertNotIn(escape(hostile_stop), html)
+        self.assertIn("[withheld from this HTML view]", html)
 
     def test_stop_regex_has_no_cell(self) -> None:
         # SGLang stop_regex is outside stop-string scope: USAGE.md note
