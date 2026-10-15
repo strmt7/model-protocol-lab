@@ -3054,3 +3054,22 @@ test_cycle40 (portability matrix 114), test_cycle41 (EXPECTED_FAMILIES
 + renames), test_cycle44 (28-not-23), test_cycle46 (catalog/REPL
 counts); README enumerations and USAGE.md `.families` row updated to
 28. README test count updated to 3550.
+
+## 2026-10-15 (cycle 53: Ling 3.0/3.1 template audit)
+
+Verified the repo's `ling` family against the official templates from
+primary sources (tests/test_cycle53_ling_template_audit.py, 7 tests):
+chat_template.jinja downloaded byte-exact from inclusionAI/Ling-3.0-flash
+(md5 23b682c460649dbbc03e9d2bc9609071) and inclusionAI/Ling-3.1-flash
+(md5 24b514df8b812d0bb0e9c061d0bb164c -- byte-identical to the repo's
+docs/evidence/ling31-chat-template.jinja); transformers PR #49446 adds
+model code only, no template docs. VERDICT: MATCH -- Ling 3.0 vs 3.1
+templates render byte-identically across 10 conversation/thinking-mode
+combinations (differences are jinja whitespace-control only), and every
+modeled repo string is byte-identical to the official 3.0 plain-text
+core (BOS <|startoftext|>, <role>HUMAN</role> user frame,
+<role>ASSISTANT</role>\n<think></think> assistant frame, <|role_end|>
+terminator, thinking-on/off gen prompts). Noted artifact (not a
+divergence): the official template leaks a literal newline+4 spaces
+after a system block (jinja indentation); Format never renders system
+blocks. No catalog change needed. README test count updated to 3557.
