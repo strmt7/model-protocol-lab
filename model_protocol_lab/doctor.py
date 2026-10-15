@@ -14,10 +14,16 @@ from pathlib import Path
 from typing import Any
 
 from .backends import _directory, _manifest, _member, _model_assets, _read_json
-from .catalog import CATALOG
-from .core import Fixture, Format, check_boundary_portability, template_diff
+from .catalog import CATALOG, candidates
+from .core import (
+    Fixture,
+    Format,
+    check_boundary_portability,
+    template_diff,
+    template_tokenizer_compatibility,
+)
 from .datasets import load_dataset
-from .fixtures import audit_special_token_literals
+from .fixtures import _extract_special_tokens, audit_special_token_literals
 
 _SUPPORTED_TYPES = ("gpt2", "llama")
 _REJECTED_CONFIG_KEYS = (
@@ -157,6 +163,185 @@ def _portability_check(
         "mismatch",
         f"primary={outcome['primary_ids']} reference={outcome['secondary_ids']}",
     )
+
+
+#: The asymmetry warning carried verbatim in every portability_matrix
+#: report section and printed with the CLI table. "incompatible" is a
+#: static exclusion answer; "compatible" is the absence of an exclusion,
+#: never a prediction. Stated loudly because the misreading ("this format
+#: will work over there") is the exact failure mode the research
+#: (docs/RESEARCH_PORTABILITY_2026-10-15.md) rejected.
+_PORTABILITY_ASYMMETRY = (
+    "ASYMMETRY WARNING: 'incompatible' means the format cannot be this "
+    "checkpoint's native format -- re-running the experiment here is "
+    "scientifically pointless, and that answer cost one tokenizer load. "
+    "'compatible' means the format's control tokens are merely encodable "
+    "as atomic special tokens by this tokenizer; it predicts NOTHING "
+    "about experimental success, which depends on the checkpoint's "
+    "weights. This matrix never transfers a selection verdict across "
+    "checkpoints and never emits a portability score."
+)
+
+
+def _secondary_registered(tokenizer: Any, doc: dict) -> dict[str, int]:
+    """Added/special token map of a second checkpoint, literal -> id.
+
+    Parsed from the checkpoint's own ``tokenizer.json`` document (the
+    authority: transformers does not reliably surface added tokens when
+    loading from ``tokenizer_file`` alone -- the same reason
+    ``examine_model`` reads them from the document), supplemented with the
+    loaded tokenizer's special-token attributes for literals the document
+    does not list. Hostile content degrades, never raises: malformed
+    entries are skipped, and a hostile ``convert_tokens_to_ids`` degrades
+    per attribute.
+    """
+    registered: dict[str, int] = {}
+    added_section = doc.get("added_tokens")
+    if type(added_section) is list:
+        for entry in added_section:
+            if (
+                type(entry) is dict
+                and type(entry.get("content")) is str
+                and entry["content"]
+                and type(entry.get("id")) is int
+                and entry["id"] >= 0
+                and entry["content"] not in registered
+            ):
+                registered[entry["content"]] = entry["id"]
+    for attr in (
+        "unk_token",
+        "bos_token",
+        "eos_token",
+        "pad_token",
+        "sep_token",
+        "cls_token",
+        "mask_token",
+    ):
+        token = getattr(tokenizer, attr, None)
+        if type(token) is str and token and token not in registered:
+            with contextlib.suppress(Exception):
+                token_id = tokenizer.convert_tokens_to_ids(token)
+                if type(token_id) is int and token_id >= 0:
+                    registered[token] = token_id
+    return registered
+
+
+def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
+    """Static template<->tokenizer compatibility matrix for a second checkpoint.
+
+    For every catalog candidate -- every base format plus its bounded local
+    repairs (the same hypothesis space ``run --mutate`` measures), in
+    deterministic family/name order -- checks the candidate's
+    special-token inventory (``fixtures._extract_special_tokens``) against
+    the second checkpoint's tokenizer via
+    ``core.template_tokenizer_compatibility``: each inventory token must be
+    registered in the checkpoint's added/special tokens, encode as exactly
+    one token id, and encode to its registered id.
+
+    Tokenizer only: never loads weights. Same cost class as the other
+    doctor checks (one tokenizer load plus O(candidates x tokens) encodes),
+    with the same 128 MB ``tokenizer.json`` cap and fixed-vocabulary error
+    codes. Formats with an empty ``bos`` skip the BOS requirement -- a
+    missing BOS token is not an incompatibility for them (their inventory
+    simply contains no BOS literal); this is reported per row as
+    ``bos_skipped``. A format whose inventory is empty reports "unknown",
+    never "compatible".
+
+    Never raises for checkpoint problems: an unusable second checkpoint
+    yields status "unavailable" with a fixed-vocabulary detail (fail-closed;
+    the matrix never fails the doctor verdict). See the "asymmetry" field
+    -- stated loudly in the report, the CLI table, and docs/USAGE.md -- for
+    what the verdicts do and do not mean.
+    """
+    if not isinstance(second_checkpoint, (str, Path)):
+        raise ValueError("second_checkpoint must be a path")
+
+    def unavailable(detail: str) -> dict[str, Any]:
+        return {
+            "status": "unavailable",
+            "detail": detail,
+            "second_checkpoint": str(second_checkpoint),
+            "asymmetry": _PORTABILITY_ASYMMETRY,
+            "rows": [],
+        }
+
+    try:
+        root = _directory(second_checkpoint)
+    except ValueError:
+        return unavailable("not_a_readable_directory")
+    try:
+        doc = _read_json(_tokenizer_file(root))
+    except ValueError as exc:
+        return unavailable(_loader_failure_code(exc))
+    try:
+        from transformers import PreTrainedTokenizerFast
+
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_file=str(_tokenizer_file(root)),
+            clean_up_tokenization_spaces=False,
+        )
+    except ImportError:
+        return unavailable("transformers_not_installed")
+    except Exception as exc:  # noqa: BLE001 -- sanitized fixed vocabulary only
+        return unavailable(_loader_failure_code(exc))
+
+    def encode(text: str) -> tuple[int, ...]:
+        return tuple(tokenizer.encode(text, add_special_tokens=False))
+
+    registered = _secondary_registered(tokenizer, doc)
+
+    rows: list[dict[str, Any]] = []
+    for family in sorted(CATALOG):
+        for fmt in candidates(family, mutate=True):
+            row = template_tokenizer_compatibility(
+                fmt.name, _extract_special_tokens(fmt), registered, encode
+            )
+            # BOS-less formats (chatml/qwen3-style, bos="") carry no BOS
+            # requirement: their inventory holds no BOS literal, and the
+            # flag documents that the skip is by design, not an omission.
+            row["bos_skipped"] = fmt.bos == ""
+            rows.append(row)
+    return {
+        "status": "ok",
+        "detail": f"{len(rows)} candidates checked (tokenizer only, no weights)",
+        "second_checkpoint": str(root),
+        "asymmetry": _PORTABILITY_ASYMMETRY,
+        "rows": rows,
+    }
+
+
+def render_portability_table(section: dict[str, Any]) -> str:
+    """Human-readable rendering of a ``portability_matrix`` report section.
+
+    The JSON report stays the machine contract (printed on stdout by the
+    CLI); this table is the operator-facing summary and goes to stderr so
+    stdout remains parseable. The asymmetry warning is always included --
+    it is the load-bearing part of the output.
+    """
+    second = section.get("second_checkpoint", "?")
+    lines = [f"portability matrix vs {second}"]
+    if section.get("status") != "ok":
+        lines.append(f"status: {section.get('status')} ({section.get('detail', '')})")
+    else:
+        rows = section.get("rows")
+        rows = rows if type(rows) is list else []
+        lines[0] += f": {len(rows)} candidates (tokenizer-only; no weights loaded)"
+        names = [row.get("format", "") for row in rows if type(row) is dict]
+        width = max([len(name) for name in names] + [len("format")])
+        lines.append(f"{'format':<{width}}  {'verdict':<12}  {'reason':<14}".rstrip())
+        for row in rows:
+            if type(row) is not dict:
+                continue
+            line = (
+                f"{row.get('format', ''):<{width}}  "
+                f"{row.get('verdict', ''):<12}  "
+                f"{row.get('reason', ''):<14}"
+            ).rstrip()
+            if row.get("bos_skipped"):
+                line += "  bos-skipped"
+            lines.append(line)
+    lines.extend(("", _PORTABILITY_ASYMMETRY))
+    return "\n".join(lines)
 
 
 def examine_model(
@@ -650,6 +835,7 @@ def doctor(
     boundary_ids: tuple[int, ...] | None = None,
     boundary_map: dict[str, tuple[int, ...]] | None = None,
     reference_model_path: str | Path | None = None,
+    portability_matrix_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Combined pre-flight report for a model directory and fixture file."""
     report = examine_model(
@@ -663,6 +849,19 @@ def doctor(
         report["dataset"] = dataset_report["dataset"]
         if dataset_report["verdict"] == "failed":
             report["verdict"] = "failed"
+    if portability_matrix_path is not None:
+        # Triage, never verdict: a broken second checkpoint degrades the
+        # section instead of failing the pre-flight report.
+        try:
+            report["portability_matrix"] = portability_matrix(portability_matrix_path)
+        except Exception:  # noqa: BLE001 -- matrix must never fail the report
+            report["portability_matrix"] = {
+                "status": "unavailable",
+                "detail": "matrix_failed",
+                "second_checkpoint": str(portability_matrix_path),
+                "asymmetry": _PORTABILITY_ASYMMETRY,
+                "rows": [],
+            }
     report["suggestion"] = _next_command(
         model_path,
         dataset_path,

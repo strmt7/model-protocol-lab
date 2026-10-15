@@ -443,6 +443,141 @@ def check_boundary_portability(
     }
 
 
+def template_tokenizer_compatibility(
+    name: str,
+    inventory: tuple[str, ...],
+    registered_tokens: dict[str, int],
+    secondary_encode: Callable[[str], tuple[int, ...]],
+) -> dict[str, Any]:
+    """Static template<->tokenizer compatibility of one format's token inventory.
+
+    Generalizes :func:`check_boundary_portability` from one boundary string
+    to a whole format's special-token inventory (see
+    ``fixtures._extract_special_tokens``): for each token-shaped literal,
+    check it against a second checkpoint's tokenizer --
+      (a) registered: the literal is in ``registered_tokens`` (the
+          checkpoint's added/special token map, parsed from its
+          ``tokenizer.json`` document, which is the authority --
+          transformers does not reliably surface added tokens when loading
+          from ``tokenizer_file`` alone);
+      (b) single-token: ``secondary_encode(literal)`` (which must encode
+          with ``add_special_tokens=False``) yields exactly one token id;
+      (c) id-consistent: that id equals the registered id (catches vocab
+          collisions where the string happens to be one ordinary token).
+
+    Verdict is "compatible" (every inventory token atomic, registered and
+    id-consistent), "incompatible" (a necessary condition failed -- the
+    format cannot be this checkpoint's native format), or "unknown" (the
+    probe degraded: an empty inventory, or an encode failure -- never
+    "compatible"). ``reason`` is the fixed-vocabulary first failure in
+    inventory order. ``secondary_encode`` failures are reported, never
+    raised -- the probe must not fail its caller.
+
+    Tokenizer only: no weights, no forward passes, deterministic. An
+    "incompatible" verdict is a static exclusion screen (re-running the
+    experiment on that checkpoint is scientifically pointless); a
+    "compatible" verdict predicts NOTHING about experimental success --
+    that depends on the checkpoint's weights. This function never emits a
+    portability score and never transfers a selection verdict.
+    """
+    if type(name) is not str or not name:
+        raise ValueError("name must be a nonempty string")
+    if type(inventory) is not tuple or any(
+        type(token) is not str or not token for token in inventory
+    ):
+        raise ValueError("inventory must be a tuple of nonempty strings")
+    if type(registered_tokens) is not dict or any(
+        type(token) is not str or type(token_id) is not int or token_id < 0
+        for token, token_id in registered_tokens.items()
+    ):
+        raise ValueError("registered_tokens must map strings to non-negative int ids")
+    if not callable(secondary_encode):
+        raise ValueError("secondary_encode must be callable")
+
+    token_rows: list[dict[str, Any]] = []
+    for token in inventory:
+        row: dict[str, Any] = {
+            "token": token,
+            "registered": token in registered_tokens,
+            "registered_id": registered_tokens.get(token),
+            "single_token": None,
+            "encoded_id": None,
+            "id_match": None,
+            "status": "encode_failed",
+        }
+        try:
+            encoded = secondary_encode(token)
+        except Exception:  # noqa: BLE001 -- compatibility probe must not fail its caller
+            token_rows.append(row)
+            continue
+        if not _valid_token_ids(encoded) or not encoded:
+            row["status"] = "encode_invalid"
+            token_rows.append(row)
+            continue
+        encoded_id = encoded[0]
+        row["encoded_id"] = encoded_id
+        row["single_token"] = len(encoded) == 1
+        if not row["registered"]:
+            row["status"] = "unregistered"
+        elif len(encoded) != 1:
+            row["status"] = "fragments"
+        elif encoded_id != registered_tokens[token]:
+            row["status"] = "id_mismatch"
+            row["id_match"] = False
+        else:
+            row["status"] = "ok"
+            row["id_match"] = True
+        token_rows.append(row)
+
+    if not inventory:
+        return {
+            "format": name,
+            "verdict": "unknown",
+            "reason": "empty_inventory",
+            "detail": (
+                "empty inventory: the format exposes no token-shaped control "
+                "literals, so compatibility cannot be judged (never "
+                "'compatible')"
+            ),
+            "tokens": token_rows,
+        }
+    degraded = next(
+        (row for row in token_rows if row["status"] in ("encode_failed", "encode_invalid")),
+        None,
+    )
+    if degraded is not None:
+        return {
+            "format": name,
+            "verdict": "unknown",
+            "reason": degraded["status"],
+            "detail": (
+                f"{degraded['status']} on {degraded['token']!r}: the encode "
+                "probe degraded, so compatibility cannot be judged"
+            ),
+            "tokens": token_rows,
+        }
+    failed = next((row for row in token_rows if row["status"] != "ok"), None)
+    if failed is not None:
+        return {
+            "format": name,
+            "verdict": "incompatible",
+            "reason": failed["status"],
+            "detail": f"{failed['status']} on {failed['token']!r}",
+            "tokens": token_rows,
+        }
+    count = len(token_rows)
+    return {
+        "format": name,
+        "verdict": "compatible",
+        "reason": "",
+        "detail": (
+            f"{count}/{count} inventory tokens registered, atomic, and id-consistent; "
+            "this predicts nothing about experimental success (weights decide)"
+        ),
+        "tokens": token_rows,
+    }
+
+
 def truncate_text_tail(text: str, drop_bytes: int) -> str | None:
     """Drop ``drop_bytes`` trailing bytes from text for mid-token truncation.
 

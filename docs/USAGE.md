@@ -47,6 +47,43 @@ or use a larger-window checkpoint. The suggestion is omitted whenever it
 could mislead (failed verdict, no dataset, no boundary IDs, or no declared
 window).
 
+### Template↔tokenizer portability matrix (`doctor --portability-matrix`)
+
+```sh
+python -m model_protocol_lab doctor --model PRIMARY --portability-matrix SECOND_CHECKPOINT
+```
+
+For every catalog candidate (each base format plus its bounded local
+repairs -- the same hypothesis space `run --mutate` measures), `doctor`
+checks the candidate's special-token inventory against the second
+checkpoint's tokenizer: each token must be registered in the checkpoint's
+added/special tokens, encode as exactly one token id, and encode to its
+registered id. Tokenizer only -- weights are never loaded -- so this costs
+about as much as the other doctor checks (one tokenizer load plus a few
+encodes per candidate).
+
+**Asymmetry warning: `incompatible` means the format cannot be the second
+checkpoint's native format -- re-running the experiment there is
+scientifically pointless, and you learned that for one tokenizer load.
+`compatible` means the format's control tokens are merely encodable as
+atomic special tokens by that tokenizer; it predicts NOTHING about
+experimental success, which depends on the checkpoint's weights.** The
+matrix never transfers a selection verdict across checkpoints and never
+emits a portability score: it is a static exclusion screen, not a
+portability measurement (research basis:
+`docs/RESEARCH_PORTABILITY_2026-10-15.md`).
+
+Details: formats with an empty `bos` (chatml/qwen3-style) skip the BOS
+requirement -- a missing BOS token is not an incompatibility for them, and
+each report row carries `bos_skipped` to document the skip. A format whose
+special-token inventory is empty reports `unknown`, never `compatible`;
+an encode failure degrades to `unknown` the same way. The matrix never
+fails the doctor verdict: an unusable second checkpoint yields an
+`unavailable` section with a fixed-vocabulary detail. The JSON report
+carries the full matrix under `portability_matrix` (per-candidate rows
+with per-token checks); the CLI also prints a readable table to stderr so
+stdout stays parseable JSON.
+
 ## 3. Prepare a local model
 
 Use trusted local GPT-2 or Llama causal-LM assets supported by the adapter. Required files include `config.json`, a self-contained `tokenizer.json`, and either `model.safetensors` or `model.safetensors.index.json` with its flat-named shards. Optional `generation_config.json` is fingerprinted but does not control generation.

@@ -96,6 +96,26 @@ All notable changes to this project are documented here. The format follows
   "weights don't know" (declared bands: mean >= -2.0 / < -5.0 nats/token).
   Alignment refusals surface as `unavailable` with a fixed reason, never a
   silent guess; diagnostic only, the selection rule is untouched.
+- Static template↔tokenizer portability matrix (`doctor
+  --portability-matrix SECOND_CHECKPOINT`, research basis
+  `docs/RESEARCH_PORTABILITY_2026-10-15.md`): for every catalog candidate
+  (base formats plus bounded local repairs), each special-token inventory
+  literal is checked against the second checkpoint's tokenizer --
+  registered in added/special tokens, encodes as exactly one token id,
+  encoded id == registered id -- via the new
+  `core.template_tokenizer_compatibility` (a generalization of
+  `core.check_boundary_portability`). Tokenizer only, never weights; same
+  128 MB cap and fixed-vocabulary error codes as the other doctor checks.
+  **Asymmetry is the design:** `incompatible` means the format cannot be
+  that checkpoint's native format (answered at ~zero compute);
+  `compatible` predicts NOTHING about experimental success -- the report
+  section, the CLI table (stderr; stdout stays parseable JSON), and
+  `docs/USAGE.md` §2 all carry the warning loudly, and no portability
+  score is ever emitted. BOS-less formats skip the BOS requirement
+  (`bos_skipped` per row); empty inventories and encode failures report
+  `unknown`, never `compatible`; hostile second checkpoints degrade to
+  `unavailable` without failing the doctor verdict. Pinned by
+  `tests/test_cycle12_portability.py` (38 tests).
 
 ### Added
 
@@ -134,6 +154,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `divergence_section_data`'s `observations_processed` now counts the
+  observations actually emulated (`len(per_fixture)`) instead of the number
+  offered after truncation (`len(candidates)`) -- with skipped
+  non-dict/invalid observations the old code overcounted (verified:
+  total=4, processed=4, per_fixture=1). Verdicts were never affected (they
+  derive from `per_fixture`); this is an informational-contract fix, and the
+  docstring now states the contract exactly. Pinned by a new
+  `tests/test_cycle11_bounds.py` regression test (junk mixed in -> 4
+  handed in, 1 emulated, processed==1, verdict "agree").
+- One-line comment at the `DivergenceClass` definition documenting why
+  `HARNESS_NORMALIZATION_RELIED`'s SGLang column is vacuous by
+  construction (`emulate_sglang_stop` trims at the leftmost stop-string
+  occurrence, so its returned text can never contain the stop string) --
+  so a future reader does not "fix" it into a false positive.
 - Narrowed the exception scope around the new divergence wiring so a future
   bug there degrades only that section, not the whole diagnosis block
   (red-team suggestion).

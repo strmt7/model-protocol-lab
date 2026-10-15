@@ -128,6 +128,10 @@ class ObservationCountBoundTests(unittest.TestCase):
         self.assertTrue(section["observations_truncated"])
         self.assertEqual(section["observations_total"], MAX_DIVERGENCE_OBSERVATIONS + 1)
         self.assertEqual(len(section["per_fixture"]), MAX_DIVERGENCE_OBSERVATIONS // 2)
+        # Half the candidates were skipped as invalid, so the processed
+        # count is the number actually emulated, not the bound.
+        self.assertEqual(section["observations_processed"], len(section["per_fixture"]))
+        self.assertEqual(section["observations_processed"], MAX_DIVERGENCE_OBSERVATIONS // 2)
         self.assertNotIn("f999_999", [entry["fixture"] for entry in section["per_fixture"]])
 
     def test_truncation_is_deterministic(self) -> None:
@@ -161,6 +165,29 @@ class ObservationCountBoundTests(unittest.TestCase):
         self.assertTrue(section["observations_truncated"])
         self.assertEqual(section["observations_total"], MAX_DIVERGENCE_OBSERVATIONS + 2)
         self.assertEqual(section["observations_processed"], MAX_DIVERGENCE_OBSERVATIONS)
+
+    def test_processed_counts_only_emulated_observations(self) -> None:
+        # Regression (G1): observations_processed must count the
+        # observations actually emulated (len(per_fixture)), not the
+        # number offered. 4 handed in, 3 skipped (a non-dict, a dict
+        # missing ids, a dict with non-int ids); only 1 is emulated and
+        # the skipped junk never touches the verdict.
+        backend = LinearStubBackend(16)
+        observations: list[Any] = [
+            _observation(0),
+            "not-an-observation",
+            {"fixture": "no-ids"},
+            {"fixture": "bad-ids", "input_ids": [], "output_ids": ["nope"]},
+        ]
+        section = _section(observations, backend)
+        assert section is not None
+        self.assertFalse(section["observations_truncated"])
+        self.assertEqual(section["observations_total"], 4)
+        self.assertEqual(section["observations_processed"], 1)
+        self.assertEqual(section["observations_processed"], len(section["per_fixture"]))
+        self.assertEqual(section["per_fixture"][0]["fixture"], "f0")
+        self.assertEqual(section["verdict"], "agree")
+        self.assertIn("1/1 agree", section["pairs_verdict"])
 
 
 if __name__ == "__main__":
