@@ -1430,3 +1430,82 @@ the final item. No significant research-justified work remains; further
 cycles would manufacture busywork. Stopping per the two-quiet-cycle
 rule's intent — there is nothing left to improve without violating a
 documented design decision or a hard constraint.
+
+## Continuous dev — Cycle 1 build summary (2026-10-14, VERIFIED)
+
+**Small cycle — Gemma 4 catalog entry.** 716 -> 725 tests, 2812 -> 2819
+subtests, all green except the README count pin
+(`test_readme_test_count_matches_discovered_suite`: README still claims
+716, discovered 725 -- coordinator-owned, left untouched per scope); ruff
+check + format clean on all changed files; mypy clean on catalog.py.
+Catalog 16 -> 17 families: `gemma4` (tests/test_cycle9_families.py, 9
+tests + 4 subtests).
+
+Built:
+1. `gemma4` entry in model_protocol_lab/catalog.py: Format("gemma4",
+   "<bos>", "<|turn>user\n", "<|turn>model\n", "<turn|>\n") with an
+   evidence-tier source comment in the existing style.
+2. Three pre-existing catalog-listing tests (cycle5/6/7) updated to 17
+   families, and the hardcoded e2e module-catalog set gained "gemma4".
+
+**Gemma 4 research summary** (google/gemma-4-31B-it):
+- Evidence tier 1 (primary -- tokenizer_config.json read 2026-10-14):
+  special tokens <|turn>, <turn|>, <|channel>, <channel|>, <|thought>,
+  <|tool_call>, <tool_call|>, <|tool_response>, <tool_response|> all
+  exist; response_template.start_anchor = ["<|turn>model\n",
+  "<tool_response|>"]; thinking channel opens <|channel>thought\n and
+  closes <channel|>; the bos_token field is EMPTY; eos_token is <eos>.
+- Evidence tier 2 (three independent byte-level implementations agreeing
+  -- dotwasi/speech-swift docs/models/gemma4-chat.md with E2E parity
+  tests, the unsloth gemma4 template, swift-gemma4-core
+  ChatTemplateBypass.md): full prompt =
+  <bos><|turn>system\n{content}<turn|>\n<|turn>user\n{content}<turn|>\n
+  <|turn>model\n, assistant role mapped to `model`.
+- BOS discrepancy (documented explicitly in the catalog comment): the
+  literal <bos> is prepended by all three tier-2 implementations even
+  though the config's bos_token field is empty -- the catalog takes tier 2
+  for the render (tier 1 alone would emit no BOS).
+- Plain-text no-tools core: thinking channel and tool-call/response
+  tokens out of scope. The system role is not modeled (the lab's Format
+  only supports user/assistant turns); the real template frames a system
+  message as its own <|turn>system\n{content}<turn|>\n turn -- unlike
+  Gemma 3, where the system folds into the first user turn. Pinned in the
+  test file as documented string constants, with the Message("system")
+  ValueError boundary pinned too.
+
+## Continuous dev — Cycle 1: stop semantics beyond HF/vLLM (SGLang, TGI) + Oct-2026 drift check (2026-10-14, VERIFIED)
+
+All sources observed 2026-10-14 via fresh clones of the official repos (full source reads).
+
+### SGLang (sgl-project/sglang @ 12dc623)
+- Stop strings STRIPPED by default (like vLLM, unlike HF): `DetokenizerManager.trim_matched_stop` (`python/sglang/srt/managers/detokenizer_manager.py:190-221`) cuts at the leftmost occurrence; `no_stop_trim=True` keeps (`SamplingParams.no_stop_trim`, default False; `sampling_params.py:153`).
+- Multi-stop: FIRST-LISTED wins, NOT earliest-completing — `Req._check_str_based_finish` (`schedule_batch.py:1836-1847`) iterates `stop_strs` in list order; the code even carries `# TODO(lmzheng): handle the case where multiple stop strs are hit`. **Hard divergence from vLLM** (PR #49391 earliest-completion). Caveat: with 1 token/step the earlier-completing stop still fires at its own step; list order decides only when ≥2 stops match within one check.
+- No `min_tokens` equivalent: `min_new_tokens` exists but only clips the length budget (`scheduler.py:2631-2634`); the finish path never consults it. vLLM gates all stops behind min_tokens; SGLang gates nothing.
+- Precedence: stop string BEATS EOS in the same step (`update_finish_state`, `schedule_batch.py:1913-1950`; shipped fix for SGLang #28802). A stop past max_new_tokens is demoted to a length finish.
+- SGLang-only extras: `stop_regex` (MAX_STOP_REGEX_COUNT=32, MAX_STOP_REGEX_LEN=256) — neither vLLM nor HF has it; MAX_STOP_COUNT=32.
+- Sources: https://github.com/sgl-project/sglang, https://github.com/sgl-project/sglang/issues/28802
+
+### HuggingFace TGI (huggingface/text-generation-inference @ b4adbf2 — upstream HEAD is 2026-03-21, genuinely stale)
+- Stop sequences KEPT (like HF, unlike vLLM/SGLang): verified constructively — no stripping code at any layer (`StoppingCriteria` only detects, `tokens.py`; full decode incl. stop tokens in `models/flash_causal_lm.py`, `models/causal_lm.py:789-791`; Rust v3 forwards, `backends/v3/src/backend.rs:513-521`; router verbatim, `router/src/server.rs:426`). Corroborated: langchain_community strips client-side ("remove stop sequences from the end"), which only makes sense if the server keeps them.
+- Multi-stop: FIRST-LISTED wins — `StopSequenceCriteria` compiles `re.escape(s) + "$"` suffix matches (`tokens.py:131-139`); `__call__` returns on first matching criterion.
+- No min_tokens equivalent. Precedence: length > EOS > stop-sequence (reverse of SGLang).
+- Genuine quirk: match buffer truncated to last 200 chars (`tokens.py:184-187`) — a stop sequence longer than 200 chars can never fire. Too narrow for a cell; documented only.
+- Sources: https://github.com/huggingface/text-generation-inference
+
+### vLLM / HF drift check (Oct 2026)
+- vLLM @ 984c242: `check_stop_strings` (`vllm/v1/engine/detokenizer.py:321`) still implements #49391 earliest-completion; PR #50200 brought the Rust frontend to parity (`min_by_key` on completion end). No October-2026 stop-semantics changes.
+- HF transformers @ 637b76e: `generation/stopping_criteria.py` byte-identical (0-line diff) to installed 5.0; `ConfidenceCriteria` predates Oct 2026.
+- Sources: https://github.com/vllm-project/vllm/pull/49391, https://github.com/vllm-project/vllm/pull/50200, https://github.com/huggingface/transformers
+
+### Recommendation (for Cycle 2)
+Add an SGLang column to `mpl diff-backends` with new divergence classes: `MULTI_STOP_SELECTION` (first-listed vs earliest-completing), `NO_MIN_TOKENS_GATE` (SGLang column on existing class), `STR_OVER_EOS_PRECEDENCE` (SGLang stop-beats-EOS vs TGI EOS-beats-stop). Do NOT add a TGI cell — every TGI rule is covered by composition of existing/proposed cells. SGLang `stop_regex` gets a USAGE note only (outside stop-string scope).
+
+## Continuous dev — Cycle 1: ecosystem gap analysis (2026-10-14, VERIFIED)
+
+Surveyed lm-evaluation-harness, HELM, OpenAI Evals, vLLM bench tooling, promptfoo, DSPy. Strong proposals (all constraint-compatible):
+1. Teacher-forced log-likelihood probe (`run --logprob-diagnostic`) — STAR PICK: the lab's own DEVELOPMENT_PLAN.md §9.3–§9.5 design, unimplemented; corroborated by lm-eval `loglikelihood` and HELM adapters. Separates "weights don't know" from "greedy derailed". Scoring engine built this cycle (`model_protocol_lab/scoring.py`); report wiring planned next.
+2. Selection-margin diagnostic — built this cycle (automatic, closed-form).
+3. Token-overhead accounting card — built this cycle (automatic).
+4. Cross-checkpoint portability re-measurement — conditional, lower priority (doubles compute; lab is philosophically per-checkpoint).
+Rejected with reasons: model-graded evals (non-deterministic, needs judge model), fuzzy matchers (weakens exact pass criterion), sampling repeats (greedy adapter), DSPy-style prompt optimization (contradicts bounded hypothesis space), throughput benchmarks (orthogonal mission), few-shot dims (content change, not format), text perturbations (fragility diagnostic covers it), decontamination (user-authored fixtures).
+Sources: https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/task_guide.md, https://www.shedge.com/metrics/llm-benchmarks/helm-benchmark/, https://github.com/promptfoo/promptfoo

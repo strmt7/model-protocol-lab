@@ -54,6 +54,7 @@ class ModuleEntryTests(unittest.TestCase):
                 "mistral_large",
                 "phi4",
                 "gemma3",
+                "gemma4",
                 "llama4",
                 "glm4",
                 "glm45",

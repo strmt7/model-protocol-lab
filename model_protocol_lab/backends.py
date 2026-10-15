@@ -11,9 +11,13 @@ from hashlib import sha256
 from importlib.metadata import version
 from pathlib import Path
 from threading import Event, RLock
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from .core import Backend, Generation, _valid_token_ids, truncate_text_tail
+
+if TYPE_CHECKING:
+    import torch
+    from torch import Tensor as _TorchTensor
 
 
 def _directory(value: str | Path) -> Path:
@@ -749,6 +753,59 @@ class LocalHFBackend:
                 return text
         except Exception:  # noqa: BLE001 -- sanitization boundary, see pyproject
             raise RuntimeError("local_decode_failed") from None
+
+    @property
+    def vocab_size(self) -> int:
+        """Model vocabulary size: valid token IDs satisfy ``0 <= t < vocab_size``."""
+        size: int = self._vocab_size
+        return size
+
+    def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Run one full-sequence forward pass; return ``[T, vocab]`` fp32 logits.
+
+        This is the teacher-forcing primitive for likelihood scoring: unlike
+        :meth:`generate` -- which exposes only the last position's logits
+        and samples greedily -- it returns every position's logits so a
+        caller can gather the causal-shifted log-probabilities of a target
+        span from a single pass. Runs under the backend lock in inference
+        mode on CPU; the returned tensor is detached and contiguous.
+        Malformed input or a failed/degenerate forward raises ValueError or
+        RuntimeError with the adapter's fixed error vocabulary, never a
+        partial tensor.
+        """
+        if not _ids_valid(input_ids, self._vocab_size) or not input_ids:
+            raise ValueError("invalid_input_ids")
+        if len(input_ids) > self._context_limit:
+            raise ValueError("context_limit_exceeded")
+        _, model = self._ready()
+        torch = self._torch
+        with self._lock:
+            try:
+                with torch.inference_mode():
+                    sequence = torch.tensor([input_ids], dtype=torch.long, device=self._device)
+                    result = model(
+                        input_ids=sequence,
+                        attention_mask=torch.ones_like(sequence),
+                        past_key_values=None,
+                        use_cache=False,
+                        output_attentions=False,
+                        output_hidden_states=False,
+                        return_dict=True,
+                    )
+                    logits: _TorchTensor = result.logits[0]
+                    if (
+                        logits.ndim != 2
+                        or logits.shape[0] != len(input_ids)
+                        or logits.shape[1] != self._vocab_size
+                        or not bool(torch.isfinite(logits).all().item())
+                    ):
+                        raise RuntimeError("local_forward_failed")
+                    output: _TorchTensor = (
+                        logits.detach().to(device="cpu", dtype=torch.float32).contiguous()
+                    )
+                    return output
+            except Exception:  # noqa: BLE001 -- inference errors become fixed codes
+                raise RuntimeError("local_forward_failed") from None
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event

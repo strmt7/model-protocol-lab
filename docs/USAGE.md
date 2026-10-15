@@ -127,7 +127,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner, section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, sensitivity sweep and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, token-overhead card (see §8.8), sensitivity sweep and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -305,6 +305,35 @@ when the decision is identical at every budget from 1 to `--max-new-tokens`.
 Like the stop matrix, this is a post-hoc diagnostic: it never changes the
 selection rule, and it degrades to an "unavailable" marker (never a run
 failure) when the search did not complete.
+
+### 8.7 Selection margin (decision fragility)
+
+Every completed `run` reports `selection_margin` in `results.json` and one
+line in the decision banner -- answering "is any fixture load-bearing for
+this verdict?" with no extra model calls. The margin is a closed-form
+integer over the recorded search outcomes: for a unique winner, the minimum
+over runners-up of their failing-fixture counts (flips to a tie); for
+`no_candidate`, the minimum over candidates (flips to a winner); for
+`ambiguous`, the tied-candidate count minus one (flips to uniqueness).
+`failed`/`cancelled` runs report no margin. The banner names the closest
+runner-up and the decisive fixtures. The margin is descriptive; it never
+changes the decision. A margin of 1 on a unique winner means the verdict
+hinges on a single borderline fixture -- treat it as barely more
+informative than a tie and consider authoring more discriminating fixtures
+(see §9).
+
+### 8.8 Protocol token-overhead accounting
+
+Every `run` with an attached checkpoint tokenizer reports `token_overhead`
+in `results.json` and a "Token overhead" card in the HTML report: per
+candidate, mean/max prompt tokens (exact `tokenizer.encode` counts of the
+rendered prompts, `add_special_tokens=False`) and mean output tokens,
+the cheapest candidate, and the winner's token tax versus the cheapest
+passing candidate as a percentage. Token counts in reports are
+retained-input/output counts, not equal-compute accounting. Decision
+utility: context-window budgeting and serving cost when two candidates
+both pass, or when the winner is token-hungry -- formats differ
+substantially in control-token overhead.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

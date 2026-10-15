@@ -911,6 +911,339 @@ def _decisive_section(result: dict[str, Any]) -> str:
     return '<section id="decisive-fixtures"><h2>Decisive fixtures</h2>' + body + "</section>"
 
 
+def selection_margin(result: dict[str, Any]) -> dict[str, Any] | None:
+    """Fragility of the selection decision, measured in fixture flips.
+
+    Pure function of the recorded search outcomes: no model calls, and it
+    never alters the decision -- it only measures how close the recorded
+    outcomes were to a different one.
+
+    - unique winner (``selected_candidate`` set): the minimum, over
+      runners-up, of their failing search-fixture counts; flipping that
+      many of the closest runner-up's failing fixtures to pass would tie
+      the selection. ``direction`` is ``"to_tie"``.
+    - ``no_candidate``: the minimum, over all candidates, of their failing
+      counts; flipping that many of the closest candidate's failing
+      fixtures to pass would select it. ``direction`` is ``"to_winner"``.
+    - ``ambiguous``: ``(# all-pass candidates - 1)``; demoting that many of
+      the tied candidates -- one flipped fixture each -- would leave a
+      unique winner. ``direction`` is ``"to_unique"``; ``runner_up`` is
+      null (no single candidate carries the margin) and
+      ``decisive_fixtures`` are the fixtures every tied candidate passed.
+    - ``failed`` / ``cancelled`` (or anything uncomputable): None, so the
+      key stays absent from ``results.json``.
+
+    A "failing" fixture is one the candidate did not pass: completed
+    without passing, or incomplete/missing. Runner-up ties break to the
+    lexicographically smallest candidate name; fixture lists are sorted.
+    """
+    if type(result) is not dict:
+        raise ValueError("result must be a dict")
+    if str(result.get("decision", "")) in ("failed", "cancelled"):
+        return None
+    names, order, per_candidate = _search_outcomes(result)
+    if not names or not order:
+        return None
+    failing: dict[str, list[str]] = {
+        name: sorted(fid for fid in order if per_candidate[name].get(fid) is not True)
+        for name in names
+    }
+    selected = result.get("selected_candidate")
+    if type(selected) is str and selected:
+        runners = [name for name in names if name != selected]
+        if not runners:
+            # A lone candidate has no runner-up to tie against: the margin
+            # is undefined, reported as a null value rather than invented.
+            return {
+                "value": None,
+                "direction": "to_tie",
+                "runner_up": None,
+                "decisive_fixtures": [],
+            }
+        best = min(runners, key=lambda name: (len(failing[name]), name))
+        return {
+            "value": len(failing[best]),
+            "direction": "to_tie",
+            "runner_up": best,
+            "decisive_fixtures": failing[best],
+        }
+    decision = str(result.get("decision", ""))
+    if decision == "ambiguous":
+        tied = [name for name in names if not failing[name]]
+        if len(tied) < 2:
+            return None
+        shared = sorted(
+            fid for fid in order if all(per_candidate[name].get(fid) is True for name in tied)
+        )
+        return {
+            "value": len(tied) - 1,
+            "direction": "to_unique",
+            "runner_up": None,
+            "decisive_fixtures": shared,
+        }
+    if decision == "no_candidate":
+        best = min(names, key=lambda name: (len(failing[name]), name))
+        return {
+            "value": len(failing[best]),
+            "direction": "to_winner",
+            "runner_up": best,
+            "decisive_fixtures": failing[best],
+        }
+    return None
+
+
+def token_overhead(result: dict[str, Any]) -> dict[str, Any]:
+    """Per-candidate token counts from the recorded observations.
+
+    Prompt tokens per candidate per fixture are the recorded encoded-input
+    lengths: ``evaluate`` stores the backend's exact encoding of the
+    rendered prompt, and the backend contract requires encoding the
+    complete rendered prompt with no implicit BOS/EOS insertion -- so
+    ``len(input_ids)`` is exactly
+    ``len(tokenizer.encode(rendered_prompt, add_special_tokens=False))``
+    with the run's own checkpoint tokenizer. Zero new model calls. Output
+    counts are the recorded retained-output lengths. Means are over
+    completed observations only; candidates with none get null stats.
+    ``cheapest_candidate`` is the smallest mean prompt count
+    (lexicographically-smallest name breaks ties);
+    ``winner_tax_vs_cheapest_pct`` is the selected winner's mean prompt
+    count relative to the cheapest, in percent -- 0.0 when the winner is
+    the cheapest -- or null when there is no selected winner or no usable
+    counts.
+    """
+    if type(result) is not dict:
+        raise ValueError("result must be a dict")
+    per_candidate: dict[str, dict[str, float | int | None]] = {}
+    for run in result.get("search") or []:
+        if type(run) is not dict:
+            continue
+        fmt = run.get("format")
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(name) is not str or not name or name in per_candidate:
+            continue
+        prompt_counts: list[int] = []
+        output_counts: list[int] = []
+        for obs in run.get("observations") or []:
+            if type(obs) is not dict or obs.get("status") != "completed":
+                continue
+            input_ids = obs.get("input_ids")
+            output_ids = obs.get("output_ids")
+            if not isinstance(input_ids, (list, tuple)) or not isinstance(
+                output_ids, (list, tuple)
+            ):
+                continue
+            prompt_counts.append(len(input_ids))
+            output_counts.append(len(output_ids))
+        if prompt_counts:
+            per_candidate[name] = {
+                "mean_prompt_tokens": sum(prompt_counts) / len(prompt_counts),
+                "max_prompt_tokens": max(prompt_counts),
+                "mean_output_tokens": sum(output_counts) / len(output_counts),
+            }
+        else:
+            per_candidate[name] = {
+                "mean_prompt_tokens": None,
+                "max_prompt_tokens": None,
+                "mean_output_tokens": None,
+            }
+    cheapest: str | None = None
+    cheapest_mean = 0.0
+    for name in sorted(per_candidate):
+        mean = per_candidate[name]["mean_prompt_tokens"]
+        if type(mean) is not float:
+            continue
+        if cheapest is None or mean < cheapest_mean or (mean == cheapest_mean and name < cheapest):
+            cheapest, cheapest_mean = name, mean
+    tax: float | None = None
+    winner_mean: float | None = None
+    winner = result.get("selected_candidate")
+    if type(winner) is str and winner in per_candidate:
+        candidate_mean = per_candidate[winner]["mean_prompt_tokens"]
+        if type(candidate_mean) is float:
+            winner_mean = candidate_mean
+    if cheapest is not None and winner_mean is not None and cheapest_mean > 0:
+        tax = (winner_mean - cheapest_mean) / cheapest_mean * 100.0
+    return {
+        "per_candidate": {name: per_candidate[name] for name in sorted(per_candidate)},
+        "cheapest_candidate": cheapest,
+        "winner_tax_vs_cheapest_pct": tax,
+    }
+
+
+def attach_diagnostics(result: dict[str, Any]) -> dict[str, Any]:
+    """Copy of ``result`` with the automatic diagnostics attached.
+
+    Adds ``selection_margin`` and ``token_overhead`` (both pure functions
+    of the recorded search outcomes; see their docstrings) as top-level
+    keys so ``results.json`` carries them. The input dict is not mutated.
+    """
+    if type(result) is not dict:
+        raise ValueError("result must be a dict")
+    enriched = dict(result)
+    enriched["selection_margin"] = selection_margin(result)
+    enriched["token_overhead"] = token_overhead(result)
+    return enriched
+
+
+def _plural(count: int, singular: str) -> str:
+    return f"{count} {singular}" + ("" if count == 1 else "s")
+
+
+def _selection_margin_line(result: dict[str, Any]) -> str:
+    """One-line decision-fragility note for the decision banner.
+
+    Renders the ``selection_margin`` object as a hoverable line plus a
+    visible explainer sentence. Returns "" when the margin is absent, so
+    failed/cancelled runs render exactly as before. Never alters the
+    decision itself.
+    """
+    margin = selection_margin(result)
+    if margin is None:
+        return ""
+    value = margin["value"]
+    direction = margin["direction"]
+    runner = margin["runner_up"]
+    fixtures = margin["decisive_fixtures"]
+    ids_text = " (" + ", ".join(fixtures) + ")" if fixtures else ""
+    descriptive = "The margin is descriptive; it never changes the decision."
+    if direction == "to_tie" and value is None:
+        label = "Selection margin: n/a (single candidate)"
+        tip = "With a single candidate there is no runner-up to tie against."
+        explainer = "There is no runner-up, so the margin is undefined. " + descriptive
+    elif direction == "to_tie":
+        unit = _plural(int(value), "fixture")
+        label = f"Selection margin: {unit} (runner-up: {runner})"
+        tip = f"Flipping {value} of {runner}'s failing fixtures to pass would tie the selection."
+        explainer = (
+            f"Flipping {value} of {runner}'s failing fixtures{ids_text} to pass "
+            f"would tie the selection. {descriptive}"
+        )
+    elif direction == "to_winner":
+        unit = _plural(int(value), "fixture")
+        label = f"Selection margin: {unit} (closest: {runner})"
+        tip = f"Flipping {value} of {runner}'s failing fixtures to pass would select {runner}."
+        explainer = (
+            f"Flipping {value} of {runner}'s failing fixtures{ids_text} to pass "
+            f"would select {runner}. {descriptive}"
+        )
+    else:  # "to_unique"
+        unit = _plural(int(value), "candidate")
+        tied = int(value) + 1
+        label = f"Selection margin: {unit}"
+        tip = f"Demoting {unit} of the {tied} tied candidates would leave a unique winner."
+        if fixtures:
+            explainer = (
+                f"Flipping one of the shared fixtures{ids_text} to fail for {unit} "
+                f"of the {tied} tied candidates would leave a unique winner. {descriptive}"
+            )
+        else:
+            explainer = (
+                f"Demoting {unit} of the {tied} tied candidates -- one flipped "
+                f"fixture each -- would leave a unique winner. {descriptive}"
+            )
+    return (
+        '<span title="' + escape(tip) + '">' + escape(label) + "</span> \u2014 " + escape(explainer)
+    )
+
+
+def _token_overhead_section(result: dict[str, Any]) -> str:
+    """Efficiency card: per-candidate token counts and the winner's tax.
+
+    Renders ``token_overhead`` as a sortable table plus the winner's token
+    tax versus the cheapest candidate. Mirrors the README's disclaimer
+    verbatim: counts are reported, not equal-compute claims.
+    """
+    overhead = token_overhead(result)
+    per_candidate = overhead["per_candidate"]
+    if not per_candidate:
+        return (
+            '<section id="token-overhead"><h2>Token overhead</h2>'
+            "<p>Token overhead unavailable: no search candidates were recorded.</p>"
+            "</section>"
+        )
+    winner = result.get("selected_candidate")
+    cheapest = overhead["cheapest_candidate"]
+    rows = []
+    for name in per_candidate:
+        stats = per_candidate[name]
+        marker = " \u2605" if name == winner else ""
+        cells = []
+        for key in ("mean_prompt_tokens", "max_prompt_tokens", "mean_output_tokens"):
+            stat = stats[key]
+            if stat is None:
+                cells.append('<td data-sort="">\u2014</td>')
+            else:
+                text = repr(stat)
+                cells.append('<td data-sort="' + escape(text) + '">' + escape(text) + "</td>")
+        rows.append(
+            '<tr><th scope="row" data-sort="'
+            + escape(name)
+            + '">'
+            + escape(name)
+            + marker
+            + "</th>"
+            + "".join(cells)
+            + "</tr>"
+        )
+    tax = overhead["winner_tax_vs_cheapest_pct"]
+    winner_stats = per_candidate.get(winner) if type(winner) is str else None
+    cheapest_stats = per_candidate.get(cheapest) if type(cheapest) is str else None
+    winner_mean = winner_stats["mean_prompt_tokens"] if type(winner_stats) is dict else None
+    cheapest_mean = cheapest_stats["mean_prompt_tokens"] if type(cheapest_stats) is dict else None
+    if (
+        tax is not None
+        and type(winner_mean) is float
+        and type(cheapest_mean) is float
+        and type(winner) is str
+        and type(cheapest) is str
+    ):
+        if winner == cheapest:
+            tax_line = (
+                "<p>The winner ("
+                + escape(winner)
+                + ") is also the cheapest candidate ("
+                + escape(repr(winner_mean))
+                + " mean prompt tokens): 0.0% token tax.</p>"
+            )
+        else:
+            tax_line = (
+                "<p>Winner token tax vs cheapest: "
+                + escape(winner)
+                + " averages "
+                + escape(repr(winner_mean))
+                + " prompt tokens vs "
+                + escape(repr(cheapest_mean))
+                + " for "
+                + escape(cheapest)
+                + " \u2014 a token tax of "
+                + escape(repr(tax))
+                + "%.</p>"
+            )
+    elif type(winner) is str and winner:
+        tax_line = (
+            "<p>The winner's token tax is unavailable: no usable token counts were recorded.</p>"
+        )
+    else:
+        tax_line = "<p>No candidate was selected, so no winner token tax is reported.</p>"
+    return (
+        '<section id="token-overhead"><h2>Token overhead</h2>'
+        "<p>Prompt tokens are the encoded length of each candidate's rendered prompt "
+        '(<span class="mono">add_special_tokens=False</span>); output tokens are the '
+        "retained output length. Counts are means over completed search observations.</p>"
+        '<div class="table-wrap"><table class="sortable">'
+        "<caption>Prompt and output token counts per candidate.</caption>"
+        '<thead><tr><th scope="col">Candidate</th><th scope="col">Mean prompt tokens</th>'
+        '<th scope="col">Max prompt tokens</th><th scope="col">Mean output tokens</th>'
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+        + tax_line
+        + "<p>Token counts in reports are retained-input/output counts, not equal-compute "
+        "accounting.</p>"
+        "</section>"
+    )
+
+
 def _search_rows(result: dict[str, Any]) -> str:
     rows = []
     for run in result.get("search") or []:
@@ -1283,10 +1616,12 @@ def render_html(result: dict[str, Any]) -> str:
     dhelp = _DECISION_HELP.get(decision, "Unrecognized decision value.")
     taxonomy_note = _taxonomy_note(result)
     diagnosis = _failure_diagnosis(result)
+    margin_line = _selection_margin_line(result)
     banner_help = (
         escape(dhelp)
         + ('</p><p class="decision-help">' + escape(taxonomy_note) if taxonomy_note else "")
         + ('</p><p class="decision-help">' + escape(diagnosis) if diagnosis else "")
+        + ('</p><p class="decision-help">' + margin_line if margin_line else "")
     )
     config_html = _config_section(result)
     search_html = (
@@ -1303,6 +1638,7 @@ def render_html(result: dict[str, Any]) -> str:
     )
     outcome_html = _outcome_grid_section(result)
     decisive_html = _decisive_section(result)
+    overhead_html = _token_overhead_section(result)
     conformance_html = _conformance_section(result)
     stop_matrix_html = _stop_matrix_section(result)
     divergence_html = _backend_divergence_section(result)
@@ -1315,6 +1651,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("search-candidates", "Search-stage candidates", search_html),
             ("per-fixture-outcomes", "Per-fixture outcomes", outcome_html),
             ("decisive-fixtures", "Decisive fixtures", decisive_html),
+            ("token-overhead", "Token overhead", overhead_html),
             ("template-conformance", "Template conformance", conformance_html),
             ("stop-behavior-matrix", "Stop-behavior isolation matrix", stop_matrix_html),
             ("backend-divergence", "Backend divergence", divergence_html),
@@ -1350,6 +1687,7 @@ def render_html(result: dict[str, Any]) -> str:
         + search_html
         + outcome_html
         + decisive_html
+        + overhead_html
         + conformance_html
         + stop_matrix_html
         + divergence_html
@@ -1414,9 +1752,14 @@ def save_report(
     include_evidence=False,
     _allow_empty_existing=False,
 ) -> tuple[Path, Path]:
-    public = _public_view(result, include_evidence)
+    # Automatic diagnostics: pure functions of the recorded search
+    # outcomes, attached to a copy so the caller's dict is untouched. The
+    # JSON keeps them (they are safe aggregates) while _public_view strips
+    # the raw observations they were computed from.
+    enriched = attach_diagnostics(result)
+    public = _public_view(enriched, include_evidence)
     json_text = json.dumps(public, ensure_ascii=True, allow_nan=False, indent=2)
-    html_text = render_html(result)
+    html_text = render_html(enriched)
     # Restrictive permissions: reports may contain sensitive evidence
     # (--include-evidence). The directory and files are readable only by the
     # invoking user, regardless of the process umask.
