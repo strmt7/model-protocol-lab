@@ -169,7 +169,7 @@ class NewFamilyRenderTests(unittest.TestCase):
 
 
 class CatalogListingTests(unittest.TestCase):
-    def test_catalog_holds_seventeen_families(self):
+    def test_catalog_holds_nineteen_families(self):
         self.assertEqual(
             sorted(CATALOG),
             [
@@ -184,6 +184,8 @@ class CatalogListingTests(unittest.TestCase):
                 "glm53",
                 "kimi2",
                 "kimi3",
+                "kolibri",
+                "lfm25",
                 "llama3",
                 "llama4",
                 "mistral",

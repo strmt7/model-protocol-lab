@@ -102,7 +102,9 @@ each candidate's own boundary as well. A mistyped candidate name fails fast
 (the valid names are listed); `--mutate` variants are named
 `<family>/toggle-bos`, `<family>/no-bos`, `<family>/prefix-newline`,
 `<family>/prefix-trim` (some collapse when the family has no BOS marker --
-see `catalog` output via `local_repairs` dedup).
+see `catalog` output via `local_repairs` dedup), plus
+`kolibri/thinking-off` (the Kolibri-1 thinking-disabled generation-prompt
+branch).
 
 Discipline: use each format's genuine end-of-turn marker, verified against
 the checkpoint tokenizer with `doctor --boundary-ids` (or `doctor
@@ -120,14 +122,17 @@ python -m model_protocol_lab run --model LOCAL_MODEL_DIRECTORY --dataset YOUR_FI
 
 The local adapter emits the full requested number of tokens unless cancelled or failed. It does not stop automatically on EOS or the supplied boundary. The evaluator finds the first boundary sequence, decodes preceding tokens, and checks the exact expected answer. This separates boundary observation from backend stop behavior.
 
-With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement. Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
+`--seed` accepts an unsigned 64-bit integer (default 0). It is validated up front and recorded in `results.json` for provenance, but it does not change greedy selection: the local adapter decodes greedily, so the seed has no effect on outputs. It exists so future sampling backends can share the flag.
+
+With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; `kolibri` additionally yields a `thinking-off` variant (the same template's generation prompt with an empty `<think>` block prefilled, for thinking-disabled requests). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
 
 Ctrl+C requests cooperative cancellation after model loading. Interrupted evaluation can retain a partial report. Model loading and individual backend operations are not guaranteed to be promptly interruptible.
 
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, token-overhead card (see §8.8), sensitivity sweep and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic
+(see §8.9) and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -335,6 +340,41 @@ utility: context-window budgeting and serving cost when two candidates
 both pass, or when the winner is token-hungry -- formats differ
 substantially in control-token overhead.
 
+### 8.9 Teacher-forced log-likelihood diagnostic (`run --logprob-diagnostic`)
+
+```sh
+python -m model_protocol_lab run ... --logprob-diagnostic
+```
+
+Opt-in because it costs one extra forward pass per candidate x fixture.
+After search completes, each candidate's *expected answer* is teacher-forced
+through the checkpoint after the recorded prompt
+(`model_protocol_lab/scoring.py`: one forward pass over
+`prompt_ids + encode(expected)`; prompt positions masked, answer tokens
+gathered with the causal shift). `results.json` carries `logprob_diagnostic`
+and the HTML report renders a "Log-likelihood diagnostic" section with
+per-candidate total/mean logprob (nats, per scored token) plus a
+plain-language reading that separates the two failure attributions:
+
+- **Greedy derailed**: the weights assign the expected answer *high*
+  teacher-forced likelihood, yet greedy generation did not reproduce it --
+  a decoding/search problem, not missing knowledge.
+- **Weights don't know**: even teacher-forced, the weights assign the
+  expected answer *low* likelihood under this candidate's framing.
+
+The reading bands are declared heuristics recorded in the payload
+(`thresholds`): mean >= -2.0 nats/token reads as derailment, mean < -5.0 as
+missing knowledge; between the bands the diagnostic withholds judgment.
+When the alignment check refuses a fixture (e.g. a token straddling the
+prompt/answer boundary) the score is `unavailable` with a fixed reason --
+reported, never guessed. Diagnostic only: it never changes the selection
+rule or the pass criterion.
+
+Related work: this is the lab's own DEVELOPMENT_PLAN.md §9.3-§9.5 design,
+corroborated by lm-eval's `loglikelihood` request type and the HELM
+adapter's token-probability measurements, which likewise score a fixed
+target string by teacher forcing rather than by sampling.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -463,9 +503,10 @@ When a run verdict surprises you, the suspect is sometimes not the weights
 or the format hypothesis but the backend's stop behavior. `diff-backends`
 runs the lab's stop emulations -- HF `StopStringCriteria`
 (`hf_stop_string`), vLLM's detokenizer holdback with stop-string stripping
-(`vllm_holdback_strip`) and keeping (`vllm_holdback_keep`), and an
-EOS-appended truncation (`eos_appended`) -- over **one recorded token
-sequence** and reports where the emulated backends disagree:
+(`vllm_holdback_strip`) and keeping (`vllm_holdback_keep`), SGLang's
+str-based finish (`sglang_stop`), and an EOS-appended truncation
+(`eos_appended`) -- over **one recorded token sequence** and reports where
+the emulated backends disagree:
 
 ```sh
 python -m model_protocol_lab diff-backends \
@@ -482,7 +523,17 @@ python -m model_protocol_lab diff-backends \
 - `--stops` (required): comma-separated stop texts, e.g. `"STOP,</answer>"`.
 - `--eos-id` (default: none): EOS token id for the `eos_appended` cell.
 - `--min-tokens` (default 0): vLLM `min_tokens` gating applied to the
-  holdback cells.
+  holdback cells. SGLang has no `min_tokens` equivalent (its
+  `min_new_tokens` only clips the length budget), so the `sglang_stop`
+  cell is never gated -- that absence is measured by
+  `NO_MIN_TOKENS_GATE`.
+
+The SGLang cell (`sglang_stop`) ports `Req._check_str_based_finish`:
+the first output step whose decoded text contains the stop string fires,
+and the returned text is cut at the leftmost stop occurrence
+(`DetokenizerManager.trim_matched_stop`) -- stripped by default like
+vLLM, unlike HF. Its multi-stop rule is first-listed-wins, a hard
+divergence from vLLM's earliest-completion rule (vLLM PR #49391).
 
 The divergence classes, with one-line meanings (each drawn from the
 vendors' own bug trackers; research log in `docs/RESEARCH_LOG.md`):
@@ -499,15 +550,26 @@ vendors' own bug trackers; research log in `docs/RESEARCH_LOG.md`):
 - `HARNESS_NORMALIZATION_RELIED` -- a strip-disposition cell's returned
   text still contains the stop string (the strip failed), so correct
   scoring would depend on the harness re-stripping.
+- `MULTI_STOP_SELECTION` -- SGLang's multi-stop check selects the
+  first-listed stop while vLLM selects the earliest-completing one, so
+  the two engines stop on different stop strings for the same output.
+- `NO_MIN_TOKENS_GATE` -- a stop that vLLM's `--min-tokens` gate blocks
+  still fires under `sglang_stop` (SGLang has no `min_tokens`
+  equivalent).
+- `STR_OVER_EOS_PRECEDENCE` -- stop string and EOS fire in the same
+  step, so precedence decides the outcome and the engines disagree:
+  SGLang's shipped fix for #28802 gives the stop string the win, while
+  TGI's documented precedence (length > EOS > stop-sequence) gives EOS
+  the win.
 
 Reading the JSON output: the top level carries `prompt_tokens`,
 `output_tokens`, `min_tokens`, `eos_id`, `stop_texts`, `cells`,
 `divergences` and the `verdict` (`"agree"` or `"diverge"`). `cells` holds
-one record per stop text, with a `semantics` map of the four emulated
+one record per stop text, with a `semantics` map of the five emulated
 cells; each cell records `available` (false when the emulation could not
 run -- recorded but excluded from the divergence checks), `fired`,
-`firing_step`, `truncated_ids`, `returned_text` (set only by the vLLM
-cells) and `disposition` (`"kept"`, `"stripped"`, or null for
+`firing_step`, `truncated_ids`, `returned_text` (set only by the
+strip/keep-style cells) and `disposition` (`"kept"`, `"stripped"`, or null for
 `eos_appended`). Each entry in `divergences` names the `class`, the
 `stop_text` and a human-readable `detail`. A compact real example:
 
@@ -527,11 +589,43 @@ $ python -m model_protocol_lab diff-backends --model path/to/checkpoint \
 }
 ```
 
-Scope limit: one stop string is emulated per stop text per run. Multi-stop
-earliest-completion selection is *not* emulated -- run each stop text
-separately (the `--stops` list exists to batch them). Streaming vs
+Scope limit: one stop string is emulated per stop text per run, but
+multi-stop *selection* is compared across the run's stop texts
+(`MULTI_STOP_SELECTION`): the SGLang winner is the fired stop with the
+smallest firing step, ties broken by list order, versus vLLM's
+earliest-completion rule. With 1 token/step the earlier-completing stop
+still fires at its own step under both rules; list order decides only
+when two or more stops match within one check. Streaming vs
 non-streaming divergence and match-position leftmost/rightmost rules are
 likewise not emulated; the port follows the vendors' documented
 non-streaming final-truncation paths. No semantics are invented: every cell
 is one of the existing emulations in the `backends` module, run with fixed
 inputs.
+
+Deliberate non-cells: there is no TGI column -- every TGI stop rule is
+covered by composition of the existing cells (TGI keeps stop sequences,
+like the `hf_stop_string` cell; TGI multi-stop is first-listed, like the
+`sglang_stop` selection rule; TGI has no `min_tokens` equivalent, like
+`sglang_stop`'s ungated path; TGI's EOS-beats-stop precedence is the
+documented contrast in `STR_OVER_EOS_PRECEDENCE`). SGLang's `stop_regex`
+(`MAX_STOP_REGEX_COUNT=32`, `MAX_STOP_REGEX_LEN=256`) is outside
+stop-string scope and gets this note only: neither vLLM nor HF has an
+equivalent, and regex stops follow different matching code paths
+upstream, so they are not part of the stop-string differential test.
+
+Input bounds (all enforced with fixed error codes, never silent
+truncation): `--prompt-text`/`--output-text` are capped at 1 MB each;
+encoded output (generated) token sequences at 4096 ids
+(`output_ids_too_long`), prompts at 131072 ids (`prompt_ids_too_long`).
+The output cap is the load-bearing one: the emulations do one
+`backend.decode(prefix)` per output step, so cost is quadratic in output
+length -- at the cap a single stop completes in ~2-3 s on the repo's
+linear reference stub, versus tens of minutes at the old 131072 cap
+(measured 2026-10-15). It also matches `mpl run --max-new-tokens`' own
+4096 cap, so the lab can never record a longer generated output. Each
+stop text is capped at 1024 characters (`stop_text_too_long`) and a run
+accepts at most 16 stop texts (`too_many_stop_texts`): a stop is a needle,
+not a document, and each stop adds five emulated cells, so the count
+multiplies the quadratic bound. Over-cap recorded observations in the
+`run` diagnosis path are skipped (the section is omitted) rather than
+burning quadratic time.

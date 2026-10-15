@@ -3,10 +3,11 @@
 ``diff_backends`` runs the lab's stop emulations (see
 :mod:`model_protocol_lab.backends`) -- HF ``StopStringCriteria``
 (``emulate_hf_stop_string``), vLLM's detokenizer holdback
-(``emulate_vllm_holdback``, strip and keep variants) and an EOS-appended
-truncation (``emulate_eos_stop``) -- over ONE recorded token sequence and
-reports where the emulated backends disagree, classified into divergence
-classes drawn from the vendors' own bug trackers (research round R2a,
+(``emulate_vllm_holdback``, strip and keep variants), SGLang's str-based
+finish (``emulate_sglang_stop``) and an EOS-appended truncation
+(``emulate_eos_stop``) -- over ONE recorded token sequence and reports
+where the emulated backends disagree, classified into divergence classes
+drawn from the vendors' own bug trackers (research rounds R2a and Cycle 1,
 ``docs/RESEARCH_LOG.md``):
 
 - ``KEPT_VS_STRIPPED`` -- HF always keeps the stop string while vLLM's
@@ -32,14 +33,59 @@ classes drawn from the vendors' own bug trackers (research round R2a,
   stop-handling bugs destroying benchmark verdicts). Cells whose
   disposition is ``"kept"`` keep the stop string by definition and are not
   flagged.
+- ``MULTI_STOP_SELECTION`` -- SGLang's multi-stop check selects the
+  first-listed stop (``Req._check_str_based_finish`` iterates
+  ``stop_strs`` in list order, ``schedule_batch.py:1836-1847``) while vLLM
+  selects the earliest-completing one (``min(stop_index +
+  len(stop_str))``, ties broken by list order; vLLM PR #49391,
+  https://github.com/vllm-project/vllm/pull/49391, pinned by
+  ``tests/detokenizer/test_check_stop_strings.py``). Fires when the two
+  selection rules pick different winners across the run's stop texts --
+  the hard divergence the research log records, with its caveat: with 1
+  token/step the earlier-completing stop still fires at its own step and
+  list order decides only when >=2 stops match within one check.
+- ``NO_MIN_TOKENS_GATE`` -- the SGLang column on the ``MIN_TOKENS_GATED``
+  class: SGLang has no ``min_tokens`` equivalent (``min_new_tokens`` only
+  clips the length budget, ``scheduler.py:2631-2634``; the finish path
+  never consults it), so a stop that vLLM's ``min_tokens`` gate blocks
+  still fires under the SGLang emulation.
+- ``STR_OVER_EOS_PRECEDENCE`` -- stop string and EOS fire in the same
+  step, so precedence -- not firing order -- decides the outcome, and the
+  engines disagree: SGLang's shipped fix for #28802 gives the stop string
+  the win (``update_finish_state`` runs the str-based check before the
+  token-based one, ``schedule_batch.py:1913-1950``), while TGI's
+  documented precedence is length > EOS > stop-sequence, i.e. EOS beats
+  the stop string (the reverse of SGLang). Co-fires with
+  ``EOS_PRECEDENCE`` on the tie; this class records the precedence
+  disagreement.
+
+Deliberate non-cells (documented, not emulated -- no TGI column):
+
+- No TGI cell: every TGI stop rule from the Cycle 1 research is covered
+  by composition of the existing cells -- TGI keeps stop sequences (like
+  HF's kept-disposition ``hf_stop_string`` cell), selects first-listed
+  among multiple stops (like the ``sglang_stop`` selection rule), has no
+  ``min_tokens`` equivalent (like ``sglang_stop``'s ungated finish path),
+  and its EOS-beats-stop precedence is the documented contrast in
+  ``STR_OVER_EOS_PRECEDENCE``. A TGI column would duplicate these cells
+  without adding a distinguishable rule (the one genuine TGI quirk, the
+  200-char match-buffer truncation, is too narrow for a cell and stays
+  research-log-only).
+- SGLang ``stop_regex`` (``MAX_STOP_REGEX_COUNT=32``,
+  ``MAX_STOP_REGEX_LEN=256``) is outside stop-string scope: a USAGE.md
+  note only, no cell.
 
 Scope limits (deliberate, documented -- no semantics are invented here;
 every cell is one of the existing emulations in
 :mod:`model_protocol_lab.backends`, run with fixed inputs):
 
-- One stop string per run. Multi-stop earliest-completion selection
-  (vLLM #49391, https://github.com/vllm-project/vllm/pull/49391) is NOT
-  emulated; callers (``mpl diff-backends``) run each stop text separately.
+- Per-stop cells still run one stop string at a time; multi-stop
+  SELECTION is compared across the run's stop texts
+  (``MULTI_STOP_SELECTION``): the SGLang winner is the fired stop with
+  the smallest firing step, ties broken by list order (the research-log
+  caveat, exactly), while the vLLM winner ports PR #49391 -- smallest
+  ``(firing step, stop_index + len(stop_str))``, ties by list order, read
+  off the strip/keep cells' firing steps and trimmed texts.
 - Streaming vs non-streaming divergence (vLLM #47137,
   https://github.com/vllm-project/vllm/issues/47137) is not emulated: the
   lab's vLLM port is the non-streaming final-truncation path (the
@@ -64,6 +110,7 @@ from .backends import (
     _hf_byte_token_mapper,
     emulate_eos_stop,
     emulate_hf_stop_string,
+    emulate_sglang_stop,
     emulate_vllm_holdback,
 )
 
@@ -73,15 +120,19 @@ DivergenceClass = Literal[
     "MIN_TOKENS_GATED",
     "EOS_PRECEDENCE",
     "HARNESS_NORMALIZATION_RELIED",
+    "MULTI_STOP_SELECTION",
+    "NO_MIN_TOKENS_GATE",
+    "STR_OVER_EOS_PRECEDENCE",
 ]
 
 #: Semantic names used as keys in each stop record's ``semantics`` mapping.
 HF_STOP_STRING = "hf_stop_string"
 VLLM_HOLDBACK_STRIP = "vllm_holdback_strip"
 VLLM_HOLDBACK_KEEP = "vllm_holdback_keep"
+SGLANG_STOP = "sglang_stop"
 EOS_APPENDED = "eos_appended"
 
-_STOP_SEMANTICS = (HF_STOP_STRING, VLLM_HOLDBACK_STRIP, VLLM_HOLDBACK_KEEP)
+_STOP_SEMANTICS = (HF_STOP_STRING, VLLM_HOLDBACK_STRIP, VLLM_HOLDBACK_KEEP, SGLANG_STOP)
 
 _FIRED_AT_STEP = re.compile(r"^fired_at_step_(\d+)$")
 
@@ -143,21 +194,53 @@ class Divergence:
         return {"class": self.kind, "stop_text": self.stop_text, "detail": self.detail}
 
 
-def _checked_ids(value: object, name: str) -> tuple[int, ...]:
+#: Maximum length of an *output* (generated) token-id sequence accepted by
+#: the stop emulations. The vLLM-holdback and SGLang emulations do one
+#: ``backend.decode(prefix)`` per output step, so total cost is quadratic
+#: in this length: at the cap a single stop completes in ~2-3 s on the
+#: repo's linear reference stub (measured 2026-10-15; tens of minutes at
+#: the old 131072 cap). The value also matches ``mpl run --max-new-tokens``' own
+#: 4096 cap, so the lab can never record a longer generated output --
+#: legitimate inputs are never rejected by this bound.
+MAX_OUTPUT_IDS = 4096
+
+#: Maximum length of a *prompt* (input) token-id sequence. Prompt tokens
+#: are decoded once each (linear cost), so the bound stays generous: 4x
+#: the lab's max context window (32768), which recorded observations can
+#: legitimately approach.
+MAX_PROMPT_IDS = 131072
+
+#: Maximum length of one stop text, in characters. Real stop strings are
+#: short phrases; the bound keeps ``json.dumps(result)`` small (each stop
+#: is embedded verbatim in its record plus ``{stop_text!r}`` details) and
+#: the per-step ``str.find`` window cheap. Far below the 1 MB prompt/
+#: output text caps -- a stop text is a needle, not a document.
+MAX_STOP_TEXT_LEN = 1024
+
+#: Maximum number of (deduped) stop texts per call. Each stop adds five
+#: emulated cells, two of them quadratic in the output length, so the
+#: count multiplies the ``MAX_OUTPUT_IDS`` bound; at both caps the
+#: absolute worst case is ~40 s on the linear reference stub. Real stop
+#: lists are a handful of strings; 16 is generous headroom.
+MAX_STOP_TEXTS = 16
+
+
+def _checked_ids(value: object, name: str, *, cap: int) -> tuple[int, ...]:
     """Strict token-id tuple validation (mirrors the emulations' contract).
 
     Requires an actual tuple of plain ints (bool excluded), each a
     non-negative id below 2**31, matching the CLI's ``parse_boundary``
-    bound. The total sequence is capped (4x the lab's max context window)
-    because the emulations do per-step decodes; unbounded input would be
-    an unadvertised DoS surface. Raises ValueError with a fixed code
+    bound. The total sequence is capped at ``cap`` (``MAX_OUTPUT_IDS``
+    for generated sequences, ``MAX_PROMPT_IDS`` for prompts) because the
+    emulations do per-step decodes; unbounded input would be an
+    unadvertised DoS surface. Raises ValueError with a fixed code
     otherwise.
     """
     if type(value) is not tuple or any(
         type(token) is not int or not 0 <= token < 2**31 for token in value
     ):
         raise ValueError(f"invalid_{name}")
-    if len(value) > 131072:
+    if len(value) > cap:
         raise ValueError(f"{name}_too_long")
     return value
 
@@ -165,8 +248,12 @@ def _checked_ids(value: object, name: str) -> tuple[int, ...]:
 def _checked_stop_texts(value: object) -> tuple[str, ...]:
     """Strict stop-text validation: tuple/list of non-empty strings.
 
-    Duplicates are removed (order-preserving): running the same stop
-    twice would only duplicate identical cells.
+    Each stop is bounded by ``MAX_STOP_TEXT_LEN`` and the deduped list by
+    ``MAX_STOP_TEXTS`` (see the constants for rationale): unbounded stops
+    balloon ``json.dumps(result)`` and the per-stop emulation cost.
+    Duplicates are removed (order-preserving, set-based so dedup itself
+    is linear, not O(m^2)): running the same stop twice would only
+    duplicate identical cells.
     """
     if type(value) is tuple:
         items: tuple[object, ...] = value
@@ -178,13 +265,19 @@ def _checked_stop_texts(value: object) -> tuple[str, ...]:
     for stop in items:
         if type(stop) is not str or not stop:
             raise ValueError("invalid_stop_texts")
+        if len(stop) > MAX_STOP_TEXT_LEN:
+            raise ValueError("stop_text_too_long")
         strings.append(stop)
     deduped: list[str] = []
+    seen: set[str] = set()
     for stop in strings:
-        if stop not in deduped:
+        if stop not in seen:
+            seen.add(stop)
             deduped.append(stop)
     if not deduped:
         raise ValueError("empty_stop_texts")
+    if len(deduped) > MAX_STOP_TEXTS:
+        raise ValueError("too_many_stop_texts")
     return tuple(deduped)
 
 
@@ -235,11 +328,15 @@ def diff_backends(
     """Differential-test emulated backend stop semantics on one token sequence.
 
     Runs ``emulate_hf_stop_string`` (per stop text), ``emulate_vllm_holdback``
-    in strip and keep variants (per stop text, with ``min_tokens``), and
-    ``emulate_eos_stop`` (once per stop text; it does not depend on the stop
-    text), then classifies disagreements into the divergence classes
-    documented in the module docstring. Returns a JSON-serializable dict
-    with ``stop_texts``, ``eos_id``, ``min_tokens``, per-stop ``cells``,
+    in strip and keep variants (per stop text, with ``min_tokens``),
+    ``emulate_sglang_stop`` (per stop text; SGLang has no ``min_tokens``
+    equivalent, so no gate is applied) and ``emulate_eos_stop`` (once per
+    stop text; it does not depend on the stop text), then classifies
+    disagreements into the divergence classes documented in the module
+    docstring -- including the cross-stop ``MULTI_STOP_SELECTION``
+    comparison of SGLang's first-listed rule against vLLM's
+    earliest-completion rule. Returns a JSON-serializable dict with
+    ``stop_texts``, ``eos_id``, ``min_tokens``, per-stop ``cells``,
     ``divergences`` and ``verdict`` (``"agree"`` iff no divergences).
 
     ``backend`` needs only ``decode`` (plus the optional
@@ -249,8 +346,8 @@ def diff_backends(
     emulation reports ``available=False`` are recorded but excluded from
     the divergence checks.
     """
-    prompt_ids = _checked_ids(prompt_ids, "prompt_ids")
-    output_ids = _checked_ids(output_ids, "output_ids")
+    prompt_ids = _checked_ids(prompt_ids, "prompt_ids", cap=MAX_PROMPT_IDS)
+    output_ids = _checked_ids(output_ids, "output_ids", cap=MAX_OUTPUT_IDS)
     stops = _checked_stop_texts(stop_texts)
     if eos_id is not None and (type(eos_id) is not int or eos_id < 0):
         raise ValueError("invalid_eos_id")
@@ -262,6 +359,10 @@ def diff_backends(
 
     records: list[dict[str, Any]] = []
     divergences: list[Divergence] = []
+    # Per-stop cells retained for the cross-stop MULTI_STOP_SELECTION
+    # comparison after the loop: (stop text, sglang, vllm strip, vllm
+    # keep) in stop-list order.
+    selection_cells: list[tuple[str, CellResult, CellResult, CellResult]] = []
     for stop_text in stops:
         hf = _cell(
             HF_STOP_STRING,
@@ -292,11 +393,21 @@ def diff_backends(
             ),
             "kept",
         )
+        # SGLang has no min_tokens equivalent (min_new_tokens only clips
+        # the length budget; the finish path never consults it), so no
+        # gate is applied here -- that absence is what NO_MIN_TOKENS_GATE
+        # measures.
+        sglang = _cell(
+            SGLANG_STOP,
+            emulate_sglang_stop(backend, output_ids, stop_text),
+            "stripped",
+        )
         eos = _cell(EOS_APPENDED, emulate_eos_stop(output_ids, eos_id), None)
         semantics = {
             HF_STOP_STRING: hf,
             VLLM_HOLDBACK_STRIP: strip,
             VLLM_HOLDBACK_KEEP: keep,
+            SGLANG_STOP: sglang,
             EOS_APPENDED: eos,
         }
         records.append(
@@ -305,6 +416,7 @@ def diff_backends(
                 "semantics": {name: cell.as_dict() for name, cell in semantics.items()},
             }
         )
+        selection_cells.append((stop_text, sglang, strip, keep))
 
         stop_cells = [cell for name, cell in semantics.items() if name in _STOP_SEMANTICS]
 
@@ -338,18 +450,37 @@ def diff_backends(
                     )
                 )
 
-        # MIN_TOKENS_GATED: the stop fires with min_tokens=0 but the given
-        # min_tokens gates it (diagnostic re-run with the gate disabled).
+        # MIN_TOKENS_GATED / NO_MIN_TOKENS_GATE share one ungated
+        # diagnostic re-run: the stop fires with min_tokens=0 but the given
+        # min_tokens gates vLLM's holdback (vLLM PR #22014). SGLang has no
+        # min_tokens equivalent, so its column fires anyway -- that is the
+        # NO_MIN_TOKENS_GATE class.
+        ungated_step: int | None = None
         if min_tokens > 0 and strip.available and not strip.fired:
             ungated = emulate_vllm_holdback(backend, output_ids, stop_text, min_tokens=0)
-            ungated_step = _firing_step(ungated.detail)
-            if ungated.available and ungated.fired and ungated_step is not None:
+            if ungated.available and ungated.fired:
+                ungated_step = _firing_step(ungated.detail)
+        if ungated_step is not None:
+            divergences.append(
+                Divergence(
+                    "MIN_TOKENS_GATED",
+                    stop_text,
+                    f"stop {stop_text!r} fires at step {ungated_step} with "
+                    f"min_tokens=0 but min_tokens={min_tokens} gates it "
+                    "(vLLM PR #22014)",
+                )
+            )
+            if sglang.available and sglang.fired and sglang.firing_step is not None:
                 divergences.append(
                     Divergence(
-                        "MIN_TOKENS_GATED",
+                        "NO_MIN_TOKENS_GATE",
                         stop_text,
                         f"stop {stop_text!r} fires at step {ungated_step} with "
-                        f"min_tokens=0 but min_tokens={min_tokens} gates it "
+                        f"min_tokens=0 and at step {sglang.firing_step} under "
+                        "sglang_stop (SGLang has no min_tokens equivalent: "
+                        "min_new_tokens only clips the length budget, the "
+                        "finish path never consults it) but "
+                        f"min_tokens={min_tokens} gates vllm_holdback_strip "
                         "(vLLM PR #22014)",
                     )
                 )
@@ -371,6 +502,36 @@ def diff_backends(
                     )
                 )
 
+        # STR_OVER_EOS_PRECEDENCE: the stop string and EOS fire in the same
+        # step, so precedence -- not firing order -- decides the outcome,
+        # and the engines disagree. SGLang's shipped fix for #28802 gives
+        # the stop string the win (update_finish_state runs the str-based
+        # check before the token-based one); TGI's documented precedence is
+        # length > EOS > stop-sequence, i.e. EOS beats the stop string (the
+        # reverse of SGLang). Co-fires with EOS_PRECEDENCE on the tie; this
+        # class records the precedence disagreement.
+        if (
+            sglang.available
+            and sglang.fired
+            and sglang.firing_step is not None
+            and eos.available
+            and eos.fired
+            and eos.firing_step == sglang.firing_step
+        ):
+            divergences.append(
+                Divergence(
+                    "STR_OVER_EOS_PRECEDENCE",
+                    stop_text,
+                    f"sglang_stop fired at step {sglang.firing_step} and "
+                    f"eos_appended fired at step {eos.firing_step}: same-step "
+                    "precedence decides the outcome -- SGLang's shipped fix "
+                    "for #28802 gives the stop string the win "
+                    "(update_finish_state runs the str-based check before "
+                    "the token-based one), while TGI's documented precedence "
+                    "is length > EOS > stop-sequence (EOS beats the stop "
+                    "string)",
+                )
+            )
         # HARNESS_NORMALIZATION_RELIED: a "stripped"-disposition cell's
         # returned text still contains the stop string -- the strip failed
         # (vLLM #46113 / SGLang #28802 anomaly class), so correct scoring
@@ -392,6 +553,63 @@ def diff_backends(
                     )
                 )
 
+    # MULTI_STOP_SELECTION (cross-stop): SGLang's multi-stop check
+    # selects the first-listed stop -- the winner is the fired stop with
+    # the smallest firing step, ties broken by list order (the
+    # research-log caveat: with 1 token/step the earlier-completing stop
+    # still fires at its own step; list order decides only when >=2 stops
+    # match within one check). vLLM instead selects the
+    # earliest-completing stop: min(stop_index + len(stop_str)), ties by
+    # list order (PR #49391). The keep cell's returned text is the firing
+    # step's decoded text cut at the windowed find's match end, so its
+    # length IS stop_index + len(stop_str).
+    sglang_pick: tuple[tuple[int, int], tuple[str, int]] | None = None
+    vllm_pick: tuple[tuple[int, int, int], tuple[str, int]] | None = None
+    for list_index, (stop_text, sglang_cell, strip_cell, keep_cell) in enumerate(selection_cells):
+        if sglang_cell.available and sglang_cell.fired and sglang_cell.firing_step is not None:
+            key = (sglang_cell.firing_step, list_index)
+            if sglang_pick is None or key < sglang_pick[0]:
+                sglang_pick = (key, (stop_text, sglang_cell.firing_step))
+        if (
+            strip_cell.available
+            and strip_cell.fired
+            and strip_cell.firing_step is not None
+            and keep_cell.available
+            and keep_cell.fired
+            and keep_cell.returned_text is not None
+        ):
+            end_index = len(keep_cell.returned_text)
+            vkey = (strip_cell.firing_step, end_index, list_index)
+            if vllm_pick is None or vkey < vllm_pick[0]:
+                vllm_pick = (vkey, (stop_text, strip_cell.firing_step))
+    sglang_winner = sglang_pick[1] if sglang_pick is not None else None
+    vllm_winner = vllm_pick[1] if vllm_pick is not None else None
+    if sglang_winner != vllm_winner:
+
+        def _pick_text(pick: tuple[str, int] | None) -> str:
+            if pick is None:
+                return "no stop"
+            return f"stop {pick[0]!r} at step {pick[1]}"
+
+        winner_stop: str | None
+        if sglang_winner is not None:
+            winner_stop = sglang_winner[0]
+        elif vllm_winner is not None:
+            winner_stop = vllm_winner[0]
+        else:  # pragma: no cover -- the winners differ, so one of them fired
+            winner_stop = None
+        divergences.append(
+            Divergence(
+                "MULTI_STOP_SELECTION",
+                winner_stop,
+                f"sglang_stop selects {_pick_text(sglang_winner)} "
+                "(first-listed rule, Req._check_str_based_finish) but "
+                f"vllm_holdback_strip selects {_pick_text(vllm_winner)} "
+                "(earliest-completion, min(stop_index + len(stop_str)), "
+                "vLLM PR #49391)",
+            )
+        )
+
     return {
         "prompt_tokens": len(prompt_ids),
         "output_tokens": len(output_ids),
@@ -412,8 +630,11 @@ def diff_backends(
 DIVERGENCE_SEVERITY: dict[DivergenceClass, str] = {
     "KEPT_VS_STRIPPED": "high",
     "EOS_PRECEDENCE": "high",
+    "STR_OVER_EOS_PRECEDENCE": "high",
+    "MULTI_STOP_SELECTION": "high",
     "FIRING_STEP_DIFFERS": "medium",
     "MIN_TOKENS_GATED": "medium",
+    "NO_MIN_TOKENS_GATE": "medium",
     "HARNESS_NORMALIZATION_RELIED": "low",
 }
 
@@ -422,15 +643,19 @@ DIVERGENCE_SEVERITY: dict[DivergenceClass, str] = {
 #: class measures.
 _CLASS_SEMANTICS: dict[DivergenceClass, tuple[str, ...]] = {
     "KEPT_VS_STRIPPED": (HF_STOP_STRING, VLLM_HOLDBACK_STRIP),
-    "FIRING_STEP_DIFFERS": (HF_STOP_STRING, VLLM_HOLDBACK_STRIP, VLLM_HOLDBACK_KEEP),
+    "FIRING_STEP_DIFFERS": (HF_STOP_STRING, VLLM_HOLDBACK_STRIP, VLLM_HOLDBACK_KEEP, SGLANG_STOP),
     "MIN_TOKENS_GATED": (VLLM_HOLDBACK_STRIP,),
+    "NO_MIN_TOKENS_GATE": (SGLANG_STOP, VLLM_HOLDBACK_STRIP),
     "EOS_PRECEDENCE": (
         EOS_APPENDED,
         HF_STOP_STRING,
         VLLM_HOLDBACK_STRIP,
         VLLM_HOLDBACK_KEEP,
+        SGLANG_STOP,
     ),
-    "HARNESS_NORMALIZATION_RELIED": (VLLM_HOLDBACK_STRIP,),
+    "STR_OVER_EOS_PRECEDENCE": (SGLANG_STOP, EOS_APPENDED),
+    "MULTI_STOP_SELECTION": (SGLANG_STOP, VLLM_HOLDBACK_STRIP),
+    "HARNESS_NORMALIZATION_RELIED": (VLLM_HOLDBACK_STRIP, SGLANG_STOP),
 }
 
 
@@ -446,7 +671,10 @@ def _observation_ids(observation: dict[str, Any], key: str) -> tuple[int, ...] |
     if type(raw) is list:
         raw = tuple(raw)
     try:
-        return _checked_ids(raw, key)
+        # Recorded outputs are generated sequences (quadratic emulation
+        # cost); recorded inputs are prompts (linear cost).
+        cap = MAX_OUTPUT_IDS if key == "output_ids" else MAX_PROMPT_IDS
+        return _checked_ids(raw, key, cap=cap)
     except ValueError:
         return None
 
@@ -468,7 +696,7 @@ def divergence_section_data(
 
     - ``verdict``: ``"agree"`` iff no fixture diverged, else ``"diverge"``;
     - ``pairs_verdict``: one-line summary, e.g.
-      ``"HF vs vLLM stop semantics: 3/4 agree; 2 divergences"``;
+      ``"HF vs vLLM vs SGLang stop semantics: 3/4 agree; 2 divergences"``;
     - ``per_fixture``: ``[{fixture, verdict, divergences:
       [{class, stop_text, detail, severity}]}]`` in observation order;
     - ``matrix``: ``{divergence_class: {semantic: count}}`` counting, per
@@ -545,7 +773,7 @@ def divergence_section_data(
     return {
         "verdict": "agree" if agreed == total else "diverge",
         "pairs_verdict": (
-            f"HF vs vLLM stop semantics: {agreed}/{total} agree; {total_findings} {noun}"
+            f"HF vs vLLM vs SGLang stop semantics: {agreed}/{total} agree; {total_findings} {noun}"
         ),
         "per_fixture": per_fixture,
         "matrix": matrix,
@@ -612,7 +840,7 @@ def run_diff_backends(args: argparse.Namespace, parser: argparse.ArgumentParser)
         if len(text) > 1_000_000:
             parser.error(f"{label} must be at most 1MB")
     try:
-        from .doctor import _build_primary_tokenizer
+        from .doctor import _build_primary_tokenizer, _loader_failure_code
 
         tokenizer = _build_primary_tokenizer(args.model)
     except ImportError:
@@ -621,12 +849,11 @@ def run_diff_backends(args: argparse.Namespace, parser: argparse.ArgumentParser)
             file=sys.stderr,
         )
         return 1
-    except ValueError as exc:
-        # Fixed vocabulary from the checkpoint checks; safe to show.
-        print(f"diff-backends: invalid checkpoint: {exc}", file=sys.stderr)
-        return 1
-    except Exception:  # noqa: BLE001 -- sanitization boundary, never leak loader text
-        print("diff-backends: tokenizer_load_failed", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 -- sanitization boundary, never leak loader text
+        # Only exact-match fixed codes (e.g. oversized_tokenizer_file)
+        # reach the terminal; a parse failure echoing checkpoint bytes
+        # collapses to the fixed code.
+        print(f"diff-backends: {_loader_failure_code(exc)}", file=sys.stderr)
         return 1
     try:
         prompt_ids = tuple(

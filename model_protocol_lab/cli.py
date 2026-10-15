@@ -104,7 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
         "Each candidate is measured with its own boundary; the default "
         "--boundary-ids applies to candidates without an entry. Names must "
         "match the evaluated candidates (see `catalog`, plus /toggle-bos, "
-        "/no-bos, /prefix-newline, /prefix-trim with --mutate).",
+        "/no-bos, /prefix-newline, /prefix-trim with --mutate, and "
+        "kolibri/thinking-off).",
     )
     run.add_argument("--max-new-tokens", type=int, default=64)
     run.add_argument("--max-context", type=int, default=2048)
@@ -128,6 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Truncation depths for --sensitivity-sweep (1-8)",
+    )
+    run.add_argument(
+        "--logprob-diagnostic",
+        action="store_true",
+        help="Teacher-force each candidate's expected answer after search "
+        "(one forward pass per candidate x fixture) and report "
+        "per-candidate log-likelihoods; diagnostic only, never changes the "
+        "selection rule",
     )
     fixtures_cmd = sub.add_parser(
         "fixtures",
@@ -653,6 +662,25 @@ def main(argv=None) -> int:
                         "available": False,
                         "detail": "frontier_unavailable",
                     }
+                # Teacher-forced log-likelihood diagnostic (opt-in: one extra
+                # forward pass per candidate x fixture). Scores each
+                # candidate's expected answer against the recorded search
+                # prompts; diagnostic only, never changes the selection rule.
+                if args.logprob_diagnostic:
+                    from .experiments import logprob_diagnostic
+
+                    try:
+                        result["logprob_diagnostic"] = logprob_diagnostic(
+                            backend, result, split.search
+                        )
+                    except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                        result["logprob_diagnostic"] = {
+                            "available": False,
+                            "detail": "diagnostic_failed",
+                            "method": "",
+                            "thresholds": {},
+                            "candidates": [],
+                        }
                 if args.sensitivity_sweep:
                     from .experiments import prompt_sensitivity_sweep
 

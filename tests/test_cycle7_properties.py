@@ -6,17 +6,17 @@ Hypothesis properties over ``model_protocol_lab.diffbackends`` --
 
 - verdict consistency: ``verdict == "agree"`` iff ``divergences == []``;
 - divergence well-formedness: every divergence dict carries a class
-  from the 5-class vocabulary, a stop_text from the deduped stop texts,
+  from the 8-class vocabulary, a stop_text from the deduped stop texts,
   and a non-empty detail string; section-builder findings additionally
   pin ``severity`` to the ``DIVERGENCE_SEVERITY`` label for the class;
-- severity totality: ``DIVERGENCE_SEVERITY`` keys are exactly the 5
+- severity totality: ``DIVERGENCE_SEVERITY`` keys are exactly the 8
   divergence classes;
 - section aggregation invariants: section ``verdict == "agree"`` iff
   every per-fixture verdict is ``"agree"``, matrix counts are
   non-negative ints, and ``pairs_verdict`` matches the documented
   one-line summary shape;
-- id-length bound: the documented 131072 cap is pinned (over-long
-  input rejected with the fixed ``output_ids_too_long`` code);
+- id-length bound: the documented output cap (``MAX_OUTPUT_IDS``) is pinned
+  (over-long input rejected with the fixed ``output_ids_too_long`` code);
 - empty input: empty ``output_ids`` never crash and yield a valid
   verdict.
 
@@ -33,6 +33,7 @@ from hypothesis import strategies as st
 
 from model_protocol_lab.diffbackends import (
     DIVERGENCE_SEVERITY,
+    MAX_OUTPUT_IDS,
     DivergenceClass,
     _checked_ids,
     diff_backends,
@@ -48,7 +49,7 @@ FUZZ = settings(
     suppress_health_check=[HealthCheck.differing_executors],
 )
 
-#: The 5-class divergence vocabulary, pinned from the Literal.
+#: The 8-class divergence vocabulary, pinned from the Literal.
 DIVERGENCE_CLASSES = frozenset(get_args(DivergenceClass))
 
 #: Valid verdicts produced by the classifier and the section builder.
@@ -149,7 +150,7 @@ class DivergencePropertyTests(unittest.TestCase):
     ) -> None:
         """Every divergence dict is well-formed.
 
-        class in the 5-class vocabulary, stop_text in the deduped stop
+        class in the 8-class vocabulary, stop_text in the deduped stop
         texts, detail a non-empty str.
         """
         result = self._classify(output_ids=output_ids, stop_texts=stop_texts, min_tokens=min_tokens)
@@ -163,9 +164,9 @@ class DivergencePropertyTests(unittest.TestCase):
     # -- severity totality ---------------------------------------------
 
     def test_severity_totality(self) -> None:
-        """DIVERGENCE_SEVERITY keys are exactly the 5 divergence classes."""
+        """DIVERGENCE_SEVERITY keys are exactly the 8 divergence classes."""
         self.assertEqual(set(DIVERGENCE_SEVERITY), DIVERGENCE_CLASSES)
-        self.assertEqual(len(DIVERGENCE_SEVERITY), 5)
+        self.assertEqual(len(DIVERGENCE_SEVERITY), 8)
 
     # -- section aggregation invariants --------------------------------
 
@@ -217,7 +218,7 @@ class DivergencePropertyTests(unittest.TestCase):
                 self.assertGreaterEqual(count, 0)
         self.assertRegex(
             section["pairs_verdict"],
-            r"HF vs vLLM stop semantics: \d+/\d+ agree; \d+ divergences?",
+            r"HF vs vLLM vs SGLang stop semantics: \d+/\d+ agree; \d+ divergences?",
         )
         for entry in per_fixture:
             self.assertIn(entry["verdict"], VERDICTS)
@@ -233,17 +234,18 @@ class DivergencePropertyTests(unittest.TestCase):
     # -- id-length bound -------------------------------------------------
 
     def test_id_length_bound(self) -> None:
-        """The documented 131072 cap: over-long input is rejected.
+        """The documented output cap: over-long input is rejected.
 
         The tuple is constructed directly (cheap); the rejection carries
         the fixed ``output_ids_too_long`` code, and the cap itself still
-        passes the validator.
+        passes the validator. (The old 131072 cap was quadratic-DoS sized;
+        see ``MAX_OUTPUT_IDS``.)
         """
         with self.assertRaises(ValueError) as ctx:
-            self._classify(output_ids=tuple([1] * 131073))
+            self._classify(output_ids=tuple([1] * (MAX_OUTPUT_IDS + 1)))
         self.assertEqual(str(ctx.exception), "output_ids_too_long")
-        at_cap = tuple([1] * 131072)
-        self.assertEqual(_checked_ids(at_cap, "output_ids"), at_cap)
+        at_cap = tuple([1] * MAX_OUTPUT_IDS)
+        self.assertEqual(_checked_ids(at_cap, "output_ids", cap=MAX_OUTPUT_IDS), at_cap)
 
     # -- empty input -----------------------------------------------------
 

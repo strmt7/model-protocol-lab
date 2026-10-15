@@ -593,14 +593,18 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
     class_order = (
         "KEPT_VS_STRIPPED",
         "EOS_PRECEDENCE",
+        "STR_OVER_EOS_PRECEDENCE",
+        "MULTI_STOP_SELECTION",
         "FIRING_STEP_DIFFERS",
         "MIN_TOKENS_GATED",
+        "NO_MIN_TOKENS_GATE",
         "HARNESS_NORMALIZATION_RELIED",
     )
     semantic_order = (
         ("hf_stop_string", "HF stop string"),
         ("vllm_holdback_strip", "vLLM strip"),
         ("vllm_holdback_keep", "vLLM keep"),
+        ("sglang_stop", "SGLang stop"),
         ("eos_appended", "EOS-appended"),
     )
     severity_badge = {"high": "fail", "medium": "neutral", "low": "neutral"}
@@ -705,7 +709,8 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
     return (
         '<section id="backend-divergence"><h2>Backend divergence</h2>'
         "<p>Differential test of the emulated backend stop semantics "
-        "(HF stop-string, vLLM detokenizer strip/keep, EOS-appended) over "
+        "(HF stop-string, vLLM detokenizer strip/keep, SGLang stop, "
+        "EOS-appended) over "
         "the frozen winner's recorded token sequences -- the same "
         "post-hoc truncation measurement the stop-behavior matrix uses. "
         + verdict_badge
@@ -774,6 +779,182 @@ def _sweep_section(result: dict[str, Any]) -> str:
         + escape(str(sweep.get("flips_at", "?")))
         + ".</p>"
         + table
+        + "</section>"
+    )
+
+
+def _logprob_num_cell(value: Any) -> str:
+    """One sortable numeric table cell: 2-decimal logprob or an em dash."""
+    if type(value) is float:
+        return (
+            '<td data-sort="' + escape(_sort_key(value)) + '">' + escape(f"{value:.2f}") + "</td>"
+        )
+    return '<td data-sort="">' + escape("\u2014") + "</td>"
+
+
+def _logprob_fixture_details(candidate: dict[str, Any]) -> str:
+    """Per-fixture score table for one candidate, inside a <details>."""
+    name = candidate.get("name")
+    scores = candidate.get("fixture_scores")
+    if type(scores) is not list or not scores:
+        return ""
+    rows = []
+    for score in scores:
+        if type(score) is not dict:
+            continue
+        native = score.get("native_pass")
+        glyph = (
+            '<span class="glyph-ok" title="pass">\u2713</span>'
+            if native is True
+            else '<span class="glyph-bad" title="fail">\u2717</span>'
+            if native is False
+            else '<span class="glyph-na" title="unknown">\u2013</span>'
+        )
+        status = score.get("status")
+        reason = score.get("reason")
+        status_text = str(status) if type(status) is str else "?"
+        if type(reason) is str and reason:
+            # Reason codes are the engine's fixed vocabulary; escaped anyway.
+            status_text += " (" + reason + ")"
+        rows.append(
+            "<tr><td>"
+            + escape(str(score.get("fixture")))
+            + "</td><td>"
+            + glyph
+            + "</td><td>"
+            + escape(status_text)
+            + "</td>"
+            + _logprob_num_cell(score.get("mean_logprob"))
+            + "</tr>"
+        )
+    return (
+        "<details><summary>Per-fixture scores: "
+        + escape(str(name))
+        + "</summary>"
+        + '<div class="table-wrap"><table>'
+        "<caption>Teacher-forced score of the expected answer per fixture; "
+        "mean is logprob per scored token in nats.</caption>"
+        "<thead><tr><th>Fixture</th><th>Native pass</th>"
+        "<th>Score status</th><th>Mean / token</th></tr></thead>"
+        "<tbody>" + "".join(rows) + "</tbody></table></div></details>"
+    )
+
+
+def _logprob_section(result: dict[str, Any]) -> str:
+    """Teacher-forced log-likelihood diagnostic section (§9.3-§9.5).
+
+    Renders ``result["logprob_diagnostic"]`` (built by
+    ``experiments.logprob_diagnostic`` when ``run --logprob-diagnostic`` is
+    set): per-candidate total/mean logprob over the expected answers, one
+    plain-language reading per candidate separating "weights don't know"
+    from "greedy derailed", and per-fixture scores in <details>. Returns ""
+    when the key is missing, so runs without the flag render exactly as
+    before (the sample-report golden test). Every model/fixture-derived
+    string is escaped; numbers, statuses and reason codes are fixed-shape.
+    Unavailable scores render as an explicit "unavailable" note -- never a
+    guess.
+    """
+    diag = result.get("logprob_diagnostic")
+    if type(diag) is not dict:
+        return ""
+    thresholds = diag.get("thresholds")
+    band_note = ""
+    if type(thresholds) is dict:
+        hi = thresholds.get("derailed_mean_logprob_at_least")
+        lo = thresholds.get("unknown_mean_logprob_below")
+        if type(hi) in (int, float) and type(lo) in (int, float):
+            band_note = (
+                f" Declared bands: mean \u2265 {hi} nats/token reads as "
+                f"greedy derailment, mean < {lo} as missing knowledge; "
+                "between the bands the diagnostic withholds judgment."
+            )
+    intro = (
+        "<p>After search, each candidate's <em>expected answer</em> was "
+        "teacher-forced through the checkpoint -- one forward pass per "
+        "candidate \u00d7 fixture over the recorded prompt plus the encoded "
+        "expected answer; prompt positions are masked and answer tokens are "
+        "gathered with the causal shift. Diagnostic only: it never changes "
+        "the selection rule. Totals are summed log-probabilities in nats; "
+        "the mean is per scored token." + band_note + "</p>"
+    )
+    candidates = diag.get("candidates")
+    rows: list[str] = []
+    readings: list[str] = []
+    details: list[str] = []
+    if type(candidates) is list:
+        for candidate in candidates:
+            if type(candidate) is not dict:
+                continue
+            name = candidate.get("name")
+            aggregate = candidate.get("aggregate")
+            if type(aggregate) is not dict:
+                aggregate = {}
+            interpretation = candidate.get("interpretation")
+            if type(interpretation) is not dict:
+                interpretation = {}
+            scores = candidate.get("fixture_scores")
+            scored_total = len(scores) if type(scores) is list else 0
+            passes = aggregate.get("native_passes")
+            pass_text = f"{passes}/{scored_total}" if type(passes) is int else "?"
+            tokens = aggregate.get("scored_token_count")
+            rows.append(
+                '<tr><th scope="row" data-sort="'
+                + escape(str(name))
+                + '">'
+                + escape(str(name))
+                + '</th><td data-sort="'
+                + escape(_sort_key(passes))
+                + '">'
+                + escape(pass_text)
+                + "</td>"
+                + _logprob_num_cell(aggregate.get("total_logprob"))
+                + _logprob_num_cell(aggregate.get("mean_logprob"))
+                + '<td data-sort="'
+                + escape(_sort_key(tokens))
+                + '">'
+                + escape(str(tokens) if type(tokens) is int else "?")
+                + "</td><td>"
+                + escape(str(interpretation.get("kind", "?")))
+                + "</td></tr>"
+            )
+            reading = interpretation.get("text")
+            readings.append(
+                "<p><strong>"
+                + escape(str(name))
+                + ":</strong> "
+                + escape(str(reading) if type(reading) is str else "?")
+                + "</p>"
+            )
+            details.append(_logprob_fixture_details(candidate))
+    if diag.get("available") is True and rows:
+        body = (
+            '<div class="table-wrap"><table class="sortable">'
+            "<caption>Per-candidate teacher-forced log-likelihood of the "
+            "expected answers: summed total in nats, mean per scored token, "
+            "and the plain-language reading.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Search pass</th><th scope="col">Total logprob</th>'
+            '<th scope="col">Mean / token</th><th scope="col">Scored tokens</th>'
+            '<th scope="col">Reading</th>'
+            "</tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table></div>"
+            + "".join(readings)
+            + "".join(details)
+        )
+    else:
+        detail = diag.get("detail")
+        detail_text = detail if type(detail) is str and detail else "no reason recorded"
+        body = (
+            "<p>Log-likelihood diagnostic unavailable: "
+            + escape(detail_text)
+            + ". The alignment check or the forward pass refused every "
+            "score; nothing was guessed.</p>"
+        )
+    return (
+        '<section id="logprob-diagnostic"><h2>Log-likelihood diagnostic</h2>'
+        + intro
+        + body
         + "</section>"
     )
 
@@ -1644,6 +1825,7 @@ def render_html(result: dict[str, Any]) -> str:
     divergence_html = _backend_divergence_section(result)
     frontier_html = _frontier_section(result)
     sweep_html = _sweep_section(result)
+    logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
     toc = _toc(
         [
@@ -1657,6 +1839,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("backend-divergence", "Backend divergence", divergence_html),
             ("token-budget-frontier", "Token-budget frontier", frontier_html),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
+            ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
         ]
     )
@@ -1693,6 +1876,7 @@ def render_html(result: dict[str, Any]) -> str:
         + divergence_html
         + frontier_html
         + sweep_html
+        + logprob_html
         + held_out_html
         + "<footer>"
         "<p>This report provides no confidence interval, universal "

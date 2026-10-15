@@ -61,6 +61,8 @@ class ModuleEntryTests(unittest.TestCase):
                 "glm53",
                 "kimi2",
                 "kimi3",
+                "kolibri",
+                "lfm25",
             },
         )
 
