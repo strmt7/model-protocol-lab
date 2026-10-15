@@ -2853,3 +2853,16 @@ committed examples/sample-report. Sensitivity: 3/3 reintroduced-leak
 mutants caught on hermetic /tmp copies (stripped _strip_raw_diagnostics,
 HTML stop_text render, _public_view keeping observations). README test
 count updated to 3338.
+
+## 2026-10-15 (cycle 44: VALIDATION.md accuracy audit)
+
+Accuracy audit of VALIDATION.md (tests/test_cycle44_validation_audit.py,
+36 tests): refreshed the stale top-section figures (cycles 10-13 ->
+cycles 10-44): test count 1001 -> 3374 (+43319 subtests), ruff format
+66 -> 101 files, bandit "1 B105 false positive" -> "no issues
+identified" (targeted nosec suppressions landed), families 23 -> 27,
+red-team follow-ups "8 fixed" -> "7 fixed + 1 documented-only". The
+cycle-1 FAQ line (12 Q&As) is an archival claim about the creation
+state, left as-is. Environment, CLI surface, CI YAML, CITATION.cff,
+USAGE.md technical sections, and the "Not established" section all
+verified accurate. README test count updated to 3374.
