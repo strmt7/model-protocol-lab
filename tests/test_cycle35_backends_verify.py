@@ -689,14 +689,26 @@ class TestReadJson(AssetHelpers):
 
     def test_oversized_rejected(self):
         target = self.tmp / "big.json"
+        # Sparse file: same size on disk-metadata and on read (holes read as
+        # zeros), but consumes ~no blocks. The rejection depends only on the
+        # byte count, so this exercises the identical code path while staying
+        # safe on small tmpfs mounts (a full 128 MiB write hit ENOSPC).
         with target.open("wb") as handle:
-            handle.write(b"\x00" * (128 * 1024 * 1024 + 1))
+            handle.seek(128 * 1024 * 1024)
+            handle.write(b"\x00")
+        self.assertEqual(target.stat().st_size, 128 * 1024 * 1024 + 1)
         with self.assertRaises(ValueError) as ctx:
             _read_json(target)
         self.assertEqual(str(ctx.exception), "oversized_asset_json")
 
     def test_exactly_at_cap_parses(self):
         # The bound is strict `>`: exactly 128 MiB is accepted.
+        # This needs 128 MiB of real bytes (valid JSON); skip honestly when
+        # the scratch filesystem cannot hold it instead of failing with
+        # ENOSPC, which says nothing about the implementation.
+        free = shutil.disk_usage(self.tmp).free
+        if free < 256 * 1024 * 1024:
+            self.skipTest(f"needs 256 MiB scratch space, have {free // (1024 * 1024)} MiB")
         target = self.tmp / "edge.json"
         with target.open("wb") as handle:
             handle.write(b'{"a":"')

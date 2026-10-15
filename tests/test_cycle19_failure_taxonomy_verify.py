@@ -35,6 +35,7 @@ silent, because the task requires the input contract verified from the code):
 
 import copy
 import importlib
+import os
 import random
 import shutil
 import sys
@@ -668,7 +669,10 @@ class TaxonomyFuzzTests(unittest.TestCase):
 # prove the differential harness catches each mutation.
 # ---------------------------------------------------------------------------
 
-_MUTANT_ROOT = Path(tempfile.gettempdir()) / "mpl_cycle19_taxonomy_mutants"
+# PID-scoped: two pytest processes staging mutants concurrently must not share
+# a directory (a fixed name raced: one process's rmtree deleted the other's
+# in-use package copies -> import failures).
+_MUTANT_ROOT = Path(tempfile.gettempdir()) / f"mpl_cycle19_taxonomy_mutants_{os.getpid()}"
 _MUTANT_PATH_READY = False
 
 
@@ -743,6 +747,11 @@ class SensitivityTests(unittest.TestCase):
         cls.mut_swap = _build_mutant("mut_swap_predicates", _SWAP_PREDICATES)
         cls.mut_drop = _build_mutant("mut_drop_class", _DROP_CLASS)
         cls.mut_heldout = _build_mutant("mut_heldout_per_obs", _HELDOUT_PER_OBS)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Do not accumulate package copies in /tmp across runs.
+        shutil.rmtree(_MUTANT_ROOT, ignore_errors=True)
 
     def test_real_implementation_has_zero_mismatches(self):
         self.assertEqual(_count_classify_mismatches(real), 0)

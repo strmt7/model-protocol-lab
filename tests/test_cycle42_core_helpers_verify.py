@@ -26,7 +26,7 @@ behavior. The suite then:
   ``repeat_bos``-collapse in ``local_repairs``' dedup key, the
   ``ValueError("template_diff_too_fragmented")`` deadline degradation);
 * runs mutation-style sensitivity controls on COPIES of ``core.py`` in
-  ``/tmp/cycle42_mutants`` (the repo is never mutated): each mutant is loaded
+  ``/tmp/cycle42_mutants_<pid>`` (the repo is never mutated): each mutant is loaded
   standalone via importlib and the differential battery must report >= 1
   divergence against the real implementation;
 * red-teams hidden assumptions (lone surrogates, ``BaseException`` vs
@@ -92,7 +92,7 @@ D7. The ``template_tokenizer_compatibility`` docstring's
 MUTATION CONTROLS
 -----------------
 16 mutants of ``core.py`` (M1..M16, see ``MUTANTS``), each applied to a fresh
-copy in ``/tmp/cycle42_mutants`` and loaded standalone. A mutant is CAUGHT
+copy in ``/tmp/cycle42_mutants_<pid>`` and loaded standalone. A mutant is CAUGHT
 when the differential battery reports >= 1 divergence against the real
 implementation. All 16 are caught.
 """
@@ -101,7 +101,9 @@ from __future__ import annotations
 
 import difflib
 import importlib.util
+import os
 import random
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -110,7 +112,9 @@ from model_protocol_lab import core as real_core
 from model_protocol_lab.core import Format
 
 CORE_SRC = Path(real_core.__file__).resolve()
-MUTANT_DIR = Path("/tmp/cycle42_mutants")  # noqa: S108 -- mutant scratch copies, never the repo
+# PID-scoped: two pytest processes staging mutants concurrently must not share
+# a directory (fixed names caused FileExistsError / half-written imports).
+MUTANT_DIR = Path(f"/tmp/cycle42_mutants_{os.getpid()}")  # noqa: S108 -- mutant scratch copies, never the repo
 
 
 # ---------------------------------------------------------------------------
@@ -1351,6 +1355,7 @@ def _battery_divergences(mutant_module) -> list[str]:
 
 class TestMutantSensitivity(unittest.TestCase):
     def test_all_mutants_caught(self):
+        self.addCleanup(shutil.rmtree, MUTANT_DIR, True)
         caught: list[str] = []
         for name, old, new, count in MUTANTS:
             with self.subTest(mutant=name):

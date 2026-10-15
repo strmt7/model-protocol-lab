@@ -36,6 +36,7 @@ Grounding notes (read before extending this file):
 import contextlib
 import dataclasses
 import importlib.util
+import os
 import pathlib
 import random
 import sys
@@ -1567,9 +1568,12 @@ def load_mutant(t: unittest.TestCase, name: str, old: str, new: str):
     src = pathlib.Path(core.__file__).read_text(encoding="utf-8")
     count = src.count(old)
     t.assertEqual(count, 1, f"mutation anchor {name!r} found {count}x, want exactly 1")
-    path = pathlib.Path(tempfile.gettempdir()) / f"cycle20_mut_{name}.py"
+    # PID-scoped: two pytest processes staging mutants concurrently must not
+    # share a file (a fixed name raced -> half-written imports).
+    path = pathlib.Path(tempfile.gettempdir()) / f"cycle20_mut_{os.getpid()}_{name}.py"
     path.write_text(src.replace(old, new), encoding="utf-8")
-    spec = importlib.util.spec_from_file_location(f"cycle20_mut_{name}", path)
+    t.addCleanup(path.unlink, missing_ok=True)
+    spec = importlib.util.spec_from_file_location(f"cycle20_mut_{os.getpid()}_{name}", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
