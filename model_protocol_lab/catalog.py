@@ -782,7 +782,7 @@ _NANBEIGE42_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
-    if family not in CATALOG:
+    if type(family) is not str or family not in CATALOG:
         raise ValueError("Unknown format family")
     base = CATALOG[family]
     if not mutate:
