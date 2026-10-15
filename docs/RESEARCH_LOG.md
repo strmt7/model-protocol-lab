@@ -2709,3 +2709,20 @@ sensitivity: 15/15 mutants caught on hermetic /tmp copies. One docstring
 fix: `_stop_cell` now documents that unavailable outcomes omit the
 `stop_text` key entirely (was: claimed None). README test count updated
 to 2613.
+
+## 2026-10-15 (cycle 35: backends.py verification)
+
+Verification of `model_protocol_lab/backends.py` (tests/
+test_cycle35_backends_verify.py, 184 tests): NO functional bug found.
+Covers the Backend protocol contract (seeded fake), asset loading
+(traversal/symlink rejection, 128 MiB boundary, sharded layouts),
+LocalHFBackend fail-closed init paths, TruncatedPromptBackend,
+StopOutcome, byte machinery, and all four stop ports vs independent
+oracles (seeded fuzz). Mutation sensitivity: 20/20 mutants caught on
+hermetic /tmp copies. 7 doc-vs-code discrepancies (D1-D7) pinned in the
+test-file docstring; deliberately no source changes: D1
+(`_directory(Path(""))` resolving to cwd) is a pathlib normalization
+quirk -- `Path("")` IS `Path(".")`, indistinguishable from an explicit
+cwd, and rejecting it would break the legitimate case; D2-D7 are
+behavioral nuances, not doc contradictions. README test count updated
+to 2797.
