@@ -2786,3 +2786,20 @@ FIX in catalog.py: `candidates()` now type-gates
 documented ValueError("Unknown format family") holds for unhashable and
 non-str keys instead of leaking TypeError. README test count updated to
 3106.
+
+## 2026-10-15 (cycle 40: doctor.py examine_model internals verification)
+
+Behavioral verification of `doctor.py`'s `examine_model` internals
+(excluding the cycle-25/26-verified asset validation and weight_headers
+checks; tests/test_cycle40_doctor_verify.py, 101 tests + 171 subtests):
+NO bug found. Covers report assembly, verdict logic (failed iff any
+check failed), per-asset checks (config, tokenizer_file dropout
+strictness, tokenizer_deep fail-closed, added/special token maps, asset
+manifest), portability machinery (110-row matrix, bos_skipped flags,
+asymmetry warning), error paths (examine_dataset fixed vocabulary,
+template_conformance validation, doctor() key assembly). Mutation
+sensitivity: 10/10 mutants caught on hermetic /tmp copies. Doc notes
+(no bugs): _portability_check "Never raises" holds even for non-path
+inputs; template_conformance no-raise starts after arg validation;
+context_window bool exclusion; unreachable empty-inventory branch. README
+test count updated to 3207.
