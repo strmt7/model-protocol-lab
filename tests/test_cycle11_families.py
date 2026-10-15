@@ -506,13 +506,13 @@ class ReadmeNewFamiliesTests(unittest.TestCase):
 
     def test_readme_count_claim_matches_catalog(self) -> None:
         # Belt-and-braces alongside the cycle-10 pin: the README's
-        # "N-family catalog" claims must track len(CATALOG) == 23.
+        # "N-family catalog" claims must track len(CATALOG) == 24.
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         matches = re.findall(r"(\d+)-family catalog", text)
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 23)
+        self.assertEqual(len(CATALOG), 24)
 
 
 if __name__ == "__main__":

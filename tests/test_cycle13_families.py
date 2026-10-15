@@ -211,10 +211,10 @@ class LingDiffTests(unittest.TestCase):
     def test_ling_differs_from_every_other_family(self) -> None:
         # ling's frames share no opener/terminator literals with any other
         # catalog family; on the same messages the full render must be
-        # byte-different from all 22 other families' renders.
+        # byte-different from all 23 other families' renders.
         mine = CATALOG["ling"].render(_MESSAGES)
         others = [name for name in CATALOG if name != "ling"]
-        self.assertEqual(len(others), 22)
+        self.assertEqual(len(others), 23)
         collisions = [name for name in others if CATALOG[name].render(_MESSAGES) == mine]
         self.assertEqual(collisions, [])
 
@@ -239,14 +239,14 @@ class ReadmeLingTests(unittest.TestCase):
     def test_readme_names_ling(self) -> None:
         # The README's family list must name the new family (the N-family
         # count pin lives in tests/test_cycle10_families.py and
-        # tests/test_cycle11_families.py and enforces 22 -> 23).
+        # tests/test_cycle11_families.py and enforces 23 -> 24).
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("Ling", text)
         matches = re.findall(r"(\d+)-family catalog", text)
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 23)
+        self.assertEqual(len(CATALOG), 24)
 
 
 if __name__ == "__main__":
