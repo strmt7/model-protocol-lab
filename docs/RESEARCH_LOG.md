@@ -2943,3 +2943,24 @@ Mutation gate 3/3 caught on a /tmp package copy (_strip_raw_diagnostics
 bypass, _cmd_save token-ID leak, diff_reports answer_probe leak);
 repo source sha256-verified untouched. README test count updated
 to 3460.
+
+## 2026-10-15 (cycle 49: logprob scoring numerics differential)
+
+Numerical differential of score_target_logprobs + teacher-forced
+logprob diagnostic against an independent pure-Python math.log oracle
+(tests/test_cycle49_logprob_numerics_audit.py, 17 tests): 300 seeded
+fuzz configs (vocab 2-512, prompt 1-8, targets 0-64, fp32/fp64, logit
+scales 1/5/30, spiky rows with dynamic range 60) plus directed and
+end-to-end cases -- 6145 field comparisons with MAX abs/rel divergence
+exactly 0.0: the engine's float64 path agrees with the oracle
+bit-for-bit after float32 rounding, including extreme +-30 logits.
+Pinned: tolerances |diff| <= max(2e-5, 4*ulp32) and rel <= 1e-6,
+exact float32-representability, no NaN/inf, fsum(per_token) within
+(n+1) ulp32 of the reported total, causal-shift spike test. No real
+numerical bugs. Mutation gate 6/6 caught on /tmp copies (mean-as-total,
+off-by-one gather, log2-vs-ln normalizer, drop-last-target, skip
+float32 rounding, mean denominator n+1); repo source sha256-verified
+untouched. Not in scope: _aggregate_fixture_scores (plain summation),
+real-HF-backend forward numerics (needs a checkpoint), diagnostic
+interpretation thresholds (policy, not numerics). README test count
+updated to 3477.
