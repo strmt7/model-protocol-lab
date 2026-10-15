@@ -362,7 +362,10 @@ def diff_backends(
     exactly as the lab's stop matrix does). All inputs are strictly
     validated; ValueError with a fixed code on any violation. Cells whose
     emulation reports ``available=False`` are recorded but excluded from
-    the divergence checks.
+    the divergence checks. Per-stop composition is deliberate: upstream's
+    joint multi-stop criteria bounds the match walk by the longest stop,
+    an implementation artifact the lab does not reproduce (see
+    ``emulate_hf_stop_string``).
     """
     prompt_ids = _checked_ids(prompt_ids, "prompt_ids", cap=MAX_PROMPT_IDS)
     output_ids = _checked_ids(output_ids, "output_ids", cap=MAX_OUTPUT_IDS)

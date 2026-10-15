@@ -2964,3 +2964,34 @@ untouched. Not in scope: _aggregate_fixture_scores (plain summation),
 real-HF-backend forward numerics (needs a checkpoint), diagnostic
 interpretation thresholds (policy, not numerics). README test count
 updated to 3477.
+
+## 2026-10-15 (cycle 50: adversarial HF stop-emulation differential)
+
+Adversarial differential of emulate_hf_stop_string vs the real
+transformers 5.19.0 StopStringCriteria
+(tests/test_cycle50_stop_emulation_adversarial.py, 58 tests + 493
+subtests): real tokenizers-built PreTrainedTokenizerFast on all three
+upstream matching modes (ByteLevel, ByteFallback, classic/Metaspace),
+427 seeded adversarial cases + ~50 directed edge cases. 4 REAL
+divergences found, all documented with reproducers; coordinator
+decision: DOCUMENT, do not change behavior --
+(1) empty stop: lab invalid_emulation_input (unreachable by design:
+diff_backends raises invalid_stop_texts; stop_matrix degrades an
+undecodable boundary to an unavailable cell; upstream's fire-at-step-1
+is pathological);
+(2) multi-stop window: lab composes per-stop len(stop) windows
+(deliberate, mirrors the single-stop tensor walk); upstream's joint
+global-window bound is an artifact reachable only with exotic
+empty-string vocab entries;
+(3a) classic path WordPiece: stop "ab" over ["a","b"] false-positives
+here vs true "a b" (disclosed approximation; no catalog family uses
+non-concatenative decoders);
+(3b) upstream fires a step early on its own cleaning artifact (lab
+fires at the true position -- lab is more correct);
+(4) non-contiguous vocab ids: degenerate (real checkpoints are
+0..N-1). Disclosure added to emulate_hf_stop_string's docstring
+("Known divergences") + one sentence in diff_backends on deliberate
+per-stop composition. Tie-break verified: transformers has literally
+no selection code (torch.any); earliest-completing wins by
+construction, same-step ties outcome-identical. Mutation gate 6/6
+caught on /tmp copies. README test count updated to 3535.
