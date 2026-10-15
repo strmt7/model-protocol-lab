@@ -1509,3 +1509,273 @@ Surveyed lm-evaluation-harness, HELM, OpenAI Evals, vLLM bench tooling, promptfo
 4. Cross-checkpoint portability re-measurement — conditional, lower priority (doubles compute; lab is philosophically per-checkpoint).
 Rejected with reasons: model-graded evals (non-deterministic, needs judge model), fuzzy matchers (weakens exact pass criterion), sampling repeats (greedy adapter), DSPy-style prompt optimization (contradicts bounded hypothesis space), throughput benchmarks (orthogonal mission), few-shot dims (content change, not format), text perturbations (fragility diagnostic covers it), decontamination (user-authored fixtures).
 Sources: https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/task_guide.md, https://www.shedge.com/metrics/llm-benchmarks/helm-benchmark/, https://github.com/promptfoo/promptfoo
+
+## Continuous dev — Cycle 10: Kolibri-1 + LFM2.5-24B-A2B catalog entries + deepseek41 re-verification (2026-10-15, VERIFIED)
+
+Catalog 17 -> 19 families: `kolibri` (Aleph-Alpha Kolibri-1, released
+2026-10-03, Apache 2.0) and `lfm25` (LiquidAI LFM2.5-24B-A2B, released
+2026-10-13). 787 -> 883 tests, 2819 -> 2843 subtests, all green; ruff
+check + format clean; mypy clean on catalog.py, cli.py and the new test
+file. Three pre-existing catalog-listing tests (cycle5/6/7) updated to 19
+families; the e2e module-catalog set gained both families; README
+"16-family" claims updated to 19 (new regression test
+`ReadmeFamilyCountTests` pins the README's "N-family catalog" claim to
+len(CATALOG)); `docs/USAGE.md` and the `--boundary-ids` help text now name
+the `kolibri/thinking-off` variant.
+
+**Kolibri-1 research** (https://huggingface.co/Aleph-Alpha/Kolibri-1):
+- Evidence tier 1: the official tokenizer_config.json chat_template,
+  byte-verified by an independent fork.
+- User/assistant turns are standard ChatML
+  (`<|im_start|>user\n{content}<|im_end|>\n`, no BOS) -- so the text-only
+  no-system core renders byte-identical to chatml (pinned in
+  tests/test_cycle10_families.py, including the mutate-set equality modulo
+  the thinking-off branch).
+- The real template ALWAYS emits a system block, even with no system
+  message: `<|im_start|>system\n# Reasoning effort\n\n<SENTENCE>[+ user
+  system content]<|im_end|>\n`. SENTENCE is effort-dependent; the lab has
+  no effort knob, so the catalog documents the DEFAULT-effort (unset ->
+  "high") behavior and pins ONLY the byte-verified sentence prefix
+  ("Reasoning effort is set to high. Think carefully through...") -- the
+  wording beyond it is deliberately not asserted. The system role is not
+  modeled in Format (same convention as mistral_large's [SYSTEM_PROMPT]
+  frame and gemma4's system turn).
+- Thinking ON (default): the generation prompt ends at
+  `<|im_start|>assistant\n` (the model opens `<think>` itself). Thinking
+  OFF: the generation prompt prefills an empty think block
+  (`<|im_start|>assistant\n<think>\n\n</think>\n\n`). Design decision: the
+  thinking-off branch rides the mutate path as "kolibri/thinking-off"
+  (candidates()), not a second catalog entry -- it is a generation-prompt
+  branch of the same template, and the mutate path is the lab's existing
+  mechanism for generation-prompt variants (BOS/prefix local repairs). No
+  other family gains a branch (pinned by a subTest loop). EOS is
+  `<|im_end|>` (a generation stop, not a Format field).
+
+**LFM2.5-24B-A2B research** (https://huggingface.co/LiquidAI/LFM2.5-24B-A2B):
+- Evidence tier 2: the official model card plus the HF blog rendered
+  example.
+- Rendered: `<|startoftext|><|im_start|>system\n{system}<|im_end|>\n`
+  `<|im_start|>user\n{content}<|im_end|>\n<|im_start|>assistant\n<think>\n`
+  -- `<|startoftext|>` BOS, ChatML-like frames, and -- unlike LFM2 -- the
+  24B variant always thinks (generation prompt appends `<think>\n`).
+- Documented caveats (pinned as test constants, never asserted in code):
+  whether `<|startoftext|>` comes from the bos_token field or a template
+  literal is UNVERIFIED (byte-identical either way); whether the system
+  block is auto-injected or merely illustrative in the card example is
+  UNVERIFIED (and the system role is unmodelable regardless).
+
+**DeepSeek V4.1 system-framing re-verification** (CONFIRMED -- catalog
+claim stands, no code change):
+- The catalog claimed V4.1 frames system messages as `<｜System｜>{content}`
+  (fullwidth), unlike V3's raw concatenation; third-party docs of the
+  sibling V4 official encoder suggested system text may render raw.
+- Primary-source re-check 2026-10-15: the official model card
+  (deepseek-ai/DeepSeek-V4.1-Flash, "Prompt Encoding") states the release
+  ships no Jinja chat template and points to the `encoding/encoding.py`
+  reference implementation; a direct quote of that official encoding shows
+  the system block opened with the fullwidth System frame
+  ("<｜System｜>Reasoning Effort: 75 (range 1-100, ...)"); the official
+  deepseek-ai/deepseek-recipe repo defines a dedicated V4.1 System role
+  token (id 128799) -- no such frame exists for V4. Sources:
+  https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash,
+  https://github.com/deepseek-ai/deepseek-recipe,
+  https://github.com/corvous/hi-blue/blob/HEAD/docs/prompting/deepseek-v4-1-flash-guide.md
+- Contrast (sibling V4, NOT V4.1): the official V4 encoder
+  (encoding_dsv4.py) renders system RAW --
+  `<｜begin▁of▁sentence｜>{system}<｜User｜>{question}<｜Assistant｜>...`
+  ("System content is bare text with no wrapper").
+  Source: https://github.com/waybarrios/vllm-mlx/pull/676
+- Conclusion: the V3/V4-vs-V4.1 difference the catalog documents is real --
+  V4.1 added the frame, V4 never had it. Regression test added
+  (tests/test_cycle10_families.py, Deepseek41SystemFramingTests): pins the
+  documented frame constant against the catalog's escape-composed frame,
+  pins the render carries no system frame and no effort preamble (the
+  latter deliberately omitted per the catalog comment), and pins the
+  V4.1-vs-V3 modeled delta is exactly the chat-mode `<｜Assistant｜><think>`
+  open suffix.
+
+**Deferred (out of window, TIER-3 only):** nemotron35, muse_glimmer,
+laguna -- no primary-source template evidence (official
+tokenizer_config.json chat_template or model-card render) was available;
+only third-party/secondary claims. Per the lab's evidence discipline
+(primary sources only; tier-3 claims never become catalog entries), they
+are documented here and deferred, not added.
+
+## Continuous dev — logprob-diagnostic wiring (2026-10-15)
+
+**Built the Cycle 1 STAR PICK's "report wiring planned next":** `run
+--logprob-diagnostic` wires the existing `model_protocol_lab/scoring.py`
+engine into the `run` flow and the HTML report (DEVELOPMENT_PLAN.md
+§9.3–§9.5). Tests-first: `tests/test_cycle10_logprob.py` (23 tests) written
+before the implementation, red→green.
+
+What changed:
+1. `model_protocol_lab/experiments.py`: `logprob_diagnostic(backend,
+   result, fixtures)` — for every search candidate × fixture, teacher-forces
+   the fixture's *expected answer* (`score_target_logprobs` over
+   `prompt_ids + encode(expected)`) after the recorded prompt. Returns
+   per-fixture scores (status/reason/total/mean/token counts/byte length),
+   per-candidate aggregates (§9.4: total, token-weighted mean, scored token
+   count, target byte length), and a plain-language `interpretation`
+   separating "greedy derailed" (mean ≥ −2.0 nats/token on failed fixtures)
+   from "weights don't know" (mean < −5.0); between the bands it withholds
+   judgment. Bands are declared heuristics in the payload's `thresholds`.
+   Alignment refusals surface as `unavailable` with the engine's fixed
+   reason codes -- never raised, never guessed. The input result dict is
+   never mutated; the selection rule is untouched (diagnostic only). NaN/inf
+   degrades aggregates to None (defense in depth; results.json is written
+   with allow_nan=False). Deterministic: no timestamps, fixed ordering.
+2. `model_protocol_lab/cli.py`: opt-in `--logprob-diagnostic` flag on `run`
+   (verified in live `--help`); runs after search inside the
+   diagnostics-must-not-fail-the-run guard, storing
+   `result["logprob_diagnostic"]`.
+3. `model_protocol_lab/reporting.py`: "Log-likelihood diagnostic" HTML
+   section (self-contained, no new CSS/JS): per-candidate total/mean
+   logprob table, one plain-language reading per candidate, per-fixture
+   scores in `<details>`; degrades to an explicit unavailable note; renders
+   nothing when the key is absent, so the byte-identical sample-report
+   golden test still holds. Every model/fixture-derived string escaped
+   (hostile fixture IDs / candidate names pinned by test).
+4. Docs: `docs/USAGE.md` §8.9 + §6 section list; `CHANGELOG.md`
+   [Unreleased]; every `run` flag re-verified against live `--help`
+   (pre-existing gap found: `--seed` is not documented in USAGE.md).
+
+Verification: 23 new tests green; `test_cycle9_scoring.py`,
+`test_sample_report.py` (byte-identical golden) green; ruff check + format
+clean on all touched files; mypy clean on `model_protocol_lab`. Full-suite
+note: concurrent sibling agents are editing `catalog.py` and adding their
+own `test_cycle10_*` files in the same tree -- one transient
+`test_e2e` subprocess failure during the full run traced to a sibling's
+mid-edit catalog state (passes in isolation; not this change), and the
+README test-count pin (`test_readme_test_count_matches_discovered_suite`)
+now fails because the discovered count moved (+23 here, plus sibling
+additions while their suite is not green). Left for the coordinator per the
+Cycle 1 precedent (coordinator-owned pin).
+
+Sources: DEVELOPMENT_PLAN.md §9.3–§9.5 (the design being implemented);
+https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/task_guide.md
+(`loglikelihood` request type — scores a fixed target string by teacher
+forcing, corroborating the probe design);
+https://www.shedge.com/metrics/llm-benchmarks/helm-benchmark/ (HELM adapter
+token-probability measurements). No new external sources needed: the engine
+and backend primitives already existed.
+
+## 2026-10-15 -- Red-team fix round: H1/M1/L1 (diffbackends bounds + loader sanitization)
+
+What changed and why:
+
+1. H1 (quadratic CPU hang): `_checked_ids` in `model_protocol_lab/
+   diffbackends.py` previously capped every token-id sequence at 131072,
+   but `emulate_vllm_holdback`/`emulate_sglang_stop` do one
+   `backend.decode(prefix)` per output step -- O(n^2) total. Measured on
+   the repo's own linear stub (TableBackend-style O(k) decode):
+   0.22 s / 0.49 s / 2.31 s at n = 1000/2000/4000 for one stop, i.e. tens
+   of minutes at the old cap -- reachable via the CLI and via
+   `divergence_section_data` over hostile recorded observations. Fix:
+   split the bound into two named constants. `MAX_OUTPUT_IDS = 4096`
+   guards the quadratic term: at the cap a single stop completes in
+   ~2-3 s on the reference stub, and 4096 is exactly `mpl run
+   --max-new-tokens`' own cap, so the lab can never record a longer
+   generated output (legitimate inputs are never rejected). Prompts keep
+   `MAX_PROMPT_IDS = 131072` (4x the 32768 max context window): prompt
+   tokens are decoded once each (linear cost) and recorded observations
+   legitimately carry long prompts. `_observation_ids` applies the output
+   cap to `output_ids` and the prompt cap to `input_ids`, so over-cap
+   hostile observations are skipped (section omitted), not hung.
+2. M1 (unbounded stop texts): `_checked_stop_texts` had no length/count
+   bound -- a 10 MB stop text would balloon `json.dumps(result)` (verbatim
+   in records + `{stop_text!r}` details) and the list-based dedup was
+   O(m^2). Fix: `MAX_STOP_TEXT_LEN = 1024` chars per stop
+   (`stop_text_too_long`), `MAX_STOP_TEXTS = 16` deduped stops per call
+   (`too_many_stop_texts`). Rationale: a stop string is a needle, not a
+   document (sibling prompt/output text caps are 1 MB); each stop adds
+   five emulated cells, two of them quadratic, so 16 keeps the absolute
+   worst case (~40 s at both caps on the reference stub) advertised and
+   bounded. Dedup is now set-based (linear, order-preserving) and runs
+   before the count check. The `diff-backends` CLI path flows through the
+   same validation (pinned: exit 1 with the fixed code, hostile text not
+   echoed), and the `run` diagnosis second hop
+   (`backend.decode(winner_boundary)` -> `divergence_section_data`) hits
+   the identical check -- a hostile tokenizer's huge decode degrades to
+   "section omitted", pinned by test.
+3. L1 (hostile-checkpoint exception text on the terminal): `debug.py`'s
+   `run_debug` interpolated the loader exception into stderr and only
+   caught `(ValueError, OSError)` (uncaught traceback otherwise);
+   `diff-backends`' ValueError branch claimed a fixed vocabulary but
+   `PreTrainedTokenizerFast` parse failures can echo checkpoint bytes.
+   Fix: `doctor._loader_failure_code` -- an exact-match allowlist over the
+   one genuinely fixed code (`oversized_tokenizer_file`); everything else
+   collapses to `tokenizer_load_failed`. Both CLI paths use it inside a
+   blanket `except Exception` sanitization boundary (cli.py:713-730
+   pattern). The debug REPL's `onecmd` error path now strips
+   terminal-control characters from exception text via the existing
+   `_sanitize_display`.
+
+Verification: 26 new tests in `tests/test_cycle10_security.py` (stub
+backends only, deterministic); existing cap-pinning test in
+`tests/test_cycle7_properties.py` updated to the new constant; ruff
+check + format clean; mypy clean on `model_protocol_lab`. Docs:
+`docs/USAGE.md` §11 gained an "Input bounds" paragraph documenting every
+bound, its rationale, and its fixed code; `CHANGELOG.md` [Unreleased]
+records all three fixes.
+
+## Continuous dev — Cycle 2: SGLang column for `mpl diff-backends` (2026-10-15, VERIFIED)
+
+Implements the Cycle 1 recommendation ("Recommendation (for Cycle 2)"):
+`mpl diff-backends` gains an SGLang column (`sglang_stop`) and three new
+divergence classes, each grounded in the cited source lines:
+
+- `backends.emulate_sglang_stop`: ports `Req._check_str_based_finish`
+  (`schedule_batch.py:1836-1847`) -- the first output step whose decoded
+  text contains the stop string fires -- and
+  `DetokenizerManager.trim_matched_stop` (`detokenizer_manager.py:190-221`),
+  which cuts the returned text at the leftmost stop occurrence by default
+  (`no_stop_trim=False`, `sampling_params.py:153`): stripped like vLLM,
+  unlike HF. Takes deliberately NO `min_tokens` parameter: upstream
+  `min_new_tokens` only clips the length budget (`scheduler.py:2631-2634`);
+  the finish path never consults it.
+- `MULTI_STOP_SELECTION` (high): SGLang's check iterates `stop_strs` in
+  list order (first-listed wins; the code carries `# TODO(lmzheng):
+  handle the case where multiple stop strs are hit`) vs vLLM's
+  earliest-completion rule -- `min(stop_index + len(stop_str))`, ties
+  broken by list order (vLLM PR #49391, pinned by
+  `tests/detokenizer/test_check_stop_strings.py`; Rust parity in PR
+  #50200). Port: the SGLang winner is the fired stop with the smallest
+  firing step, ties by list order (the Cycle 1 caveat: with 1 token/step
+  the earlier-completing stop still fires at its own step); the vLLM
+  winner ports the PR #49391 formula off the strip/keep cells' firing
+  steps and trimmed texts. Re-verified 2026-10-15 from the PR
+  descriptions: #49391 selects "the one whose match completes earliest in
+  the text (`min(stop_index + len(stop_str))`), breaking ties by
+  stop-list order"; #50200 confirms "Python selects the one that
+  completes earliest in the text, ties broken by list order".
+- `NO_MIN_TOKENS_GATE` (medium): the SGLang column on the existing
+  `MIN_TOKENS_GATED` class -- a stop vLLM's `min_tokens` gate blocks
+  still fires under `sglang_stop`.
+- `STR_OVER_EOS_PRECEDENCE` (high): stop string and EOS fire in the same
+  step, so precedence decides the outcome and the engines disagree --
+  SGLang's shipped fix for #28802 gives the stop string the win
+  (`update_finish_state` runs the str-based check before the token-based
+  one, `schedule_batch.py:1913-1950`; corroborated 2026-10-15 by the fix
+  PR "reorders the finish condition checks in `update_finish_state` to
+  ensure that stop strings take precedence over stop/EOS tokens in the
+  same step"), while TGI's documented precedence is length > EOS >
+  stop-sequence (EOS beats the stop string -- the reverse of SGLang).
+
+Deliberate exclusions, as recommended: NO TGI cell -- every TGI stop rule
+is covered by composition of the existing cells (kept sequences = the
+`hf_stop_string` cell; first-listed multi-stop = the `sglang_stop`
+selection rule; no `min_tokens` = the ungated `sglang_stop` path;
+EOS-beats-stop = the documented contrast in `STR_OVER_EOS_PRECEDENCE`);
+SGLang `stop_regex` gets a USAGE.md note only (outside stop-string
+scope).
+
+Verification: 27 new tests in `tests/test_cycle10_sglang.py` (each
+SGLang rule vs vLLM/HF behavior, all three new classes, the no-TGI-cell
+rationale, hostile-string escaping in the report, determinism); existing
+severity/count pins in `tests/test_cycle7_divergence.py` and
+`tests/test_cycle7_properties.py` updated from 5 to 8 classes; the
+`pairs_verdict` one-liner now reads "HF vs vLLM vs SGLang stop
+semantics: …". ruff check + format clean; mypy clean. Docs: `USAGE.md`
+§11 (new column, new classes, flags re-verified against live `--help`,
+no-TGI-cell rationale, `stop_regex` note), `CHANGELOG.md` [Unreleased].

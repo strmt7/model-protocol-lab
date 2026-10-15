@@ -248,7 +248,10 @@ class DebugShell(cmd.Cmd):
             try:
                 stop = self._dispatch(line)
             except Exception as exc:  # noqa: BLE001 -- REPL boundary: every failure becomes "error: ..."
-                print(f"error: {exc}")
+                # Exception text can carry hostile bytes (control
+                # characters from fixture/dataset errors); strip them so
+                # the terminal never sees raw escapes.
+                print(f"error: {_sanitize_display(str(exc))}")
                 stop = False
         text = buffer.getvalue()
         self._transcript.append(f"{echo_prompt}{line}\n")
@@ -730,8 +733,13 @@ def run_debug(args: argparse.Namespace) -> int:
         except ImportError:
             print("debug: --model requires the 'transformers' package", file=sys.stderr)
             return 1
-        except (ValueError, OSError) as exc:
-            print(f"debug: cannot load tokenizer: {exc}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 -- sanitization boundary, never leak loader text
+            # The parse can echo hostile checkpoint bytes (and raise
+            # non-ValueError); only exact-match fixed codes reach the
+            # terminal, everything else collapses to the fixed code.
+            from .doctor import _loader_failure_code
+
+            print(f"debug: {_loader_failure_code(exc)}", file=sys.stderr)
             return 1
     shell = DebugShell(split, dataset_label=str(args.dataset), tokenizer=tokenizer)
     if args.script is not None:

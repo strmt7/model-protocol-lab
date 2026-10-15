@@ -1,6 +1,7 @@
 """Bounded search followed by one frozen held-out evaluation."""
 
 import json
+import math
 from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import asdict
@@ -16,6 +17,7 @@ from .backends import (
     emulate_vllm_holdback,
 )
 from .core import Backend, Fixture, Format, Split, _valid_token_ids, evaluate, first_boundary
+from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 
 FAILURE_MODES = (
     "no-boundary-in-N",
@@ -431,6 +433,341 @@ def budget_frontier(
         "flip_ranges": flip_ranges,
         "budget_robust": not flip_ranges,
     }
+
+
+LOGPROB_DERAILED_MEAN_THRESHOLD = -2.0
+"""Mean-logprob band edge (nats/token) for the log-likelihood diagnostic.
+
+A natively-failed fixture whose expected answer scores at or above this
+mean teacher-forced logprob reads as "greedy derailed": the weights assign
+the expected answer high likelihood, yet greedy generation diverged -- a
+decoding/search problem rather than missing knowledge. A declared
+heuristic, reported in the diagnostic payload's ``thresholds``.
+"""
+
+LOGPROB_UNKNOWN_MEAN_THRESHOLD = -5.0
+"""Mean-logprob band edge (nats/token) for the log-likelihood diagnostic.
+
+A natively-failed fixture whose expected answer scores below this mean
+teacher-forced logprob reads as "weights don't know": even forced, the
+checkpoint assigns the expected answer low likelihood under this
+candidate's framing. Between the two bands the diagnostic withholds
+judgment instead of guessing. A declared heuristic, reported in the
+diagnostic payload's ``thresholds``.
+"""
+
+# Fixed vocabularies for the diagnostic payload: backend/fixture text must
+# never reach them.
+_LOGPROB_NOT_SCORED = "not_scored"
+_LOGPROB_INCOMPLETE = "observation_incomplete"
+_LOGPROB_ENCODE_FAILED = "encode_failed"
+
+
+def _logprob_unavailable(reason: str, prompt_len: int) -> TargetScore:
+    """Build an engine-shaped refusal for caller-side problems (e.g. the
+    expected answer could not be encoded): status ``unavailable`` with a
+    fixed reason, never an exception."""
+    return TargetScore(
+        status="unavailable",
+        reason=reason,
+        per_token_logprobs=(),
+        total_logprob=None,
+        mean_logprob=None,
+        scored_token_count=0,
+        target_byte_length=0,
+        prompt_token_count=prompt_len,
+    )
+
+
+def _score_expected_answer(
+    backend: Backend, prompt_ids: tuple[int, ...], expected: str
+) -> TargetScore:
+    """Teacher-force one fixture's expected answer; never raises on
+    fixture/backend data.
+
+    Every engine-level refusal (alignment, forward, math) comes back as a
+    ``TargetScore`` with status ``unavailable`` and a fixed reason; an
+    unencodable expected answer is reported the same way
+    (``encode_failed``) instead of raising.
+    """
+    try:
+        target_ids: Any = backend.encode(expected)
+    except Exception:  # noqa: BLE001 -- encode problems become a fixed code
+        return _logprob_unavailable(_LOGPROB_ENCODE_FAILED, len(prompt_ids))
+    if type(target_ids) is not tuple or any(type(t) is not int for t in target_ids):
+        return _logprob_unavailable(_LOGPROB_ENCODE_FAILED, len(prompt_ids))
+    return score_target_logprobs(backend, prompt_ids, target_ids)
+
+
+def _aggregate_fixture_scores(scores: list[TargetScore]) -> dict[str, Any]:
+    """Candidate-level roll-up over per-fixture ``TargetScore`` values (§9.4).
+
+    Reports the summed total log-likelihood, the token-count-weighted mean
+    per scored token, the scored token count, and the target byte length, so
+    token counts that differ across candidates stay visible. Only ``ok``
+    entries contribute; ``unavailable``/``ok_empty`` never leak into the
+    sums. NaN/inf degrades the affected field to None instead of poisoning
+    ``results.json`` (written with ``allow_nan=False``); the engine already
+    rejects non-finite logits, this is defense in depth.
+    """
+    scored_fixtures = 0
+    with_total = 0
+    total = 0.0
+    tokens = 0
+    byte_length = 0
+    for score in scores:
+        if score.status != STATUS_OK:
+            continue
+        scored_fixtures += 1
+        tokens += score.scored_token_count
+        byte_length += score.target_byte_length
+        if type(score.total_logprob) is float:
+            with_total += 1
+            total += score.total_logprob
+    total_out: float | None = None
+    mean_out: float | None = None
+    if scored_fixtures and with_total == scored_fixtures and tokens:
+        total_out = total
+        mean_out = total / tokens
+    # NaN/inf degrades the affected fields to None instead of poisoning
+    # results.json (written with allow_nan=False); the engine already
+    # rejects non-finite logits, this is defense in depth. A finite total
+    # with a non-finite mean is incoherent: withhold both.
+    if (
+        total_out is None
+        or mean_out is None
+        or not math.isfinite(total_out)
+        or not math.isfinite(mean_out)
+    ):
+        total_out = None
+        mean_out = None
+    return {
+        "scored_fixtures": scored_fixtures,
+        "total_logprob": total_out,
+        "mean_logprob": mean_out,
+        "scored_token_count": tokens,
+        "target_byte_length": byte_length,
+    }
+
+
+def _plural_fixtures(count: int) -> str:
+    return f"{count} fixture" + ("" if count == 1 else "s")
+
+
+def _interpret_logprob_candidate(fixture_scores: list[dict[str, Any]]) -> dict[str, str]:
+    """Plain-language reading of one candidate's diagnostic (§9.3-§9.5).
+
+    Only natively-failed fixtures with an ``ok`` score classify: the
+    question is why a failure happened, and only a scored likelihood can
+    answer it. Mean logprob >= ``LOGPROB_DERAILED_MEAN_THRESHOLD``
+    nats/token reads as "greedy derailed" (the weights assign the expected
+    answer high likelihood, yet greedy generation diverged); mean <
+    ``LOGPROB_UNKNOWN_MEAN_THRESHOLD`` reads as "weights don't know";
+    between the bands the diagnostic withholds judgment rather than
+    guessing.
+    """
+    failures = [s for s in fixture_scores if not s["native_pass"]]
+    scored = [s for s in failures if s["status"] == "ok" and type(s["mean_logprob"]) is float]
+    if not failures:
+        return {
+            "kind": "no_failures",
+            "text": (
+                "Every search fixture passed natively, so there is no failure "
+                "for this diagnostic to explain. Likelihoods are reported for "
+                "reference only."
+            ),
+        }
+    if not scored:
+        return {
+            "kind": "unavailable",
+            "text": (
+                "No failing fixture could be scored -- the alignment check or "
+                "the forward pass refused every one -- so the diagnostic "
+                "reports nothing rather than guessing."
+            ),
+        }
+    highs = [s for s in scored if s["mean_logprob"] >= LOGPROB_DERAILED_MEAN_THRESHOLD]
+    lows = [s for s in scored if s["mean_logprob"] < LOGPROB_UNKNOWN_MEAN_THRESHOLD]
+    total = sum(s["total_logprob"] for s in scored if type(s["total_logprob"]) is float)
+    tokens = sum(s["scored_token_count"] for s in scored if type(s["scored_token_count"]) is int)
+    mean = total / tokens if tokens else None
+    mean_text = f"{mean:.2f}" if mean is not None else "n/a"
+    if highs and not lows:
+        return {
+            "kind": "greedy_derailed",
+            "text": (
+                "Likely greedy derailment: the weights assign the expected "
+                f"answer high teacher-forced likelihood (mean {mean_text} "
+                f"nats/token over {_plural_fixtures(len(scored))} failing), "
+                "yet greedy generation did not reproduce it. The failure "
+                "looks like a decoding/search problem, not missing knowledge."
+            ),
+        }
+    if lows and not highs:
+        return {
+            "kind": "weights_dont_know",
+            "text": (
+                "Likely missing knowledge: even teacher-forced, the weights "
+                f"assign the expected answer low likelihood (mean {mean_text} "
+                f"nats/token over {_plural_fixtures(len(scored))} failing). "
+                "This candidate's framing does not make the expected answer "
+                "probable under the checkpoint."
+            ),
+        }
+    if highs and lows:
+        return {
+            "kind": "mixed",
+            "text": (
+                f"Mixed causes: {_plural_fixtures(len(highs))} failing score "
+                "in the high band (greedy-derailment pattern) while "
+                f"{_plural_fixtures(len(lows))} score in the low band "
+                "(missing-knowledge pattern). The failures have more than "
+                "one cause."
+            ),
+        }
+    return {
+        "kind": "indeterminate",
+        "text": (
+            "Indeterminate: the failing fixtures' mean likelihoods fall "
+            "between the declared bands (below "
+            f"{LOGPROB_DERAILED_MEAN_THRESHOLD:.1f} yet at or above "
+            f"{LOGPROB_UNKNOWN_MEAN_THRESHOLD:.1f} nats/token), so the "
+            "diagnostic withholds judgment."
+        ),
+    }
+
+
+def _diagnostic_observation(
+    backend: Backend, obs: Any, expected_by_id: dict[str, str]
+) -> tuple[dict[str, Any], TargetScore | None]:
+    """Score one recorded observation's fixture; never raises on bad data.
+
+    Returns the JSON-ready fixture-score dict and the engine ``TargetScore``
+    (None when the observation itself cannot be scored). The engine score
+    feeds the candidate aggregate; the dict feeds the report.
+    """
+    fixture_id = obs.get("fixture") if type(obs) is dict else None
+    label = fixture_id if type(fixture_id) is str else "?"
+    native_pass = type(obs) is dict and bool(obs.get("exact_match") and obs.get("boundary_found"))
+    not_scored: dict[str, Any] = {
+        "fixture": label,
+        "status": _LOGPROB_NOT_SCORED,
+        "reason": _LOGPROB_INCOMPLETE,
+        "total_logprob": None,
+        "mean_logprob": None,
+        "scored_token_count": 0,
+        "target_byte_length": 0,
+        "native_pass": native_pass,
+    }
+    if type(obs) is not dict or obs.get("status") != "completed":
+        return not_scored, None
+    raw_ids = obs.get("input_ids")
+    prompt_ids = tuple(raw_ids) if isinstance(raw_ids, (list, tuple)) else ()
+    if (
+        not prompt_ids
+        or any(type(t) is not int or t < 0 for t in prompt_ids)
+        or type(fixture_id) is not str
+        or fixture_id not in expected_by_id
+    ):
+        return not_scored, None
+    score = _score_expected_answer(backend, prompt_ids, expected_by_id[fixture_id])
+    scored: dict[str, Any] = {
+        "fixture": label,
+        "status": score.status,
+        "reason": score.reason,
+        "total_logprob": score.total_logprob,
+        "mean_logprob": score.mean_logprob,
+        "scored_token_count": score.scored_token_count,
+        "target_byte_length": score.target_byte_length,
+        "native_pass": native_pass,
+    }
+    return scored, score
+
+
+def logprob_diagnostic(
+    backend: Backend,
+    result: dict[str, Any],
+    fixtures: tuple[Fixture, ...] | list[Fixture],
+) -> dict[str, Any]:
+    """Teacher-forced log-likelihood diagnostic over recorded search observations.
+
+    For every search candidate and every search fixture, the fixture's
+    *expected answer* is teacher-forced through ``backend`` after the
+    recorded prompt: ``score_target_logprobs(backend, prompt_ids,
+    encode(expected))``. This separates "the weights don't know the answer"
+    (low likelihood even when forced) from "greedy derailed" (high
+    likelihood, yet the recorded greedy generation diverged) -- the
+    DEVELOPMENT_PLAN.md §9.3-§9.5 design.
+
+    Diagnostic only: the input ``result`` is never mutated and the selection
+    rule is untouched; the caller stores the returned dict under
+    ``result["logprob_diagnostic"]``. One forward pass per candidate x
+    fixture, which is why the CLI flag is opt-in. Alignment refusals surface
+    per fixture as status ``unavailable`` with a fixed reason -- never a
+    silent guess. Returns ``available: False`` with a fixed ``detail`` when
+    the backend exposes no forward-logits primitive or no candidate could
+    be scored.
+    """
+    if type(result) is not dict or type(result.get("search")) is not list:
+        raise ValueError("result must be a run_experiment result dict")
+    if isinstance(fixtures, list):
+        fixtures = tuple(fixtures)
+    if type(fixtures) is not tuple or any(type(item) is not Fixture for item in fixtures):
+        raise ValueError("fixtures must be a tuple of Fixture")
+    expected_by_id = {item.id: item.expected for item in fixtures}
+    payload: dict[str, Any] = {
+        "available": False,
+        "detail": None,
+        "method": (
+            "Teacher-forced log-likelihood of each fixture's expected answer: "
+            "one forward pass per candidate x fixture over prompt_ids + "
+            "encode(expected); prompt positions are masked and answer tokens "
+            "are gathered with the causal shift (logits at t-1 predict token "
+            "t). Diagnostic only; never changes the selection rule."
+        ),
+        "thresholds": {
+            "derailed_mean_logprob_at_least": LOGPROB_DERAILED_MEAN_THRESHOLD,
+            "unknown_mean_logprob_below": LOGPROB_UNKNOWN_MEAN_THRESHOLD,
+        },
+        "candidates": [],
+    }
+    if not callable(getattr(backend, "forward_logits", None)):
+        payload["detail"] = "logits_not_supported"
+        return payload
+    for entry in result["search"]:
+        if type(entry) is not dict:
+            continue
+        fmt = entry.get("format")
+        name = fmt.get("name") if type(fmt) is dict else None
+        observations = entry.get("observations")
+        if type(name) is not str or type(observations) is not list:
+            continue
+        fixture_scores: list[dict[str, Any]] = []
+        engine_scores: list[TargetScore] = []
+        for obs in observations:
+            score_dict, engine_score = _diagnostic_observation(backend, obs, expected_by_id)
+            fixture_scores.append(score_dict)
+            if engine_score is not None:
+                engine_scores.append(engine_score)
+        aggregate = _aggregate_fixture_scores(engine_scores)
+        aggregate["native_passes"] = sum(1 for s in fixture_scores if s["native_pass"])
+        aggregate["native_failures"] = sum(1 for s in fixture_scores if not s["native_pass"])
+        aggregate["unavailable_fixtures"] = sum(
+            1 for s in fixture_scores if s["status"] in ("unavailable", _LOGPROB_NOT_SCORED)
+        )
+        payload["candidates"].append(
+            {
+                "name": name,
+                "fixture_scores": fixture_scores,
+                "aggregate": aggregate,
+                "interpretation": _interpret_logprob_candidate(fixture_scores),
+            }
+        )
+    if not payload["candidates"]:
+        payload["detail"] = "no_scorable_observations"
+        return payload
+    payload["available"] = True
+    return payload
 
 
 def prompt_sensitivity_sweep(

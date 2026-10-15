@@ -121,12 +121,14 @@ class StopOutcome:
     text. ``truncated_ids`` is the token sequence the competitor would have
     returned: a prefix of the recorded output. ``returned_text`` is the text
     the competitor would have returned when it differs from the decode of
-    ``truncated_ids``: currently set only by ``emulate_vllm_holdback``, whose
-    default ``include_stop_str_in_output=False`` strips the stop string from
-    the returned text while keeping the completing token in
-    ``truncated_ids`` (token_ids and text can disagree, exactly as upstream).
-    None everywhere else; the field defaults to None so old callers and
-    positional constructions are unaffected.
+    ``truncated_ids``: set by ``emulate_vllm_holdback`` (whose default
+    ``include_stop_str_in_output=False`` strips the stop string from the
+    returned text while keeping the completing token in ``truncated_ids``)
+    and by ``emulate_sglang_stop`` (whose default ``no_stop_trim=False``
+    likewise trims at the leftmost stop-string occurrence) -- token_ids and
+    text can disagree, exactly as upstream. None everywhere else; the field
+    defaults to None so old callers and positional constructions are
+    unaffected.
     """
 
     available: bool
@@ -486,6 +488,85 @@ def emulate_vllm_holdback(
         return StopOutcome(True, True, tuple(output_ids[:kept]), f"fired_at_step_{step}", returned)
     if min_tokens >= len(output_ids) and min_tokens > 0:
         return StopOutcome(True, False, tuple(output_ids), "gated_by_min_tokens")
+    return StopOutcome(True, False, tuple(output_ids), "no_stop_within_cap")
+
+
+def emulate_sglang_stop(
+    backend: Backend,
+    output_ids: tuple[int, ...],
+    stop_text: str,
+    *,
+    no_stop_trim: bool = False,
+) -> StopOutcome:
+    """Emulate SGLang's str-based stop handling over a recorded output.
+
+    Ports ``Req._check_str_based_finish``
+    (``python/sglang/srt/managers/schedule_batch.py:1836-1847``,
+    sgl-project/sglang @ 12dc623): each new output step's decoded text is
+    searched for the stop string, and the first step whose decoded prefix
+    contains it fires. On fire, ``DetokenizerManager.trim_matched_stop``
+    (``python/sglang/srt/managers/detokenizer_manager.py:190-221``) cuts
+    the returned text at the leftmost stop-string occurrence; the default
+    ``no_stop_trim=False`` (``SamplingParams.no_stop_trim``,
+    ``sampling_params.py:153``) strips -- like vLLM's default, unlike HF,
+    which always keeps. Pass ``no_stop_trim=True`` to model the kept
+    variant, which returns the text through the stop string's end.
+
+    Deliberate divergences from the other engines, each pinned by the
+    research log (``docs/RESEARCH_LOG.md``, Cycle 1, SGLang section):
+
+    - No ``min_tokens`` equivalent: upstream ``min_new_tokens`` only clips
+      the length budget (``scheduler.py:2631-2634``); the finish path never
+      consults it, so this emulation takes no ``min_tokens`` parameter --
+      vLLM gates all stops behind ``min_tokens``, SGLang gates nothing.
+    - Stop string beats EOS in the same step: ``update_finish_state``
+      (``schedule_batch.py:1913-1950``) runs the str-based check before the
+      token-based (EOS) check -- the shipped fix for
+      https://github.com/sgl-project/sglang/issues/28802. A stop past
+      ``max_new_tokens`` demotes to a length finish (not emulated: the lab
+      replays a recorded output, so there is no length budget).
+    - Multi-stop selection is first-listed, not earliest-completing: the
+      upstream check iterates ``stop_strs`` in list order (it even carries
+      ``# TODO(lmzheng): handle the case where multiple stop strs are
+      hit``) -- a hard divergence from vLLM PR #49391, whose Python side
+      selects ``min(stop_index + len(stop_str))`` with ties broken by list
+      order (pinned by ``tests/detokenizer/test_check_stop_strings.py``).
+      That selection happens across the stop list in one check, so it is
+      computed by the caller (``diffbackends``) from these per-stop cells:
+      the SGLang winner is the fired stop with the smallest firing step,
+      ties broken by list order -- exactly the research-log caveat that
+      with 1 token/step the earlier-completing stop still fires at its own
+      step and list order decides only when >=2 stops match within one
+      check.
+
+    ``truncated_ids`` keeps the ids through the firing step (the trim is
+    text-level upstream); the exposed ``StopOutcome.returned_text`` is the
+    text SGLang would return (trimmed at the stop start, or through the
+    stop end when ``no_stop_trim=True``). SGLang's ``stop_regex`` is out of
+    scope (it is not a stop string; see the USAGE.md note).
+    """
+    if not _valid_token_ids(output_ids) or type(stop_text) is not str or not stop_text:
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    if type(no_stop_trim) is not bool:
+        return StopOutcome(False, False, tuple(output_ids), "invalid_emulation_input")
+    stop_len = len(stop_text)
+    try:
+        for step in range(1, len(output_ids) + 1):
+            text = backend.decode(tuple(output_ids[:step]))
+            if type(text) is not str:
+                return StopOutcome(False, False, tuple(output_ids), "decode_unavailable")
+            # Upstream searches the decoded output text for the stop string;
+            # trim_matched_stop cuts at the leftmost occurrence.
+            index = text.find(stop_text)
+            if index == -1:
+                continue
+            stop_end = index + stop_len
+            returned = text[:stop_end] if no_stop_trim else text[:index]
+            return StopOutcome(
+                True, True, tuple(output_ids[:step]), f"fired_at_step_{step}", returned
+            )
+    except Exception:  # noqa: BLE001 -- emulation degrades, never fails the run
+        return StopOutcome(False, False, tuple(output_ids), "decode_unavailable")
     return StopOutcome(True, False, tuple(output_ids), "no_stop_within_cap")
 
 

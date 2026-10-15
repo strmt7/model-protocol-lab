@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Format catalog expanded to 19 families: `kolibri` (Aleph-Alpha
+  Kolibri-1, released 2026-10-03, Apache 2.0; evidence tier 1 -- official
+  tokenizer_config.json chat_template byte-verified by an independent fork)
+  and `lfm25` (LiquidAI LFM2.5-24B-A2B, released 2026-10-13; evidence tier
+  2 -- official model card plus HF blog rendered example). Kolibri-1's
+  text-only no-system core is byte-identical to chatml (the always-emitted
+  system block with its effort-dependent sentence, the default-high effort
+  choice, and the thinking on/off branches are documented in the catalog
+  comment; only byte-verified prefixes are pinned in tests). The Kolibri-1
+  thinking-off branch (generation prompt prefills an empty `<think>` block)
+  rides the `--mutate` path as `kolibri/thinking-off` rather than becoming
+  a second catalog entry. LFM2.5 prepends `<|startoftext|>` and always
+  thinks (generation prompt appends `<think>`); its bos_token-vs-template
+  and system-block caveats are documented, not asserted.
+  `tests/test_cycle10_families.py` pins byte-exact renders, the mutation,
+  the diffs-vs-chatml, the evidence tiers, the README family count, and the
+  deepseek41 system-framing re-verification (V4.1's fullwidth System frame
+  CONFIRMED against the primary source 2026-10-15; the sibling V4 encoder
+  renders system raw -- the catalog claim stands, no fix needed).
 - Format catalog expanded to 17 families: `gemma4` (Gemma 4 — completely
   new turn/channel protocol, `<|turn>role` / `<turn|>`, assistant rendered
   as `model`, literal `<bos>` prepend; evidence tiers documented in the
@@ -35,6 +54,16 @@ All notable changes to this project are documented here. The format follows
 - `LocalHFBackend.forward_logits` (single full-sequence forward returning
   fp32 CPU logits) and a `vocab_size` property, the missing primitives the
   scoring engine needs (`generate` only exposed last-position logits).
+- Opt-in teacher-forced log-likelihood diagnostic (`run
+  --logprob-diagnostic`, the DEVELOPMENT_PLAN.md §9.3–§9.5 "report wiring
+  planned next"): after search, each candidate's expected answer is scored
+  against the recorded prompts via `experiments.logprob_diagnostic`;
+  `results.json` carries `logprob_diagnostic` and the HTML report renders a
+  "Log-likelihood diagnostic" section with per-candidate total/mean
+  logprob and a plain-language reading separating "greedy derailed" from
+  "weights don't know" (declared bands: mean >= -2.0 / < -5.0 nats/token).
+  Alignment refusals surface as `unavailable` with a fixed reason, never a
+  silent guess; diagnostic only, the selection rule is untouched.
 
 ### Added
 
@@ -76,6 +105,27 @@ All notable changes to this project are documented here. The format follows
 - Narrowed the exception scope around the new divergence wiring so a future
   bug there degrades only that section, not the whole diagnosis block
   (red-team suggestion).
+- Red-team H1: `diff_backends` token-id cap lowered from 131072 to the
+  named `MAX_OUTPUT_IDS = 4096` (prompts keep the named
+  `MAX_PROMPT_IDS = 131072`, linear decode cost). The emulations do one
+  `backend.decode(prefix)` per output step -- quadratic -- so the old cap
+  burned tens of minutes per call on the linear reference stub; at the new
+  cap a single stop completes in ~2-3 s (measured 2026-10-15). 4096 also
+  matches `mpl run --max-new-tokens`' own cap, so the lab can never record
+  a longer generated output. Over-cap input is rejected with the fixed
+  `output_ids_too_long` code; over-cap recorded observations are skipped.
+- Red-team M1: stop texts are now bounded -- 1024 chars per stop
+  (`stop_text_too_long`), 16 stops per call (`too_many_stop_texts`) --
+  enforced in `_checked_stop_texts`, the `diff-backends` CLI path, and the
+  `run` diagnosis path (which passes `backend.decode(winner_boundary)`
+  through the same validation). Dedup is now set-based (linear, not
+  O(m^2)) and runs before the count check.
+- Red-team L1: tokenizer-loader failures in `mpl debug` and
+  `mpl diff-backends` collapse to the fixed `tokenizer_load_failed` code
+  via an exact-match allowlist (`doctor._loader_failure_code`); hostile
+  checkpoint bytes can no longer reach the terminal, and non-ValueError
+  parse failures no longer produce a traceback. The debug REPL's error
+  path strips terminal-control characters from exception text.
 
 ### Added
 
@@ -387,6 +437,27 @@ All notable changes to this project are documented here. The format follows
   `candidate_fingerprint` normalized to match `local_repairs` dedup;
   report parent dirs all 0o700; `doctor` tokenizer-deep failures sanitized;
   empty-`expected` fixtures warn in `inspect`/`run`.
+
+### Added
+
+- SGLang column for `mpl diff-backends` (implements the Cycle 1 research
+  recommendation): new `sglang_stop` emulated semantic
+  (`backends.emulate_sglang_stop`, a port of SGLang's
+  `Req._check_str_based_finish` with `DetokenizerManager.trim_matched_stop`
+  leftmost-occurrence stripping; deliberately takes no `min_tokens`
+  parameter -- SGLang's `min_new_tokens` only clips the length budget and
+  the finish path never consults it) plus three new divergence classes:
+  `MULTI_STOP_SELECTION` (high; SGLang first-listed vs vLLM
+  earliest-completion multi-stop selection, vLLM PR #49391),
+  `NO_MIN_TOKENS_GATE` (medium; the SGLang column on `MIN_TOKENS_GATED`),
+  and `STR_OVER_EOS_PRECEDENCE` (high; same-step stop+EOS tie where
+  SGLang's shipped #28802 fix gives the stop string the win while TGI's
+  documented precedence gives EOS the win). The report's "Backend
+  divergence" section renders the new classes with severity badges and a
+  "SGLang stop" matrix column. Deliberately no TGI cell: every TGI stop
+  rule is covered by composition of the existing cells (documented in
+  `USAGE.md` §11); SGLang `stop_regex` gets a USAGE note only. Pinned by
+  `tests/test_cycle10_sglang.py` (27 tests).
 
 ## [0.1.0a0] — 2026-10-12
 

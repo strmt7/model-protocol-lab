@@ -8,6 +8,8 @@ plain-text, no-tools core: deterministic once branches are fixed (no
 tools, no images, thinking on/off, system or not).
 """
 
+from dataclasses import replace
+
 from .core import Format, local_repairs
 
 # Full-width bars/blocks used by the DeepSeek template, spelled as escapes
@@ -282,11 +284,90 @@ CATALOG = {
         "",
         open_suffix="<|assistant|><think>",
     ),
+    # Kolibri-1 (Aleph-Alpha, released 2026-10-03, Apache 2.0). Evidence
+    # tier 1: the official tokenizer_config.json chat_template, byte-verified
+    # by an independent fork. User/assistant turns are standard ChatML --
+    # <|im_start|>user\n{content}<|im_end|>\n -- with no BOS, so the text-only
+    # no-system render is byte-identical to chatml (pinned in
+    # tests/test_cycle10_families.py). Everything that differs is documented
+    # here, not modeled: the real template ALWAYS emits a system block, even
+    # with no system message:
+    # <|im_start|>system\n# Reasoning effort\n\n<SENTENCE>[+ user system
+    # content]<|im_end|>\n. SENTENCE is effort-dependent; the lab renders
+    # plain-text fixtures with no effort knob, so the catalog documents the
+    # DEFAULT-effort (unset -> "high") behavior: the only byte-verified
+    # wording is the sentence prefix "Reasoning effort is set to high. Think
+    # carefully through..." -- the sentence wording beyond that verified
+    # prefix is deliberately NOT asserted. The system role is not modeled in
+    # Format (same convention as mistral_large's [SYSTEM_PROMPT] frame and
+    # gemma4's system turn); the verified system-block prefix is pinned as a
+    # documented constant in the test file. Thinking ON (default): the
+    # generation prompt ends at <|im_start|>assistant\n (the model opens
+    # <think> itself) -- this base entry's open-reply suffix via the
+    # assistant_prefix fallback. Thinking OFF: the generation prompt
+    # prefills an empty think block,
+    # <|im_start|>assistant\n<think>\n\n</think>\n\n -- modeled as the
+    # "kolibri/thinking-off" variant in the mutate path (see candidates()), a
+    # generation-prompt branch of the same template, not a second base entry.
+    # EOS is <|im_end|> (a generation stop, not a Format field).
+    # Source: https://huggingface.co/Aleph-Alpha/Kolibri-1
+    "kolibri": Format(
+        "kolibri",
+        "",
+        "<|im_start|>user\n",
+        "<|im_start|>assistant\n",
+        "<|im_end|>\n",
+    ),
+    # LFM2.5-24B-A2B (LiquidAI, released 2026-10-13). Evidence tier 2: the
+    # official model card plus the HF blog rendered example. ChatML-like:
+    # <|startoftext|> BOS, per-message
+    # <|im_start|>{role}\n{content}<|im_end|>\n, and -- unlike LFM2 -- the 24B
+    # variant always thinks, so the generation prompt appends <think>\n
+    # after the assistant frame:
+    # <|startoftext|><|im_start|>system\n{system}<|im_end|>\n<|im_start|>user
+    # \n{content}<|im_end|>\n<|im_start|>assistant\n<think>\n.
+    # Documented caveats: whether <|startoftext|> comes from the bos_token
+    # field or a template literal is UNVERIFIED (byte-identical either way);
+    # whether the <|im_start|>system\n{system}<|im_end|>\n block is
+    # auto-injected or merely illustrative in the card's example is UNVERIFIED
+    # -- and the system role is not modeled in Format regardless (same
+    # convention as the other entries). EOS is not asserted beyond the
+    # per-turn <|im_end|>\n framing.
+    # Source: https://huggingface.co/LiquidAI/LFM2.5-24B-A2B
+    "lfm25": Format(
+        "lfm25",
+        "<|startoftext|>",
+        "<|im_start|>user\n",
+        "<|im_start|>assistant\n",
+        "<|im_end|>\n",
+        open_suffix="<|im_start|>assistant\n<think>\n",
+    ),
 }
+
+
+# Kolibri-1 thinking-off branch: same frames as the base entry, but the
+# generation prompt prefills an empty <think> block (thinking disabled).
+# Deterministic string; pinned byte-exact in tests/test_cycle10_families.py.
+_KOLIBRI_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
     if family not in CATALOG:
         raise ValueError("Unknown format family")
     base = CATALOG[family]
-    return local_repairs(base) if mutate else (base,)
+    if not mutate:
+        return (base,)
+    variants = local_repairs(base)
+    if family == "kolibri":
+        # Thinking-off is a generation-prompt branch of the same template,
+        # so it rides the mutate path like the BOS/prefix local repairs
+        # rather than becoming a second catalog entry. Its open_suffix is
+        # new, so it cannot collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-off",
+                open_suffix=_KOLIBRI_THINKING_OFF_SUFFIX,
+            ),
+        )
+    return variants

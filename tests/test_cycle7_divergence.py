@@ -81,7 +81,8 @@ class DivergenceSectionDataTests(unittest.TestCase):
         assert section is not None
         self.assertEqual(section["verdict"], "agree")
         self.assertEqual(
-            section["pairs_verdict"], "HF vs vLLM stop semantics: 1/1 agree; 0 divergences"
+            section["pairs_verdict"],
+            "HF vs vLLM vs SGLang stop semantics: 1/1 agree; 0 divergences",
         )
         self.assertEqual(len(section["per_fixture"]), 1)
         entry = section["per_fixture"][0]
@@ -103,7 +104,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         assert section is not None
         self.assertEqual(section["verdict"], "diverge")
         self.assertEqual(
-            section["pairs_verdict"], "HF vs vLLM stop semantics: 1/2 agree; 1 divergence"
+            section["pairs_verdict"], "HF vs vLLM vs SGLang stop semantics: 1/2 agree; 1 divergence"
         )
         self.assertEqual(
             [entry["verdict"] for entry in section["per_fixture"]], ["agree", "diverge"]
@@ -179,8 +180,11 @@ class DivergenceSectionDataTests(unittest.TestCase):
             {
                 "KEPT_VS_STRIPPED": "high",
                 "EOS_PRECEDENCE": "high",
+                "STR_OVER_EOS_PRECEDENCE": "high",
+                "MULTI_STOP_SELECTION": "high",
                 "FIRING_STEP_DIFFERS": "medium",
                 "MIN_TOKENS_GATED": "medium",
+                "NO_MIN_TOKENS_GATE": "medium",
                 "HARNESS_NORMALIZATION_RELIED": "low",
             },
         )
@@ -235,7 +239,7 @@ class BackendDivergenceReportTests(unittest.TestCase):
         self.assertIn('id="backend-divergence"', html)
         self.assertIn("<h2>Backend divergence</h2>", html)
         # One-line verdict.
-        self.assertIn(escape("HF vs vLLM stop semantics: 1/2 agree; 1 divergence"), html)
+        self.assertIn(escape("HF vs vLLM vs SGLang stop semantics: 1/2 agree; 1 divergence"), html)
         self.assertIn('<span class="badge fail">diverge</span>', html)
         # Class x semantic matrix with severity badge.
         self.assertIn("KEPT_VS_STRIPPED", html)
@@ -266,7 +270,7 @@ class BackendDivergenceReportTests(unittest.TestCase):
         # through the builder, stop text/detail are exercised raw here).
         hostile_section: dict[str, Any] = {
             "verdict": "diverge",
-            "pairs_verdict": "HF vs vLLM stop semantics: 0/1 agree; 1 divergence",
+            "pairs_verdict": "HF vs vLLM vs SGLang stop semantics: 0/1 agree; 1 divergence",
             "per_fixture": [
                 {
                     "fixture": hostile_fixture,

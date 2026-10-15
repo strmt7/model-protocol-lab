@@ -51,6 +51,27 @@ def _tokenizer_file(root: Path) -> Path:
     return path
 
 
+#: Fixed-vocabulary codes ``_build_primary_tokenizer`` may raise as
+#: ValueError with a message that is safe to show. Anything else a loader
+#: raises -- notably ``PreTrainedTokenizerFast`` parse failures, which echo
+#: hostile checkpoint bytes into the exception text -- must never reach the
+#: terminal and collapses to ``tokenizer_load_failed``.
+_LOADER_FIXED_CODES = frozenset({"oversized_tokenizer_file"})
+
+
+def _loader_failure_code(exc: BaseException) -> str:
+    """Map a tokenizer-loader exception to a terminal-safe fixed code.
+
+    Returns the exception's own message only on an exact allowlist match;
+    every other failure (including non-ValueError parse blowups) maps to
+    ``"tokenizer_load_failed"``. Sanitization boundary for all
+    tokenizer-load call sites (debug, diff-backends): call it instead of
+    interpolating the exception.
+    """
+    text = str(exc)
+    return text if text in _LOADER_FIXED_CODES else "tokenizer_load_failed"
+
+
 def _check(status: str, detail: str = "") -> dict[str, str]:
     return {"status": status, "detail": detail}
 
