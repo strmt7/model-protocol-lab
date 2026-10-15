@@ -11,6 +11,8 @@ import importlib.util
 import io
 import json
 import re
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -82,9 +84,32 @@ class ReadmeConsistencyTests(unittest.TestCase):
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         match = re.search(r"full test suite passes \((\d+) tests", text)
         self.assertIsNotNone(match, "README status line lost its test-count claim")
-        loader = unittest.TestLoader()
-        suite = loader.discover(str(REPO_ROOT / "tests"), top_level_dir=str(REPO_ROOT))
-        self.assertEqual(int(match.group(1)), suite.countTestCases())
+        # Count via pytest collection (the suite's actual runner). unittest
+        # discovery alone misses pytest-style function tests, so it
+        # undercounts once such files exist in the suite.
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "--collect-only",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "tests",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        collected = None
+        for line in proc.stdout.splitlines():
+            m = re.search(r"(\d+) tests collected", line)
+            if m:
+                collected = int(m.group(1))
+        self.assertIsNotNone(collected, "could not parse pytest collection count")
+        self.assertEqual(int(match.group(1)), collected)
 
 
 class MutationFoundTests(unittest.TestCase):

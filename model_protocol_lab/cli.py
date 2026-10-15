@@ -169,6 +169,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="New fixture JSON file; an existing path is never overwritten",
     )
     # ANCHOR: new top-level subparsers are registered here (one block per command).
+    diff_reports_cmd = sub.add_parser(
+        "diff-reports",
+        help="Compare two experiment result directories (or results.json files)",
+        allow_abbrev=False,
+    )
+    diff_reports_cmd.add_argument(
+        "old_results",
+        type=Path,
+        help="Old report directory (containing results.json) or results.json path",
+    )
+    diff_reports_cmd.add_argument(
+        "new_results",
+        type=Path,
+        help="New report directory (containing results.json) or results.json path",
+    )
+    diff_reports_cmd.add_argument(
+        "--all",
+        action="store_true",
+        help="List every compared fixture outcome, not just changed ones "
+        "(requires --include-evidence on both runs)",
+    )
     diff_cmd = sub.add_parser(
         "diff-backends",
         help="Differential-test emulated backend stop semantics on one token sequence",
@@ -316,6 +337,10 @@ def main(argv=None) -> int:
             print(json.dumps([asdict(fmt) for fmt in CATALOG.values()], indent=2))
             return 0
         # ANCHOR: new top-level command dispatch goes here (one block per command).
+        if args.command == "diff-reports":
+            from .diffreports import run_diff_reports
+
+            return run_diff_reports(args, parser)
         if args.command == "diff-backends":
             from .diffbackends import run_diff_backends
 

@@ -187,6 +187,7 @@ class CatalogListingTests(unittest.TestCase):
                 "kolibri",
                 "laguna",
                 "lfm25",
+                "ling",
                 "llama3",
                 "llama4",
                 "mistral",

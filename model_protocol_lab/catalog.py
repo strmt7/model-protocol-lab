@@ -447,6 +447,51 @@ CATALOG = {
         assistant_turn_end="</assistant>",
         open_suffix="<assistant></think>",
     ),
+    # Ling-3.1-flash (inclusionAI, released 2026-10-15, MIT). Evidence
+    # tier 1: the official chat_template.jinja ("Bailing V3", preserved at
+    # docs/evidence/ling31-chat-template.jinja). Every string below is
+    # derived from the template's plain-text, no-tools branch, cited by
+    # jinja line number:
+    # - thinking option (lines 5-13): enable_thinking/thinking_option
+    #   unset -> thinking_option defaults to 'on' (line 12), so the base
+    #   entry models thinking ON (the lab's default render). Thinking OFF
+    #   is a generation-prompt branch (lines 127-128) and rides the mutate
+    #   path as "ling/thinking-off" (kolibri/thinking-off convention).
+    # - system block (lines 19, 35-45): ALWAYS emitted even with no system
+    #   message. With system message X (no "detailed thinking" marker in
+    #   X): <role>SYSTEM</role>X\ndetailed thinking on<|role_end|>
+    #   (lines 40-41); without: <role>SYSTEM</role>detailed thinking
+    #   on<|role_end|> (line 44). The system role is not modeled in Format
+    #   (same convention as mistral_large/gemma4/kolibri); the block is
+    #   pinned as a documented constant in tests/test_cycle13_families.py.
+    # - user (line 62): <role>HUMAN</role>{content}<|role_end|>.
+    # - assistant history, no reasoning (lines 75-79): <role>ASSISTANT</role>
+    #   \n<think></think>{content} (line 79: the empty-think branch;
+    #   preserved_thinking is true, line 16), closed by <|role_end|>
+    #   (line 108).
+    # - generation prompt (lines 123-129): <role>ASSISTANT</role>\n<think>
+    #   when thinking is on (line 126), <role>ASSISTANT</role>\n<think>
+    #   </think> when off (line 128).
+    # BOS: <|startoftext|> -- tier-1 verified from the official
+    # tokenizer_config.json bos_token field (read 2026-10-15). Caveat: the
+    # jinja template itself emits no BOS literal and add_bos_token is
+    # false, so a raw apply_chat_template call would not add it either;
+    # the entry takes the config's bos_token (lfm25 convention).
+    # EOS caveat: the official eos_token field is <|role_end|> -- NOT
+    # <|endoftext|> (that token is the pad_token and a special added
+    # token); documented, not modeled (Format has no EOS field). Out of
+    # scope for the plain-text core: the tool-call branches (lines 24-34,
+    # 84-107), the reasoning-content branches (lines 67-77), and the
+    # multi-step tool scan (lines 47-56).
+    # Source: https://huggingface.co/inclusionAI/Ling-3.1-flash
+    "ling": Format(
+        "ling",
+        "<|startoftext|>",
+        "<role>HUMAN</role>",
+        "<role>ASSISTANT</role>\n<think></think>",
+        "<|role_end|>",
+        open_suffix="<role>ASSISTANT</role>\n<think>",
+    ),
 }
 
 
@@ -461,6 +506,12 @@ _KOLIBRI_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
 # kolibri/thinking-off's "<think>\n\n</think>\n\n" tail. Deterministic
 # string; pinned byte-exact in tests/test_cycle11_families.py.
 _NEMOTRON35_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think></think>"
+
+# Ling-3.1-flash thinking-off branch: same frames as the base entry, but
+# the generation prompt prefills an empty <think> block (thinking
+# disabled, jinja lines 127-128). Deterministic string; pinned byte-exact
+# in tests/test_cycle13_families.py.
+_LING_THINKING_OFF_SUFFIX = "<role>ASSISTANT</role>\n<think></think>"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
@@ -494,6 +545,20 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
                 base,
                 name=base.name + "/thinking-off",
                 open_suffix=_NEMOTRON35_THINKING_OFF_SUFFIX,
+            ),
+        )
+    if family == "ling":
+        # Thinking-off is a generation-prompt branch of the same template
+        # (jinja lines 127-128; the official default is thinking-on, which
+        # the base entry models via its open_suffix), so it rides the mutate
+        # path like kolibri/thinking-off rather than becoming a second
+        # catalog entry. Its open_suffix is new, so it cannot collide with
+        # local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-off",
+                open_suffix=_LING_THINKING_OFF_SUFFIX,
             ),
         )
     if family == "laguna":

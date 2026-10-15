@@ -2021,3 +2021,100 @@ defines, and behavior is pinned against `tokenizers`-built synthetic
 checkpoints; operators should still verify encode behavior against the
 checkpoint's intended tokenizer before trusting results (USAGE.md §3
 already carries that caution for the primary path).
+
+## Continuous dev — Cycle 13: Ling-3.1-flash catalog entry (2026-10-15, VERIFIED)
+
+Catalog 22 -> 23 families: `ling` (inclusionAI/Ling-3.1-flash, released
+2026-10-15, MIT; https://huggingface.co/inclusionAI/Ling-3.1-flash).
+Evidence TIER-1: the official `chat_template.jinja` ("Bailing V3"),
+read and derived line-by-line by hand (preserved at
+docs/evidence/ling31-chat-template.jinja); the tokenizer_config.json
+`bos_token` field was verified live against the HF repo (read 2026-10-15):
+`<|startoftext|>`.
+
+What the template says (plain-text, no-tools core): an always-emitted
+system block (with system message X: `<role>SYSTEM</role>X\ndetailed
+thinking on<|role_end|>`; without: `<role>SYSTEM</role>detailed thinking
+on<|role_end|>`); user `<role>HUMAN</role>{content}<|role_end|>`;
+assistant history `<role>ASSISTANT</role>\n<think></think>{content}
+<|role_end|>`; generation prompt `<role>ASSISTANT</role>\n<think>`
+(thinking defaults ON, jinja line 12). The catalog models the default
+thinking-on render; thinking-off prefills an empty think block and rides
+the `--mutate` path as `ling/thinking-off` (kolibri/thinking-off
+convention). The system block is documented, not modeled (lab
+convention); tool-call branches, reasoning-content branches, and the
+multi-step tool scan are out of scope for the plain-text core.
+
+**EOS correction (verified, not assumed):** the official eos_token field
+is `<|role_end|>` -- NOT `<|endoftext|>`, which is the pad_token and a
+special added token. Documented in the catalog comment; Format asserts no
+EOS string.
+
+**BOS caveat (documented):** the jinja template itself emits no BOS
+literal and add_bos_token is false; the entry takes the config's
+bos_token (lfm25 convention), so a raw apply_chat_template call would
+not emit it -- noted in the catalog comment.
+
+954 -> 964 tests (10 new in tests/test_cycle13_families.py: byte-exact
+render pins, thinking-off mutation pin, dedup-key no-collision pin,
+diff-vs-all-other-22-families pin, README naming/count pin); the
+cycle-10/cycle-11 thinking-branch invariants and the cycle-11 README
+count pin updated for the new family; README "22-family" claims updated
+to 23 and the test-count claim to 964; CHANGELOG [Unreleased] extended.
+
+## Continuous dev — Cycle 13: `mpl diff-reports` iterate-and-compare tool (2026-10-15)
+
+Research recommendation, no external research needed (pure local tooling):
+the core operator workflow is iterate-and-compare -- tweak a template or
+fixture, re-run, see what changed -- and eyeballing two HTML reports is
+imprecise. `mpl diff-reports OLD_RESULTS NEW_RESULTS` (new module
+`model_protocol_lab/diffreports.py`, wired into the CLI at the two ANCHOR
+sites) compares two `results.json` files deterministically: same inputs →
+byte-identical output, no model, no network, exact comparisons only (no
+fuzzy matching).
+
+Compared axes: decision flip (old → new), winner change, per-candidate
+pass/fail verdict flips on search and held-out (held-out verdicts exist
+only for each run's winner; others report `absent`), per-fixture outcome
+diffs per candidate (pass requires exact answer + boundary token match,
+the `run` criterion; changed-only by default, `--all` lists everything),
+and a config-drift warning section -- the classic operator mistake of
+comparing runs that were never comparable. Drift flags different
+candidate families (base names; `results.json` does not store the
+`--family` flag, so this is the exact family signal available), candidate
+sets, per-candidate boundary token IDs, `--max-new-tokens`, backend
+fingerprints (model identity), and fixture sets (when evidence exists).
+Per-fixture comparison needs `--include-evidence` on both runs and
+degrades loudly otherwise; exit 0 on success even when differences are
+found (differences are the output, not a failure).
+
+Security posture mirrors the repo's bounded-reader discipline: 32 MB cap
+(`results_too_large`), regular-file-only reads via the
+`os.open(O_NONBLOCK)` + `fstat` pattern from `datasets.load_dataset`,
+duplicate-field and non-finite rejection with fixed codes, shape
+validation of only the compared axes (everything else degrades to
+`unknown` rather than failing), and control-character stripping of
+operator-visible identifiers before they reach stderr. All failures map
+to fixed `ValueError` codes -- no tracebacks, no file content in error
+text.
+
+Verification: 30 new tests in tests/test_cycle13_diffreports.py --
+decision/winner flips, verdict flips (search, held-out, absent, malformed
+summary → `unknown`), per-fixture diffs (changed-only default, `--all`,
+deterministic (stage, candidate, fixture) ordering), config drift for all
+six fields with fixed field order, identical-run → "no differences",
+missing-evidence degradation, hostile inputs (malformed JSON, duplicate
+keys, NaN, non-UTF-8, oversized, FIFO, missing paths, deep nesting,
+directory resolution) all collapsing to fixed codes with no tracebacks,
+stderr sanitization of hostile identifiers, byte-identical determinism,
+and CLI wiring (JSON on stdout, summary on stderr, exit 0 with
+differences). ruff check + format clean; mypy clean on all 15 source
+files.
+
+**Deliberate exclusions:** no fuzzy fixture matching (exact fixture-ID
+comparison only -- cross-fixture alignment is a research question, not a
+diff feature); no HTML report comparison (`results.json` is the source of
+truth); no verdict inference from missing summaries (degrades to
+`unknown`, shown as such); the `--family` flag is not recovered (not
+stored in `results.json` -- candidate base names are the exact available
+signal, documented as such).
