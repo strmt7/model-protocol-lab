@@ -2656,3 +2656,14 @@ copies. Doc discrepancies D1/D2 (str-subclass size-limit message; lone
 surrogate UnicodeEncodeError vocabulary) are cosmetic error-message
 quirks, pinned by tests -- no source change made. README test count
 updated to 2424.
+
+## 2026-10-15 (cycle 31: cli.py dispatch verification)
+
+Verification of `model_protocol_lab/cli.py` + `__main__.py` (tests/
+test_cycle31_cli_verify.py, 82 tests + 76 subtests): NO functional bug
+found. Covers all 8 subcommands' parsing/validation/dispatch, exit-code
+mapping, hostile argv, `allow_abbrev=False` option-abbreviation
+rejection, determinism, and decision->exit-code mapping with a fake
+backend. Mutation sensitivity: 9/9 mutants caught on hermetic /tmp
+copies. No help-text discrepancies (4 consistency notes pinned in the
+test-file docstring). README test count updated to 2506.
