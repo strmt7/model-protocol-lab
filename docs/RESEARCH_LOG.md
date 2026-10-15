@@ -2908,3 +2908,19 @@ real-model runs (no weights), exit-130 signal path, s8.2/8.5/8.9
 literature prose, local_context_limit_exceeds_declared_window (checked
 statically: backends.py raises the exact code). README test count
 updated to 3441.
+
+## 2026-10-15 (cycle 47: sample-report pipeline end-to-end audit)
+
+End-to-end audit of examples/make_sample_report.py
+(tests/test_cycle47_sample_report_audit.py, 5 tests + 10 subtests):
+regeneration into /tmp via the script's own build_sample_report() with
+its scripted DemoBackend (decision compatible_on_fixture_set, selected
+llama3); HTML self-contained (zero external URLs, inline-only script,
+default-src 'none' CSP); exact 19-key top-level JSON schema pinned
+(schema_version 1, config echoes, nested search/held-out/
+selection_margin/token_overhead/failure_taxonomy schemas);
+byte-identical determinism across two fresh regenerations; and the
+regenerated output is byte-identical to the committed
+examples/sample-report/ (no schema drift). No real bugs. Deliberately
+not verified: actual browser rendering, CSP script-src hash
+re-derivation, pip-audit/CI. README test count updated to 3446.
