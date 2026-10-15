@@ -2837,3 +2837,19 @@ had no docstring at all -- added one stating the pinned contract (first
 contiguous-subsequence index, falsy stop raises ValueError, no type
 validation). Remaining D2-D7 notes are pinned behavioral details, not
 doc errors. README test count updated to 3303.
+
+## 2026-10-15 (cycle 43: second canary evidence-leak sweep)
+
+Second canary sweep with marker CANARY43-LEAKSWEEP-QZ7 planted as
+fixture content, expected answers, generated text and token-ID arrays
+(tests/test_cycle43_leak_sweep.py, 35 tests + 11 subtests): NO LEAK
+FOUND. Covers save_report JSON+HTML with include_evidence False/True
+(backend_divergences, template_conformance, stop-matrix,
+budget-frontier, logprob sections), divergence_section_data end to end,
+diff-reports/diff-backends (function + CLI), debug REPL surfaces
+(by-design echoes vs must-stay-clean pinned per USAGE.md section 10),
+doctor + portability matrix, CLI inspect/fixtures build, and the
+committed examples/sample-report. Sensitivity: 3/3 reintroduced-leak
+mutants caught on hermetic /tmp copies (stripped _strip_raw_diagnostics,
+HTML stop_text render, _public_view keeping observations). README test
+count updated to 3338.
