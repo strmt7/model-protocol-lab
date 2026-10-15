@@ -257,6 +257,19 @@ All notable changes to this project are documented here. The format follows
     duplicate-fixture-ID last-wins vs duplicate-candidate first-wins
     inconsistency is deliberate -- reconciling it would change only
     hostile-input behavior.
+- `emulate_vllm_holdback` now skips the stop check on steps whose token
+  decodes to no new text, porting upstream `check_stop_strings`'
+  `if not new_char_count ...: return None`
+  (`vllm/v1/engine/detokenizer.py`). Without it, the find window start
+  `1 - len(stop)` is 0 for single-character stops (e.g. `"\n"`), so a stop
+  completed during the `min_tokens` gate was refound at the first
+  zero-new-char step -- upstream never refires it. Found by a new
+  differential harness (`tests/test_cycle14_holdback.py`): a line-faithful
+  port of upstream's `update`/`check_stop_strings` compared against the
+  emulation over 32 adversarial cases (stop at position 0, stops spanning
+  token/gate boundaries, empty-decoding tokens, unicode, both
+  `include_stop_str_in_output` modes, empty output) plus a 400-trial seeded
+  fuzz; all 435 subtests agree with upstream after the fix.
 
 ### Added
 
