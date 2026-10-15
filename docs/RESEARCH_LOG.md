@@ -3171,3 +3171,25 @@ native comparison, off-by-one flip-range end); repo source
 sha256-verified untouched. Not in scope: HTML/markdown rendering,
 exhaustive validation paths, max-scale perf, the truncation-equals-
 regeneration modeling assumption. README test count updated to 3671.
+
+## 2026-10-15 (cycle 58: HTML escaping / XSS audit)
+
+Adversarial audit of HTML escaping in the report renderers
+(tests/test_cycle58_html_escaping_audit.py, 9 tests + 14 subtests):
+reporting.render_html (all 12 sections), save_report, the sample-report
+generator (shares the renderer), and diffreports.render_summary
+(verified: no HTML entry point, terminal-only with ANSI sanitization).
+14 adversarial payloads (script tags, <img onerror>, javascript: URLs,
+</textarea>/</title> breakouts, HTML comments, CSS expression(),
+dotless-i <scrıpt>, fullwidth tags, attribute-injection quotes,
+mixed-case tags, U+2028) injected into every renderer-visible field:
+every payload rendered only in escaped form; an HTMLParser-based audit
+found exactly one <script> (the renderer's own sorter), no on* attrs,
+no javascript: in URL attributes, no img/iframe/textarea elements;
+JSON round-trip integrity and legitimate-content fidelity (unicode,
+<|special|> tokens, code with <>&) verified; CSP meta with hash-locked
+script-src confirmed present. No real escaping holes. Mutation gate 3/3
+caught on /tmp copies (dropped escaping, escape-<-only, double-escape);
+repo untouched. Not verified: live-browser execution (no live browser
+in this environment; structural audit + raw-substring checks used
+instead). README test count updated to 3680.
