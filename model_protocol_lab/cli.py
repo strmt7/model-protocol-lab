@@ -87,6 +87,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional second local checkpoint: its tokenizer re-encodes the "
         "boundary marker to check cross-tokenizer boundary portability",
     )
+    doctor_cmd.add_argument(
+        "--portability-matrix",
+        type=Path,
+        default=None,
+        help="Optional second local checkpoint: every catalog candidate's "
+        "special-token inventory is checked against its tokenizer "
+        "(registered, single-token, id-consistent) and reported as a "
+        "compatibility matrix. Tokenizer only, never weights. "
+        "'incompatible' rules the checkpoint out; 'compatible' predicts "
+        "nothing about experimental success (see docs/USAGE.md section 2).",
+    )
     run = sub.add_parser(
         "run", help="Evaluate a local checkpoint and save a report", allow_abbrev=False
     )
@@ -351,8 +362,17 @@ def main(argv=None) -> int:
                 boundary_ids=args.boundary_ids,
                 boundary_map=_resolve_boundary_map(args.boundary_map, None, parser),
                 reference_model_path=args.reference_model,
+                portability_matrix_path=args.portability_matrix,
             )
             print(json.dumps(result, indent=2))
+            if args.portability_matrix is not None:
+                # The human-readable matrix goes to stderr so stdout stays
+                # a parseable JSON report.
+                from .doctor import render_portability_table
+
+                section = result.get("portability_matrix")
+                if type(section) is dict:
+                    print(render_portability_table(section), file=sys.stderr)
             return 0 if result["verdict"] == "ok" else 1
         if args.command == "fixtures":
             from .fixtures import (

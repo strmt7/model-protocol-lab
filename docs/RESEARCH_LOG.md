@@ -1967,3 +1967,57 @@ render either way); the muse_glimmer `to=self` reasoning-trace content and
 the system-appendage beyond the documented suffix (unmodelable roles /
 generation stops, documented only); the laguna reasoned-content branch
 (non-deterministic, kimi3 convention).
+
+## Continuous dev — Cycle 12: static template↔tokenizer portability matrix (2026-10-15, VERIFIED)
+
+Builds the research recommendation from
+docs/RESEARCH_PORTABILITY_2026-10-15.md (kept as-is): `doctor
+--portability-matrix SECOND_CHECKPOINT` checks every catalog candidate's
+special-token inventory (`fixtures._extract_special_tokens`) against the
+second checkpoint's tokenizer -- registered in added/special tokens,
+encodes as exactly one token id, encoded id == registered id -- via the new
+`core.template_tokenizer_compatibility`, a deliberate generalization of
+`core.check_boundary_portability` (same probe-must-not-fail-caller,
+fixed-vocabulary, exact-token-ID discipline). Tokenizer only, never
+weights: one tokenizer load + O(candidates × tokens) encodes, reusing
+doctor's `_build_primary_tokenizer` path, the 128 MB `tokenizer.json` cap,
+and the `_loader_failure_code` sanitization boundary (hostile checkpoint
+bytes never reach the terminal).
+
+**The asymmetry is the design and is stated loudly everywhere** (report
+section, CLI table, docs/USAGE.md §2): `incompatible` ⇒ the format cannot
+be that checkpoint's native format ⇒ re-running the experiment there is
+scientifically pointless, answered at ~zero compute. `compatible` ⇒ the
+markers are merely encodable ⇒ NO prediction about experimental success
+(weights decide). No portability score is emitted anywhere; a recursive
+key-scan test pins that no score/prediction/transfer key can appear in the
+section. BOS-less formats (8 catalog families, bos="") skip the BOS
+requirement by design (`bos_skipped` per row -- the inventory simply holds
+no BOS literal); empty inventories and encode failures report `unknown`,
+never `compatible`. The matrix is triage, never a gate: it cannot fail the
+doctor verdict, and an unusable second checkpoint yields `unavailable`
+with a fixed-vocabulary detail.
+
+Verification: 38 new tests in tests/test_cycle12_portability.py --
+incompatible pinned for all three failure modes (unregistered / fragments /
+id_mismatch), unknown for empty inventory and degraded encodes, first-
+failure-in-inventory-order, degrade-beats-incompatible, BOS-less skip both
+ways, hostile dirs (missing / oversized-sparse / malformed-JSON with
+hostile marker bytes / non-dict doc / unloadable tokenizer) all collapse
+to fixed codes, determinism (two runs byte-identical), CLI flag wiring
+(stdout stays parseable JSON, table + ASYMMETRY WARNING on stderr), and a
+no-transfer-claim scan over the whole section. 915 -> 953 tests (README
+count updated; the pinning test passes); ruff check + format clean; mypy
+clean on all 14 source files.
+
+**Deliberate exclusions:** no primary-checkpoint matrix row (the research's
+"natural second row" -- deferred; the experiment's own checkpoint is
+covered by template_conformance, and the flag's question is strictly
+"can I rule out checkpoint B without running it?"); no behavioral
+template-inference feature (rejected by the research as speculative
+science); no AutoTokenizer-vs-minimal-loader validation on real
+checkpoints yet -- the encode path is the same Rust tokenizer the file
+defines, and behavior is pinned against `tokenizers`-built synthetic
+checkpoints; operators should still verify encode behavior against the
+checkpoint's intended tokenizer before trusting results (USAGE.md §3
+already carries that caution for the primary path).

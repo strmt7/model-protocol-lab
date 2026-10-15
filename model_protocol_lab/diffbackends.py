@@ -119,6 +119,7 @@ DivergenceClass = Literal[
     "FIRING_STEP_DIFFERS",
     "MIN_TOKENS_GATED",
     "EOS_PRECEDENCE",
+    # Vacuous for SGLang by construction: text trimmed at the leftmost stop-string occurrence.
     "HARNESS_NORMALIZATION_RELIED",
     "MULTI_STOP_SELECTION",
     "NO_MIN_TOKENS_GATE",
@@ -723,8 +724,10 @@ def divergence_section_data(
     - ``observations_truncated``: True when the input list held more than
       ``MAX_DIVERGENCE_OBSERVATIONS`` entries;
     - ``observations_total``: the number of observation entries handed in;
-    - ``observations_processed``: the number actually processed (the bound
-      when truncated).
+    - ``observations_processed``: the number of observations actually
+      emulated, i.e. ``len(per_fixture)`` (the bound when truncated *and*
+      every truncated candidate validated -- skipped observations are not
+      counted).
 
     Observations that are not dicts, or whose ``input_ids``/``output_ids``
     do not validate, are skipped. At most ``MAX_DIVERGENCE_OBSERVATIONS``
@@ -813,7 +816,7 @@ def divergence_section_data(
         "min_tokens": min_tokens,
         "observations_truncated": truncated,
         "observations_total": observations_total,
-        "observations_processed": len(candidates),
+        "observations_processed": len(per_fixture),
     }
 
 
