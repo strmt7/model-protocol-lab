@@ -178,6 +178,25 @@ def _hf_overhang_match(token_texts: Sequence[_TokSeq], stop: _TokSeq) -> bool:
     ``_hf_byte_token_mapper``). HF matches on *cleaned vocab strings* on the
     classic path; this port matches on per-token ``decode`` strings there,
     which agree except on exotic spacing edge cases.
+
+    Two faithfulness details mirror the tensor implementation exactly:
+
+    - The walk only consumes the last ``len(stop)`` representations: HF
+      truncates ``input_ids`` to ``[:, -maximum_token_len:]`` before
+      matching (``maximum_token_len`` is ``len(stop)`` for one stop
+      string), so tokens earlier than that window can never participate.
+      The bound is a no-op for non-empty representations, which consume at
+      least one unit each and end the walk after at most ``len(stop)`` of
+      them.
+    - An empty representation is transparent to the walk: upstream assigns
+      it valid positions ``1..len(stop)-1`` and it adds nothing to the
+      running total, so a live walk (``matched < len(stop)``) always passes
+      through it. (With a single-unit stop the walk completes at the
+      end-overlap, so the empty case is unreachable there -- upstream
+      gives it no valid positions then.) Only reachable with exotic
+      empty-string vocab entries; out-of-vocabulary ids use the
+      ``_OOVTokenBytes`` marker, which keeps killing the walk exactly like
+      HF's dummy-row clamp.
     """
     if not stop or not token_texts:
         return False
@@ -198,13 +217,23 @@ def _hf_overhang_match(token_texts: Sequence[_TokSeq], stop: _TokSeq) -> bool:
     for overlap in sorted(end_overlaps, reverse=True):
         matched = overlap
         index = len(token_texts) - 2
-        while matched < target and index >= 0:
+        # HF's per-call ``input_ids[:, -maximum_token_len:]`` truncation:
+        # the walk may only consume the last ``target`` representations
+        # (the max() keeps the bound from going negative, which would let
+        # ``index`` wrap around to the sequence tail).
+        earliest = max(0, len(token_texts) - target)
+        while matched < target and index >= earliest:
             token = token_texts[index]
             if type(token) is not type(stop):
                 break
+            if len(token) == 0:
+                # Transparent to the walk (see docstring); consumes window
+                # budget but no stop-string units.
+                index -= 1
+                continue
             remainder = stop[: target - matched]
             width = min(len(token), len(remainder))
-            if width == 0 or token[len(token) - width :] != remainder[len(remainder) - width :]:
+            if token[len(token) - width :] != remainder[len(remainder) - width :]:
                 break
             matched += len(token)
             index -= 1
@@ -259,6 +288,20 @@ def _decoder_config_has_type(config: Any, decoder_type: str) -> bool:
     return False
 
 
+class _OOVTokenBytes(bytes):
+    """Byte-space marker for out-of-vocabulary token ids.
+
+    Compares equal to ``b""`` (so an OOV id still "can never match"), but
+    its distinct type keeps it from being confused with a genuinely empty
+    token representation in :func:`_hf_overhang_match`: upstream clamps OOV
+    ids to a dummy table row whose valid positions are all -1, killing any
+    walk that reaches it, while a real empty-string token is transparent
+    to the walk (valid positions ``1..len(stop)-1``). The walk's
+    ``type(token) is not type(stop)`` guards implement both behaviors with
+    no extra branches.
+    """
+
+
 def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | None:
     """Byte-space token mapping mirroring HF ``StopStringCriteria``'s table build.
 
@@ -273,9 +316,11 @@ def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | Non
     "unmappable in byte space" (e.g. special tokens under a byte-level
     decoder): the caller falls back to the isolated decode encoded as
     UTF-8, approximating HF's cleaned-vocab-string fallback for such
-    tokens. Out-of-vocabulary ids map to ``b""``, which can never match --
-    mirroring HF clamping them to a dummy table row. Never raises:
-    anything unexpected degrades to None (string path).
+    tokens. Out-of-vocabulary ids map to an empty ``_OOVTokenBytes``
+    marker, which compares equal to ``b""`` (so it can never match) but
+    keeps killing the match walk -- mirroring HF clamping them to a dummy
+    table row. Never raises: anything unexpected degrades to None (string
+    path).
     """
     try:
         decoder = getattr(getattr(tokenizer, "backend_tokenizer", None), "decoder", None)
@@ -315,7 +360,7 @@ def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | Non
         if type(token_id) is not int or token_id < 0:
             raise ValueError("token id must be a nonnegative integer")
         if token_id >= vocab_size:
-            return b""
+            return _OOVTokenBytes()
         token = tokenizer.convert_ids_to_tokens(token_id)
         if type(token) is not str:
             return None
@@ -360,8 +405,11 @@ def emulate_hf_stop_string(
     decoders, where the match table is built from raw token bytes and the
     stop string is UTF-8-encoded. Tokens the mapping cannot represent fall
     back to the isolated decode encoded as UTF-8 (an approximation of HF's
-    cleaned-vocab-string fallback). Without ``token_bytes`` the classic
-    string path is used: token texts come from per-token
+    cleaned-vocab-string fallback). A per-token None means "unmappable";
+    out-of-vocabulary ids should map to empty bytes (the lab's own mapper
+    returns the ``_OOVTokenBytes`` marker so the walk kills, mirroring HF's
+    dummy-row clamp, rather than passing through). Without ``token_bytes``
+    the classic string path is used: token texts come from per-token
     ``backend.decode``, an approximation of HF's cleaned vocab strings.
 
     HF always keeps the stop string: there is no include/exclude option
@@ -400,7 +448,7 @@ def emulate_hf_stop_string(
                             False, False, tuple(output_ids), "token_text_unavailable"
                         )
                     mapped = decoded.encode("utf-8")
-                if type(mapped) is not bytes:
+                if type(mapped) not in (bytes, _OOVTokenBytes):
                     return StopOutcome(False, False, tuple(output_ids), "token_text_unavailable")
                 byte_texts.append(mapped)
             step = _first_firing_step(byte_texts, stop_text.encode("utf-8"), base, len(output_ids))

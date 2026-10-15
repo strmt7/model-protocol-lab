@@ -270,6 +270,25 @@ All notable changes to this project are documented here. The format follows
   token/gate boundaries, empty-decoding tokens, unicode, both
   `include_stop_str_in_output` modes, empty output) plus a 400-trial seeded
   fuzz; all 435 subtests agree with upstream after the fix.
+- `emulate_hf_stop_string` now treats empty token representations as
+  transparent to the match walk (upstream assigns them valid positions
+  `1..len(stop)-1` and zero length contribution, so a live walk always
+  passes through them) and bounds the walk to the last `len(stop)`
+  representations, mirroring upstream's
+  `input_ids[:, -maximum_token_len:]` truncation -- found by a new
+  differential harness (`tests/test_cycle14_hfstop.py`) comparing the
+  emulation against the real `transformers.StopStringCriteria` (5.19.0)
+  over the docstring's match/no-match cases, stop-at-0/empty-output/
+  unicode/overlapping/overlong stops, prompt-boundary overhangs, the
+  byte-space path (UTF-8 fragments, byte-fallback hex tokens, OOV ids),
+  multi-stop earliest-completion, plus a 525-trial seeded fuzz; the one
+  pre-fix disagreement was `["s", "", "topper"]` vs `"stop"`, where
+  upstream fires at step 3 and the port stayed silent. Out-of-vocabulary
+  ids on the byte path now map to an empty `_OOVTokenBytes` marker (still
+  `== b""`, so they can never match) that keeps killing the walk exactly
+  like upstream's dummy-row clamp; previously the shared `b""` could not
+  be told apart from a genuine empty token. All 3000+ differential trials
+  agree with upstream after the fix.
 
 ### Added
 
