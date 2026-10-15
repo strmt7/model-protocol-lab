@@ -3100,3 +3100,25 @@ test_cycle10/11 (thinking-off invariant), test_cycle10/11/13/14/15
 test_cycle40 (118 candidates); README enumerations (+Qwen3.8),
 USAGE.md `.families` row, VALIDATION.md updated to 29. README test
 count updated to 3574.
+
+## 2026-10-15 (cycle 55: core.evaluate() differential audit)
+
+Differential re-verification of core.evaluate() and the observation
+pipeline against a hand-rolled independent oracle
+(tests/test_cycle55_evaluate_audit.py, 53 tests): 400 randomized
+trials x 1-3 fixtures (exact matches, near-misses, empty outputs,
+multi-byte boundaries, boundary-at-0, over-long boundaries, overlapping
+boundary/answer, decode failures, invalid generations, encode/render
+failures, mid-run cancellation), field-by-field Observation comparison
++ report status/counts, seed derivation (sha256 seed\0case.id, 4-byte
+big-endian), determinism, secret-leak scan, error-code sanitization,
+diagnostic boundary_text_match modes, abort-vs-terminate input-id
+retention. No real bugs in source (one divergence found was an oracle
+bug -- the post-encode cancellation path uses terminate(), retaining
+input_ids; oracle fixed, source confirmed correct). Mutation gate 6/6
+caught on /tmp copies (case-insensitive match, boundary off-by-one,
+invalid->completed, dropped last token, decode_error taxonomy, inverted
+endswith); repo source sha256-verified untouched. Not in scope:
+check_boundary_portability, candidate ranking/selection, real backends,
+thread-safety/perf, first_boundary's no-validation paths. README test
+count updated to 3627.
