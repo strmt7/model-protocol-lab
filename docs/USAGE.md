@@ -104,7 +104,9 @@ each candidate's own boundary as well. A mistyped candidate name fails fast
 `<family>/prefix-trim` (some collapse when the family has no BOS marker --
 see `catalog` output via `local_repairs` dedup), plus
 `kolibri/thinking-off` (the Kolibri-1 thinking-disabled generation-prompt
-branch).
+branch), `nemotron35/thinking-off` (the Nemotron 3.5 Lightning
+thinking-disabled generation-prompt branch), and `laguna/thinking-on` (the
+Laguna S-2.1 thinking-enabled generation-prompt branch).
 
 Discipline: use each format's genuine end-of-turn marker, verified against
 the checkpoint tokenizer with `doctor --boundary-ids` (or `doctor
@@ -124,7 +126,7 @@ The local adapter emits the full requested number of tokens unless cancelled or 
 
 `--seed` accepts an unsigned 64-bit integer (default 0). It is validated up front and recorded in `results.json` for provenance, but it does not change greedy selection: the local adapter decodes greedily, so the seed has no effect on outputs. It exists so future sampling backends can share the flag.
 
-With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; `kolibri` additionally yields a `thinking-off` variant (the same template's generation prompt with an empty `<think>` block prefilled, for thinking-disabled requests). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
+With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; `kolibri` and `nemotron35` additionally yield a `thinking-off` variant (the same template's generation prompt with an empty `<think>` block prefilled, for thinking-disabled requests), and `laguna` additionally yields a `thinking-on` variant (the S-2.1 thinking-enabled generation prompt). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
 
 Ctrl+C requests cooperative cancellation after model loading. Interrupted evaluation can retain a partial report. Model loading and individual backend operations are not guaranteed to be promptly interruptible.
 
@@ -628,4 +630,12 @@ accepts at most 16 stop texts (`too_many_stop_texts`): a stop is a needle,
 not a document, and each stop adds five emulated cells, so the count
 multiplies the quadratic bound. Over-cap recorded observations in the
 `run` diagnosis path are skipped (the section is omitted) rather than
-burning quadratic time.
+burning quadratic time. The *count* of recorded observations the diagnosis
+processes is also bounded: at most 512 (`MAX_DIVERGENCE_OBSERVATIONS`) --
+legitimate runs hand over at most 200 (the experiment fixture cap is 100
+search + 100 held-out fixtures, and only the winner's observations are
+used), so real runs are never affected. When a report records more, the
+first 512 are differential-tested in input order and the section records
+the fixed-vocabulary `observations_truncated: true` with the recorded
+count (`observations_total`) -- the run degrades by omission, never by
+exception, and the HTML report names the bound explicitly.

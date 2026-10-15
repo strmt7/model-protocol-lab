@@ -342,6 +342,111 @@ CATALOG = {
         "<|im_end|>\n",
         open_suffix="<|im_start|>assistant\n<think>\n",
     ),
+    # NVIDIA Nemotron 3.5 Lightning
+    # (nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16, released 2026-08-11).
+    # Evidence tier 2: the official HF model card, the NeMo SFT docs, and the
+    # community osaurus renderer (a byte-level implementation of the official
+    # template). Per-turn frames are ChatML:
+    # <|im_start|>{role}\n{content}<|im_end|>\n. Thinking ON (default --
+    # enable_thinking defaults true): the generation prompt ends at
+    # <|im_start|>assistant\n<think>\n (the base entry's open_suffix).
+    # Thinking OFF: the generation prompt prefills an EMPTY think block,
+    # <|im_start|>assistant\n<think></think> (note: no trailing newlines --
+    # unlike kolibri/thinking-off's "<think>\n\n</think>\n\n" tail) -- modeled
+    # as the "nemotron35/thinking-off" variant in the mutate path (see
+    # candidates()), a generation-prompt branch of the same template, not a
+    # second base entry (kolibri/thinking-off convention).
+    # CRITICAL BOS CAVEAT: BOS behavior is UNVERIFIED/conflicting at official
+    # level -- the catalog models bos="" as an ABSENCE-OF-EVIDENCE
+    # placeholder and does NOT assert any BOS token (contrast lfm25, whose
+    # <|startoftext|> is a byte-verified tier-2 render). A verified official
+    # reading may revise this entry.
+    # Sources: https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16,
+    # https://github.com/nvidia-nemo/nemotron/blob/HEAD/docs/nemotron/lightning35/sft.md,
+    # https://github.com/osaurus-ai/osaurus/pull/2360
+    "nemotron35": Format(
+        "nemotron35",
+        "",
+        "<|im_start|>user\n",
+        "<|im_start|>assistant\n",
+        "<|im_end|>\n",
+        open_suffix="<|im_start|>assistant\n<think>\n",
+    ),
+    # Meta Muse Glimmer 30B (meta-models, released 2026-08-10, Apache 2.0).
+    # Evidence tier 2: the official meta-oss-cookbook quickstart, the HF
+    # transformers model docs, and the HF blog walkthrough -- with the
+    # generation prompt COMMUNITY-REFINED (tier 2/community-corroborated):
+    # the simpler "<|start|>assistant" alternative was superseded by the
+    # recipient-channel form below.
+    # Frame: <|begin_of_text|><|start|>{role}<|message|>{content}<|eot|>
+    # (no newline anywhere). Assistant turns use recipient channels: the
+    # reasoning trace is <|start|>assistant to=self<|message|>... and the
+    # user-facing reply <|start|>assistant to=user<|message|>...<|eot|> --
+    # the lab's plain-text no-reasoning hypothesis models the assistant turn
+    # as to=user and does NOT render the to=self trace (same class of
+    # omission as kimi3's empty think block and glm45/glm53's empty
+    # <think></think>: the reasoned-content branch is not a hypothesis).
+    # Generation prompt: <|start|>assistant to=user<|message|>.
+    # Documented, NOT modeled: system messages render the caller text with
+    # "\nReasoning strength: high.\n# Valid recipients: \"self\", \"user\"."
+    # APPENDED after the caller content (single newlines -- not a standalone
+    # preamble block); the system role is not modeled in Format (same
+    # convention as mistral_large/gemma4/kolibri). EOS is <|end_of_text|>
+    # (id 200001);  is the end-of-MESSAGE marker, NOT a stop token.
+    # Sources: https://github.com/meta-models/meta-oss-cookbook/blob/HEAD/quickstart/README.md,
+    # http://huggingface.co/docs/transformers/main/model_doc/muse_glimmer,
+    # https://github.com/huggingface/blog/blob/main/muse-glimmer.md
+    "muse_glimmer": Format(
+        "muse_glimmer",
+        "<|begin_of_text|>",
+        "<|start|>user<|message|>",
+        "<|start|>assistant to=user<|message|>",
+        "<|eot|>",
+        open_suffix="<|start|>assistant to=user<|message|>",
+    ),
+    # Poolside Laguna 2.1 (poolside/Laguna-XS-2.1, Jul 2026, OpenMDW-1.1).
+    # Evidence tier 2: the official HF model cards plus the renderers
+    # library's LagunaXS21Renderer/LagunaS21Renderer, which are token-exact
+    # parity-verified against apply_chat_template.
+    # Base entry = XS-2.1 defaults (documented choice): enable_thinking
+    # defaults FALSE, so the generation prompt is <assistant></think> (bare
+    # </think> prefill, reasoning dropped from history turns), with no
+    # trailing newline. S-2.1 (enable_thinking defaults TRUE, gen prompt
+    # <assistant><think>) is the "laguna/thinking-on" mutate-path variant --
+    # the kolibri/thinking-off convention: a generation-prompt branch of the
+    # same template, not a second catalog entry.
+    # Frames ("hugging tags", no inner newlines): <user>{content}</user>,
+    # <tool_response>{content}</tool_response>, <system>{content}</system>.
+    # Assistant turns, XS-2.1/thinking-off: <assistant></think>{content}
+    # </assistant>. Thinking-on renders reasoning VERBATIM (empty included),
+    # so the lab's deterministic no-reasoning hypothesis uses an EMPTY think
+    # block: <assistant><think></think>{content}</assistant> (the
+    # reasoned-content branch is not a hypothesis here -- kimi3 convention).
+    # The </assistant> terminator is tier-2 via the renderers PR text ("the
+    # two opener tokens are unsampled scaffold; everything through the
+    # sampled </assistant> is the model's emission"). EOS is <|EOS|> --
+    # DECODE-ONLY, never rendered in the prompt (documented, not modeled).
+    # BOS: no BOS token appears in any tier-2 render; modeled as empty with
+    # the absence-of-evidence caveat (contrast nemotron35, whose BOS is
+    # explicitly conflicting at official level).
+    # System role: not modeled (lab convention). The upstream template ships
+    # a default Poolside system prompt, but an empty caller system message
+    # suppresses the <system> block entirely -- and the lab never sends
+    # system messages, so the no-system render modeled here is byte-identical
+    # either way; the default-prompt wording is deliberately NOT asserted.
+    # Sources: https://huggingface.co/poolside/Laguna-XS-2.1,
+    # https://github.com/PrimeIntellect-ai/renderers/pull/99,
+    # https://github.com/PrimeIntellect-ai/renderers/pull/111
+    "laguna": Format(
+        "laguna",
+        "",
+        "<user>",
+        "<assistant></think>",
+        "",
+        user_turn_end="</user>",
+        assistant_turn_end="</assistant>",
+        open_suffix="<assistant></think>",
+    ),
 }
 
 
@@ -349,6 +454,13 @@ CATALOG = {
 # generation prompt prefills an empty <think> block (thinking disabled).
 # Deterministic string; pinned byte-exact in tests/test_cycle10_families.py.
 _KOLIBRI_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+
+# Nemotron 3.5 Lightning thinking-off branch: same frames as the base
+# entry, but the generation prompt prefills an empty <think> block
+# (thinking disabled). Note the absent trailing newlines -- unlike
+# kolibri/thinking-off's "<think>\n\n</think>\n\n" tail. Deterministic
+# string; pinned byte-exact in tests/test_cycle11_families.py.
+_NEMOTRON35_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think></think>"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
@@ -368,6 +480,38 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
                 base,
                 name=base.name + "/thinking-off",
                 open_suffix=_KOLIBRI_THINKING_OFF_SUFFIX,
+            ),
+        )
+    if family == "nemotron35":
+        # Thinking-off is a generation-prompt branch of the same template
+        # (the official default is thinking-on, which the base entry models
+        # via its open_suffix), so it rides the mutate path like
+        # kolibri/thinking-off rather than becoming a second catalog entry.
+        # Its open_suffix is new, so it cannot collide with local_repairs'
+        # dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-off",
+                open_suffix=_NEMOTRON35_THINKING_OFF_SUFFIX,
+            ),
+        )
+    if family == "laguna":
+        # S-2.1's default (enable_thinking=True) is a generation-prompt
+        # branch of the same template, so it rides the mutate path like
+        # kolibri/thinking-off rather than becoming a second catalog entry:
+        # the gen prompt is <assistant><think>, and history assistant turns
+        # render an EMPTY think block verbatim (the lab's deterministic
+        # no-reasoning hypothesis -- the reasoned-content branch is not a
+        # hypothesis, kimi3 convention). The base entry stays XS-2.1
+        # defaults (thinking off). The new open_suffix and assistant_prefix
+        # cannot collide with local_repairs' dedup keys.
+        variants += (
+            replace(
+                base,
+                name=base.name + "/thinking-on",
+                open_suffix="<assistant><think>",
+                assistant_prefix="<assistant><think></think>",
             ),
         )
     return variants

@@ -224,6 +224,21 @@ MAX_STOP_TEXT_LEN = 1024
 #: lists are a handful of strings; 16 is generous headroom.
 MAX_STOP_TEXTS = 16
 
+#: Maximum number of recorded observations ``divergence_section_data``
+#: processes per call. The ``run`` diagnosis path feeds the winner's
+#: recorded observations only (search + held-out fixture outputs);
+#: experiments.py rejects fixture splits above 100 search / 100 held-out
+#: fixtures, so a legitimate run hands over at most 200 observations.
+#: 512 is comfortably above that legitimate maximum (2.56x headroom) but
+#: far below DoS territory: each observation costs one full
+#: ``diff_backends`` emulation (~2-3 s worst case per stop text at
+#: ``MAX_OUTPUT_IDS``), so a hostile report with millions of observations
+#: would otherwise burn open-ended hours. Over-count input degrades by
+#: omission, never by exception: the first 512 observations are processed
+#: in input order and the output records ``observations_truncated: true``
+#: plus the offered count.
+MAX_DIVERGENCE_OBSERVATIONS = 512
+
 
 def _checked_ids(value: object, name: str, *, cap: int) -> tuple[int, ...]:
     """Strict token-id tuple validation (mirrors the emulations' contract).
@@ -704,15 +719,26 @@ def divergence_section_data(
       ``_CLASS_SEMANTICS``);
     - ``severities``: ``{divergence_class: severity}`` for the classes
       that fired (pins the report's severity badges);
-    - ``stop_texts``, ``eos_id``, ``min_tokens``: the run parameters.
+    - ``stop_texts``, ``eos_id``, ``min_tokens``: the run parameters;
+    - ``observations_truncated``: True when the input list held more than
+      ``MAX_DIVERGENCE_OBSERVATIONS`` entries;
+    - ``observations_total``: the number of observation entries handed in;
+    - ``observations_processed``: the number actually processed (the bound
+      when truncated).
 
     Observations that are not dicts, or whose ``input_ids``/``output_ids``
-    do not validate, are skipped. Returns None when no observation is
+    do not validate, are skipped. At most ``MAX_DIVERGENCE_OBSERVATIONS``
+    entries are processed -- the first ones, in input order -- so a hostile
+    report with millions of observations degrades to a fixed-vocabulary
+    truncation note instead of burning open-ended emulation time; this
+    preserves the "degrade by omission, never fail the run" contract.
+    Returns None when no observation is
     usable, so the ``run`` diagnosis degrades gracefully (the section is
     simply absent from the report). ``stop_texts``/``eos_id``/
     ``min_tokens``/``backend`` are strictly validated like
     :func:`diff_backends`; ValueError with a fixed code on violation.
-    Deterministic: identical inputs produce identical output.
+    Deterministic: identical inputs produce identical output (truncation
+    takes the same first-N prefix every run).
     """
     if type(observations) is tuple:
         candidates: list[Any] = list(observations)
@@ -720,6 +746,10 @@ def divergence_section_data(
         candidates = list(observations)
     else:
         raise ValueError("invalid_observations")
+    observations_total = len(candidates)
+    truncated = observations_total > MAX_DIVERGENCE_OBSERVATIONS
+    if truncated:
+        candidates = candidates[:MAX_DIVERGENCE_OBSERVATIONS]
     stops = _checked_stop_texts(stop_texts)
     if eos_id is not None and (type(eos_id) is not int or eos_id < 0):
         raise ValueError("invalid_eos_id")
@@ -781,6 +811,9 @@ def divergence_section_data(
         "stop_texts": list(stops),
         "eos_id": eos_id,
         "min_tokens": min_tokens,
+        "observations_truncated": truncated,
+        "observations_total": observations_total,
+        "observations_processed": len(candidates),
     }
 
 

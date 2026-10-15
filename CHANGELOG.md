@@ -8,6 +8,38 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Format catalog expanded to 22 families: `nemotron35` (NVIDIA Nemotron 3.5
+  Lightning, released 2026-08-11; evidence tier 2 -- official HF model card,
+  NeMo SFT docs, community osaurus renderer), `muse_glimmer` (Meta Muse
+  Glimmer 30B, released 2026-08-10, Apache 2.0; evidence tier 2 -- official
+  quickstart, HF transformers docs, HF blog, generation prompt
+  community-refined), and `laguna` (Poolside Laguna 2.1, Jul 2026,
+  OpenMDW-1.1; evidence tier 2 -- official HF cards plus the renderers
+  library's token-exact LagunaXS21/S21 renderers). Nemotron 3.5's ChatML
+  per-turn frames render byte-identical to chatml (only the thinking-on
+  generation tail `<|im_start|>assistant\n<think>\n` differs); its BOS
+  behavior is UNVERIFIED/conflicting at official level, so the catalog
+  models bos="" as an absence-of-evidence placeholder and asserts no BOS
+  token. Its thinking-off branch (generation prompt prefills an empty
+  `<think></think>` block, no trailing newlines -- unlike kolibri's tail)
+  rides the `--mutate` path as `nemotron35/thinking-off`. Muse Glimmer
+  frames `<|start|>{role}<|message|>{content}<|eot|>` with a
+  `<|begin_of_text|>` BOS; assistant turns use recipient channels and are
+  modeled as `to=user` (the `to=self` reasoning trace is not rendered); the
+  system appendage (`\nReasoning strength: high.\n# Valid recipients:
+  "self", "user".`), the `<|end_of_text|>` EOS, and the end-of-message
+  marker are documented, not modeled. Laguna 2.1 renders hugging tags with
+  no inner newlines (`<user>{content}</user>`, assistant turns closed by
+  `</assistant>`); the base entry is XS-2.1 defaults (enable_thinking FALSE,
+  gen prompt `<assistant></think>`), and S-2.1's thinking-on default rides
+  the `--mutate` path as `laguna/thinking-on` (gen prompt
+  `<assistant><think>`, history turns render an EMPTY think block verbatim);
+  EOS is decode-only and never rendered. Mistral Large 4 and Reflection
+  Beam are NOT shipped (not released) -- tracked as watched in
+  docs/RESEARCH_LOG.md. `tests/test_cycle11_families.py` pins byte-exact
+  renders, the thinking-branch mutations, diffs-vs-closest-family, the
+  nemotron35 no-BOS-assertion, and the evidence tiers; README family count
+  updated 19 -> 22.
 - Format catalog expanded to 19 families: `kolibri` (Aleph-Alpha
   Kolibri-1, released 2026-10-03, Apache 2.0; evidence tier 1 -- official
   tokenizer_config.json chat_template byte-verified by an independent fork)
@@ -191,6 +223,23 @@ All notable changes to this project are documented here. The format follows
   sortable tables (small inline script, inert-safe), sticky anchor TOC,
   exclusive `<details name>` accordions, SVG budget-frontier sparkline, and
   a tested no-remote-asset property.
+
+### Fixed (observation-count bound, 2026-10-15)
+
+- Red-team residual of the H1/M1/L1 fix cycle: `divergence_section_data`
+  now bounds the *number* of recorded observations with the named constant
+  `MAX_DIVERGENCE_OBSERVATIONS = 512`. Legitimate runs hand over at most
+  200 observations (the experiment fixture cap is 100 search + 100
+  held-out fixtures, and only the winner's observations feed the section),
+  so real runs are never affected; a hostile report with millions of
+  observations is now fixed work instead of open-ended emulation time.
+  Over-count input degrades by omission, never by exception: the first 512
+  observations are processed in input order and the section records the
+  fixed-vocabulary `observations_truncated: true` plus `observations_total`
+  / `observations_processed`; the HTML report names the bound explicitly.
+  Pinned by `tests/test_cycle11_bounds.py` (boundary N/N+1, first-N order,
+  determinism, no-usable-observations still degrades to an omitted
+  section). Per-observation bounds (H1/M1) are unchanged.
 
 ### Fixed
 

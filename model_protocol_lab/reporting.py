@@ -559,7 +559,9 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
     ``diffbackends.divergence_section_data`` from the winner's recorded
     observations): the one-line verdict, a divergence-class x semantic
     count matrix with severity badges, and one ``<details>`` callout per
-    divergence. Returns "" when the key is missing, so runs without the
+    divergence. When the section data records ``observations_truncated``,
+    a fixed-vocabulary note names how many observations were recorded and
+    how many were actually tested. Returns "" when the key is missing, so runs without the
     diagnosis render exactly as before (the sample-report golden test).
     Every model/fixture-derived string (fixture names, stop texts,
     detail lines) is escaped; severities, classes and counts are the
@@ -706,6 +708,22 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
             )
             + ".</p>"
         )
+    # Observation-count bound note (fixed vocabulary): the diagnosis
+    # processed only the first MAX_DIVERGENCE_OBSERVATIONS observations
+    # when the run recorded more than that. Numbers are ints by
+    # construction; still escaped via str() like the rest of this section.
+    truncation_note = ""
+    if section.get("observations_truncated") is True:
+        from .diffbackends import MAX_DIVERGENCE_OBSERVATIONS
+
+        total_obs = section.get("observations_total")
+        truncation_note = (
+            "<p>Observation bound reached: the run recorded "
+            + escape(str(total_obs))
+            + " observations; only the first "
+            + escape(str(MAX_DIVERGENCE_OBSERVATIONS))
+            + " were differential-tested.</p>"
+        )
     return (
         '<section id="backend-divergence"><h2>Backend divergence</h2>'
         "<p>Differential test of the emulated backend stop semantics "
@@ -718,6 +736,7 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
         + escape(pairs_verdict)
         + ".</p>"
         + params
+        + truncation_note
         + matrix_table
         + ("<h3>Divergences</h3>" + "".join(callouts) if callouts else "")
         + "</section>"

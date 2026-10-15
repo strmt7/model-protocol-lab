@@ -105,7 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--boundary-ids applies to candidates without an entry. Names must "
         "match the evaluated candidates (see `catalog`, plus /toggle-bos, "
         "/no-bos, /prefix-newline, /prefix-trim with --mutate, and "
-        "kolibri/thinking-off).",
+        "kolibri/thinking-off, nemotron35/thinking-off, "
+        "laguna/thinking-on).",
     )
     run.add_argument("--max-new-tokens", type=int, default=64)
     run.add_argument("--max-context", type=int, default=2048)

@@ -1779,3 +1779,191 @@ severity/count pins in `tests/test_cycle7_divergence.py` and
 semantics: …". ruff check + format clean; mypy clean. Docs: `USAGE.md`
 §11 (new column, new classes, flags re-verified against live `--help`,
 no-TGI-cell rationale, `stop_regex` note), `CHANGELOG.md` [Unreleased].
+
+## 2026-10-15 -- Residual fix: observation-count bound on `divergence_section_data`
+
+What changed and why:
+
+The H1/M1/L1 red-team fix cycle bounded each observation's ids
+(`MAX_OUTPUT_IDS`/`MAX_PROMPT_IDS`) and the stop texts
+(`MAX_STOP_TEXT_LEN`/`MAX_STOP_TEXTS`), but left one residual: the *count*
+of observations `divergence_section_data` processes was unbounded. The
+`run` diagnosis path hands it the winner's recorded observations, and each
+observation costs one full `diff_backends` emulation (~2-3 s worst case
+per stop text at the output cap on the reference stub) -- so a hostile
+`results.json` with millions of recorded observations would burn
+open-ended hours, even though every individual observation was "valid".
+
+Fix: named constant `MAX_DIVERGENCE_OBSERVATIONS = 512`. Rationale, all
+from the lab's own caps: the section consumes only the winner's recorded
+observations (search + held-out fixture outputs), and experiments.py
+rejects fixture splits above 100 search / 100 held-out fixtures, so a
+legitimate run hands over at most 200 observations. 512 is comfortably
+above that maximum (2.56x headroom) but far below DoS territory. No
+legitimate run is affected; the bound can only engage on inputs no real
+experiment can produce.
+
+Contract (deliberate): degrade by omission, never fail the run. Over-count
+input processes the first 512 observations in input order and records the
+fixed-vocabulary `observations_truncated: true` plus `observations_total`
+(the offered count) and `observations_processed` (the bound) in the
+section dict; the HTML report renders an explicit "Observation bound
+reached" note naming both numbers. No exception is raised (a raise would
+be swallowed by cli.py's diagnosis try/except and silently drop the
+*whole* section; omission keeps the first-512 verdicts). Per-observation
+skip semantics (non-dicts, invalid ids) are unchanged, including inside
+the first-512 window. Deterministic: the same first-N prefix truncates
+every run. Boundary N is accepted fully; N+1 truncates.
+
+Verification: 8 new tests in `tests/test_cycle11_bounds.py` (stub backend
+only, deterministic): named-constant pin, full processing at N,
+truncation flag/counts at N+1 with first-N order, hostile-scale input
+finishes fast without raising, per-observation skip contract preserved
+under truncation, same-input determinism, all-unusable first-N still
+degrades to an omitted section, tuple input handled. ruff check + format
+clean; mypy clean. Docs: `docs/USAGE.md` §11 "Input bounds" paragraph,
+`CHANGELOG.md` [Unreleased] (new `### Fixed` block), this entry.
+
+## Drift check 2026-10-15 (all backends NO CHANGE)
+
+Re-verified vLLM, HF transformers, SGLang, TGI stop/decoding semantics against 2026-10-01..2026-10-15 upstream. All pinned behaviors stand (vLLM #49391 earliest-completion, HF stop-kept, SGLang first-listed + stop-beats-EOS #28802, TGI stale @b4adbf2). No divergence class or emulation cell invalidated.
+WATCH: sgl-project/sglang#42466 (open, unmerged, CI failing) proposes earliest-*start* multi-stop selection — would change MULTI_STOP_SELECTION if merged; differs from both current SGLang (first-listed) and vLLM (earliest-completion). Re-check on next drift sweep.
+
+## Continuous dev — Cycle 11: Nemotron 3.5 Lightning + Muse Glimmer 30B + Poolside Laguna 2.1 catalog entries (2026-10-15, VERIFIED)
+
+Catalog 19 -> 22 families: `nemotron35` (NVIDIA Nemotron 3.5 Lightning,
+released 2026-08-11), `muse_glimmer` (Meta Muse Glimmer 30B, released
+2026-08-10, Apache 2.0), `laguna` (Poolside Laguna 2.1, Jul 2026,
+OpenMDW-1.1). 891 -> 915 tests (24 new in tests/test_cycle11_families.py);
+ruff check + format clean; mypy clean on catalog.py and the new test file.
+Three pre-existing catalog-listing tests (cycle5/6/7) updated to 22
+families; the e2e module-catalog set gained all three families; the
+cycle-10 thinking-off cross-catalog invariant gained the nemotron35
+exception; the `<|im_start|>` audit collision counts went 5 -> 6
+(+nemotron35); README "19-family" claims updated to 22 and the test-count
+claim to 915 (new regression test pins the naming); CHANGELOG [Unreleased]
+extended. Full suite green except pre-existing environmental failures in
+this sandbox (torch/hypothesis/transformers not installed: 5 loader
+errors, the diff-backends tiny-tokenizer test, and the README-count test
+whose discovery is shrunken by those same missing modules) -- all
+unrelated to this change.
+
+**Tier promotion (revises the Cycle 10 deferral).** Cycle 10 deferred these
+three as TIER-3 (only secondary claims, no primary-source template
+evidence). This cycle re-examined them against newly verified evidence and
+promotes all three to TIER-2 (official sources + independent byte-level
+corroboration):
+- laguna: the renderers library's LagunaXS21Renderer/LagunaS21Renderer are
+  token-exact parity-verified against `apply_chat_template` on the
+  official chat_template.jinja (upstream rev 575f0f28); the PR texts (#99,
+  #111) were re-read directly this cycle and corroborate every modeled
+  string (hugging tags, thinking gates, `</assistant>` terminator, gen
+  prompts, empty-system opt-out).
+- nemotron35: the official HF model card + NeMo SFT docs + the community
+  osaurus byte-level renderer (PR #2360) agree on the frames and thinking
+  tails; the BOS question stays explicitly UNVERIFIED/conflicting at
+  official level and is pinned as such (no BOS token asserted).
+- muse_glimmer: the official meta-oss-cookbook quickstart + HF transformers
+  model docs + HF blog walkthrough agree on the frame protocol; the gen
+  prompt is community-refined (the simpler `<|start|>assistant` alternative
+  was superseded) and is marked tier-2/community-corroborated.
+
+**Nemotron 3.5 Lightning research**
+(https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16):
+- Per-turn frames are ChatML (`<|im_start|>{role}\n{content}<|im_end|>\n`)
+  -- so the text-only core renders byte-identical to chatml except the
+  generation tail (pinned in tests/test_cycle11_families.py, including the
+  mutate-set equality modulo the thinking-off branch).
+- Thinking ON (default -- enable_thinking defaults true): the generation
+  prompt ends at `<|im_start|>assistant\n<think>\n` (the base entry's
+  open_suffix). Thinking OFF: the generation prompt prefills an EMPTY think
+  block, `<|im_start|>assistant\n<think></think>` -- with NO trailing
+  newlines, unlike kolibri/thinking-off's "<think>\n\n</think>\n\n" tail
+  (the byte difference is pinned).
+- Design decision: the base entry is the thinking-on DEFAULT branch; the
+  thinking-off branch rides the mutate path as "nemotron35/thinking-off"
+  (candidates()), a generation-prompt branch of the same template, not a
+  second catalog entry (kolibri/thinking-off convention).
+- CRITICAL: BOS behavior is UNVERIFIED/conflicting at official level. The
+  catalog models bos="" as an ABSENCE-OF-EVIDENCE placeholder and does NOT
+  assert any BOS token -- a test pins both the modeled value and the
+  source-level UNVERIFIED marker in the catalog comment, and asserts no
+  BOS-like token appears in the render.
+- Sources: the HF model card above,
+  https://github.com/nvidia-nemo/nemotron/blob/HEAD/docs/nemotron/lightning35/sft.md,
+  https://github.com/osaurus-ai/osaurus/pull/2360
+
+**Muse Glimmer 30B research**
+(https://github.com/meta-models/meta-oss-cookbook/blob/HEAD/quickstart/README.md):
+- Frame: `<|begin_of_text|><|start|>{role}<|message|>{content}<|eot|>` --
+  no newline anywhere. Assistant turns use recipient channels: the
+  reasoning trace is `<|start|>assistant to=self<|message|>...` and the
+  user-facing reply `<|start|>assistant to=user<|message|>...<|eot|>` --
+  the lab's plain-text no-reasoning hypothesis models the assistant turn as
+  to=user and does NOT render the to=self trace (same class of omission as
+  kimi3's empty think block and glm45/glm53's empty <think></think>: the
+  reasoned-content branch is not a hypothesis).
+- Generation prompt: `<|start|>assistant to=user<|message|>` --
+  COMMUNITY-REFINED (tier 2/community-corroborated); the simpler
+  `<|start|>assistant` alternative was superseded (pinned: the open_suffix
+  equals the refined form and not the simple form).
+- Documented, NOT modeled: system messages render the caller text with
+  "\nReasoning strength: high.\n# Valid recipients: \"self\", \"user\"."
+  APPENDED after the caller content (single newlines -- not a standalone
+  preamble block); the system role is not modeled in Format (same
+  convention as mistral_large/gemma4/kolibri). EOS is `<|end_of_text|>` (id
+  200001);  is the end-of-MESSAGE marker, NOT a stop token. All three
+  are pinned as documented test constants only.
+- Closest-family diff (pinned): llama3 shares the `<|begin_of_text|>` BOS,
+  but every frame differs.
+- Sources: the quickstart README above,
+  http://huggingface.co/docs/transformers/main/model_doc/muse_glimmer,
+  https://github.com/huggingface/blog/blob/main/muse-glimmer.md
+
+**Poolside Laguna 2.1 research** (https://huggingface.co/poolside/Laguna-XS-2.1):
+- Frames ("hugging tags", no inner newlines): `<user>{content}</user>`,
+  `<tool_response>{content}</tool_response>`, `<system>{content}</system>`.
+- Reasoning gated on enable_thinking -- on: every assistant turn renders
+  `<think>{reasoning}</think>` VERBATIM (empty included); off: turns open
+  with a bare `</think>` and reasoning is dropped. Gen prompt:
+  `<assistant>` + (`<think>` | `</think>`), no trailing newline. Completed
+  assistant turns terminate with `</assistant>` (tier-2 via the renderers
+  PR text: "the two opener tokens are unsampled scaffold; everything
+  through the sampled </assistant> is the model's emission").
+- Design decision: the base entry is XS-2.1 DEFAULTS (enable_thinking
+  FALSE -- documented choice): gen prompt `<assistant></think>`, history
+  assistant turns `<assistant></think>{content}</assistant>`. S-2.1
+  (enable_thinking defaults TRUE) is the "laguna/thinking-on" mutate-path
+  variant -- the kolibri/thinking-off convention: a generation-prompt
+  branch of the same template, not a second catalog entry. Its history
+  assistant turns render an EMPTY think block verbatim
+  (`<assistant><think></think>{content}</assistant>`) -- the lab's
+  deterministic no-reasoning hypothesis (the reasoned-content branch is not
+  a hypothesis here, kimi3 convention).
+- EOS is `〈|EOS|〉` -- DECODE-ONLY, never rendered in the prompt
+  (documented, not modeled; pinned as a constant that must not leak into
+  any render). BOS: no BOS token appears in any tier-2 render; modeled as
+  empty with the absence-of-evidence caveat (contrast nemotron35, whose BOS
+  is explicitly conflicting).
+- System role: not modeled (lab convention). The upstream template ships a
+  default Poolside system prompt, but an empty caller system message
+  suppresses the `<system>` block entirely -- and the lab never sends
+  system messages, so the no-system render modeled here is byte-identical
+  either way; the default-prompt wording is deliberately NOT asserted.
+- Sources: the HF model card above,
+  https://github.com/PrimeIntellect-ai/renderers/pull/99,
+  https://github.com/PrimeIntellect-ai/renderers/pull/111
+
+**Watched, NOT shipped:** Mistral Large 4 and Reflection Beam are not
+released -- deliberately not catalog entries. Tracked as watched; a future
+cycle may add them once primary-source template evidence exists (the
+tier-3 bar from Cycle 10 still applies: tier-3 claims never become catalog
+entries).
+
+**Strings deliberately not pinned:** nemotron35's BOS token (UNVERIFIED /
+conflicting at official level -- see the catalog comment); the wording of
+Laguna's default Poolside system prompt (suppressed in the lab's no-system
+render either way); the muse_glimmer `to=self` reasoning-trace content and
+the system-appendage beyond the documented suffix (unmodelable roles /
+generation stops, documented only); the laguna reasoned-content branch
+(non-deterministic, kimi3 convention).
