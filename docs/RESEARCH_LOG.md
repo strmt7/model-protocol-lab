@@ -2803,3 +2803,23 @@ sensitivity: 10/10 mutants caught on hermetic /tmp copies. Doc notes
 inputs; template_conformance no-raise starts after arg validation;
 context_window bool exclusion; unreachable empty-inventory branch. README
 test count updated to 3207.
+
+## 2026-10-15 (cycle 41: public API surface + documented-example accuracy)
+
+Executed every runnable USAGE.md/README CLI example and compared against
+documentation (tests/test_cycle41_api_surface_verify.py, 56 tests + 56
+subtests; model-backed tests use a tiny synthetic GPT-2 checkpoint built
+locally). Fixed FOUR doc errors (docs only, no behavior changes):
+(1) README Quick start `fixtures build -o` -> `--output` (nonexistent
+flag), and the example target changed to /tmp/mpl-fixtures.json since
+fixtures build never overwrites the shipped examples/fixtures.json
+(verified: builds verbatim, semantically identical to shipped file);
+(2) USAGE.md section 10 `.boundary` "same grammar as `run --boundary`"
+-> `run --boundary-ids`; (3) README 27-family parenthetical listed 26
+names -- added Gemma 4 (two spots); (4) README "`catalog` lists every
+family with its source" -> framing fields + code-comment sources
+(`mpl catalog` emits no source field). Public API surface: __init__.py
+exports nothing but __version__ (0.1.0a0, consistent); the CLI is the
+public interface. Also installed the package editable in the venv so
+console-script tests run locally as in CI. README test count updated to
+3263.

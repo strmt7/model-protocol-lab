@@ -500,7 +500,7 @@ like `.help ren`, `.help PATTERN` search, `#` comments):
 | `.fixture <n\|id>` | Select the active fixture by number or id |
 | `.render` | Render the hypothesis over the active messages, with a per-segment char-span map (plus exact token IDs per segment when `--model` is given) |
 | `.tokens` | Exact token IDs of the full render (needs `--model`) |
-| `.boundary ID,ID,...` | Set the boundary token-ID sequence (1-16 ASCII IDs, same grammar as `run --boundary`) |
+| `.boundary ID,ID,...` | Set the boundary token-ID sequence (1-16 ASCII IDs, same grammar as `run --boundary-ids`) |
 | `.stream ID,ID,...` | Record a token stream (up to 4096 IDs) for `.step` to walk |
 | `.step [ID,ID,...]` | Walk boundary detection one token at a time; prints the running overhang (how much of the boundary currently matches as a stream suffix) and the first full-boundary position |
 | `.audit` | Flag special-token literals (e.g. `<|im_start|>`) embedded in fixture text that could forge a role boundary |
