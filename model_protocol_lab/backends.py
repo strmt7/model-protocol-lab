@@ -443,7 +443,12 @@ def emulate_vllm_holdback(
     a stop fully completed during the gated period is *not* refound -- only
     a stop completing at or after the gate (including one spanning the
     gate boundary) fires. If the recorded output ends while still gated, no
-    check ever ran (``detail="gated_by_min_tokens"``). The
+    check ever ran (``detail="gated_by_min_tokens"``). A step whose token
+    decodes to no new text skips the check entirely, porting upstream
+    ``check_stop_strings``' ``if not new_char_count ...: return None`` --
+    without it the window start ``1 - len(stop)`` would be 0 for
+    single-character stops and refind a stop completed during the gate,
+    which upstream never refinds. The
     incremental text comes from ``backend.decode`` of each prefix, an
     approximation of vLLM's ``DecodeStream``; the ``stop_buffer_length``
     holdback only withholds streamed deltas and does not change this final
@@ -470,6 +475,14 @@ def emulate_vllm_holdback(
         offsets.append(len(text))
     for step, text in enumerate(texts, start=1):
         new_char_count = len(text) - (len(texts[step - 2]) if step > 1 else 0)
+        if not new_char_count:
+            # Port of upstream check_stop_strings' `if not new_char_count
+            # ...: return None`: a token decoding to no new text cannot
+            # complete a stop. Without this, the window start
+            # `1 - new_char_count - stop_len` is 0 for single-character
+            # stops, which would refind a stop completed during the
+            # min_tokens gate -- upstream never refinds it.
+            continue
         # Same window as vLLM: already-searched text is excluded; a negative
         # start searches from 0, exactly like vLLM's str.find call.
         index = text.find(stop_text, 1 - new_char_count - stop_len)
