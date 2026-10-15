@@ -2771,3 +2771,18 @@ _unavailable reason vocabulary, _require_torch. Mutation sensitivity:
 `score_span_from_logits` now documents that non-tensor logits raise
 TypeError("logits_must_be_tensor") (was: claimed all rejections are
 ValueError). README test count updated to 3062.
+
+## 2026-10-15 (cycle 39: catalog integrity cross-check + 1 robustness fix)
+
+Whole-catalog integrity sweep (tests/test_cycle39_catalog_integrity.py,
+44 tests + 5803 subtests): NO catalog data bugs. Covers the exact
+27-key pin, byte-identical renders (1/3/5-turn), an independent
+from-first-principles Format.render oracle (80 seeded conversations x
+27 families), mutate-branch validity/dedup/rebuild equivalence,
+fallback semantics, hostile lookups, red-team contents. Mutation
+sensitivity: 9/9 mutants caught on hermetic /tmp copies. One robustness
+FIX in catalog.py: `candidates()` now type-gates
+(`type(family) is not str`) before the CATALOG lookup, so the
+documented ValueError("Unknown format family") holds for unhashable and
+non-str keys instead of leaking TypeError. README test count updated to
+3106.
