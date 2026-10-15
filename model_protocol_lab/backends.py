@@ -420,6 +420,33 @@ def emulate_hf_stop_string(
     the returned text (see ``emulate_vllm_holdback``). The
     ``StopOutcome.returned_text`` field stays None here: nothing is
     stripped, so the kept text is simply ``backend.decode(truncated_ids)``.
+
+    Known divergences from real ``StopStringCriteria`` (all pinned by
+    tests; none reachable with supported configurations):
+
+    - Empty stop strings are rejected as ``invalid_emulation_input``
+      (``available=False``). Every repo entry point rejects them at the
+      API boundary (``diff_backends`` raises ``invalid_stop_texts``);
+      ``stop_matrix`` degrades an undecodable boundary to an unavailable
+      cell instead of failing. Upstream instead fires at step 1 for any
+      input -- a pathological edge the lab deliberately does not
+      reproduce.
+    - Multi-stop runs compose per-stop cells, each bounded to its own
+      ``len(stop)`` window (mirroring the single-stop tensor walk).
+      Upstream's joint criteria bounds by the global longest stop, so
+      with exotic empty-string vocab entries a short stop's walk can
+      reach past its own window when a longer stop is present. Real
+      tokenizers do not emit empty-string tokens.
+    - The classic string path matches on per-token ``decode`` strings
+      while upstream matches on cleaned vocab strings; the two agree
+      except on exotic spacing edge cases (e.g. WordPiece inter-token
+      spaces: stop ``"ab"`` over tokens ``["a", "b"]`` false-positives
+      here while real HF stays silent on the true ``"a b"`` text;
+      conversely upstream can fire a step early on its own cleaning
+      artifacts, where this port fires at the true position).
+    - Non-contiguous vocab ids are degenerate (real checkpoints use
+      ``0..N-1``); the byte mapper bounds by ``len(vocab)`` and treats
+      higher ids as walk-killing OOV, mirroring HF's dummy-row clamp.
     """
     if (
         not _valid_token_ids(prompt_ids)
