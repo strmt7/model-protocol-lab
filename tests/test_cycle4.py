@@ -108,7 +108,20 @@ class ReadmeConsistencyTests(unittest.TestCase):
             m = re.search(r"(\d+) tests collected", line)
             if m:
                 collected = int(m.group(1))
-        self.assertIsNotNone(collected, "could not parse pytest collection count")
+        # A collection error must surface its own diagnostics: pytest's
+        # error banner goes to stderr and "0 tests collected" never parses,
+        # so the old message hid the real failure. Fail loudly with the
+        # tail of both streams first, then parse.
+        self.assertEqual(
+            proc.returncode,
+            0,
+            "pytest collection failed: " + (proc.stderr or proc.stdout)[-2000:],
+        )
+        self.assertIsNotNone(
+            collected,
+            "could not parse pytest collection count from output: "
+            + (proc.stdout or proc.stderr)[-2000:],
+        )
         self.assertEqual(int(match.group(1)), collected)
 
 

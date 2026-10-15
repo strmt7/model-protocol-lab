@@ -648,6 +648,26 @@ def test_planned_count_drift_flags_silent_mismatch():
     assert "2 -> 50" in rendered
 
 
+def test_stderr_sanitizes_hostile_planned_drift_field():
+    # Finding 1: the config-drift field for planned-fixture counts is built
+    # as f"planned:{name}" from the raw candidate name, and render_summary
+    # interpolated the field raw into stderr (confirmed live: ANSI/OSC
+    # escapes in a hostile candidate name reached stderr unfiltered).
+    # Sanitizing at the render loop covers every drift field type --
+    # planned:, fixtures:search/held_out, and the fixed config fields.
+    evil = "llama3\x1b[31mPWNED\x07"
+    old = _results(candidates=(evil, "chatml"), passes=(2, 2), planned=2)
+    new = _results(candidates=(evil, "chatml"), passes=(50, 50), planned=50)
+    payload = diff_reports(old, new)
+    drift = _drift_fields(payload)
+    assert f"planned:{evil}" in drift  # hostile field reaches the payload
+    rendered = render_summary(payload)
+    assert "\x1b" not in rendered  # but never reaches stderr raw
+    assert "\x07" not in rendered
+    assert "PWNED" in rendered  # readable text survives; escapes do not
+    assert "planned:" in rendered
+
+
 def test_evidence_asymmetry_is_not_identical():
     # Finding 5: evidence on exactly one side used to report identical=True
     # with "identical on every compared axis" -- a whole axis was never

@@ -500,8 +500,14 @@ def render_summary(diff: dict[str, Any]) -> str:
     if drift:
         lines.append("WARNING: run configurations differ -- results may not be comparable:")
         for entry in drift:
+            # The planned-drift field is built as f"planned:{name}" from a
+            # raw candidate name in the compared files, so the field is
+            # sanitized like every other operator-visible identifier. Fixed
+            # fields (families, fixtures:search, ...) are unaffected by the
+            # strip, so sanitizing at render covers every drift field type.
             lines.append(
-                f"  - {entry['field']}: {_compact(entry['old'])} -> {_compact(entry['new'])}"
+                f"  - {_display_id(entry['field'])}: {_compact(entry['old'])} -> "
+                f"{_compact(entry['new'])}"
             )
     decision = diff["decision"]
     lines.append(f"Decision: {_display_id(decision['old'])} -> {_display_id(decision['new'])}")

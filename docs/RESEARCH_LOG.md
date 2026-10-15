@@ -2184,3 +2184,45 @@ assertion added to the existing missing-evidence test. Full suite:
 964 unittest-discovered tests OK (README pin: 1000 pytest-collected).
 ruff check + format clean; mypy clean on all 15 source files.
 Docs: `CHANGELOG.md` [Unreleased] `### Fixed`, this entry.
+
+## 2026-10-15 -- Red-team fix round (follow-up): diffreports drift-field sanitization + README pin test debuggability
+
+A follow-up red-team pass over the cycle-13 `mpl diff-reports` code produced
+two small genuine low-severity findings. Both are fixed and regression-pinned.
+
+- **Finding 1 (Low):** `render_summary` interpolated the config-drift
+  `field` string raw into stderr. The field is built as
+  `f"planned:{name}"` with the raw candidate name (`diff_reports`, ~line
+  434), and was rendered via `f"  - {entry['field']}: ..."` (~line 504),
+  so a hostile candidate name carrying ANSI/OSC escapes reached stderr
+  raw (confirmed live). Fix: the field now passes through the existing
+  `_display_id` sanitizer at the render loop. Sanitizing at render --
+  rather than at construction -- was chosen deliberately because it
+  covers every drift field type: `planned:<name>` (hostile), the fixed
+  config fields (`families`, `candidates`, `max_new_tokens`,
+  `boundaries`, `backend_fingerprint`), and `fixtures:search/held_out`
+  (fixed stage suffixes). The `_compact` JSON rendering of drift values
+  was already ASCII-safe (`ensure_ascii=True`), and the JSON stdout
+  payload keeps the raw field for machine consumers -- sanitization
+  applies only to the human-readable stderr summary. Pinned by a new
+  test in `tests/test_cycle13_diffreports.py`: hostile candidate name in
+  a planned-drift entry reaches the payload (`planned:<evil>` present)
+  but the rendered summary contains no raw `\x1b`/`\x07` bytes, while
+  the readable text ("PWNED") and the `planned:` prefix survive.
+
+- **Finding 5 (Low):** the README test-count pin test in
+  `tests/test_cycle4.py` never inspected `proc.returncode`/`proc.stderr`,
+  so a pytest collection error surfaced as the misleading "could not
+  parse pytest collection count", hiding the real failure. Fix: the test
+  now asserts `proc.returncode == 0` first, and both failure messages
+  include the last ~2000 characters of stderr/stdout, so CI collection
+  failures are debuggable from the test output alone.
+
+Verification: new regression test passes; `tests/test_cycle13_diffreports.py`
+37 passed; the hardened pin test correctly surfaced a real collection
+error (missing `torch` in a throwaway venv) instead of the misleading
+parse message, then passed in the real environment after the README
+count was bumped 1000 -> 1001 for the new test. Full suite: 1001
+passed + 3142 subtests, ruff check + format clean, mypy clean on all
+source files.
+Docs: `CHANGELOG.md` [Unreleased] `### Fixed`, this entry.
