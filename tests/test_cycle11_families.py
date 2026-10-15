@@ -441,13 +441,14 @@ class ClosestFamilyDiffTests(unittest.TestCase):
 
 class ThinkingBranchInvariantTests(unittest.TestCase):
     def test_thinking_branches_exist_exactly_where_expected(self) -> None:
-        # Thinking-off branches ride the mutate path for exactly the three
+        # Thinking-off branches ride the mutate path for exactly the
         # families whose templates prefill an empty think block when
-        # thinking is disabled (kolibri, nemotron35, ling, nanbeige42);
-        # thinking-on rides it for exactly laguna (S-2.1's default). No
-        # other family gains either branch. (tests/test_cycle10_families.py
-        # pins the same invariant from the kolibri side with the nemotron35,
-        # ling and nanbeige42 exceptions.)
+        # thinking is disabled (kolibri, nemotron35, ling, nanbeige42,
+        # qwen38); thinking-on rides it for exactly laguna (S-2.1's
+        # default). No other family gains either branch.
+        # (tests/test_cycle10_families.py pins the same invariant from the
+        # kolibri side with the nemotron35, ling, nanbeige42 and qwen38
+        # exceptions.)
         off_families = {
             family
             for family in CATALOG
@@ -460,7 +461,7 @@ class ThinkingBranchInvariantTests(unittest.TestCase):
             if f"{family}/thinking-on"
             in {variant.name for variant in candidates(family, mutate=True)}
         }
-        self.assertEqual(off_families, {"kolibri", "nemotron35", "ling", "nanbeige42"})
+        self.assertEqual(off_families, {"kolibri", "nemotron35", "ling", "nanbeige42", "qwen38"})
         self.assertEqual(on_families, {"laguna"})
 
 
@@ -512,7 +513,7 @@ class ReadmeNewFamiliesTests(unittest.TestCase):
         self.assertTrue(matches, "README lost its N-family catalog claim")
         for match in matches:
             self.assertEqual(int(match), len(CATALOG))
-        self.assertEqual(len(CATALOG), 28)
+        self.assertEqual(len(CATALOG), 29)
 
 
 if __name__ == "__main__":

@@ -3073,3 +3073,30 @@ terminator, thinking-on/off gen prompts). Noted artifact (not a
 divergence): the official template leaks a literal newline+4 spaces
 after a system block (jinja indentation); Format never renders system
 blocks. No catalog change needed. README test count updated to 3557.
+
+## 2026-10-15 (cycle 54: Qwen3.8 catalog family)
+
+Added the 29th catalog family `qwen38` (Qwen/Qwen3.8-27B, released Aug
+2026). Template verified byte-exact against the primary source: the
+official chat_template.jinja at main (verified commit 412f8b6). The
+template DIFFERS from qwen3: thinking ON (the default) opens the
+generation prompt with <|im_start|>assistant\n<think>\n (qwen3 ends at
+<|im_start|>assistant\n); thinking OFF prefills an empty think block
+<|im_start|>assistant\n<think>\n\n</think>\n\n (same tail as
+kolibri/nanbeige42, unlike nemotron35's "<think></think>") -- modeled
+as the qwen38/thinking-off mutate-path variant. Per-turn frames are
+ChatML, no BOS -- byte-identical to qwen3. Deliberately not modeled:
+the auto-injected system reasoning-effort block, assistant
+reasoning-content turns (preserve_thinking), tool branches. 17
+byte-exact tests (tests/test_cycle54_qwen38.py). Notable: qwen38's base
+framing is byte-identical to nemotron35's (both thinking-by-default
+ChatML models) -- documented as the second duplicate group in
+test_cycle39 (DISCREPANCY-3), alongside chatml/kolibri/qwen3. Count pins
+migrated 28->29 families / 114->118 doctor candidates (qwen38 adds base
++ thinking-off + prefix-newline + prefix-trim): test_cycle39 (key set,
+branches, duplicate groups), test_cycle5/6/7/e2e (family lists),
+test_cycle10/11 (thinking-off invariant), test_cycle10/11/13/14/15
+(README N-family claims), test_cycle36/41/44/46 (family counts),
+test_cycle40 (118 candidates); README enumerations (+Qwen3.8),
+USAGE.md `.families` row, VALIDATION.md updated to 29. README test
+count updated to 3574.

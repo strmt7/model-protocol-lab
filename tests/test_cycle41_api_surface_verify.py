@@ -64,6 +64,7 @@ EXPECTED_FAMILIES = [
     "llama3",
     "gemma",
     "qwen3",
+    "qwen38",
     "deepseek",
     "mistral",
     "mistral_large",
@@ -217,7 +218,7 @@ class TestPackageSurface(unittest.TestCase):
 
 
 class TestCatalog(unittest.TestCase):
-    def test_catalog_28_families_and_keys(self) -> None:
+    def test_catalog_29_families_and_keys(self) -> None:
         proc = run_mpl("catalog")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         data = json.loads(proc.stdout)
@@ -408,7 +409,7 @@ class TestDebugRepl(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("token 3/4 id=8 overhang=1/1 boundary_at=2", proc.stdout)
 
-    def test_families_lists_28(self) -> None:
+    def test_families_lists_29(self) -> None:
         proc = self._script(".families\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout.strip().splitlines(), EXPECTED_FAMILIES)

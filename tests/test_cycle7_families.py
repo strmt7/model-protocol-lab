@@ -192,6 +192,7 @@ class CatalogListingTests(unittest.TestCase):
                 "nemotron35",
                 "phi4",
                 "qwen3",
+                "qwen38",
             ],
         )
         for family, fmt in CATALOG.items():

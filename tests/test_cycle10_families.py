@@ -198,13 +198,14 @@ class KolibriRenderTests(unittest.TestCase):
         self.assertTrue(any(name.startswith("kolibri/prefix-trim") for name in names))
         # No other family gains a thinking-off branch -- except nemotron35
         # (tests/test_cycle11_families.py), ling
-        # (tests/test_cycle13_families.py) and nanbeige42
-        # (tests/test_cycle15_hy4_minimax_nanbeige_families.py): Nemotron
-        # 3.5 Lightning, Ling-3.1-flash and Nanbeige 4.2-3B also prefill an
+        # (tests/test_cycle13_families.py), nanbeige42
+        # (tests/test_cycle15_hy4_minimax_nanbeige_families.py) and qwen38
+        # (tests/test_cycle54_qwen38.py): Nemotron 3.5 Lightning,
+        # Ling-3.1-flash, Nanbeige 4.2-3B and Qwen3.8-27B also prefill an
         # empty <think> block when thinking is disabled, so they
         # legitimately ride the same mutate-path branch.
         for family in CATALOG:
-            if family in ("kolibri", "nemotron35", "ling", "nanbeige42"):
+            if family in ("kolibri", "nemotron35", "ling", "nanbeige42", "qwen38"):
                 continue
             with self.subTest(family=family):
                 self.assertNotIn(
