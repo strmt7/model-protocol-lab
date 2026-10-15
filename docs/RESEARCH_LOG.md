@@ -2226,3 +2226,109 @@ count was bumped 1000 -> 1001 for the new test. Full suite: 1001
 passed + 3142 subtests, ruff check + format clean, mypy clean on all
 source files.
 Docs: `CHANGELOG.md` [Unreleased] `### Fixed`, this entry.
+
+## 2026-10-15 (cycle 13 upstream drift)
+
+Five-item upstream-drift sweep, all primary sources re-read this round.
+No code changed; recommendations only.
+
+**1. SGLang PR #42466 (multi-stop selection) — STILL OPEN, NOT MERGED.**
+Re-read https://github.com/sgl-project/sglang/pull/42466 (page text,
+2026-10-15): title "[Fix] Stop at the earliest matching stop_str when
+several match" by untrall; CI still failing on all three listed runs
+(Latest PR Test Base / Extra / AMD ROCm 10 all red). Independently
+confirmed absent from main via GitHub code search of sgl-project/sglang:
+the `# TODO(lmzheng): handle the case where multiple stop strs are hit`
+comment is still present in
+`python/sglang/srt/managers/detokenizer_manager.py`, and the PR's new
+test file `test/srt/test_multi_stop_str.py` does not exist in the repo.
+Proposed behavior (unchanged from the earlier drift note, quoted from
+the PR): "Collect every matched stop string in `_check_str_based_finish`
+(`schedule_batch.py`) and record the one with the earliest occurrence in
+the decoded text (ties keep list order; single-match behavior unchanged)"
+— i.e. within one decode step, the *leftmost* occurrence wins instead of
+list order. WATCH: if it merges, the repo's SGLang multi-stop tie-break
+(currently smallest firing step, ties broken by list order — see
+`emulate_sglang_stop` docstring in `model_protocol_lab/backends.py`)
+must become: same firing step -> earliest occurrence position in decoded
+text, ties keep list order. No repo change until merged.
+
+**2. Mistral Large 4 / Reflection Beam weights — NOT SHIPPED.**
+- Mistral Large 4: API preview live since 2026-10-06; the HuggingFace
+  pages https://huggingface.co/mistralai/Mistral-Large-4-1T-A52B and
+  https://huggingface.co/mistralai/Mistral-Large-4.0-1T05-A52B both show
+  "Upcoming release" / "Expected release: October 31, 2026. Current ETA".
+  No downloadable weights.
+- Reflection Beam: announced 2026-10-05 (501B/23B-active MoE, 1M
+  context); weights promised "later in October 2026" under Apache 2.0
+  after final red-teaming, early access via waitlist only
+  (https://www.cryptopolitan.com/reflection-ai-beam-early-access-open-weights/,
+   https://aistockwire.com/blog/reflection-ai-beam-open-weight-model-nvidia-nvda-kimi-glm-benchmarks-october-2026).
+  No downloadable weights.
+Catalog impact: NONE. The `mistral` (Mistral-7B-Instruct-v0.3) and
+`mistral_large` (Mistral-Large-Instruct-2411) entries remain accurate for
+all released Mistral models. Recommendation for the next cycle: when the
+weights land, add NEW family entries (do not edit the existing ones) —
+Large 4 is natively multimodal with a new template/tokenizer, Beam is a
+new 501B lab/family.
+
+**3. New open-weight releases since 2026-10-01.**
+- DeepSeek-V4.1-Flash: weights went live 2026-10-06 on Alibaba's
+  ModelScope hub and the Qwen platform (552B, MIT)
+  (https://abhs.in/blog/deepseek-v4-1-flash-552b-moe-1m-context-mit-pricing-benchmarks-2026).
+  ALREADY IN CATALOG as `deepseek41` (sourced from
+  https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash). No gap.
+- Decision 3.0 (vllm-sr/d3, d3-flash, d3-mini, d3-nano, d3-lite,
+  d3-edge): uploaded 2026-10-10, Apache-2.0, safetensors on HuggingFace
+  (verified via the HF model cards, e.g.
+  https://huggingface.co/vllm-sr/d3). BUT they are non-generative
+  decision models — "returns a probability for every answer, without
+  generating text" — so they have no chat template; out of scope for the
+  chat-template catalog. Watchlist only.
+- AutoTrust AI JEV-27B-VL / GEV-26B-Decide (announced 2026-10-08,
+  open-weight decision/vision models): same verdict — notable, non-chat,
+  no catalog entry.
+  (https://www.morningstar.com/news/pr-newswire/20261008cn66859/...)
+- EmbeddingGemma 2 (2026-10-06, Apache 2.0): embedding model, no chat
+  template, out of scope.
+- Out-of-window backlog for a future research cycle (all before
+  2026-10-01, all missing from the catalog): IFM/MBZUAI **K2-Horizon**
+  fleet (6 models 0.9B–375B, Apache 2.0, released ~2026-09-03, on HF with
+  day-zero vLLM/SGLang support — genuine missing chat families);
+  Tencent **Hy4 preview** (2026-08-28, Apache 2.0, 770B/49B); MiniMax-M3
+  (2026-06, MiniMax Community License); Nanbeige4.2-3B (release date
+  uncertain, likely ~Sept 2026).
+
+**4. vLLM stop-string/min_tokens semantics (releases since 2026-09-01:
+v0.28.0, v0.29.0, v0.30.0) — NO CHANGE to modeled semantics.**
+Read the official release notes at
+https://github.com/vllm-project/vllm/releases/tag/v0.28.0,
+/v0.29.0, and /v0.30.0. Stop-adjacent items found:
+- v0.28.0 #49227/#50595: request stop tokens masked in xgrammar until
+  the grammar terminates (structured-output path only, not the core
+  stop-string holdback the lab models); #51447: new `VLLM_MAX_STOP_STRINGS`
+  cap (default 4) on stop strings per request — a request-level limit, not
+  a selection-semantics change; #51997/#51556: Anthropic/Cohere frontend
+  stop-sequence bounding/reporting.
+- v0.29.0 #54218 (read the full PR): "terminal grammars stop under
+  `min_tokens`" — fixes the min_tokens+structured-output terminal-state
+  hang, does NOT change stop-string/EOS min_tokens holdback; #53750:
+  applies the stop-string count limit to Cohere requests (frontend
+  validation).
+- v0.30.0 #55325: Anthropic `stop_sequence` reported in `message_delta`
+  (streaming frontend); #51450: invalid structured-output requests no
+  longer stop the engine.
+None alters vLLM's core semantics pinned by the repo (all stops gated
+behind `min_tokens`; multi-stop earliest-completion selection per
+vLLM #49391). `emulate_vllm_stop` and the diffbackends cells stand.
+
+**5. transformers stop_string semantics since 5.19.0 — NO CHANGE.**
+The releases page https://github.com/huggingface/transformers/releases
+tops out at v5.19.0 (no v5.19.1, no v5.20): the repo's pinned knowledge
+is the current upstream. No `generate()` `stop_string` handling change
+to report. (v5.19.0 notes read this round: MoE router-logits breaking
+change, CB cache/attention work, no generation stopping-criteria items.)
+
+Net: no repo change warranted on any item this round. Keep the SGLang
+#42466 WATCH and add Mistral Large 4 / Reflection Beam weights to the
+watch list for the next drift sweep.
