@@ -109,8 +109,10 @@ def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
 
     Returns the split plus the IDs of fixtures with an empty ``expected``
     answer (which pass vacuously, exactly as in the JSON schema -- the
-    caller warns, mirroring ``inspect``). Raises ValueError with a row
-    number on any authoring error. The returned split has already passed
+    caller warns, mirroring ``inspect``). Raises ValueError naming the
+    offending row for per-row authoring errors; header, size, column-count,
+    partition-size, and split-discipline errors name the problem without a
+    row number. The returned split has already passed
     the same separation checks ``inspect`` applies (ID uniqueness, group
     non-overlap, identical-message leakage, NFC-normalized).
     """
@@ -344,9 +346,10 @@ def _extract_special_tokens(fmt: Format) -> tuple[str, ...]:
     """Token-shaped substrings of a format's framing fields, deduplicated.
 
     Scans bos, user_prefix, assistant_prefix, turn_end, then the optional
-    per-role turn terminators and open suffix when set (each falls back to
-    an already-scanned field when None, so only non-None overrides add
-    text). First-seen order is the inventory order the audit reports in.
+    per-role turn terminators and open suffix (None fields are skipped --
+    the base turn_end/assistant_prefix they fall back to was already
+    scanned, so only non-None overrides can add new text). First-seen
+    order is the inventory order the audit reports in.
     """
     if type(fmt) is not Format:
         raise ValueError("_extract_special_tokens needs a Format")

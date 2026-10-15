@@ -2633,3 +2633,15 @@ https://blog.codercops.com/blog/mistral-large-4-open-weight-preview-2026,
 https://beam.ai/agentic-insights/mistral-large-4-open-weights -- weights
 promised for end of October 2026 / reported date October 27, 2026; both
 still API previews). Remains on the WATCH list.
+
+## 2026-10-15 (cycle 29: fixtures.py differential verification)
+
+Differential verification of `model_protocol_lab/fixtures.py` against an
+independent oracle written from the docstrings (tests/
+test_cycle29_fixtures_verify.py, 139 tests): NO functional bug found.
+Mutation sensitivity: 16/16 mutants caught on hermetic /tmp copies.
+Two docstring claims corrected in fixtures.py (behavior unchanged):
+(1) `parse_fixture_csv` no longer claims row numbers on *all* authoring
+errors -- only per-row errors carry a row number; (2) `_extract_special_tokens`
+parenthetical reworded (None optional fields are skipped, covered by the
+already-scanned base field). README test count updated to 1644.
