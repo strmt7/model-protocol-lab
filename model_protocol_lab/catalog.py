@@ -118,6 +118,36 @@ CATALOG = {
         "<start_of_turn>model\n",
         "<end_of_turn>\n",
     ),
+    # Gemma 4 (google/gemma-4-31B-it). Evidence tier 1 (primary --
+    # tokenizer_config.json read 2026-10-14): special tokens <|turn>,
+    # <turn|>, <|channel>, <channel|>, <|thought>, <|tool_call>,
+    # <tool_call|>, <|tool_response>, <tool_response|> all exist; the
+    # response template start anchor is ["<|turn>model\n", "<tool_response|>"];
+    # the thinking channel opens with <|channel>thought\n and closes with
+    # <channel|>; the bos_token field is EMPTY and eos_token is <eos>.
+    # Full prompt (evidence tier 2 -- three independent byte-level
+    # implementations agreeing: dotwasi/speech-swift
+    # docs/models/gemma4-chat.md with E2E parity tests, the unsloth gemma4
+    # template, swift-gemma4-core ChatTemplateBypass.md):
+    # <bos><|turn>system\n{content}<turn|>\n<|turn>user\n{content}<turn|>\n
+    # <|turn>model\n, with the assistant role mapped to `model`. The literal
+    # <bos> is prepended by all three tier-2 implementations even though the
+    # config's bos_token field is empty -- a documented discrepancy: the
+    # catalog takes tier 2 for the render (tier 1 alone would emit no BOS).
+    # Plain-text no-tools core: the thinking channel and tool-call/response
+    # tokens are out of scope (like other entries). The system role is not
+    # modeled -- the lab's Format only supports user/assistant turns; the
+    # real template frames a system message as
+    # <|turn>system\n{content}<turn|>\n (unlike Gemma 3, where the system
+    # folds into the first user turn).
+    # Source: https://huggingface.co/google/gemma-4-31B-it
+    "gemma4": Format(
+        "gemma4",
+        "<bos>",
+        "<|turn>user\n",
+        "<|turn>model\n",
+        "<turn|>\n",
+    ),
     # Llama 4 (meta-llama/llama-models models/llama4/prompt_format.md):
     # <|header_start|>/<|header_end|> replace <|start_header_id|>/
     # <|end_header_id|>; <|eot|> replaces <|eot_id|>; new <|end_of_text|> token.

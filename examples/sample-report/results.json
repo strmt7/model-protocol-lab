@@ -219,5 +219,45 @@
     "held_out": null,
     "eos_id_considered": false
   },
+  "selection_margin": {
+    "value": 2,
+    "direction": "to_tie",
+    "runner_up": "llama3/no-bos",
+    "decisive_fixtures": [
+      "search-copy-blue",
+      "search-latest-green"
+    ]
+  },
+  "token_overhead": {
+    "per_candidate": {
+      "llama3": {
+        "mean_prompt_tokens": 223.0,
+        "max_prompt_tokens": 289,
+        "mean_output_tokens": 16.0
+      },
+      "llama3/no-bos": {
+        "mean_prompt_tokens": 206.0,
+        "max_prompt_tokens": 272,
+        "mean_output_tokens": 16.0
+      },
+      "llama3/prefix-newline": {
+        "mean_prompt_tokens": 224.5,
+        "max_prompt_tokens": 291,
+        "mean_output_tokens": 16.0
+      },
+      "llama3/prefix-trim": {
+        "mean_prompt_tokens": 220.0,
+        "max_prompt_tokens": 285,
+        "mean_output_tokens": 16.0
+      },
+      "llama3/toggle-bos": {
+        "mean_prompt_tokens": 257.0,
+        "max_prompt_tokens": 340,
+        "mean_output_tokens": 16.0
+      }
+    },
+    "cheapest_candidate": "llama3/no-bos",
+    "winner_tax_vs_cheapest_pct": 8.25242718446602
+  },
   "raw_evidence_included": false
 }

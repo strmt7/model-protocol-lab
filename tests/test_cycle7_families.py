@@ -160,7 +160,7 @@ class NewFamilyRenderTests(unittest.TestCase):
 
 
 class CatalogListingTests(unittest.TestCase):
-    def test_catalog_holds_sixteen_families(self) -> None:
+    def test_catalog_holds_seventeen_families(self) -> None:
         self.assertEqual(
             sorted(CATALOG),
             [
@@ -169,6 +169,7 @@ class CatalogListingTests(unittest.TestCase):
                 "deepseek41",
                 "gemma",
                 "gemma3",
+                "gemma4",
                 "glm4",
                 "glm45",
                 "glm53",

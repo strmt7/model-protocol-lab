@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Format catalog expanded to 17 families: `gemma4` (Gemma 4 — completely
+  new turn/channel protocol, `<|turn>role` / `<turn|>`, assistant rendered
+  as `model`, literal `<bos>` prepend; evidence tiers documented in the
+  catalog comment: response_template start anchor and special-token
+  inventory from the official tokenizer_config.json, request-side framing
+  corroborated by three independent byte-level implementations).
+- Automatic selection-margin diagnostic (`selection_margin` in
+  `results.json`, one line in the decision banner): the closed-form number
+  of single-fixture outcome flips that would change the decision --
+  descriptive only, never changes the selection rule.
+- Automatic protocol token-overhead card (`token_overhead` in
+  `results.json`, "Token overhead" HTML section): per-candidate
+  mean/max prompt tokens, cheapest candidate, and the winner's token tax
+  versus cheapest; counts are retained-input/output counts, not
+  equal-compute accounting.
+- Teacher-forced log-likelihood scoring engine
+  (`model_protocol_lab/scoring.py`): `score_target_logprobs` scores an
+  exact target token-ID sequence via one forward pass with causal-shifted
+  gather; `check_alignment` refuses (status `unavailable`, never a silent
+  guess) when a token straddles the prompt/answer boundary; NaN/inf
+  rejected, float64 accumulation, deterministic. Implements
+  DEVELOPMENT_PLAN.md §9.3–§9.5 (acceptance gate: hand-computed logit
+  tensors cross-checked against an independent reference). Not yet wired
+  into `run` -- report integration is planned next.
+- `LocalHFBackend.forward_logits` (single full-sequence forward returning
+  fp32 CPU logits) and a `vocab_size` property, the missing primitives the
+  scoring engine needs (`generate` only exposed last-position logits).
+
+### Added
+
 - Selection-rule veto pins (`tests/test_cycle8_selection.py`): a failed
   search evaluation in any candidate vetoes selection even when an
   earlier-listed candidate would be the unique winner; a held-out failure
