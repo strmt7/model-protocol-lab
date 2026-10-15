@@ -309,6 +309,17 @@ def _valid_generation(result: object, cap: int) -> bool:
 
 
 def first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None:
+    """Index of the first occurrence of ``stop`` as a contiguous subsequence.
+
+    Returns the first index ``i`` with ``tokens[i:i+len(stop)] == stop``,
+    or None when ``stop`` never occurs (including when ``stop`` is longer
+    than ``tokens``). Overlapping matches return the first index. A falsy
+    ``stop`` (``()``, ``""``, ``0``, ``None``, ...) raises ValueError.
+
+    No type validation is performed: lists and strings are accepted (mixed
+    container types simply never compare equal under ``==``), and unsized
+    ``tokens`` raise TypeError from ``len``.
+    """
     if not stop:
         raise ValueError("A nonempty boundary is required")
     for index in range(len(tokens) - len(stop) + 1):

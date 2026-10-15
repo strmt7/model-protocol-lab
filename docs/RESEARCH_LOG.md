@@ -2823,3 +2823,17 @@ exports nothing but __version__ (0.1.0a0, consistent); the CLI is the
 public interface. Also installed the package editable in the venv so
 console-script tests run locally as in CI. README test count updated to
 3263.
+
+## 2026-10-15 (cycle 42: core.py remaining helpers verification)
+
+Differential verification of the six core.py pure helpers not covered by
+prior cycles (truncate_text_tail, first_boundary, local_repairs,
+template_diff, check_boundary_portability,
+template_tokenizer_compatibility; tests/
+test_cycle42_core_helpers_verify.py, 40 tests + 2129 subtests): NO
+functional bug found. Mutation sensitivity: 16/16 mutants caught on
+hermetic /tmp copies. One documentation gap closed: `first_boundary`
+had no docstring at all -- added one stating the pinned contract (first
+contiguous-subsequence index, falsy stop raises ValueError, no type
+validation). Remaining D2-D7 notes are pinned behavioral details, not
+doc errors. README test count updated to 3303.
