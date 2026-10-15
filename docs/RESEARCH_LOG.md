@@ -2743,3 +2743,16 @@ literal `EOF` line. Mutation sensitivity: 16/16 mutants caught on
 hermetic /tmp copies. Security: no leaks beyond the documented
 USAGE.md section 10 contract (operator content by design). README test
 count updated to 2937.
+
+## 2026-10-15 (cycle 37: diffbackends.py classification internals)
+
+Differential verification of the divergence classification internals
+(tests/test_cycle37_diffbackends_verify.py, 39 tests + 1996 subtests):
+NO implementation bug found. Mutation sensitivity: 7/7 mutants caught on
+hermetic /tmp copies. Two docstring fixes in diffbackends.py
+(behavior-preserving): (1) the STR_OVER_EOS_PRECEDENCE "co-fires with
+EOS_PRECEDENCE on the tie" claim was false in general -- co-firing holds
+only when no other stop cell fires strictly before the tie step
+(counterexample pinned); module docstring and code comment corrected;
+(2) the diff_backends return-key list now names prompt_tokens/
+output_tokens. README test count updated to 2976.
