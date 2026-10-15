@@ -477,6 +477,22 @@ All notable changes to this project are documented here. The format follows
   with scripting disabled); mutually exclusive `<details>` accordions via
   `name=`; inline-SVG pass-curve sparklines for the token-budget frontier
   (same quantized data as the text sparklines, prints and scales reliably).
+- Red-team (follow-up, 2026-10-15): `diff-reports` config-drift field
+  reached stderr unsanitized -- the `planned:<candidate>` drift field is
+  built from the raw candidate name, and `render_summary` interpolated the
+  field raw, so a hostile candidate name with ANSI/OSC escapes reached
+  stderr (confirmed live). Fix: the field is passed through the existing
+  `_display_id` sanitizer at the render loop, which covers every drift
+  field type (planned:, fixtures:search/held_out, and the fixed config
+  fields). Pinned by a regression test in
+  `tests/test_cycle13_diffreports.py` (hostile candidate name in a
+  planned-drift entry -> no raw escape bytes in the rendered summary).
+- Red-team (follow-up, 2026-10-15): the README test-count pin test never
+  inspected `proc.returncode`/`proc.stderr`, so a pytest collection error
+  surfaced as the misleading "could not parse pytest collection count".
+  Fix: the test now asserts `proc.returncode == 0` first, and both
+  failure messages include the last ~2000 characters of stderr/stdout so
+  CI collection failures are debuggable from the test output alone.
 
 ### Changed
 
