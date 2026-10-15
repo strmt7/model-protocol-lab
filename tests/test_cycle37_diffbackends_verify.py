@@ -1614,6 +1614,10 @@ class SectionAggregationTests(_Cycle37Base):
 # Mutation sensitivity: run this file against mutated COPIES in /tmp.
 # ---------------------------------------------------------------------------
 
+# PID-scoped so two pytest processes running this file concurrently stage
+# into disjoint directories (a fixed name raced -> FileExistsError).
+_SCRATCH_ROOT = f"/tmp/cycle37_diffbackends_mutants_{os.getpid()}"  # noqa: S108 -- task-mandated /tmp scratch
+
 _MUTANTS: tuple[tuple[str, str, str], ...] = (
     # (name, exact source snippet, replacement)
     (
@@ -1662,23 +1666,28 @@ class SensitivityTests(unittest.TestCase):
     def test_mutants_are_caught(self) -> None:
         if os.environ.get("C37_UNDER_MUTANT") == "1":
             self.skipTest("running under a mutant copy")
-        scratch = "/tmp/cycle37_diffbackends_mutants"  # noqa: S108 -- task-mandated /tmp scratch
+        scratch = _SCRATCH_ROOT
         shutil.rmtree(scratch, ignore_errors=True)
         os.makedirs(scratch)
-        package_dir = os.path.dirname(model_protocol_lab.__file__)
-        test_src = os.path.abspath(__file__)
-        python = sys.executable
-        results: list[tuple[str, bool, str]] = []
-        # Baseline first: the pristine copy must pass fully.
-        baseline_dir = os.path.join(scratch, "baseline")
-        self._stage_copy(scratch, baseline_dir, package_dir, test_src, None, None)
-        baseline_ok = self._run_suite(baseline_dir, python, fast=False)
-        results.append(("baseline-pristine", baseline_ok, "must pass"))
-        for name, old, new in _MUTANTS:
-            mutant_dir = os.path.join(scratch, f"mutant_{name}")
-            self._stage_copy(scratch, mutant_dir, package_dir, test_src, old, new)
-            caught = not self._run_suite(mutant_dir, python, fast=True)
-            results.append((name, caught, "must fail"))
+        try:
+            package_dir = os.path.dirname(model_protocol_lab.__file__)
+            test_src = os.path.abspath(__file__)
+            python = sys.executable
+            results: list[tuple[str, bool, str]] = []
+            # Baseline first: the pristine copy must pass fully.
+            baseline_dir = os.path.join(scratch, "baseline")
+            self._stage_copy(scratch, baseline_dir, package_dir, test_src, None, None)
+            baseline_ok = self._run_suite(baseline_dir, python, fast=False)
+            results.append(("baseline-pristine", baseline_ok, "must pass"))
+            for name, old, new in _MUTANTS:
+                mutant_dir = os.path.join(scratch, f"mutant_{name}")
+                self._stage_copy(scratch, mutant_dir, package_dir, test_src, old, new)
+                caught = not self._run_suite(mutant_dir, python, fast=True)
+                results.append((name, caught, "must fail"))
+        finally:
+            # Do not accumulate package copies in /tmp across runs (tmpfs is
+            # small; leftovers starve the 128 MiB fixture tests of disk).
+            shutil.rmtree(scratch, ignore_errors=True)
         failures = [name for name, ok, _ in results if not ok]
         detail = "; ".join(
             f"{name}: {'OK' if ok else 'NOT CAUGHT'} ({note})" for name, ok, note in results

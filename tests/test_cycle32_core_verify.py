@@ -20,7 +20,7 @@ with it. The suite then:
   real ``catalog.py``) through BOTH the oracle and the implementation;
 * pins exact rendered strings for those families (1-turn and 3-turn);
 * runs mutation-style sensitivity controls on COPIES of ``core.py`` in
-  ``/tmp/cycle32_mutants`` (the repo is never mutated) to prove the tests
+  ``/tmp/cycle32_mutants_<pid>`` (the repo is never mutated) to prove the tests
   catch real bugs -- ``TestMutantSensitivity`` loads each mutated copy via
   importlib (``core.py`` is stdlib-only, so it loads standalone) and
   asserts the differential harness reports at least one divergence;
@@ -71,7 +71,7 @@ D5. Empty-string vs ``None`` overrides: documented in the field comments
 MUTATION CONTROLS
 -----------------
 15 mutants of ``core.py`` (M1..M15, see ``MUTANTS``), each applied to a
-fresh copy in ``/tmp/cycle32_mutants`` and loaded standalone. A mutant is
+fresh copy in ``/tmp/cycle32_mutants_<pid>`` and loaded standalone. A mutant is
 CAUGHT when the differential harness reports >= 1 divergence against it.
 All 15 are caught.
 """
@@ -80,7 +80,9 @@ from __future__ import annotations
 
 import dataclasses
 import importlib.util
+import os
 import random
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -89,7 +91,9 @@ from model_protocol_lab import catalog as catalog_mod
 from model_protocol_lab import core as real_core
 
 CORE_SRC = Path(real_core.__file__).resolve()
-MUTANT_DIR = Path("/tmp/cycle32_mutants")  # noqa: S108 -- mutant scratch copies, never the repo
+# PID-scoped: two pytest processes staging mutants concurrently must not share
+# a directory (fixed names caused FileExistsError / half-written imports).
+MUTANT_DIR = Path(f"/tmp/cycle32_mutants_{os.getpid()}")  # noqa: S108 -- mutant scratch copies, never the repo
 
 
 # ---------------------------------------------------------------------------
@@ -1010,7 +1014,7 @@ class TestRenderValidation(unittest.TestCase):
 
 # ---------------------------------------------------------------------------
 # Mutation-style sensitivity controls: each mutant is a behavior-changing
-# edit to a COPY of core.py in /tmp/cycle32_mutants (the repo is never
+# edit to a COPY of core.py in /tmp/cycle32_mutants_<pid> (the repo is never
 # mutated). core.py is stdlib-only, so the copy loads standalone via
 # importlib. A mutant is CAUGHT iff the differential harness reports >= 1
 # divergence against it.
@@ -1140,6 +1144,7 @@ def _load_mutant(name: str, old: str, new: str, count: int):
 
 class TestMutantSensitivity(unittest.TestCase):
     def test_all_mutants_caught(self):
+        self.addCleanup(shutil.rmtree, MUTANT_DIR, True)
         caught: list[str] = []
         for name, old, new, count in MUTANTS:
             with self.subTest(mutant=name):

@@ -13,7 +13,7 @@ Method: targeted exact-assertion tests plus a seeded fuzz
 (``random.Random`` with string seeds; ``# noqa: S311`` like the other cycle
 files) over hostile result dicts asserting determinism, escaping, and JSON
 shape. Sensitivity is proven by mutation testing on COPIES of reporting.py
-in /tmp/cycle33_mutants (the repo is never mutated): 20 mutants, each
+in /tmp/cycle33_mutants_<pid> (the repo is never mutated): 20 mutants, each
 caught by at least one check, plus an unmutated control copy that must pass
 every check.
 
@@ -200,7 +200,7 @@ _NEEDS_ESCAPE = [s for s in _HOSTILE_STRINGS if any(c in s for c in '<>&"')]
 
 # ---------------------------------------------------------------------------
 # Shared checks. Each takes a reporting-like module so the same checks run
-# against the real implementation and against /tmp mutant copies.
+# against the real implementation and against /tmp mutant copies (PID-scoped).
 # ---------------------------------------------------------------------------
 
 
@@ -1320,6 +1320,10 @@ class TestFuzzReportInternals(unittest.TestCase):
 # Mutation-style sensitivity controls: copies in /tmp, never the repo.
 # ---------------------------------------------------------------------------
 
+# PID-scoped so two pytest processes running this file concurrently stage
+# into disjoint directories (a fixed name raced -> ModuleNotFoundError).
+_MUTANT_ROOT = Path(tempfile.gettempdir()) / f"cycle33_mutants_{os.getpid()}"
+
 _MUTANTS = [
     (
         "m01_decision_class",
@@ -1491,7 +1495,11 @@ class TestMutantSensitivity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.root = Path(tempfile.gettempdir()) / "cycle33_mutants"
+        # PID-scoped (module constant): two pytest processes staging mutants
+        # concurrently must not share a directory (a fixed name raced: one
+        # process's rmtree deleted the other's in-use packages ->
+        # ModuleNotFoundError).
+        cls.root = _MUTANT_ROOT
         if cls.root.exists():
             shutil.rmtree(cls.root)
         src = Path(reporting.__file__).read_text(encoding="utf-8")

@@ -3193,3 +3193,46 @@ caught on /tmp copies (dropped escaping, escape-<-only, double-escape);
 repo untouched. Not verified: live-browser execution (no live browser
 in this environment; structural audit + raw-substring checks used
 instead). README test count updated to 3680.
+
+## 2026-10-15 (cycle 59: boundary-portability checker adversarial audit)
+
+Adversarial differential audit of check_boundary_portability
+(core.py:413) and its generalization template_tokenizer_compatibility
+(core.py:462) (tests/test_cycle59_boundary_portability_audit.py, 33 tests
++ 398 subtests): hand-pinned exact-dict contract tests for every branch,
+an independent hand-rolled oracle (no shared code with the
+implementation) differential-fuzzed over 266 randomized cases (19 encode
+behaviours x 14 output shapes) + 60 invalid-argument cases, and 14
+adversarial edge tests for the generalization (row schemas, precedence,
+duplicate inventory, guard tables). Mutation gate 6/6 caught on /tmp
+copies (==->!=, inverted validity guard, dropped invalid-output guard,
+swapped identical/divergent_ids, fragments misclassification,
+degraded-membership narrowing). No genuine bugs — CLEAN. One contract
+gray zone pinned: empty-tuple secondary encode classifies as
+divergent_ids (sibling probe treats empty encodes as encode_invalid);
+any change is now deliberate. Deliberately not verified:
+doctor._portability_check / doctor.portability_matrix (require real
+checkpoints; thin wrappers, existing tests). README test count updated
+to 3713.
+
+## 2026-10-16 (cycle 60: test-harness concurrency robustness)
+
+Flaky suite failures (1-3 per run) investigated and fixed. Reproduced
+deterministically by running two full suites concurrently; all failures
+were in test scaffolding, never product code:
+- cycle37 mutant test: FileExistsError on the FIXED /tmp scratch dir
+  (both processes staged into /tmp/cycle37_diffbackends_mutants).
+- cycle33 mutant test: ModuleNotFoundError 'm12_overhead_stat' (one
+  process's setUpClass rmtree deleted the other's in-use
+  /tmp/cycle33_mutants packages mid-import).
+- cycle35 128 MiB fixture writes: ENOSPC on the 512 MiB /tmp tmpfs.
+Fixes (tests only, product code untouched): PID-scoped mutant scratch
+roots in test_cycle19/20/32/33/37/42; scratch-dir cleanup after the
+cycle32/37/42/19 sensitivity runs and cycle20 staged files (stops /tmp
+accumulation that starved the fixture tests); sparse-file oversized
+fixture in cycle35 (identical byte count on read, ~zero blocks);
+honest skip of the exactly-at-cap test when <256 MiB scratch is free.
+Regression tests: tests/test_cycle60_concurrency_robustness.py (9 tests)
+pins PID-scoping at all six sites, runs two parallel mutant-sensitivity
+batteries, pins the sparse rejection path, and pins the disk-space skip
+via a mocked disk_usage. README test count updated to 3722.
