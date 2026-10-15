@@ -1,9 +1,9 @@
 """Cycle 39: whole-catalog integrity cross-check for ``catalog.py``.
 
 Unlike cycles 10/11/13/14/15 (per-family byte-exact template pins), this
-sweep verifies WHOLE-CATALOG invariants across all 27 families:
+sweep verifies WHOLE-CATALOG invariants across all 28 families:
 
-* key-set pin (exact 27 keys; sorted order is stable across runs),
+* key-set pin (exact 28 keys; sorted order is stable across runs),
 * every family renders deterministically for 1-turn and multi-turn
   conversations (byte-identical across runs),
 * independent oracle: a from-first-principles re-implementation of the
@@ -65,7 +65,7 @@ from dataclasses import FrozenInstanceError, replace
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Format, Message
 
-# Exact 27-family key pin, sorted (the declaration order in catalog.py is
+# Exact 28-family key pin, sorted (the declaration order in catalog.py is
 # NOT sorted; the sorted order must be stable across runs).
 EXPECTED_KEYS_SORTED = [
     "chatml",
@@ -91,6 +91,7 @@ EXPECTED_KEYS_SORTED = [
     "mistral",
     "mistral_large",
     "muse_glimmer",
+    "muse_spark",
     "nanbeige42",
     "nemotron35",
     "phi4",
@@ -113,6 +114,7 @@ EXPLICIT_OPEN_SUFFIX = {
     "minimax3",
     "mistral_large",
     "muse_glimmer",
+    "muse_spark",
     "nanbeige42",
     "nemotron35",
 }
@@ -216,9 +218,9 @@ def _framing_key(fmt: Format) -> tuple:
 
 
 class KeySetTests(unittest.TestCase):
-    def test_exact_27_keys(self):
+    def test_exact_28_keys(self):
         self.assertEqual(set(CATALOG.keys()), set(EXPECTED_KEYS_SORTED))
-        self.assertEqual(len(CATALOG), 27)
+        self.assertEqual(len(CATALOG), 28)
 
     def test_sorted_order_stable(self):
         self.assertEqual(sorted(CATALOG.keys()), EXPECTED_KEYS_SORTED)

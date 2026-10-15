@@ -726,6 +726,73 @@ CATALOG = {
         "<|im_end|>\n",
         open_suffix="<|im_start|>assistant\n<think>\n",
     ),
+    # Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B, Meta
+    # Superintelligence Labs, released 2026-10-15, Muse Model License).
+    # Evidence tier 1: the official chat_template.jinja (230 lines, sha256
+    # 4c0eca41f078f872d88827f8ad6bb5ab4dcd92c3d7eb2662a45f8a2d6e0c6c32,
+    # read 2026-10-15 from hf-internal-testing/tiny-muse-spark -- the
+    # HF-official test mirror of the gated release tokenizer, asserted
+    # token-identical to SGLang's MuseSpark1xOmniMultimodalProcessor in
+    # transformers PR #49644's integration tests), cross-checked by
+    # rendering the template byte-exact under stock Jinja2 (the {%-
+    # generation %} extension is render-transparent; raise_exception is
+    # render-time only). Every string below is derived from the template's
+    # plain-text, no-tools, default-reasoning-effort branch, cited by
+    # jinja line number:
+    # - BOS (line 128): the template emits {{- bos_token -}}; the config
+    #   bos_token is <|begin_of_text|> with add_bos_token true (tier-1
+    #   from the official tokenizer_config.json, read 2026-10-15).
+    # - system block (lines 138-152): ALWAYS emitted, even with no system
+    #   message. With no caller system message, no tools, and
+    #   reasoning_effort unset (default 'xhigh', lines 3/6, mapped to 512
+    #   at line 149): <|start|>system<|message|>You are a helpful AI
+    #   assistant.\n\nKnowledge cutoff: 2026-01-04.\n\nReasoning strength:
+    #   512.\n\nUse the appropriate recipient for each message:... (the
+    #   render_valid_recipients block, lines 108-126, trimmed, parts
+    #   joined with \n\n)<|eot|>. The system role is not modeled in Format
+    #   (same convention as mistral_large/gemma4/kolibri/ling); the block
+    #   is pinned as a documented constant in
+    #   tests/test_cycle52_muse_spark.py. current_date caveat: the
+    #   template defaults to today's date via strftime_now when available
+    #   (line 5), so a raw apply_chat_template render is NOT byte-stable;
+    #   the documented constant pins current_date=None (no "Current date:"
+    #   line) -- the deterministic core.
+    # - user (lines 160-167): <|start|>user<|message|>{content}<|eot|>
+    #   (esc() neutralizes "<|" and the bare media placeholders -- an edge
+    #   case, not modeled).
+    # - assistant history, no reasoning/tool calls (lines 194, 212-223):
+    #   the recipient defaults to 'user' and end_turn is true for it, so
+    #   <|start|>assistant to=user<|message|>{content}<|eot|>. The
+    #   reasoned-content branch (to=self, line 198) and the tool-call
+    #   branches (lines 199-211) are not hypotheses.
+    # - generation prompt (lines 228-229): <|start|>assistant (bare --
+    #   unlike muse_glimmer's <|start|>assistant to=user<|message|>).
+    # - EOS: the config eos_token is <|end_of_text|> (id 200001); <|eot|>
+    #   (id 200008) is the end-of-MESSAGE marker, NOT a stop token --
+    #   documented, not modeled (Format has no EOS field; the glimmer
+    #   convention).
+    # reasoning_effort only touches the unmodeled system block
+    # ("Reasoning strength: N." with low->8, medium->32, high->256,
+    # xhigh->512, lines 6/149); the generation prompt is invariant, so no
+    # mutate-path variant rides (contrast k2horizon/hy4, whose effort
+    # branches change the suffix).
+    # Out of scope for the plain-text core: the tool-definition and
+    # tool-call rendering (lines 62-106, 199-211), the reasoning trace
+    # (line 198), multimodal placeholder expansion (<|patch|>/<|video|>/
+    # <|audio|>, lines 36-56), per-message timestamps (lines 162-166),
+    # the caller-supplied system/developer message path (lines 130-136,
+    # 157-159), and the esc() neutralization edge cases.
+    # Sources: https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B,
+    # https://github.com/huggingface/transformers/pull/49644,
+    # https://huggingface.co/hf-internal-testing/tiny-muse-spark/blob/main/chat_template.jinja
+    "muse_spark": Format(
+        "muse_spark",
+        "<|begin_of_text|>",
+        "<|start|>user<|message|>",
+        "<|start|>assistant to=user<|message|>",
+        "<|eot|>",
+        open_suffix="<|start|>assistant",
+    ),
 }
 
 

@@ -193,6 +193,7 @@ class CatalogListingTests(unittest.TestCase):
                 "mistral",
                 "mistral_large",
                 "muse_glimmer",
+                "muse_spark",
                 "nanbeige42",
                 "nemotron35",
                 "phi4",

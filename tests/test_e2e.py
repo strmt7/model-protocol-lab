@@ -71,6 +71,7 @@ class ModuleEntryTests(unittest.TestCase):
                 "hy4",
                 "minimax3",
                 "nanbeige42",
+                "muse_spark",
             },
         )
 
