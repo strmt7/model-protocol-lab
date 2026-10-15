@@ -649,7 +649,9 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
     )
 
     # Divergence-class x semantic count matrix: fixed row order (severity
-    # descending), fixed column order, sortable like the other tables.
+    # descending over the known classes; classes outside class_order get no
+    # matrix row, though their <details> callouts below still render),
+    # fixed column order, sortable like the other tables.
     class_order = (
         "KEPT_VS_STRIPPED",
         "EOS_PRECEDENCE",
@@ -1631,6 +1633,11 @@ def _config_section(result: dict[str, Any]) -> str:
 
 
 def _held_out_section(result: dict[str, Any]) -> str:
+    """Held-out stage cards, or the not-evaluated notice.
+
+    A non-dict ``held_out`` (absent or malformed) renders the same
+    "Not evaluated" notice; the section does not distinguish the two.
+    """
     held = result.get("held_out")
     if type(held) is not dict:
         return (

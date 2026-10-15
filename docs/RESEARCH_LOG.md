@@ -2680,3 +2680,17 @@ rejected). Mutation sensitivity: 15/15 mutants caught on hermetic /tmp
 copies. No doc contradictions (code enforces more than docstrings
 state; documented in the test-file docstring D1-D5). README test count
 updated to 2543.
+
+## 2026-10-15 (cycle 33: reporting.py internals verification)
+
+Verification of `model_protocol_lab/reporting.py` report internals (tests/
+test_cycle33_reporting_verify.py, 11 tests + 342 subtests): NO functional
+bug found. Covers all 12 section renderers, byte-determinism of HTML/JSON
+(across PYTHONHASHSEED via subprocess), self-contained-HTML property
+(zero external refs, CSP-allowlist script hash), fixed-vocabulary
+markers, summary computations, JSON payload shape, O_EXCL + 0o600/0o700
+permissions, hostile-input escaping. Mutation sensitivity: 20/20 mutants
+caught on hermetic /tmp copies. Two documentation fixes in reporting.py:
+(1) matrix row-order comment clarified (hardcoded class_order; unknown
+classes get no matrix row); (2) `_held_out_section` docstring added,
+noting absent/malformed conflation. README test count updated to 2554.
