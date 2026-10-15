@@ -654,10 +654,10 @@ stop-string scope and gets this note only: neither vLLM nor HF has an
 equivalent, and regex stops follow different matching code paths
 upstream, so they are not part of the stop-string differential test.
 
-Input bounds (all enforced with fixed error codes, never silent
-truncation): `--prompt-text`/`--output-text` are capped at 1 MB each;
-encoded output (generated) token sequences at 4096 ids
-(`output_ids_too_long`), prompts at 131072 ids (`prompt_ids_too_long`).
+Input bounds (never silent truncation): `--prompt-text`/`--output-text`
+are capped at 1 MB each (argparse error, exit 2); encoded output
+(generated) token sequences at 4096 ids (`output_ids_too_long`),
+prompts at 131072 ids (`prompt_ids_too_long`).
 The output cap is the load-bearing one: the emulations do one
 `backend.decode(prefix)` per output step, so cost is quadratic in output
 length -- at the cap a single stop completes in ~2-3 s on the repo's
