@@ -9,7 +9,9 @@ a clear report instead of mid-run.
 from __future__ import annotations
 
 import contextlib
+import json
 import shlex
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +82,48 @@ def _loader_failure_code(exc: BaseException) -> str:
 
 def _check(status: str, detail: str = "") -> dict[str, str]:
     return {"status": status, "detail": detail}
+
+
+#: Cap on a safetensors JSON header read. Headers are metadata, never
+#: weights; a larger declared header is not plausible (real headers are
+#: kilobytes to low megabytes) and would turn the check into a memory sink.
+_SAFETENSORS_HEADER_CAP = 64 * 1024 * 1024
+
+
+def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """Byte-level validation of safetensors weight files; never loads weights.
+
+    ``_model_assets`` is filename-level: a truncated download or a renamed
+    foreign file passes the layout check. This check reads only the 8-byte
+    little-endian header length plus the JSON header itself (tensor data is
+    never read) and verifies the file is at least that long and the header
+    parses as a JSON object. Details use the fixed error vocabulary -- raw
+    file bytes never reach them (names come from ``_model_assets``, which
+    restricts them to ``[A-Za-z0-9_.-]+\\.safetensors``).
+    """
+    for name in names:
+        if not name.endswith(".safetensors"):
+            continue
+        try:
+            with (root / name).open("rb") as handle:
+                prefix = handle.read(8)
+                if len(prefix) < 8:
+                    return _check("failed", f"invalid_safetensors_header: {name}")
+                (size,) = struct.unpack("<Q", prefix)
+                if size > _SAFETENSORS_HEADER_CAP:
+                    return _check("failed", f"invalid_safetensors_header: {name}")
+                header_bytes = handle.read(size)
+                if len(header_bytes) < size:
+                    return _check("failed", f"invalid_safetensors_header: {name}")
+        except OSError:
+            return _check("failed", f"invalid_safetensors_header: {name}")
+        try:
+            header = json.loads(header_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return _check("failed", f"invalid_safetensors_header: {name}")
+        if type(header) is not dict:
+            return _check("failed", f"invalid_safetensors_header: {name}")
+    return _check("ok", "safetensors headers valid")
 
 
 def _model_result(
@@ -351,7 +395,12 @@ def examine_model(
     boundary_map: dict[str, tuple[int, ...]] | None = None,
     reference_model_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a local checkpoint directory; never loads weights."""
+    """Validate a local checkpoint directory; never loads weights.
+
+    Weight files get byte-level header validation (the 8-byte length plus
+    the JSON header only -- tensor data is never read), so a truncated
+    download or a renamed foreign file fails here instead of mid-run.
+    """
     checks: dict[str, dict[str, str]] = {}
     try:
         root = _directory(model_path)
@@ -372,6 +421,9 @@ def examine_model(
         return _model_result("failed", checks)
     checks["asset_layout"] = _check("ok", f"{len(names)} assets")
     checks["asset_manifest"] = _check("ok", "sha256 recorded")
+    checks["weight_headers"] = _check_weight_headers(root, names)
+    if checks["weight_headers"]["status"] == "failed":
+        return _model_result("failed", checks, assets=manifest)
 
     try:
         config = _read_json(_member(root, "config.json"))
