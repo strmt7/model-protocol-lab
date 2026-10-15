@@ -2885,3 +2885,26 @@ removed, winner held-out with default boundary -> decode_failed
 cascade, lax >=1 winner, inverted held-out verdict); unmutated control
 clean. Source untouched (sha256 61dcc509... verified before/after).
 README test count updated to 3387.
+
+## 2026-10-15 (cycle 46: docs command-example accuracy audit)
+
+End-to-end audit of every runnable command example in docs/USAGE.md
+(ss1-12) and the README command sections
+(tests/test_cycle46_docs_accuracy_audit.py, 54 tests + 12 subtests):
+command names exist, every documented flag parses and round-trips,
+representative invocations run against a scripted char<->ord fake
+backend or synthetic tokenizer-only checkpoints (run, doctor incl.
+--portability-matrix/--boundary-ids/--reference-model, fixtures
+build with the documented CSV, verbatim debug session from s10,
+diff-backends reproducing KEPT_VS_STRIPPED byte-for-byte,
+diff-reports JSON/summary shapes + exit codes). No material
+inaccuracies; one genuine precision fix applied: USAGE.md s11 claimed
+all input bounds are "enforced with fixed error codes" -- the 1 MB
+--prompt-text/--output-text caps go through argparse (exit 2), so the
+wording was corrected (behavior already pinned in tests). Not run
+locally: pip installs (offline), full unittest discover (over budget),
+make_sample_report.py (would rewrite committed example files),
+real-model runs (no weights), exit-130 signal path, s8.2/8.5/8.9
+literature prose, local_context_limit_exceeds_declared_window (checked
+statically: backends.py raises the exact code). README test count
+updated to 3441.
