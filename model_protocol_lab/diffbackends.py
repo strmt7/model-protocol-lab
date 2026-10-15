@@ -56,8 +56,9 @@ drawn from the vendors' own bug trackers (research rounds R2a and Cycle 1,
   token-based one, ``schedule_batch.py:1913-1950``), while TGI's
   documented precedence is length > EOS > stop-sequence, i.e. EOS beats
   the stop string (the reverse of SGLang). Co-fires with
-  ``EOS_PRECEDENCE`` on the tie; this class records the precedence
-  disagreement.
+  ``EOS_PRECEDENCE`` on the tie unless another stop cell fired strictly
+  earlier (then EOS did not beat every stop, so only this class fires);
+  this class records the precedence disagreement.
 
 Deliberate non-cells (documented, not emulated -- no TGI column):
 
@@ -353,7 +354,8 @@ def diff_backends(
     comparison of SGLang's first-listed rule against vLLM's
     earliest-completion rule. Returns a JSON-serializable dict with
     ``stop_texts``, ``eos_id``, ``min_tokens``, per-stop ``cells``,
-    ``divergences`` and ``verdict`` (``"agree"`` iff no divergences).
+    ``divergences`` and ``verdict`` (``"agree"`` iff no divergences), plus
+    the echoed ``prompt_tokens``/``output_tokens`` input lengths.
 
     ``backend`` needs only ``decode`` (plus the optional
     ``hf_stop_token_bytes`` byte-space mapping, used by the HF emulation
@@ -524,8 +526,10 @@ def diff_backends(
         # the stop string the win (update_finish_state runs the str-based
         # check before the token-based one); TGI's documented precedence is
         # length > EOS > stop-sequence, i.e. EOS beats the stop string (the
-        # reverse of SGLang). Co-fires with EOS_PRECEDENCE on the tie; this
-        # class records the precedence disagreement.
+        # reverse of SGLang). Co-fires with EOS_PRECEDENCE on the tie
+        # unless another stop cell fired strictly earlier (then EOS did not
+        # beat every stop, so only this class fires); this class records
+        # the precedence disagreement.
         if (
             sglang.available
             and sglang.fired
