@@ -40,6 +40,15 @@ def classify_observation(obs: dict[str, Any], eos_id: int | None) -> str | None:
     boundary-delimited within the token cap, recorded here as
     ``no-boundary-in-N``; the per-observation records keep the finer
     answer-vs-boundary distinction.
+
+    Input contract: raises ``ValueError`` for a non-dict observation (this
+    propagates out of ``failure_taxonomy`` for a non-dict element inside a
+    search entry's observation list). A truthy non-iterable ``output_ids``
+    raises ``TypeError`` from the EOS-membership check -- but only when that
+    branch is actually reached (a pass or a backend failure short-circuits
+    first). ``cancelled`` observations group with ``backend-error``: the
+    cancellation is operational, not a measurement, and the run decision
+    already records "cancelled" separately.
     """
     if type(obs) is not dict:
         raise ValueError("observation must be a dict")
@@ -69,6 +78,12 @@ def failure_taxonomy(result: dict[str, Any], eos_id: int | None) -> dict[str, An
     held-out observation counts as ``held-out-divergence`` regardless of its
     specific failure -- the divergence itself is the finding. Deterministic
     from the stored observations.
+
+    Input contract asymmetry (deliberate): a non-dict search *entry* is
+    skipped, but a non-dict observation inside a search entry's observation
+    list propagates ``ValueError`` from ``classify_observation``; held-out
+    observations that are not dicts are silently skipped instead (the
+    held-out stage only counts dicts that did not pass).
     """
     if type(result) is not dict:
         raise ValueError("result must be a dict")
