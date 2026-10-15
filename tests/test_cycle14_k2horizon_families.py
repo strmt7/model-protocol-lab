@@ -249,11 +249,11 @@ class K2HorizonDiffTests(unittest.TestCase):
     def test_k2horizon_differs_from_every_other_family(self) -> None:
         # k2horizon's <|ifm|...> frames share no opener/terminator literals
         # with any other catalog family; on the same messages the full
-        # render must be byte-different from all 23 other families'
-        # renders.
+        # render must be byte-different from every other family's render
+        # (dynamic count).
         mine = CATALOG["k2horizon"].render(_MESSAGES_2)
         others = [name for name in CATALOG if name != "k2horizon"]
-        self.assertEqual(len(others), 23)
+        self.assertEqual(len(others), len(CATALOG) - 1)
         collisions = [name for name in others if CATALOG[name].render(_MESSAGES_2) == mine]
         self.assertEqual(collisions, [])
 
