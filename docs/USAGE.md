@@ -461,7 +461,9 @@ way the experiments do: render a catalog hypothesis over a fixture's
 messages, inspect the per-segment char spans (and exact token IDs when a
 tokenizer is attached), step through response-boundary detection one token
 at a time, and audit fixtures for special-token literals -- all in one
-terminal session, scriptable for repeatability.
+terminal session, scriptable for repeatability. It is a local tool that
+displays the operator's own fixture content by design; do not paste
+`.save` transcripts into public issues.
 
 ```sh
 python -m model_protocol_lab debug --dataset examples/fixtures.json
