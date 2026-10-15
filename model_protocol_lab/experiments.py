@@ -671,7 +671,7 @@ def _diagnostic_observation(
         "reason": _LOGPROB_INCOMPLETE,
         "total_logprob": None,
         "mean_logprob": None,
-        "scored_token_count": 0,
+        "scored_token_count": 0,  # nosec B105 -- integer counter field, not a credential
         "target_byte_length": 0,
         "native_pass": native_pass,
     }

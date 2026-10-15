@@ -500,7 +500,7 @@ def template_tokenizer_compatibility(
             "token": token,
             "registered": token in registered_tokens,
             "registered_id": registered_tokens.get(token),
-            "single_token": None,
+            "single_token": None,  # nosec B105 -- report-schema field default, not a credential
             "encoded_id": None,
             "id_match": None,
             "status": "encode_failed",
