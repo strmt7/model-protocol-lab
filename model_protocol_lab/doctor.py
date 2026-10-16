@@ -414,6 +414,11 @@ def examine_model(
     except ValueError as exc:
         checks["asset_layout"] = _check("failed", str(exc))
         return _model_result("failed", checks)
+    except OSError:
+        # Unreadable asset (e.g. permission denied): fail closed with the
+        # fixed vocabulary, never a raw OSError.
+        checks["asset_layout"] = _check("failed", "missing_or_unsafe_asset")
+        return _model_result("failed", checks)
     try:
         manifest = _manifest(root, names)
     except ValueError as exc:
@@ -422,6 +427,10 @@ def examine_model(
         # stages): report both, like every other stage does.
         checks["asset_layout"] = _check("ok", f"{len(names)} assets")
         checks["asset_manifest"] = _check("failed", str(exc))
+        return _model_result("failed", checks)
+    except OSError:
+        checks["asset_layout"] = _check("ok", f"{len(names)} assets")
+        checks["asset_manifest"] = _check("failed", "missing_or_unsafe_asset")
         return _model_result("failed", checks)
     checks["asset_layout"] = _check("ok", f"{len(names)} assets")
     checks["asset_manifest"] = _check("ok", "sha256 recorded")
@@ -433,6 +442,11 @@ def examine_model(
         config = _read_json(_member(root, "config.json"))
     except ValueError as exc:
         checks["config"] = _check("failed", str(exc))
+        return _model_result("failed", checks, assets=manifest)
+    except OSError:
+        # Unreadable config.json (e.g. permission denied for a non-root
+        # user): fail closed with the fixed vocabulary, never a raw OSError.
+        checks["config"] = _check("failed", "missing_or_unsafe_asset")
         return _model_result("failed", checks, assets=manifest)
     model_type = config.get("model_type")
     rejected = [key for key in _REJECTED_CONFIG_KEYS if config.get(key)]
@@ -456,6 +470,10 @@ def examine_model(
         tokenizer_doc = _read_json(_member(root, "tokenizer.json"))
     except ValueError as exc:
         checks["tokenizer_file"] = _check("failed", str(exc))
+        return _model_result("failed", checks, assets=manifest, context_window=context_window)
+    except OSError:
+        # Unreadable tokenizer.json: fail closed with the fixed vocabulary.
+        checks["tokenizer_file"] = _check("failed", "missing_or_unsafe_asset")
         return _model_result("failed", checks, assets=manifest, context_window=context_window)
     token_model = tokenizer_doc.get("model")
     if type(token_model) is not dict:
