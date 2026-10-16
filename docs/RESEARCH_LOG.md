@@ -3780,3 +3780,31 @@ directory / non-UTF8 / oversize guards. Mutation gate 6/6 killed (mutant
 files verified imported from /tmp via conftest guard per cycle-76 lesson;
 coordinator spot-verified one kill). Non-finding: lone-surrogate str ->
 UnicodeEncodeError, still a ValueError subclass. README test count 5837.
+
+## Cycle 83 (2026-10-16) — CLI wiring audit below the cycle-64 surface, CLEAN
+
+Adversarial audit of the argparse/exit-code wiring in
+``model_protocol_lab/cli.py`` that cycle 64 (subcommand surface) did not
+cover: 63 tests (62 pass, 1 by-design skip) in
+``tests/test_cycle83_cli_wiring_audit.py``. argparse edges (repeated
+flags, ``--flag=value`` vs ``--flag value``, ``=`` in values, empty/unicode
+args, ``--``/``---`` separators, unknown args, extra positionals,
+abbreviated subcommands rejected, duplicate/unknown ``--boundary-map``,
+20k-arg lists, NUL-byte dataset); exit-code contract pinned by subprocess
+(exit 0/1/2/130 for compatible/failed/cancelled/ambiguous/held_out_failed/
+no_candidate run decisions, bad subcommand, missing args, invalid enums,
+unreadable inputs, unwritable outputs, malformed fixtures, nonexistent
+checkpoints, contradictory ranges); ``--help`` byte-stable across runs for
+every subcommand (fixed COLUMNS, no PID/tmpdir/timestamp leaks); console
+script ``model-protocol-lab`` byte-identical to ``python -m`` on 5
+invocations incl. two failure paths; no ``MPL_*`` env var read anywhere in
+the package; hostile ``sys.argv[0]`` cannot crash parsing (prog
+hard-coded). No genuine bugs found, no source changes. Precision notes:
+no ``--version`` flag exists (cycle 64 pins ``--version`` -> exit 2, so it
+was deliberately not added); ``doctor`` exits 1 with verdict JSON on
+stdout/empty stderr is the deliberate contract; ``debug --script`` echoes
+operator-supplied path only. Mutation-kill evidence: 3 temporary in-place
+mutations (inspect return 1->0; dropped token/context range check;
+dropped duplicate boundary-map check) killed by 11 tests, all restored.
+README test count 5900. External: parent confirmed via GitHub Actions API
+that the fc7e7e14 CI-red-fix commit is now fully green on all six jobs.
