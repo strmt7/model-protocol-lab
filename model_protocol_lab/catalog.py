@@ -550,6 +550,14 @@ CATALOG = {
     # K2-Horizon-32B, K2-Horizon-7B, K2-Horizon-3.7B, K2-Horizon-0.9B
     # (all six verified present and ungated on the IFM HF org; safetensors
     # weights publicly downloadable -- e.g. 61 shards listed for the 375B).
+    # 2026-10-16 cross-check: Inception42's Jais-3 fleet (released 2026-10-15,
+    # e.g. inception42/Jais-3-MoVA-36B-A4B) is built on K2HorizonForCausalLM
+    # (config.json "architectures", verified) and its model card mandates the
+    # k2_horizon serving parsers; its tokenizer_config.json bos_token is
+    # byte-identical to <|ifm|begin_of_text|> (verified 2026-10-16). The
+    # Jais-3 HF repos publish no chat_template.jinja (the template lives in
+    # serving code, not the repo), so no separate catalog entry is needed --
+    # this entry covers Jais-3.
     # Evidence tier 1: the official chat_template.jinja (preserved at
     # docs/evidence/k2horizon-chat-template.jinja), read 2026-10-15 from the
     # official HF repos -- byte-identical across 375B-A23B, 7B and
