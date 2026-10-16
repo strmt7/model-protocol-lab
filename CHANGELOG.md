@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added (cycle 97 — hostile-environment robustness audit, 2026-10-16)
+
+- `tests/test_cycle97_hostile_environment.py` (10 tests): hostile
+  *environment* audit of the write paths — the red-team sweeps covered
+  hostile inputs; this covers adverse filesystem/OS conditions.
+  `prepare_report_dir` / `save_report` under mocked PermissionError
+  (clean OSError, no partial dirs/files, half-built pair cleanup),
+  concurrent directory claims (exactly one wins via O_EXCL), existing
+  file/non-empty dir rejection, and `write_fixture_file` permission and
+  no-clobber behavior. All write paths confirmed robust; no code changes
+  needed. Test count 6083 -> 6093.
+
 ## [0.1.0] — 2026-10-16
 
 ### Added (cycles 14–15, 52, 54 — catalog to 29 families, 2026-10-15)
