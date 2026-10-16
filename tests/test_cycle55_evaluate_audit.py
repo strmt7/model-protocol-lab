@@ -25,11 +25,10 @@ empty when the audit finds none.
 
 import random
 import unicodedata
+import unittest
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from threading import Event
-
-import pytest
 
 from model_protocol_lab.core import (
     EvaluationReport,
@@ -606,22 +605,383 @@ def _assert_reports_equal(real: EvaluationReport, expected: EvaluationReport) ->
     # EvaluationReport.__post_init__ already validated invariants on construction.
 
 
-def test_differential_fuzz_400_trials() -> None:
-    rng = random.Random(20261015)  # noqa: S311 -- deterministic test seed
-    for _ in range(400):
-        fixtures, scripts, boundary, cap, seed = _build_trial(rng)
-        real, expected, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
-        _assert_reports_equal(real, expected)
+class EvaluateAuditTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
 
+    def test_differential_fuzz_400_trials(self):
+        rng = random.Random(20261015)  # noqa: S311 -- deterministic test seed
+        for _ in range(400):
+            fixtures, scripts, boundary, cap, seed = _build_trial(rng)
+            real, expected, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
+            _assert_reports_equal(real, expected)
 
-def test_differential_fuzz_preset_cancel() -> None:
-    rng = random.Random(99)  # noqa: S311 -- deterministic test seed
-    for _ in range(25):
-        fixtures, scripts, boundary, cap, seed = _build_trial(rng)
-        real, expected, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed, preset_cancel=True)
-        _assert_reports_equal(real, expected)
+    def test_differential_fuzz_preset_cancel(self):
+        rng = random.Random(99)  # noqa: S311 -- deterministic test seed
+        for _ in range(25):
+            fixtures, scripts, boundary, cap, seed = _build_trial(rng)
+            real, expected, _, _ = _run_pair(
+                fixtures, scripts, boundary, cap, seed, preset_cancel=True
+            )
+            _assert_reports_equal(real, expected)
+            assert real.status == "cancelled"
+            assert real.observations == ()
+
+    def test_exact_match_with_boundary_strip(self):
+        tokens = (10, 11, 1)
+        expected = scripted_decode((10, 11))
+        real, oracle = _one_case(tokens=tokens, boundary=(1,), expected=expected, cap=3)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "completed"
+        assert obs.answer == expected
+        assert obs.exact_match is True
+        assert obs.boundary_found is True
+        assert obs.boundary_text_match is True
+        assert obs.output_ids == tokens
+        assert obs.raw_reason == "limit"
+        assert obs.error is None
+
+    def test_case_difference_is_not_exact_match(self):
+        tokens = (10, 11)  # decodes to "kl"
+        real, oracle = _one_case(tokens=tokens, boundary=(9,), expected="KL", cap=2)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.answer == "kl"
+        assert obs.exact_match is False
+        assert obs.boundary_found is False
+
+    def test_boundary_at_position_zero(self):
+        real, oracle = _one_case(tokens=(1, 10), boundary=(1,), expected="", cap=2)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.boundary_found is True
+        assert obs.answer == ""
+        assert obs.exact_match is True
+
+    def test_boundary_longer_than_output(self):
+        real, oracle = _one_case(tokens=(1, 2), boundary=(1, 2, 3), expected="x", cap=2)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.boundary_found is False
+        assert obs.boundary_text_match is False
+
+    def test_overlapping_boundary(self):
+        real, oracle = _one_case(tokens=(3, 3, 3), boundary=(3, 3), expected="", cap=3)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.boundary_found is True
+        assert obs.answer == ""  # first occurrence wins: cut == 0
+
+    def test_tokenization_mismatch_flag(self):
+        real, oracle = _one_case(tokens=(7, 901), boundary=(1,), expected="x", cap=2)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.boundary_found is False
+        assert obs.boundary_text_match is True
+        assert obs.answer == scripted_decode((7, 901)) == "hα"
+
+    def test_empty_generation_cancelled(self):
+        real, oracle = _one_case(tokens=(), boundary=(1,), expected="", gen_kind="cancelled", cap=4)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "cancelled"
+        assert obs.output_ids == ()
+        assert obs.answer == ""
+        assert obs.exact_match is False
+        assert obs.boundary_found is False
+        assert obs.raw_reason == "cancelled"
+
+    def test_unicode_roundtrip(self):
+        tokens = (1, 2, 3, 810, 811, 812)
+        expected = scripted_decode(tokens)
+        assert expected == "αβγ→🎉中"
+        real, oracle = _one_case(tokens=tokens, boundary=(9,), expected=expected, cap=6)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.exact_match is True
+        assert obs.answer == "αβγ→🎉中"
+
+    def test_decode_failure_taxonomy(self):
+        real, oracle = _one_case(tokens=(10, _FAIL_TOKEN, 11), boundary=(9,), expected="x", cap=3)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "failed"
+        assert obs.error == "decode_failed"
+        assert obs.answer == ""
+        assert obs.raw_reason == "limit"
+        assert obs.output_ids == (10, _FAIL_TOKEN, 11)
+
+    def test_decode_non_str_taxonomy(self):
+        real, oracle = _one_case(tokens=(_NONSTR_TOKEN,), boundary=(9,), expected="x", cap=1)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "failed"
+        assert obs.error == "decode_failed"
+
+    def test_diagnostic_decode_failure_gives_none(self):
+        real, oracle = _one_case(tokens=(10, 11), boundary=(_FAIL_TOKEN,), expected="kl", cap=2)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "completed"
+        assert obs.exact_match is True
+        assert obs.boundary_found is False
+        assert obs.boundary_text_match is None
+
+    def test_empty_boundary_text_gives_none(self):
+        real, oracle = _one_case(tokens=(10,), boundary=(_EMPTY_TEXT_TOKEN,), expected="k", cap=1)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "completed"
+        assert obs.boundary_found is False
+        assert obs.boundary_text_match is None
+
+    def test_error_allowlist_passthrough(self):
+        real, oracle = _one_case(
+            tokens=(5,), boundary=(9,), expected="x", gen_kind="error_allow", cap=4
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "failed"
+        assert obs.error == "context_limit_exceeded"
+        assert obs.raw_reason == "error"
+
+    def test_error_text_sanitized(self):
+        real, oracle = _one_case(
+            tokens=(5,), boundary=(9,), expected="x", gen_kind="error_text", cap=4
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "failed"
+        assert obs.error == "backend_reported_error"
+        assert _PROBE_SECRET not in repr(asdict(obs))
+
+    def test_error_none_sanitized(self):
+        real, oracle = _one_case(
+            tokens=(5,), boundary=(9,), expected="x", gen_kind="error_none", cap=4
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.error == "backend_reported_error"
+
+    def test_failure_taxonomy(self):
+        for encode_kind, gen_kind, want_error in [
+            ("raise", "limit", "encode_failed"),
+            ("invalid_list", "limit", "invalid_input_ids"),
+            ("invalid_neg", "limit", "invalid_input_ids"),
+            ("invalid_bool", "limit", "invalid_input_ids"),
+            ("ok", "raise", "generate_failed"),
+            ("ok", "bad_too_long", "invalid_generation"),
+            ("ok", "bad_limit_short", "invalid_generation"),
+            ("ok", "bad_reason", "invalid_generation"),
+            ("ok", "bad_error_type", "invalid_generation"),
+            ("ok", "bad_error_on_limit", "invalid_generation"),
+            ("ok", "bad_not_generation", "invalid_generation"),
+        ]:
+            with self.subTest(encode_kind=encode_kind, gen_kind=gen_kind, want_error=want_error):
+                tokens = (10, 11, 12, 13)
+                real, oracle = _one_case(
+                    tokens=tokens,
+                    boundary=(9,),
+                    expected="x",
+                    gen_kind=gen_kind,
+                    cap=4,
+                    encode_kind=encode_kind,
+                )
+                _assert_reports_equal(real, oracle)
+                (obs,) = real.observations
+                assert obs.status == "failed"
+                assert obs.error == want_error
+                assert obs.exact_match is False
+
+    def test_render_failed(self):
+        fixture = Fixture(
+            id="renderfail",
+            messages=(Message(role="user", content="q"), Message(role="user", content="q2")),
+            expected="x",
+            group="g",
+        )
+        real, oracle, _, _ = _run_pair([fixture], [CaseScript()], (1,), 4, 7)
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "failed"
+        assert obs.error == "render_failed"
+        assert obs.input_ids == ()
+        assert obs.output_ids == ()
+        assert obs.raw_reason is None
+
+    def test_generate_sets_event_mid_run(self):
+        real, oracle = _one_case(
+            tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="generate"
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "cancelled"
+        assert obs.raw_reason == "limit"
+        assert obs.output_ids == (10, 11)
+        assert obs.answer == ""
+        assert obs.exact_match is False
+        assert obs.error is None
+
+    def test_encode_sets_event_keeps_input_ids(self):
+        real, oracle = _one_case(
+            tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="encode"
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.status == "cancelled"
+        assert obs.input_ids == (1000,)
+        assert obs.output_ids == ()
+        assert obs.answer == ""
+        assert obs.raw_reason is None
+        assert obs.error is None
+        assert obs.boundary_found is False
+
+    def test_decode_diag_event_then_loop_top_cancel(self):
+        fixtures = [
+            Fixture(
+                id="c0", messages=(Message(role="user", content="q"),), expected="kl", group="g"
+            ),
+            Fixture(
+                id="c1", messages=(Message(role="user", content="q"),), expected="kl", group="g"
+            ),
+        ]
+        scripts = [
+            CaseScript(gen_kind="limit", tokens=(10, 11), set_event_at="decode_diag"),
+            CaseScript(gen_kind="limit", tokens=(10, 11)),
+        ]
+        real, oracle, _, _ = _run_pair(fixtures, scripts, (9,), 2, 7)
+        _assert_reports_equal(real, oracle)
         assert real.status == "cancelled"
-        assert real.observations == ()
+        assert len(real.observations) == 1
+        assert real.observations[0].status == "completed"
+        assert real.observations[0].exact_match is True
+
+    def test_request_seed_derivation(self):
+        fixtures = [
+            Fixture(
+                id=f"case-{i}☃",
+                messages=(Message(role="user", content="q"),),
+                expected="e",
+                group="g",
+            )
+            for i in range(3)
+        ]
+        scripts = [CaseScript(gen_kind="limit", tokens=(10, 11)) for _ in range(3)]
+        real, oracle, backend_a, _ = _run_pair(fixtures, scripts, (9,), 2, 12345)
+        _assert_reports_equal(real, oracle)
+        assert backend_a.seeds == [(i, _o_request_seed(12345, f"case-{i}☃")) for i in range(3)]
+        assert real.status == "completed"
+
+    def test_determinism(self):
+        rng = random.Random(31337)  # noqa: S311 -- deterministic test seed
+        fixtures, scripts, boundary, cap, seed = _build_trial(rng)
+        first, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
+        second, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
+        assert [asdict(o) for o in first.observations] == [asdict(o) for o in second.observations]
+        assert (first.status, first.planned_count) == (second.status, second.planned_count)
+
+    def test_no_secret_leak(self):
+        scenarios = [
+            {"gen_kind": "error_text"},
+            {"gen_kind": "raise"},
+            {"encode_kind": "raise"},
+            {"tokens": (10, _FAIL_TOKEN), "gen_kind": "limit"},
+        ]
+        for i, kwargs in enumerate(scenarios):
+            tokens = kwargs.pop("tokens", (10, 11))
+            real, oracle = _one_case(
+                tokens=tokens, boundary=(9,), expected="x", cap=2, fixture_id=f"leak-{i}", **kwargs
+            )
+            _assert_reports_equal(real, oracle)
+            for obs in real.observations:
+                blob = repr(asdict(obs))
+                assert _PROBE_SECRET not in blob
+                assert obs.error in _FIXED_ERROR_VOCAB | {None}
+                assert type(obs.input_ids) is tuple
+                assert all(type(t) is int for t in obs.output_ids)
+
+    def test_observation_field_structure(self):
+        tokens = (10, 11, 1)
+        real, oracle = _one_case(
+            tokens=tokens, boundary=(1,), expected=scripted_decode((10, 11)), cap=3
+        )
+        _assert_reports_equal(real, oracle)
+        (obs,) = real.observations
+        assert obs.candidate == "audit-candidate"
+        assert obs.fixture == "edge"
+        assert obs.input_ids == (1000,)
+        assert obs.output_ids == tokens
+        assert type(obs.answer) is str
+        assert type(obs.exact_match) is bool
+        assert type(obs.boundary_found) is bool
+        assert obs.boundary_text_match is True
+        assert obs.raw_reason == "limit"
+        assert obs.error is None
+        assert obs.status == "completed"
+
+    def test_validation_parity(self):
+        for breakage in [
+            "candidate",
+            "cases_empty",
+            "cases_list",
+            "cases_bad_member",
+            "cases_dup_nfc_id",
+            "cap_zero",
+            "cap_too_big",
+            "cap_str",
+            "cap_bool",
+            "boundary_empty",
+            "boundary_list",
+            "boundary_negative",
+            "boundary_bool_token",
+            "seed_negative",
+            "seed_too_big",
+            "seed_str",
+            "cancel_str",
+        ]:
+            with self.subTest(breakage=breakage):
+                kwargs = _valid_kwargs()
+                if breakage == "candidate":
+                    kwargs["candidate"] = "not-a-format"
+                elif breakage == "cases_empty":
+                    kwargs["cases"] = ()
+                elif breakage == "cases_list":
+                    kwargs["cases"] = list(kwargs["cases"])
+                elif breakage == "cases_bad_member":
+                    kwargs["cases"] = ("nope",)
+                elif breakage == "cases_dup_nfc_id":
+                    kwargs["cases"] = _nfc_dup_cases()
+                elif breakage == "cap_zero":
+                    kwargs["max_new_tokens"] = 0
+                elif breakage == "cap_too_big":
+                    kwargs["max_new_tokens"] = 4097
+                elif breakage == "cap_str":
+                    kwargs["max_new_tokens"] = "64"
+                elif breakage == "cap_bool":
+                    kwargs["max_new_tokens"] = True
+                elif breakage == "boundary_empty":
+                    kwargs["boundary"] = ()
+                elif breakage == "boundary_list":
+                    kwargs["boundary"] = [1]
+                elif breakage == "boundary_negative":
+                    kwargs["boundary"] = (1, -2)
+                elif breakage == "boundary_bool_token":
+                    kwargs["boundary"] = (1, True)
+                elif breakage == "seed_negative":
+                    kwargs["seed"] = -1
+                elif breakage == "seed_too_big":
+                    kwargs["seed"] = 2**64
+                elif breakage == "seed_str":
+                    kwargs["seed"] = "0"
+                elif breakage == "cancel_str":
+                    kwargs["cancel"] = "not-an-event"
+                else:  # pragma: no cover -- parametrize list is exhaustive
+                    raise AssertionError(breakage)
+                backend = ScriptBackend(_CANDIDATE, [], [], Event())
+                with self.assertRaises(ValueError):
+                    evaluate(backend, **kwargs)
+                with self.assertRaises(ValueError):
+                    oracle_evaluate(backend, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -654,328 +1014,6 @@ def _one_case(
     return real, expected_report
 
 
-def test_exact_match_with_boundary_strip() -> None:
-    tokens = (10, 11, 1)
-    expected = scripted_decode((10, 11))
-    real, oracle = _one_case(tokens=tokens, boundary=(1,), expected=expected, cap=3)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "completed"
-    assert obs.answer == expected
-    assert obs.exact_match is True
-    assert obs.boundary_found is True
-    assert obs.boundary_text_match is True
-    assert obs.output_ids == tokens
-    assert obs.raw_reason == "limit"
-    assert obs.error is None
-
-
-def test_case_difference_is_not_exact_match() -> None:
-    # Mutation killer M1 (case-insensitive exact match).
-    tokens = (10, 11)  # decodes to "kl"
-    real, oracle = _one_case(tokens=tokens, boundary=(9,), expected="KL", cap=2)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.answer == "kl"
-    assert obs.exact_match is False
-    assert obs.boundary_found is False
-
-
-def test_boundary_at_position_zero() -> None:
-    real, oracle = _one_case(tokens=(1, 10), boundary=(1,), expected="", cap=2)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.boundary_found is True
-    assert obs.answer == ""
-    assert obs.exact_match is True
-
-
-def test_boundary_longer_than_output() -> None:
-    real, oracle = _one_case(tokens=(1, 2), boundary=(1, 2, 3), expected="x", cap=2)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.boundary_found is False
-    assert obs.boundary_text_match is False
-
-
-def test_overlapping_boundary() -> None:
-    real, oracle = _one_case(tokens=(3, 3, 3), boundary=(3, 3), expected="", cap=3)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.boundary_found is True
-    assert obs.answer == ""  # first occurrence wins: cut == 0
-
-
-def test_tokenization_mismatch_flag() -> None:
-    # Mutation killer M6 (inverted endswith): 901 decodes to "α" like token 1,
-    # but the ID-level boundary (1,) is absent while the text still ends with α.
-    real, oracle = _one_case(tokens=(7, 901), boundary=(1,), expected="x", cap=2)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.boundary_found is False
-    assert obs.boundary_text_match is True
-    assert obs.answer == scripted_decode((7, 901)) == "hα"
-
-
-def test_empty_generation_cancelled() -> None:
-    real, oracle = _one_case(tokens=(), boundary=(1,), expected="", gen_kind="cancelled", cap=4)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "cancelled"
-    assert obs.output_ids == ()
-    assert obs.answer == ""
-    assert obs.exact_match is False
-    assert obs.boundary_found is False
-    assert obs.raw_reason == "cancelled"
-
-
-def test_unicode_roundtrip() -> None:
-    tokens = (1, 2, 3, 810, 811, 812)
-    expected = scripted_decode(tokens)
-    assert expected == "αβγ→🎉中"
-    real, oracle = _one_case(tokens=tokens, boundary=(9,), expected=expected, cap=6)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.exact_match is True
-    assert obs.answer == "αβγ→🎉中"
-
-
-def test_decode_failure_taxonomy() -> None:
-    # Mutation killer M5 (wrong taxonomy code).
-    real, oracle = _one_case(tokens=(10, _FAIL_TOKEN, 11), boundary=(9,), expected="x", cap=3)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == "decode_failed"
-    assert obs.answer == ""
-    assert obs.raw_reason == "limit"
-    assert obs.output_ids == (10, _FAIL_TOKEN, 11)
-
-
-def test_decode_non_str_taxonomy() -> None:
-    real, oracle = _one_case(tokens=(_NONSTR_TOKEN,), boundary=(9,), expected="x", cap=1)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == "decode_failed"
-
-
-def test_diagnostic_decode_failure_gives_none() -> None:
-    # Boundary IDs that fail decode: the run still completes, diagnostic is None.
-    real, oracle = _one_case(tokens=(10, 11), boundary=(_FAIL_TOKEN,), expected="kl", cap=2)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "completed"
-    assert obs.exact_match is True
-    assert obs.boundary_found is False
-    assert obs.boundary_text_match is None
-
-
-def test_empty_boundary_text_gives_none() -> None:
-    real, oracle = _one_case(tokens=(10,), boundary=(_EMPTY_TEXT_TOKEN,), expected="k", cap=1)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "completed"
-    assert obs.boundary_found is False
-    assert obs.boundary_text_match is None
-
-
-def test_error_allowlist_passthrough() -> None:
-    real, oracle = _one_case(
-        tokens=(5,), boundary=(9,), expected="x", gen_kind="error_allow", cap=4
-    )
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == "context_limit_exceeded"
-    assert obs.raw_reason == "error"
-
-
-def test_error_text_sanitized() -> None:
-    real, oracle = _one_case(tokens=(5,), boundary=(9,), expected="x", gen_kind="error_text", cap=4)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == "backend_reported_error"
-    assert _PROBE_SECRET not in repr(asdict(obs))
-
-
-def test_error_none_sanitized() -> None:
-    real, oracle = _one_case(tokens=(5,), boundary=(9,), expected="x", gen_kind="error_none", cap=4)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.error == "backend_reported_error"
-
-
-@pytest.mark.parametrize(
-    ("encode_kind", "gen_kind", "want_error"),
-    [
-        ("raise", "limit", "encode_failed"),
-        ("invalid_list", "limit", "invalid_input_ids"),
-        ("invalid_neg", "limit", "invalid_input_ids"),
-        ("invalid_bool", "limit", "invalid_input_ids"),
-        ("ok", "raise", "generate_failed"),
-        ("ok", "bad_too_long", "invalid_generation"),
-        ("ok", "bad_limit_short", "invalid_generation"),
-        ("ok", "bad_reason", "invalid_generation"),
-        ("ok", "bad_error_type", "invalid_generation"),
-        ("ok", "bad_error_on_limit", "invalid_generation"),
-        ("ok", "bad_not_generation", "invalid_generation"),
-    ],
-)
-def test_failure_taxonomy(encode_kind: str, gen_kind: str, want_error: str) -> None:
-    tokens = (10, 11, 12, 13)
-    real, oracle = _one_case(
-        tokens=tokens,
-        boundary=(9,),
-        expected="x",
-        gen_kind=gen_kind,
-        cap=4,
-        encode_kind=encode_kind,
-    )
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == want_error
-    assert obs.exact_match is False
-
-
-def test_render_failed() -> None:
-    fixture = Fixture(
-        id="renderfail",
-        messages=(Message(role="user", content="q"), Message(role="user", content="q2")),
-        expected="x",
-        group="g",
-    )
-    real, oracle, _, _ = _run_pair([fixture], [CaseScript()], (1,), 4, 7)
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "failed"
-    assert obs.error == "render_failed"
-    assert obs.input_ids == ()
-    assert obs.output_ids == ()
-    assert obs.raw_reason is None
-
-
-def test_generate_sets_event_mid_run() -> None:
-    # Event set inside generate(): the valid limit result becomes a cancelled
-    # observation carrying raw_reason="limit" and the undecoded answer.
-    real, oracle = _one_case(
-        tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="generate"
-    )
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "cancelled"
-    assert obs.raw_reason == "limit"
-    assert obs.output_ids == (10, 11)
-    assert obs.answer == ""
-    assert obs.exact_match is False
-    assert obs.error is None
-
-
-def test_encode_sets_event_keeps_input_ids() -> None:
-    # terminate (not abort) after a successful encode: the cancelled
-    # observation retains the encoded input ids.
-    real, oracle = _one_case(
-        tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="encode"
-    )
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.status == "cancelled"
-    assert obs.input_ids == (1000,)
-    assert obs.output_ids == ()
-    assert obs.answer == ""
-    assert obs.raw_reason is None
-    assert obs.error is None
-    assert obs.boundary_found is False
-
-
-def test_decode_diag_event_then_loop_top_cancel() -> None:
-    # Event set during the diagnostic decode: case 0 completes, then the
-    # loop-top check cancels the report with the completed evidence retained.
-    fixtures = [
-        Fixture(id="c0", messages=(Message(role="user", content="q"),), expected="kl", group="g"),
-        Fixture(id="c1", messages=(Message(role="user", content="q"),), expected="kl", group="g"),
-    ]
-    scripts = [
-        CaseScript(gen_kind="limit", tokens=(10, 11), set_event_at="decode_diag"),
-        CaseScript(gen_kind="limit", tokens=(10, 11)),
-    ]
-    real, oracle, _, _ = _run_pair(fixtures, scripts, (9,), 2, 7)
-    _assert_reports_equal(real, oracle)
-    assert real.status == "cancelled"
-    assert len(real.observations) == 1
-    assert real.observations[0].status == "completed"
-    assert real.observations[0].exact_match is True
-
-
-def test_request_seed_derivation() -> None:
-    fixtures = [
-        Fixture(
-            id=f"case-{i}☃",
-            messages=(Message(role="user", content="q"),),
-            expected="e",
-            group="g",
-        )
-        for i in range(3)
-    ]
-    scripts = [CaseScript(gen_kind="limit", tokens=(10, 11)) for _ in range(3)]
-    real, oracle, backend_a, _ = _run_pair(fixtures, scripts, (9,), 2, 12345)
-    _assert_reports_equal(real, oracle)
-    assert backend_a.seeds == [(i, _o_request_seed(12345, f"case-{i}☃")) for i in range(3)]
-    assert real.status == "completed"
-
-
-def test_determinism() -> None:
-    rng = random.Random(31337)  # noqa: S311 -- deterministic test seed
-    fixtures, scripts, boundary, cap, seed = _build_trial(rng)
-    first, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
-    second, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
-    assert [asdict(o) for o in first.observations] == [asdict(o) for o in second.observations]
-    assert (first.status, first.planned_count) == (second.status, second.planned_count)
-
-
-def test_no_secret_leak() -> None:
-    scenarios = [
-        {"gen_kind": "error_text"},
-        {"gen_kind": "raise"},
-        {"encode_kind": "raise"},
-        {"tokens": (10, _FAIL_TOKEN), "gen_kind": "limit"},
-    ]
-    for i, kwargs in enumerate(scenarios):
-        tokens = kwargs.pop("tokens", (10, 11))
-        real, oracle = _one_case(
-            tokens=tokens, boundary=(9,), expected="x", cap=2, fixture_id=f"leak-{i}", **kwargs
-        )
-        _assert_reports_equal(real, oracle)
-        for obs in real.observations:
-            blob = repr(asdict(obs))
-            assert _PROBE_SECRET not in blob
-            assert obs.error in _FIXED_ERROR_VOCAB | {None}
-            assert type(obs.input_ids) is tuple
-            assert all(type(t) is int for t in obs.output_ids)
-
-
-def test_observation_field_structure() -> None:
-    tokens = (10, 11, 1)
-    real, oracle = _one_case(
-        tokens=tokens, boundary=(1,), expected=scripted_decode((10, 11)), cap=3
-    )
-    _assert_reports_equal(real, oracle)
-    (obs,) = real.observations
-    assert obs.candidate == "audit-candidate"
-    assert obs.fixture == "edge"
-    assert obs.input_ids == (1000,)
-    assert obs.output_ids == tokens
-    assert type(obs.answer) is str
-    assert type(obs.exact_match) is bool
-    assert type(obs.boundary_found) is bool
-    assert obs.boundary_text_match is True
-    assert obs.raw_reason == "limit"
-    assert obs.error is None
-    assert obs.status == "completed"
-
-
 # ---------------------------------------------------------------------------
 # Input-validation parity: both implementations must reject the same inputs.
 # ---------------------------------------------------------------------------
@@ -1004,68 +1042,5 @@ def _nfc_dup_cases() -> tuple[Fixture, Fixture]:
     return (mk("caf\u00e9"), mk("cafe\u0301"))
 
 
-@pytest.mark.parametrize(
-    "breakage",
-    [
-        "candidate",
-        "cases_empty",
-        "cases_list",
-        "cases_bad_member",
-        "cases_dup_nfc_id",
-        "cap_zero",
-        "cap_too_big",
-        "cap_str",
-        "cap_bool",
-        "boundary_empty",
-        "boundary_list",
-        "boundary_negative",
-        "boundary_bool_token",
-        "seed_negative",
-        "seed_too_big",
-        "seed_str",
-        "cancel_str",
-    ],
-)
-def test_validation_parity(breakage: str) -> None:
-    kwargs = _valid_kwargs()
-    if breakage == "candidate":
-        kwargs["candidate"] = "not-a-format"
-    elif breakage == "cases_empty":
-        kwargs["cases"] = ()
-    elif breakage == "cases_list":
-        kwargs["cases"] = list(kwargs["cases"])
-    elif breakage == "cases_bad_member":
-        kwargs["cases"] = ("nope",)
-    elif breakage == "cases_dup_nfc_id":
-        kwargs["cases"] = _nfc_dup_cases()
-    elif breakage == "cap_zero":
-        kwargs["max_new_tokens"] = 0
-    elif breakage == "cap_too_big":
-        kwargs["max_new_tokens"] = 4097
-    elif breakage == "cap_str":
-        kwargs["max_new_tokens"] = "64"
-    elif breakage == "cap_bool":
-        kwargs["max_new_tokens"] = True
-    elif breakage == "boundary_empty":
-        kwargs["boundary"] = ()
-    elif breakage == "boundary_list":
-        kwargs["boundary"] = [1]
-    elif breakage == "boundary_negative":
-        kwargs["boundary"] = (1, -2)
-    elif breakage == "boundary_bool_token":
-        kwargs["boundary"] = (1, True)
-    elif breakage == "seed_negative":
-        kwargs["seed"] = -1
-    elif breakage == "seed_too_big":
-        kwargs["seed"] = 2**64
-    elif breakage == "seed_str":
-        kwargs["seed"] = "0"
-    elif breakage == "cancel_str":
-        kwargs["cancel"] = "not-an-event"
-    else:  # pragma: no cover -- parametrize list is exhaustive
-        raise AssertionError(breakage)
-    backend = ScriptBackend(_CANDIDATE, [], [], Event())
-    with pytest.raises(ValueError):
-        evaluate(backend, **kwargs)
-    with pytest.raises(ValueError):
-        oracle_evaluate(backend, **kwargs)
+if __name__ == "__main__":
+    unittest.main()

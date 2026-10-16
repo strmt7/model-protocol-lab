@@ -76,9 +76,9 @@ import json
 import os
 import re
 import tempfile
+import unittest
 from pathlib import Path
 
-import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -153,84 +153,24 @@ def check_contract(make_call):
     except ValueError:
         return None
     except Exception as exc:  # noqa: BLE001 -- the contract under test forbids these
-        pytest.fail(f"non-ValueError escaped: {type(exc).__name__}: {exc!r}")
+        raise AssertionError(f"non-ValueError escaped: {type(exc).__name__}: {exc!r}") from exc
     assert_valid_split(result)
     return result
 
 
 def check_rejected(text):
     """Strict form: this input is known-invalid, so it must raise ValueError."""
-    with pytest.raises(ValueError):
+    try:
         parse_dataset(text)
-
-
-@pytest.fixture()
-def pid_tmpdir():
-    """PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp)."""
-    with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
-        yield Path(path)
+    except ValueError:
+        return
+    raise AssertionError(f"expected ValueError for {text!r}")
 
 
 # ---------------------------------------------------------------------------
 # Sanity: the mutation base is itself a valid dataset.
 # ---------------------------------------------------------------------------
 
-
-def test_valid_text_sanity():
-    split = check_contract(lambda: parse_dataset(_VALID_TEXT))
-    assert split is not None
-    assert [c.id for c in split.search] == ["s1"]
-    assert [c.id for c in split.held_out] == ["h1"]
-
-
-# ---------------------------------------------------------------------------
-# 1. Arbitrary Unicode text.
-# ---------------------------------------------------------------------------
-
-
-@FUZZ
-@given(st.text())
-def test_arbitrary_text_contract(text):
-    check_contract(lambda: parse_dataset(text))
-
-
-# ---------------------------------------------------------------------------
-# 2. Mutations of a valid fixture JSON.
-# ---------------------------------------------------------------------------
-
-
-@FUZZ
-@given(st.integers(0, len(_VALID_TEXT)))
-def test_truncation_contract(cut):
-    check_contract(lambda: parse_dataset(_VALID_TEXT[:cut]))
-
-
-@FUZZ
-@given(st.data())
-def test_char_substitution_contract(data):
-    index = data.draw(st.integers(0, len(_VALID_TEXT) - 1))
-    replacement = data.draw(st.characters())
-    mutated = _VALID_TEXT[:index] + replacement + _VALID_TEXT[index + 1 :]
-    check_contract(lambda: parse_dataset(mutated))
-
-
-@FUZZ
-@given(st.integers(1, len(_VALID_TEXT) - 1))
-def test_rotation_contract(split_at):
-    rotated = _VALID_TEXT[split_at:] + _VALID_TEXT[:split_at]
-    check_contract(lambda: parse_dataset(rotated))
-
-
-@FUZZ
-@given(st.integers(0, len(_VALID_TEXT)))
-def test_key_splice_contract(index):
-    mutated = _VALID_TEXT[:index] + '"zz": 1, ' + _VALID_TEXT[index:]
-    check_contract(lambda: parse_dataset(mutated))
-
-
-# ---------------------------------------------------------------------------
-# 3. Type-shape attacks.
-# ---------------------------------------------------------------------------
 
 _WRONG_SCALAR = st.one_of(
     st.none(),
@@ -239,6 +179,7 @@ _WRONG_SCALAR = st.one_of(
     st.floats(allow_nan=False, allow_infinity=False),
     st.text(max_size=30),
 )
+
 _WRONG_VALUE = st.recursive(
     _WRONG_SCALAR,
     lambda children: st.one_of(
@@ -248,11 +189,192 @@ _WRONG_VALUE = st.recursive(
     max_leaves=8,
 )
 
+_HOSTILE_FILE_BYTES = st.one_of(
+    st.text(max_size=500).map(lambda s: s.encode("utf-8", errors="surrogatepass")),
+    st.binary(max_size=300),
+    st.integers(0, len(_VALID_TEXT)).map(lambda k: _VALID_TEXT[:k].encode("utf-8")),
+)
 
-@FUZZ
-@given(_WRONG_VALUE)
-def test_wrong_top_level_shape_property(value):
-    check_contract(lambda: parse_dataset(json.dumps(value)))
+
+class ParserHostilePropertiesTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
+
+    def setUp(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        # PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp).
+        self._td = tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-")
+        self.pid_tmpdir = Path(self._td.name)
+
+    def tearDown(self) -> None:
+        self._td.cleanup()
+
+    def test_valid_text_sanity(self):
+        split = check_contract(lambda: parse_dataset(_VALID_TEXT))
+        assert split is not None
+        assert [c.id for c in split.search] == ["s1"]
+        assert [c.id for c in split.held_out] == ["h1"]
+
+    @FUZZ
+    @given(st.text())
+    def test_arbitrary_text_contract(self, text):
+        check_contract(lambda: parse_dataset(text))
+
+    @FUZZ
+    @given(st.integers(0, len(_VALID_TEXT)))
+    def test_truncation_contract(self, cut):
+        check_contract(lambda: parse_dataset(_VALID_TEXT[:cut]))
+
+    @FUZZ
+    @given(st.data())
+    def test_char_substitution_contract(self, data):
+        index = data.draw(st.integers(0, len(_VALID_TEXT) - 1))
+        replacement = data.draw(st.characters())
+        mutated = _VALID_TEXT[:index] + replacement + _VALID_TEXT[index + 1 :]
+        check_contract(lambda: parse_dataset(mutated))
+
+    @FUZZ
+    @given(st.integers(1, len(_VALID_TEXT) - 1))
+    def test_rotation_contract(self, split_at):
+        rotated = _VALID_TEXT[split_at:] + _VALID_TEXT[:split_at]
+        check_contract(lambda: parse_dataset(rotated))
+
+    @FUZZ
+    @given(st.integers(0, len(_VALID_TEXT)))
+    def test_key_splice_contract(self, index):
+        mutated = _VALID_TEXT[:index] + '"zz": 1, ' + _VALID_TEXT[index:]
+        check_contract(lambda: parse_dataset(mutated))
+
+    @FUZZ
+    @given(_WRONG_VALUE)
+    def test_wrong_top_level_shape_property(self, value):
+        check_contract(lambda: parse_dataset(json.dumps(value)))
+
+    def test_type_shape_attacks_at_every_level(self):
+        for name, text in _SHAPE_CASES:
+            with self.subTest(name=name, text=text):
+                check_rejected(text)
+
+    def test_non_string_inputs_rejected(self):
+        for bad in [None, 123, 4.5, b"{}", bytearray(b"{}"), ["x"], {"a": 1}, True]:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                parse_dataset(bad)  # type: ignore[arg-type]
+
+    def test_str_subclass_rejected(self):
+        class Sneaky(str):
+            pass
+
+        with self.assertRaises(ValueError):
+            parse_dataset(Sneaky("{}"))
+
+    def test_number_attacks(self):
+        check_rejected(json.dumps({"search": 10**1000, "held_out": []}))
+        check_rejected('{"search": [' + "9" * 5000 + "]}")  # trips the 4300-digit cap
+        for token in ("1e308", "-1e308", "1e-9999"):
+            check_rejected(_VALID_TEXT.replace('"Search question?"', token, 1))
+
+    @FUZZ
+    @given(st.integers(50, 500), st.sampled_from(["[]", "{}"]))
+    def test_nesting_depth_property(self, depth, kind):
+        text = "[" * depth + "]" * depth if kind == "[]" else '{"k":' * depth + "0" + "}" * depth
+        # Must be ValueError -- a bare RecursionError escaping is the F5 bug class.
+        check_contract(lambda: parse_dataset(text))
+
+    def test_nesting_spliced_inside_fixture(self):
+        deep = "[" * 300 + "]" * 300
+        bad = _VALID_TEXT.replace('[{"role": "user", "content": "Search question?"}]', deep, 1)
+        check_rejected(bad)
+
+    def test_deep_nesting_guard_fixed_vocabulary(self):
+        for depth in [20000, 300000]:
+            with (
+                self.subTest(depth=depth),
+                self.assertRaisesRegex(ValueError, re.escape("Dataset nesting too deep")),
+            ):
+                parse_dataset("[" * depth + "]" * depth)
+
+    def test_fixed_vocabulary_pins(self):
+        dup = _VALID_TEXT.replace('"id": "s1"', '"id": "s1", "id": "s2"', 1)
+        with self.assertRaisesRegex(ValueError, re.escape("Duplicate JSON field")):
+            parse_dataset(dup)
+
+        for token in ("NaN", "Infinity", "-Infinity"):
+            bad = _VALID_TEXT.replace('"Search question?"', token, 1)
+            with self.assertRaisesRegex(ValueError, re.escape("Nonfinite JSON")):
+                parse_dataset(bad)
+
+        for bad in ("[]", '"x"', "42", "null", "true"):
+            with self.assertRaisesRegex(ValueError, re.escape("Unexpected or missing JSON fields")):
+                parse_dataset(bad)
+
+        zero = _doc(dict(_SEARCH_FIX, messages=[]))
+        with self.assertRaisesRegex(
+            ValueError,
+            re.escape(f"conversation must have 1-{MAX_MESSAGES} messages"),
+        ):
+            parse_dataset(zero)
+
+    def test_oversize_text_rejected(self):
+        with self.assertRaisesRegex(ValueError, re.escape("Dataset exceeds size limit")):
+            parse_dataset(" " * (MAX_BYTES + 1))
+        # Exactly at the cap: still rejected, but by the JSON layer, not the guard.
+        check_rejected(" " * MAX_BYTES)
+
+    @FILE_FUZZ
+    @given(_HOSTILE_FILE_BYTES)
+    def test_load_dataset_hostile_files(self, payload):
+        with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
+            target = Path(path) / "hostile.json"
+            target.write_bytes(payload)
+            check_contract(lambda: load_dataset(target))
+
+    def test_load_dataset_valid_file(self):
+        target = self.pid_tmpdir / "valid.json"
+        target.write_text(_VALID_TEXT, encoding="utf-8")
+        split = check_contract(lambda: load_dataset(target))
+        assert split is not None
+
+    def test_load_dataset_path_attacks(self):
+        with self.assertRaisesRegex(ValueError, re.escape("Fixture path is not a regular file")):
+            load_dataset(self.pid_tmpdir)  # a directory is never loadable
+
+        fifo = self.pid_tmpdir / f"fifo-{os.getpid()}"
+        os.mkfifo(fifo)
+        with self.assertRaisesRegex(ValueError, re.escape("Fixture path is not a regular file")):
+            load_dataset(fifo)  # refused via O_NONBLOCK + fstat: cannot hang
+
+        bad = self.pid_tmpdir / "bad.bin"
+        bad.write_bytes(b"\xff\xfe\x00not-json")
+        with self.assertRaisesRegex(ValueError, re.escape("Fixture file is not valid UTF-8")):
+            load_dataset(bad)
+
+        with self.assertRaisesRegex(ValueError, re.escape("Unreadable fixture file")):
+            load_dataset(self.pid_tmpdir / "missing.json")
+
+        big = self.pid_tmpdir / "big.json"
+        big.write_bytes(b" " * (MAX_BYTES + 1))
+        with self.assertRaisesRegex(ValueError, re.escape("Dataset exceeds size limit")):
+            load_dataset(big)
+
+        for wrong in (123, None, ["x"]):
+            with self.assertRaisesRegex(ValueError, re.escape("Invalid fixture path")):
+                load_dataset(wrong)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# 1. Arbitrary Unicode text.
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 2. Mutations of a valid fixture JSON.
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 3. Type-shape attacks.
+# ---------------------------------------------------------------------------
 
 
 def _doc(search, held=None):
@@ -304,35 +426,9 @@ _SHAPE_CASES = [
 ]
 
 
-@pytest.mark.parametrize("name,text", _SHAPE_CASES, ids=[n for n, _ in _SHAPE_CASES])
-def test_type_shape_attacks_at_every_level(name, text):
-    check_rejected(text)
-
-
-@pytest.mark.parametrize("bad", [None, 123, 4.5, b"{}", bytearray(b"{}"), ["x"], {"a": 1}, True])
-def test_non_string_inputs_rejected(bad):
-    with pytest.raises(ValueError):
-        parse_dataset(bad)  # type: ignore[arg-type]
-
-
-def test_str_subclass_rejected():
-    class Sneaky(str):
-        pass
-
-    with pytest.raises(ValueError):
-        parse_dataset(Sneaky("{}"))
-
-
 # ---------------------------------------------------------------------------
 # 4. Number attacks.
 # ---------------------------------------------------------------------------
-
-
-def test_number_attacks():
-    check_rejected(json.dumps({"search": 10**1000, "held_out": []}))
-    check_rejected('{"search": [' + "9" * 5000 + "]}")  # trips the 4300-digit cap
-    for token in ("1e308", "-1e308", "1e-9999"):
-        check_rejected(_VALID_TEXT.replace('"Search question?"', token, 1))
 
 
 # ---------------------------------------------------------------------------
@@ -340,51 +436,9 @@ def test_number_attacks():
 # ---------------------------------------------------------------------------
 
 
-@FUZZ
-@given(st.integers(50, 500), st.sampled_from(["[]", "{}"]))
-def test_nesting_depth_property(depth, kind):
-    text = "[" * depth + "]" * depth if kind == "[]" else '{"k":' * depth + "0" + "}" * depth
-    # Must be ValueError -- a bare RecursionError escaping is the F5 bug class.
-    check_contract(lambda: parse_dataset(text))
-
-
-def test_nesting_spliced_inside_fixture():
-    deep = "[" * 300 + "]" * 300
-    bad = _VALID_TEXT.replace('[{"role": "user", "content": "Search question?"}]', deep, 1)
-    check_rejected(bad)
-
-
-@pytest.mark.parametrize("depth", [20000, 300000])
-def test_deep_nesting_guard_fixed_vocabulary(depth):
-    with pytest.raises(ValueError, match=re.escape("Dataset nesting too deep")):
-        parse_dataset("[" * depth + "]" * depth)
-
-
 # ---------------------------------------------------------------------------
 # Fixed-vocabulary pins (substrings read verbatim from datasets.py).
 # ---------------------------------------------------------------------------
-
-
-def test_fixed_vocabulary_pins():
-    dup = _VALID_TEXT.replace('"id": "s1"', '"id": "s1", "id": "s2"', 1)
-    with pytest.raises(ValueError, match=re.escape("Duplicate JSON field")):
-        parse_dataset(dup)
-
-    for token in ("NaN", "Infinity", "-Infinity"):
-        bad = _VALID_TEXT.replace('"Search question?"', token, 1)
-        with pytest.raises(ValueError, match=re.escape("Nonfinite JSON")):
-            parse_dataset(bad)
-
-    for bad in ("[]", '"x"', "42", "null", "true"):
-        with pytest.raises(ValueError, match=re.escape("Unexpected or missing JSON fields")):
-            parse_dataset(bad)
-
-    zero = _doc(dict(_SEARCH_FIX, messages=[]))
-    with pytest.raises(
-        ValueError,
-        match=re.escape(f"conversation must have 1-{MAX_MESSAGES} messages"),
-    ):
-        parse_dataset(zero)
 
 
 # ---------------------------------------------------------------------------
@@ -392,65 +446,10 @@ def test_fixed_vocabulary_pins():
 # ---------------------------------------------------------------------------
 
 
-def test_oversize_text_rejected():
-    with pytest.raises(ValueError, match=re.escape("Dataset exceeds size limit")):
-        parse_dataset(" " * (MAX_BYTES + 1))
-    # Exactly at the cap: still rejected, but by the JSON layer, not the guard.
-    check_rejected(" " * MAX_BYTES)
-
-
 # ---------------------------------------------------------------------------
 # 6. load_dataset file attacks.
 # ---------------------------------------------------------------------------
 
-_HOSTILE_FILE_BYTES = st.one_of(
-    st.text(max_size=500).map(lambda s: s.encode("utf-8", errors="surrogatepass")),
-    st.binary(max_size=300),
-    st.integers(0, len(_VALID_TEXT)).map(lambda k: _VALID_TEXT[:k].encode("utf-8")),
-)
 
-
-@FILE_FUZZ
-@given(_HOSTILE_FILE_BYTES)
-def test_load_dataset_hostile_files(payload):
-    # Temp dir is managed inline (not via the function-scoped fixture):
-    # hypothesis reuses one fixture instance across examples, and a fresh
-    # PID-scoped dir per example keeps the file attacks fully isolated.
-    with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
-        target = Path(path) / "hostile.json"
-        target.write_bytes(payload)
-        check_contract(lambda: load_dataset(target))
-
-
-def test_load_dataset_valid_file(pid_tmpdir):
-    target = pid_tmpdir / "valid.json"
-    target.write_text(_VALID_TEXT, encoding="utf-8")
-    split = check_contract(lambda: load_dataset(target))
-    assert split is not None
-
-
-def test_load_dataset_path_attacks(pid_tmpdir):
-    with pytest.raises(ValueError, match=re.escape("Fixture path is not a regular file")):
-        load_dataset(pid_tmpdir)  # a directory is never loadable
-
-    fifo = pid_tmpdir / f"fifo-{os.getpid()}"
-    os.mkfifo(fifo)
-    with pytest.raises(ValueError, match=re.escape("Fixture path is not a regular file")):
-        load_dataset(fifo)  # refused via O_NONBLOCK + fstat: cannot hang
-
-    bad = pid_tmpdir / "bad.bin"
-    bad.write_bytes(b"\xff\xfe\x00not-json")
-    with pytest.raises(ValueError, match=re.escape("Fixture file is not valid UTF-8")):
-        load_dataset(bad)
-
-    with pytest.raises(ValueError, match=re.escape("Unreadable fixture file")):
-        load_dataset(pid_tmpdir / "missing.json")
-
-    big = pid_tmpdir / "big.json"
-    big.write_bytes(b" " * (MAX_BYTES + 1))
-    with pytest.raises(ValueError, match=re.escape("Dataset exceeds size limit")):
-        load_dataset(big)
-
-    for wrong in (123, None, ["x"]):
-        with pytest.raises(ValueError, match=re.escape("Invalid fixture path")):
-            load_dataset(wrong)  # type: ignore[arg-type]
+if __name__ == "__main__":
+    unittest.main()

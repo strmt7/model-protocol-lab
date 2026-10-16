@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 106 — CI unittest gate coverage, 2026-10-17)
+
+- Closed a major test-runner gap: CI's `coverage run -m unittest discover`
+  silently skipped 2533 test executions because 9 test files were written
+  in pytest style (module-level `def test_*` functions, pytest-style
+  classes) that unittest discovery collects zero tests from. The 9 files
+  (cycles 13, 49, 55, 62, 63, 74, 82, 86, 88) are now `unittest.TestCase`
+  subclasses, which pytest also runs natively — both runners now execute
+  the full suite (unittest: 3598 -> 3873 tests; pytest: 6131 -> 4913
+  collected items, with parametrize cases as subtests). This included
+  security-relevant suites: hostile parser properties, held-out
+  separation, diff-reports security, and doctor portability. README and
+  VALIDATION.md test counts updated.
+
 ### Added (cycle 104 — mypy strict compliance, 2026-10-16)
 
 - The full package now passes `mypy --strict` (37 errors fixed across 7

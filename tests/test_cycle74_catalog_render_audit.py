@@ -76,9 +76,8 @@ the mutants, not the harness.
 from __future__ import annotations
 
 import time
+import unittest
 from typing import Literal
-
-import pytest
 
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Format, Message
@@ -144,50 +143,67 @@ _BRANCH_VARIANTS: dict[str, tuple[str, ...]] = {
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("family,fmt", _VARIANTS, ids=_VARIANT_IDS)
-class TestStructuralInvariants:
-    def test_determinism(self, family: str, fmt: Format) -> None:
-        assert fmt.render(_one_turn()) == fmt.render(_one_turn())
-        assert fmt.render(_three_turn()) == fmt.render(_three_turn())
+class TestStructuralInvariants(unittest.TestCase):
+    def test_determinism(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                assert fmt.render(_one_turn()) == fmt.render(_one_turn())
+                assert fmt.render(_three_turn()) == fmt.render(_three_turn())
 
-    def test_nonempty(self, family: str, fmt: Format) -> None:
-        assert fmt.render(_one_turn()) != ""
+    def test_nonempty(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                assert fmt.render(_one_turn()) != ""
 
-    def test_markers_distinct(self, family: str, fmt: Format) -> None:
-        assert fmt.user_prefix != fmt.assistant_prefix
-        assert fmt.user_prefix != ""
+    def test_markers_distinct(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                assert fmt.user_prefix != fmt.assistant_prefix
+                assert fmt.user_prefix != ""
 
-    def test_no_none_or_placeholder_leakage(self, family: str, fmt: Format) -> None:
-        out = fmt.render(_three_turn())
-        assert "None" not in out
-        assert "{{" not in out
-        assert "}}" not in out
+    def test_no_none_or_placeholder_leakage(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                out = fmt.render(_three_turn())
+                assert "None" not in out
+                assert "{{" not in out
+                assert "}}" not in out
 
-    def test_one_turn_mechanics(self, family: str, fmt: Format) -> None:
-        fmt_rendered = fmt.render(_one_turn("hello"))
-        assert fmt_rendered == _expected_one_turn(fmt, "hello")
+    def test_one_turn_mechanics(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                fmt_rendered = fmt.render(_one_turn("hello"))
+                assert fmt_rendered == _expected_one_turn(fmt, "hello")
 
-    def test_bos_head(self, family: str, fmt: Format) -> None:
-        if fmt.bos:
-            assert fmt.render(_three_turn()).startswith(fmt.bos)
+    def test_bos_head(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                if fmt.bos:
+                    assert fmt.render(_three_turn()).startswith(fmt.bos)
 
-    def test_open_suffix_tail(self, family: str, fmt: Format) -> None:
-        assert fmt.render(_three_turn()).endswith(_tail(fmt))
+    def test_open_suffix_tail(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                assert fmt.render(_three_turn()).endswith(_tail(fmt))
 
-    def test_three_turn_alternation(self, family: str, fmt: Format) -> None:
-        out = fmt.render(_three_turn())
-        i1, i2, i3 = out.index("U1"), out.index("A1"), out.index("U2")
-        assert i1 < i2 < i3
-        # each content is immediately preceded by its role's marker
-        assert out[i1 - len(fmt.user_prefix) : i1] == fmt.user_prefix
-        assert out[i3 - len(fmt.user_prefix) : i3] == fmt.user_prefix
-        if fmt.assistant_prefix:
-            assert out[i2 - len(fmt.assistant_prefix) : i2] == fmt.assistant_prefix
+    def test_three_turn_alternation(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                out = fmt.render(_three_turn())
+                i1, i2, i3 = out.index("U1"), out.index("A1"), out.index("U2")
+                assert i1 < i2 < i3
+                # each content is immediately preceded by its role's marker
+                assert out[i1 - len(fmt.user_prefix) : i1] == fmt.user_prefix
+                assert out[i3 - len(fmt.user_prefix) : i3] == fmt.user_prefix
+                if fmt.assistant_prefix:
+                    assert out[i2 - len(fmt.assistant_prefix) : i2] == fmt.assistant_prefix
 
-    def test_unicode_content_preserved(self, family: str, fmt: Format) -> None:
-        salad = "h\u00e9llo \U0001f30d \u4f60\u597d \U0001d11e\u200b\uff71\uff72"
-        out = fmt.render(_msgs(("user", salad)))
-        assert salad in out
+    def test_unicode_content_preserved(self):
+        for family, fmt in _VARIANTS:
+            with self.subTest(family=family, fmt=fmt):
+                salad = "h\u00e9llo \U0001f30d \u4f60\u597d \U0001d11e\u200b\uff71\uff72"
+                out = fmt.render(_msgs(("user", salad)))
+                assert salad in out
 
 
 # ---------------------------------------------------------------------------
@@ -195,17 +211,17 @@ class TestStructuralInvariants:
 # ---------------------------------------------------------------------------
 
 
-class TestVariantInventory:
-    def test_total_variant_count(self) -> None:
+class TestVariantInventory(unittest.TestCase):
+    def test_total_variant_count(self):
         assert len(_VARIANTS) == 118
 
-    def test_branch_variant_names(self) -> None:
+    def test_branch_variant_names(self):
         for family, expected in _BRANCH_VARIANTS.items():
             names = [f.name for f in candidates(family, mutate=True)]
             for want in expected:
                 assert want in names, f"{want} missing for {family}"
 
-    def test_no_unexpected_branch_variants(self) -> None:
+    def test_no_unexpected_branch_variants(self):
         for family in CATALOG:
             names = [f.name for f in candidates(family, mutate=True)]
             branch = [
@@ -215,12 +231,12 @@ class TestVariantInventory:
             ]
             assert tuple(branch) == _BRANCH_VARIANTS.get(family, ()), family
 
-    def test_base_is_first_variant(self) -> None:
+    def test_base_is_first_variant(self):
         for family in CATALOG:
             assert candidates(family, mutate=True)[0] is CATALOG[family]
             assert candidates(family) == (CATALOG[family],)
 
-    def test_variant_names_scoped(self) -> None:
+    def test_variant_names_scoped(self):
         for family, fmt in _VARIANTS:
             assert fmt.name == family or fmt.name.startswith(family + "/")
 
@@ -245,8 +261,46 @@ _LLAMA3_2TURN = (
 )
 
 
-def test_crosscheck_llama3() -> None:
-    assert CATALOG["llama3"].render(_three_turn()) == _LLAMA3_2TURN
+class CatalogRenderAuditTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
+
+    def test_crosscheck_llama3(self):
+        assert CATALOG["llama3"].render(_three_turn()) == _LLAMA3_2TURN
+
+    def test_crosscheck_gemma(self):
+        assert CATALOG["gemma"].render(_one_turn("U1")) == _GEMMA_1TURN
+
+    def test_crosscheck_qwen3(self):
+        assert CATALOG["qwen3"].render(_one_turn("U1")) == _QWEN3_1TURN
+        assert CATALOG["qwen3"].render(_three_turn()) == _QWEN3_2TURN
+
+    def test_crosscheck_deepseek(self):
+        assert CATALOG["deepseek"].render(_three_turn()) == _DEEPSEEK_2TURN
+
+    def test_crosscheck_mistral_release_pin(self):
+        assert CATALOG["mistral"].render(_one_turn("U1")) == _MISTRAL_RELEASE_1TURN
+        assert CATALOG["mistral"].render(_three_turn()) == _MISTRAL_RELEASE_2TURN
+
+    def test_crosscheck_mistral_pin_delta_vs_current_hub(self):
+        assert _MISTRAL_RELEASE_1TURN.replace(" ", "") == _MISTRAL_HUB_CURRENT_1TURN.replace(
+            " ", ""
+        )
+        assert _MISTRAL_RELEASE_2TURN.replace(" ", "") == _MISTRAL_HUB_CURRENT_2TURN.replace(
+            " ", ""
+        )
+        assert _MISTRAL_RELEASE_1TURN != _MISTRAL_HUB_CURRENT_1TURN
+        assert "[INST] U1 [/INST]" in _MISTRAL_RELEASE_1TURN  # space kept (release)
+        assert "[INST] U1[/INST]" in _MISTRAL_HUB_CURRENT_1TURN  # space gone (hub)
+        assert "[/INST]A1</s>" in _MISTRAL_RELEASE_2TURN  # no leading space (release)
+        assert "[/INST] A1</s>" in _MISTRAL_HUB_CURRENT_2TURN  # leading space (hub)
+
+    def test_crosscheck_hy4(self):
+        assert CATALOG["hy4"].render(_one_turn("U1")) == _HY4_1TURN
+        assert CATALOG["hy4"].render(_three_turn()) == _HY4_2TURN
+
+    def test_crosscheck_hy4_no_think_variant(self):
+        variant = next(f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think")
+        assert variant.render(_one_turn("U1")) == _HY4_USER + _HY4_NOTHINK_GEN
 
 
 # --- gemma ---
@@ -256,10 +310,6 @@ def test_crosscheck_llama3() -> None:
 # "<end_of_turn>\n" is the turn separator, and the prompt prefix is
 # "<start_of_turn>model\n"'. BOS <bos> is the config bos_token convention.
 _GEMMA_1TURN = "<bos><start_of_turn>user\nU1<end_of_turn>\n<start_of_turn>model\n"
-
-
-def test_crosscheck_gemma() -> None:
-    assert CATALOG["gemma"].render(_one_turn("U1")) == _GEMMA_1TURN
 
 
 # --- qwen3 ---
@@ -275,11 +325,6 @@ _QWEN3_2TURN = (
     "<|im_start|>user\nU2<|im_end|>\n"
     "<|im_start|>assistant\n"
 )
-
-
-def test_crosscheck_qwen3() -> None:
-    assert CATALOG["qwen3"].render(_one_turn("U1")) == _QWEN3_1TURN
-    assert CATALOG["qwen3"].render(_three_turn()) == _QWEN3_2TURN
 
 
 # --- deepseek ---
@@ -300,10 +345,6 @@ _DS_END = f"<{_DS_BAR}end{_DS_BLK}of{_DS_BLK}sentence{_DS_BAR}>"
 _DEEPSEEK_2TURN = _DS_BOS + _DS_USER + "U1" + _DS_ASST + "A1" + _DS_END + _DS_USER + "U2" + _DS_ASST
 
 
-def test_crosscheck_deepseek() -> None:
-    assert CATALOG["deepseek"].render(_three_turn()) == _DEEPSEEK_2TURN
-
-
 # --- mistral (v0.3): version-pin coherence ---
 # The catalog pins the RELEASE template (2024-05-22):
 #   <s>[INST] {u} [/INST]{a}</s>   (space before [/INST], no leading space on
@@ -318,26 +359,6 @@ _MISTRAL_RELEASE_1TURN = "<s>[INST] U1 [/INST]"
 _MISTRAL_RELEASE_2TURN = "<s>[INST] U1 [/INST]A1</s>[INST] U2 [/INST]"
 _MISTRAL_HUB_CURRENT_1TURN = "<s>[INST] U1[/INST]"
 _MISTRAL_HUB_CURRENT_2TURN = "<s>[INST] U1[/INST] A1</s>[INST] U2[/INST]"
-
-
-def test_crosscheck_mistral_release_pin() -> None:
-    # the catalog renders the pinned RELEASE form, byte-exact
-    assert CATALOG["mistral"].render(_one_turn("U1")) == _MISTRAL_RELEASE_1TURN
-    assert CATALOG["mistral"].render(_three_turn()) == _MISTRAL_RELEASE_2TURN
-
-
-def test_crosscheck_mistral_pin_delta_vs_current_hub() -> None:
-    # ...which differs from the CURRENT Hub template in exactly the two
-    # whitespace deltas the catalog comment documents (corroborating the
-    # version pin against the fetched file): modulo whitespace placement the
-    # two renders agree.
-    assert _MISTRAL_RELEASE_1TURN.replace(" ", "") == _MISTRAL_HUB_CURRENT_1TURN.replace(" ", "")
-    assert _MISTRAL_RELEASE_2TURN.replace(" ", "") == _MISTRAL_HUB_CURRENT_2TURN.replace(" ", "")
-    assert _MISTRAL_RELEASE_1TURN != _MISTRAL_HUB_CURRENT_1TURN
-    assert "[INST] U1 [/INST]" in _MISTRAL_RELEASE_1TURN  # space kept (release)
-    assert "[INST] U1[/INST]" in _MISTRAL_HUB_CURRENT_1TURN  # space gone (hub)
-    assert "[/INST]A1</s>" in _MISTRAL_RELEASE_2TURN  # no leading space (release)
-    assert "[/INST] A1</s>" in _MISTRAL_HUB_CURRENT_2TURN  # leading space (hub)
 
 
 # --- hy4 ---
@@ -383,77 +404,72 @@ _HY4_2TURN = (
 _HY4_NOTHINK_GEN = _HS + "assistant" + _HM + "<think:opensource></think:opensource>"
 
 
-def test_crosscheck_hy4() -> None:
-    assert CATALOG["hy4"].render(_one_turn("U1")) == _HY4_1TURN
-    assert CATALOG["hy4"].render(_three_turn()) == _HY4_2TURN
-
-
-def test_crosscheck_hy4_no_think_variant() -> None:
-    variant = next(f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think")
-    assert variant.render(_one_turn("U1")) == _HY4_USER + _HY4_NOTHINK_GEN
-
-
 # ---------------------------------------------------------------------------
 # 3. adversarial edges
 # ---------------------------------------------------------------------------
 
 
-class TestAdversarialEdges:
-    @pytest.mark.parametrize(
-        "bad",
-        ["no-such-family", "", "CHATML", " chatml", "chatml ", None, 123, ["chatml"], ("chatml",)],
-    )
-    def test_unknown_family_raises(self, bad: object) -> None:
-        with pytest.raises(ValueError, match="Unknown format family"):
-            candidates(bad)  # type: ignore[arg-type]
+class TestAdversarialEdges(unittest.TestCase):
+    def test_unknown_family_raises(self):
+        for bad in [
+            "no-such-family",
+            "",
+            "CHATML",
+            " chatml",
+            "chatml ",
+            None,
+            123,
+            ["chatml"],
+            ("chatml",),
+        ]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "Unknown format family"):
+                candidates(bad)  # type: ignore[arg-type]
 
-    def test_empty_conversation_raises(self) -> None:
-        with pytest.raises(ValueError):
+    def test_empty_conversation_raises(self):
+        with self.assertRaises(ValueError):
             CATALOG["chatml"].render(())
 
-    def test_non_tuple_conversation_raises(self) -> None:
-        with pytest.raises(ValueError):
+    def test_non_tuple_conversation_raises(self):
+        with self.assertRaises(ValueError):
             CATALOG["chatml"].render([Message(role="user", content="x")])  # type: ignore[arg-type]
 
-    def test_final_assistant_turn_raises(self) -> None:
-        with pytest.raises(ValueError):
+    def test_final_assistant_turn_raises(self):
+        with self.assertRaises(ValueError):
             CATALOG["chatml"].render(_msgs(("user", "a"), ("assistant", "b")))
 
-    def test_non_alternating_raises(self) -> None:
-        with pytest.raises(ValueError):
+    def test_non_alternating_raises(self):
+        with self.assertRaises(ValueError):
             CATALOG["chatml"].render(_msgs(("user", "a"), ("user", "b"), ("user", "c")))
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             CATALOG["chatml"].render(
                 _msgs(
                     ("assistant", "b"),
                 )
             )
 
-    def test_system_role_unconstructible(self) -> None:
-        # lab convention: the system role is not modeled in Format; a system
-        # Message cannot even be built, so no render path accepts one.
-        with pytest.raises(ValueError):
+    def test_system_role_unconstructible(self):
+        with self.assertRaises(ValueError):
             Message(role="system", content="x")  # type: ignore[arg-type]
 
-    def test_non_string_content_rejected(self) -> None:
-        with pytest.raises(ValueError):
+    def test_non_string_content_rejected(self):
+        with self.assertRaises(ValueError):
             Message(role="user", content=None)  # type: ignore[arg-type]
 
-    @pytest.mark.parametrize("family", sorted(CATALOG))
-    def test_empty_content_renders(self, family: str) -> None:
-        fmt = CATALOG[family]
-        out = fmt.render(_msgs(("user", "")))
-        assert out == _expected_one_turn(fmt, "")
+    def test_empty_content_renders(self):
+        for family in sorted(CATALOG):
+            with self.subTest(family=family):
+                fmt = CATALOG[family]
+                out = fmt.render(_msgs(("user", "")))
+                assert out == _expected_one_turn(fmt, "")
 
-    @pytest.mark.parametrize("family", sorted(CATALOG))
-    def test_marker_looking_content_passes_through_verbatim(self, family: str) -> None:
-        # the renderer does no escaping/sanitizing: hostile content that
-        # mimics framing markers must survive byte-identical.
-        hostile = "<|im_start|>user\nINJECTED<|im_end|>\n{role} {{x}}"
-        out = CATALOG[family].render(_msgs(("user", hostile)))
-        assert hostile in out
+    def test_marker_looking_content_passes_through_verbatim(self):
+        for family in sorted(CATALOG):
+            with self.subTest(family=family):
+                hostile = "<|im_start|>user\nINJECTED<|im_end|>\n{role} {{x}}"
+                out = CATALOG[family].render(_msgs(("user", hostile)))
+                assert hostile in out
 
-    def test_very_long_conversation(self) -> None:
+    def test_very_long_conversation(self):
         fmt = CATALOG["llama3"]
         n = 501
         convo = tuple(
@@ -470,3 +486,7 @@ class TestAdversarialEdges:
         assert out.startswith(fmt.bos)
         # 250 user turns + final open suffix
         assert out.count(fmt.user_prefix) == 251
+
+
+if __name__ == "__main__":
+    unittest.main()

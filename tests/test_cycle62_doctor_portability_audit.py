@@ -99,12 +99,11 @@ import contextlib
 import json
 import random
 import sys
+import unittest
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-
-import pytest
 
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import (
@@ -190,18 +189,6 @@ class _PrimaryFake:
 
     def decode(self, token_ids: list) -> Any:
         return self._decode(token_ids)
-
-
-@pytest.fixture()
-def fake_transformers(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeSpec]:
-    """Install the fake ``transformers`` module; yield its registry."""
-    registry: dict[str, FakeSpec] = {}
-    _FakePreTrainedTokenizerFast.registry = registry
-    module = ModuleType("transformers")
-    module.PreTrainedTokenizerFast = _FakePreTrainedTokenizerFast
-    monkeypatch.setitem(sys.modules, "transformers", module)
-    yield registry
-    _FakePreTrainedTokenizerFast.registry = {}
 
 
 def _write_ckpt(directory: Path, doc: dict) -> Path:
@@ -529,17 +516,6 @@ def _raise_encode(text: str) -> Any:
     raise RuntimeError("encode boom")
 
 
-@pytest.fixture()
-def check_dirs(tmp_path: Path) -> dict[str, Path]:
-    base = tmp_path / "check"
-    good = _write_ckpt(base / "ref_ok", {})
-    nofile = base / "ref_nofile"
-    nofile.mkdir(parents=True)
-    bad = _write_ckpt(base / "ref_bad", {})
-    (bad / "tokenizer.json").write_text("{not json", encoding="utf-8")
-    return {"good": good, "nofile": nofile, "bad": bad, "base": base}
-
-
 def _run_check(
     registry: dict[str, FakeSpec],
     dirs: dict[str, Path],
@@ -605,241 +581,675 @@ def _assert_check(
     assert set(actual) == {"status", "detail"}
 
 
-def test_check_none_primary(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(primary=None))
+class DoctorPortabilityAuditTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
 
+    def setUp(self) -> None:
+        import sys
+        import tempfile
+        from pathlib import Path
 
-def test_check_none_boundary_ids(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(boundary=None))
+        # tmp_path fixture
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self._td.name)
+        # fake_transformers fixture: install fake module, yield registry
+        self.fake_transformers = {}
+        _FakePreTrainedTokenizerFast.registry = self.fake_transformers
+        module = ModuleType("transformers")
+        module.PreTrainedTokenizerFast = _FakePreTrainedTokenizerFast
+        self._orig_transformers = sys.modules.get("transformers")
+        sys.modules["transformers"] = module
+        # check_dirs fixture
+        base = self.tmp_path / "check"
+        good = _write_ckpt(base / "ref_ok", {})
+        nofile = base / "ref_nofile"
+        nofile.mkdir(parents=True)
+        bad = _write_ckpt(base / "ref_bad", {})
+        (bad / "tokenizer.json").write_text("{not json", encoding="utf-8")
+        self.check_dirs = {"good": good, "nofile": nofile, "bad": bad, "base": base}
 
+    def tearDown(self) -> None:
+        import sys
 
-def test_check_bool_boundary_id_invalid(fake_transformers, check_dirs):
-    case = _std_case(boundary={"kind": "tuple", "ids": [7, True]})
-    _assert_check(fake_transformers, check_dirs, case)
-    assert _oracle_portability_check(
-        primary=case["primary"], boundary=case["boundary"], reference=case
-    ) == {"status": "skipped", "detail": "invalid boundary ids"}
+        # Undo fake module installation (monkeypatch.setitem equivalent)
+        if self._orig_transformers is None:
+            sys.modules.pop("transformers", None)
+        else:
+            sys.modules["transformers"] = self._orig_transformers
+        _FakePreTrainedTokenizerFast.registry = {}
+        self._td.cleanup()
 
+    def test_check_none_primary(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(primary=None))
 
-def test_check_zero_boundary_id_valid(fake_transformers, check_dirs):
-    # id 0 is a legitimate token id, not "empty"/invalid
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(
-            boundary={"kind": "tuple", "ids": [0]},
-            encode=lambda text: (0,),
-        ),
-    )
+    def test_check_none_boundary_ids(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(boundary=None))
 
+    def test_check_bool_boundary_id_invalid(self):
+        case = _std_case(boundary={"kind": "tuple", "ids": [7, True]})
+        _assert_check(self.fake_transformers, self.check_dirs, case)
+        assert _oracle_portability_check(
+            primary=case["primary"], boundary=case["boundary"], reference=case
+        ) == {"status": "skipped", "detail": "invalid boundary ids"}
 
-def test_check_negative_boundary_id_invalid(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(boundary={"kind": "tuple", "ids": [3, -1]}),
-    )
+    def test_check_zero_boundary_id_valid(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(
+                boundary={"kind": "tuple", "ids": [0]},
+                encode=lambda text: (0,),
+            ),
+        )
 
+    def test_check_negative_boundary_id_invalid(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(boundary={"kind": "tuple", "ids": [3, -1]}),
+        )
 
-def test_check_noniterable_boundary_ids(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(boundary={"kind": "int", "ids": []}),
-    )
+    def test_check_noniterable_boundary_ids(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(boundary={"kind": "int", "ids": []}),
+        )
 
+    def test_check_str_boundary_ids_invalid(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(boundary={"kind": "str", "ids": []}),
+        )
 
-def test_check_str_boundary_ids_invalid(fake_transformers, check_dirs):
-    # tuple("12") -> ('1', '2'): not ints -> invalid, never a bare TypeError
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(boundary={"kind": "str", "ids": []}),
-    )
+    def test_check_empty_boundary_ids(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(boundary={"kind": "tuple", "ids": []}),
+        )
 
+    def test_check_generator_boundary_ids(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(boundary={"kind": "gen", "ids": [4, 5]}, encode=lambda t: (4, 5)),
+        )
 
-def test_check_empty_boundary_ids(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(boundary={"kind": "tuple", "ids": []}),
-    )
+    def test_check_decode_raises(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(primary={"decode": _raise_decode}),
+        )
 
+    def test_check_decode_returns_bytes(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(primary={"decode": lambda ids: b"<m>"}),
+        )
 
-def test_check_generator_boundary_ids(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(boundary={"kind": "gen", "ids": [4, 5]}, encode=lambda t: (4, 5)),
-    )
+    def test_check_decode_returns_empty(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(primary={"decode": lambda ids: ""}),
+        )
 
+    def test_check_decode_returns_str_subclass(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(primary={"decode": lambda ids: _StrSub("<m>")}),
+        )
 
-def test_check_decode_raises(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(primary={"decode": _raise_decode}),
-    )
+    def test_check_reference_dir_missing(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="missing_dir"))
 
+    def test_check_reference_bad_path(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="bad_path"))
 
-def test_check_decode_returns_bytes(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(primary={"decode": lambda ids: b"<m>"}),
-    )
+    def test_check_reference_tokenizer_json_missing(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="nofile"))
 
+    def test_check_reference_tokenizer_json_malformed(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="bad_json"))
 
-def test_check_decode_returns_empty(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(primary={"decode": lambda ids: ""}),
-    )
+    def test_check_reference_transformers_missing(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="no_transformers"))
 
+    def test_check_reference_construct_raises(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(load="construct_error", construct_error=RuntimeError("boom")),
+        )
 
-def test_check_decode_returns_str_subclass(fake_transformers, check_dirs):
-    # strict `type() is str`: a subclass is still a decode failure
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(primary={"decode": lambda ids: _StrSub("<m>")}),
-    )
+    def test_check_encode_returns_list_normalized(self):
+        case = _std_case(encode=lambda text: [1, 2])
+        _assert_check(self.fake_transformers, self.check_dirs, case)
+        assert _run_check(
+            self.fake_transformers,
+            self.check_dirs,
+            primary=case["primary"],
+            boundary=case["boundary"],
+            encode=case["encode"],
+        ) == {"status": "ok", "detail": "boundary ids identical under reference tokenizer"}
 
+    def test_check_encode_returns_generator(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(encode=lambda text: (i for i in (1, 2))),
+        )
 
-def test_check_reference_dir_missing(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(load="missing_dir"))
+    def test_check_encode_returns_none(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(encode=lambda t: None))
 
+    def test_check_encode_returns_bool_ids(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(encode=lambda t: (True, True)),
+        )
 
-def test_check_reference_bad_path(fake_transformers, check_dirs):
-    # _directory raises ValueError -> caught -> skipped, never raised
-    _assert_check(fake_transformers, check_dirs, _std_case(load="bad_path"))
+    def test_check_encode_returns_negative_ids(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(encode=lambda t: (1, -1)),
+        )
 
+    def test_check_encode_returns_str_elements(self):
+        _assert_check(
+            self.fake_transformers,
+            self.check_dirs,
+            _std_case(encode=lambda t: ("1", "2")),
+        )
 
-def test_check_reference_tokenizer_json_missing(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(load="nofile"))
+    def test_check_encode_returns_empty_tuple_is_divergent(self):
+        case = _std_case(encode=lambda t: ())
+        _assert_check(self.fake_transformers, self.check_dirs, case)
+        assert _run_check(
+            self.fake_transformers,
+            self.check_dirs,
+            primary=case["primary"],
+            boundary=case["boundary"],
+            encode=case["encode"],
+        ) == {"status": "mismatch", "detail": "primary=[1, 2] reference=[]"}
 
+    def test_check_encode_raises(self):
+        _assert_check(self.fake_transformers, self.check_dirs, _std_case(encode=_raise_encode))
 
-def test_check_reference_tokenizer_json_malformed(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(load="bad_json"))
+    def test_check_encode_missing_attr(self):
+        registry = self.fake_transformers
+        _register(registry, self.check_dirs["good"], FakeSpec(drop_encode=True))
+        primary = _PrimaryFake(lambda ids: "<m>")
+        actual = _portability_check(self.check_dirs["good"], (1, 2), primary)
+        assert actual == {
+            "status": "skipped",
+            "detail": "reference_tokenizer_unavailable",
+        }
 
+    def test_check_identical_exact_dict(self):
+        case = _std_case()
+        actual = _run_check(
+            self.fake_transformers,
+            self.check_dirs,
+            primary=case["primary"],
+            boundary=case["boundary"],
+            encode=case["encode"],
+        )
+        assert actual == {
+            "status": "ok",
+            "detail": "boundary ids identical under reference tokenizer",
+        }
 
-def test_check_reference_transformers_missing(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(load="no_transformers"))
+    def test_check_divergent_exact_detail(self):
+        case = _std_case(encode=lambda t: (1, 3))
+        actual = _run_check(
+            self.fake_transformers,
+            self.check_dirs,
+            primary=case["primary"],
+            boundary=case["boundary"],
+            encode=case["encode"],
+        )
+        assert actual == {"status": "mismatch", "detail": "primary=[1, 2] reference=[1, 3]"}
 
+    def test_fuzz_portability_check(self):
+        rng = random.Random(0xC62)  # noqa: S311 -- deterministic test seed
+        failures: list[str] = []
+        for n in range(_CHECK_FUZZ_CASES):
+            case = _fuzz_check_case(rng)
+            reference = case["reference"]
+            try:
+                expected = _oracle_portability_check(
+                    primary=case["primary"],
+                    boundary=case["boundary"],
+                    reference=reference,
+                )
+                actual = _run_check(
+                    self.fake_transformers,
+                    self.check_dirs,
+                    primary=case["primary"],
+                    boundary=case["boundary"],
+                    load=reference["load"],
+                    encode=reference["encode"],
+                    construct_error=reference.get("construct_error"),
+                )
+                assert actual == expected, f"impl={actual} oracle={expected}"
+                assert set(actual) == {"status", "detail"}
+            except AssertionError as exc:
+                failures.append(f"case {n}: {exc}\n  spec={case!r}")
+        assert not failures, "\n".join(failures[:10]) + (
+            f"\n... {len(failures)} of {_CHECK_FUZZ_CASES} fuzz cases failed" if failures else ""
+        )
 
-def test_check_reference_construct_raises(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(load="construct_error", construct_error=RuntimeError("boom")),
-    )
+    def test_matrix_rejects_non_path(self):
+        for bad in (123, None, b"x"):
+            with self.assertRaisesRegex(ValueError, "second_checkpoint must be a path"):
+                portability_matrix(bad)
 
+    def test_matrix_missing_dir(self):
+        target = self.tmp_path / "does-not-exist"
+        assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
 
-def test_check_encode_returns_list_normalized(fake_transformers, check_dirs):
-    # the tuple() wrapper normalises a list return: still identical
-    case = _std_case(encode=lambda text: [1, 2])
-    _assert_check(fake_transformers, check_dirs, case)
-    assert _run_check(
-        fake_transformers,
-        check_dirs,
-        primary=case["primary"],
-        boundary=case["boundary"],
-        encode=case["encode"],
-    ) == {"status": "ok", "detail": "boundary ids identical under reference tokenizer"}
+    def test_matrix_path_is_file(self):
+        target = self.tmp_path / "afile"
+        target.write_text("x", encoding="utf-8")
+        assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
 
+    def test_matrix_missing_tokenizer_json(self):
+        target = self.tmp_path / "nodoc"
+        target.mkdir()
+        report = portability_matrix(target)
+        _assert_unavailable_shape(report, "tokenizer_load_failed")
+        assert report["second_checkpoint"] == str(target)
 
-def test_check_encode_returns_generator(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(encode=lambda text: (i for i in (1, 2))),
-    )
+    def test_matrix_malformed_tokenizer_json(self):
+        target = _matrix_ckpt(self.tmp_path, "badjson", {})
+        (target / "tokenizer.json").write_text("{oops", encoding="utf-8")
+        report = portability_matrix(target)
+        _assert_unavailable_shape(report, "tokenizer_load_failed")
 
+    def test_matrix_oversized_tokenizer_json(self):
+        import os
 
-def test_check_encode_returns_none(fake_transformers, check_dirs):
-    # tuple(None) raises TypeError inside the probe -> secondary_encode_failed
-    _assert_check(fake_transformers, check_dirs, _std_case(encode=lambda t: None))
+        target = _matrix_ckpt(self.tmp_path, "huge", {})
+        path = target / "tokenizer.json"
+        fd = os.open(path, os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 128 * 1024 * 1024 + 1)  # sparse: no disk use
+        finally:
+            os.close(fd)
+        report = portability_matrix(target)
+        # the allowlisted fixed code surfaces verbatim, not "tokenizer_load_failed"
+        _assert_unavailable_shape(report, "oversized_tokenizer_file")
 
+    def test_matrix_transformers_missing(self):
+        target = _matrix_ckpt(self.tmp_path, "notk", {})
+        with _no_transformers():
+            report = portability_matrix(target)
+        _assert_unavailable_shape(report, "transformers_not_installed")
 
-def test_check_encode_returns_bool_ids(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(encode=lambda t: (True, True)),
-    )
+    def test_matrix_construct_raises(self):
+        target = self.tmp_path / "matrix" / "boom"
+        _write_ckpt(target, {})
+        _register(self.fake_transformers, target, FakeSpec(construct_error=RuntimeError("boom")))
+        report = portability_matrix(target)
+        _assert_unavailable_shape(report, "tokenizer_load_failed")
 
+    def test_matrix_construct_raises_allowlisted_code(self):
+        target = self.tmp_path / "matrix" / "boom2"
+        _write_ckpt(target, {})
+        _register(
+            self.fake_transformers,
+            target,
+            FakeSpec(construct_error=ValueError("oversized_tokenizer_file")),
+        )
+        report = portability_matrix(target)
+        _assert_unavailable_shape(report, "oversized_tokenizer_file")
 
-def test_check_encode_returns_negative_ids(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(encode=lambda t: (1, -1)),
-    )
+    def test_matrix_all_compatible_checkpoint(self):
+        doc, ids = _full_coverage_doc()
+        target = self.tmp_path / "matrix" / "full"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (ids[text],), attrs={}),
+        )
+        assert report["status"] == "ok"
+        assert report["detail"] == (
+            f"{len(report['rows'])} candidates checked (tokenizer only, no weights)"
+        )
+        assert report["second_checkpoint"] == str(target.resolve())
+        assert report["asymmetry"] == _PORTABILITY_ASYMMETRY
+        expected_fmts = [
+            fmt for family in sorted(CATALOG) for fmt in candidates(family, mutate=True)
+        ]
+        assert len(report["rows"]) == len(expected_fmts) == 118
+        for row, fmt in zip(report["rows"], expected_fmts, strict=True):
+            assert row["format"] == fmt.name
+            assert row["verdict"] == "compatible", row
+            assert row["reason"] == ""
+            assert row["bos_skipped"] == (fmt.bos == "")
+            for token_row in row["tokens"]:
+                assert token_row["status"] == "ok"
+                assert token_row["registered"] is True
+                assert token_row["single_token"] is True
+                assert token_row["id_match"] is True
+                assert token_row["encoded_id"] == token_row["registered_id"]
 
+    def test_matrix_one_bad_literal_poisons_only_its_row(self):
+        lit = _LITS[0]
+        doc, ids = _full_coverage_doc()
 
-def test_check_encode_returns_str_elements(fake_transformers, check_dirs):
-    _assert_check(
-        fake_transformers,
-        check_dirs,
-        _std_case(encode=lambda t: ("1", "2")),
-    )
+        def encode(text: str) -> Any:
+            if text == lit:
+                raise RuntimeError("encode boom on one literal")
+            return (ids[text],)
 
+        target = self.tmp_path / "matrix" / "oneliteral"
+        report = _run_matrix(self.fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
+        assert report["status"] == "ok"  # the matrix itself is not poisoned
+        with_lit = [r for r in report["rows"] if lit in _INV_BY_NAME[r["format"]]]
+        without_lit = [r for r in report["rows"] if lit not in _INV_BY_NAME[r["format"]]]
+        assert with_lit and without_lit
+        for row in with_lit:
+            assert row["verdict"] == "unknown", row
+            assert row["reason"] == "encode_failed"
+            bad = [t for t in row["tokens"] if t["token"] == lit]
+            assert len(bad) == 1 and bad[0]["status"] == "encode_failed"
+        for row in without_lit:
+            assert row["verdict"] == "compatible", row
 
-def test_check_encode_returns_empty_tuple_is_divergent(fake_transformers, check_dirs):
-    # empty tuple PASSES _valid_token_ids -> divergent, i.e. a real mismatch
-    # with secondary=[] -- not an "invalid" degradation
-    case = _std_case(encode=lambda t: ())
-    _assert_check(fake_transformers, check_dirs, case)
-    assert _run_check(
-        fake_transformers,
-        check_dirs,
-        primary=case["primary"],
-        boundary=case["boundary"],
-        encode=case["encode"],
-    ) == {"status": "mismatch", "detail": "primary=[1, 2] reference=[]"}
+    def test_matrix_duplicate_added_tokens_first_wins(self):
+        lit = _LITS[1]
+        doc, ids = _full_coverage_doc()
+        doc["added_tokens"].append({"content": lit, "id": ids[lit] + 5000})  # later dupe loses
+        target = self.tmp_path / "matrix" / "dupe"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (ids[text],), attrs={}),
+        )
+        assert report["status"] == "ok"
+        for row in report["rows"]:
+            for token_row in row["tokens"]:
+                if token_row["token"] == lit:
+                    assert token_row["registered_id"] == ids[lit]
+                    assert token_row["status"] == "ok"
 
+    def test_matrix_unregistered_literal(self):
+        lit = _LITS[2]
+        doc, ids = _full_coverage_doc()
+        doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
+        target = self.tmp_path / "matrix" / "unreg"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (ids[text],), attrs={}),
+        )
+        hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
+        assert hits
+        for row in hits:
+            assert row["verdict"] == "incompatible"
+            assert row["reason"] == "unregistered"
+            assert row["detail"] == f"unregistered on {lit!r}"
+            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            assert token_row["registered"] is False
+            assert token_row["registered_id"] is None
+            assert token_row["single_token"] is True  # encode was fine
+            assert token_row["id_match"] is None
 
-def test_check_encode_raises(fake_transformers, check_dirs):
-    _assert_check(fake_transformers, check_dirs, _std_case(encode=_raise_encode))
+    def test_matrix_fragmenting_literal(self):
+        lit = _LITS[3]
+        doc, ids = _full_coverage_doc()
 
+        def encode(text: str) -> Any:
+            return (ids[text], ids[text] + 1) if text == lit else (ids[text],)
 
-def test_check_encode_missing_attr(fake_transformers, check_dirs):
-    registry = fake_transformers
-    _register(registry, check_dirs["good"], FakeSpec(drop_encode=True))
-    primary = _PrimaryFake(lambda ids: "<m>")
-    actual = _portability_check(check_dirs["good"], (1, 2), primary)
-    assert actual == {
-        "status": "skipped",
-        "detail": "reference_tokenizer_unavailable",
-    }
+        target = self.tmp_path / "matrix" / "frag"
+        report = _run_matrix(self.fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
+        hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
+        assert hits
+        for row in hits:
+            assert row["verdict"] == "incompatible"
+            assert row["reason"] == "fragments"
+            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            assert token_row["single_token"] is False
+            assert token_row["id_match"] is None
 
+    def test_matrix_id_mismatch_literal(self):
+        lit = _LITS[4]
+        doc, ids = _full_coverage_doc()
 
-def test_check_identical_exact_dict(fake_transformers, check_dirs):
-    case = _std_case()
-    actual = _run_check(
-        fake_transformers,
-        check_dirs,
-        primary=case["primary"],
-        boundary=case["boundary"],
-        encode=case["encode"],
-    )
-    assert actual == {
-        "status": "ok",
-        "detail": "boundary ids identical under reference tokenizer",
-    }
+        def encode(text: str) -> Any:
+            return (ids[text] + 1,) if text == lit else (ids[text],)
 
+        target = self.tmp_path / "matrix" / "mismatch"
+        report = _run_matrix(self.fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
+        hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
+        assert hits
+        for row in hits:
+            assert row["verdict"] == "incompatible"
+            assert row["reason"] == "id_mismatch"
+            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            assert token_row["id_match"] is False
+            assert token_row["encoded_id"] == ids[lit] + 1
+            assert token_row["registered_id"] == ids[lit]
 
-def test_check_divergent_exact_detail(fake_transformers, check_dirs):
-    case = _std_case(encode=lambda t: (1, 3))
-    actual = _run_check(
-        fake_transformers,
-        check_dirs,
-        primary=case["primary"],
-        boundary=case["boundary"],
-        encode=case["encode"],
-    )
-    assert actual == {"status": "mismatch", "detail": "primary=[1, 2] reference=[1, 3]"}
+    def test_matrix_added_tokens_not_a_list_ignored(self):
+        lit = _LITS[0]
+        doc = {"added_tokens": {lit: 123}}  # dict, not list -> ignored
+        target = self.tmp_path / "matrix" / "notalist"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (7,), attrs={}),
+        )
+        assert report["status"] == "ok"
+        hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
+        assert hits
+        for row in hits:
+            assert row["verdict"] == "incompatible"
+            assert row["reason"] == "unregistered"
+
+    def test_matrix_convert_raises_attr_skipped(self):
+        lit = _LITS[0]
+        doc, ids = _full_coverage_doc()
+        doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
+
+        def convert(token: str) -> Any:
+            raise RuntimeError("convert boom")
+
+        target = self.tmp_path / "matrix" / "convraise"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (ids[text],), convert=convert, attrs={"bos_token": lit}),
+        )
+        hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
+        assert hits
+        for row in hits:
+            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            assert token_row["registered"] is False  # suppressed exception -> skipped
+            assert row["reason"] == "unregistered"
+
+    def test_matrix_empty_doc_all_encode_invalid(self):
+        target = self.tmp_path / "matrix" / "emptydoc"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            {},
+            FakeSpec(encode=lambda text: (), attrs={}),
+        )
+        assert report["status"] == "ok"
+        assert report["rows"]
+        for row in report["rows"]:
+            assert row["verdict"] == "unknown", row
+            if row["tokens"]:
+                assert row["reason"] == "encode_invalid"
+            else:
+                assert row["reason"] == "empty_inventory"
+
+    def test_matrix_never_raises_on_hostile_doc(self):
+        doc = {
+            "added_tokens": [
+                {"content": 1, "id": 2},
+                "nope",
+                None,
+                {"content": "", "id": 3},
+                {"content": "<x>", "id": "s"},
+                {"content": "<y>", "id": -1},
+                {"content": "<z>", "id": True},
+                {},
+            ]
+        }
+        target = self.tmp_path / "matrix" / "hostile"
+        report = _run_matrix(
+            self.fake_transformers,
+            target,
+            doc,
+            FakeSpec(encode=lambda text: (1,), attrs={"bos_token": 123}),
+        )
+        assert report["status"] == "ok"
+        assert len(report["rows"]) == 118
+
+    def test_matrix_str_and_path_agree(self):
+        doc, ids = _full_coverage_doc()
+        target = self.tmp_path / "matrix" / "both"
+        spec = FakeSpec(encode=lambda text: (ids[text],), attrs={})
+        by_str = _run_matrix(self.fake_transformers, target, doc, spec)
+        _register(self.fake_transformers, target, spec)
+        by_path = portability_matrix(Path(target))
+        assert by_str == by_path
+
+    def test_registered_first_wins_and_zero_id(self):
+        doc = {
+            "added_tokens": [
+                {"content": "<a>", "id": 1},
+                {"content": "<a>", "id": 2},
+                {"content": "<b>", "id": 0},
+            ]
+        }
+        assert _secondary_registered(_AttrFake({}), doc) == {"<a>": 1, "<b>": 0}
+
+    def test_registered_rejects_malformed_entries(self):
+        doc = {
+            "added_tokens": [
+                {"content": "<bool>", "id": True},
+                {"content": "<neg>", "id": -3},
+                {"content": "<strid>", "id": "9"},
+                {"content": "", "id": 5},
+                {"content": 7, "id": 8},
+                {"id": 9},
+                {"content": "<noid>"},
+                "junk",
+                None,
+                {},
+                {"content": "<ok>", "id": 11},
+            ]
+        }
+        assert _secondary_registered(_AttrFake({}), doc) == {"<ok>": 11}
+
+    def test_registered_ignores_non_list_section(self):
+        assert _secondary_registered(_AttrFake({}), {"added_tokens": {"<a>": 1}}) == {}
+        assert _secondary_registered(_AttrFake({}), {}) == {}
+
+    def test_registered_attr_gap_fill_and_doc_wins(self):
+        doc = {"added_tokens": [{"content": "<d>", "id": 1}]}
+        seen: list[str] = []
+
+        def convert(token: str) -> int:
+            seen.append(token)
+            return {"<d>": 99, "<a>": 2}[token]
+
+        tok = _AttrFake({"bos_token": "<d>", "eos_token": "<a>"}, convert)
+        assert _secondary_registered(tok, doc) == {"<d>": 1, "<a>": 2}
+        assert seen == ["<a>"]  # doc-covered literal never consults convert
+
+    def test_registered_convert_failures_suppressed(self):
+        def convert(token: str) -> Any:
+            raise RuntimeError("convert boom")
+
+        tok = _AttrFake({"bos_token": "<a>"}, convert)
+        assert _secondary_registered(tok, {"added_tokens": []}) == {}
+
+    def test_registered_convert_bad_values_skipped(self):
+        for bad in (True, -1, "12", None):
+            tok = _AttrFake({"bos_token": "<a>"}, lambda token, b=bad: b)
+            assert _secondary_registered(tok, {"added_tokens": []}) == {}, bad
+
+    def test_registered_non_string_attrs_skipped(self):
+        tok = _AttrFake(
+            {"bos_token": 123, "eos_token": "", "pad_token": None},
+            lambda token: (_ for _ in ()).throw(AssertionError("must not be called")),
+        )
+        assert _secondary_registered(tok, {"added_tokens": []}) == {}
+
+    def test_fuzz_portability_matrix(self):
+        rng = random.Random(0xC620)  # noqa: S311 -- deterministic test seed
+        failures: list[str] = []
+        for n in range(_MATRIX_FUZZ_CASES):
+            ckpt = self.tmp_path / "fuzz" / f"case{n}"
+            doc, attrs, convert, raw_encode = _fuzz_matrix_stimulus(rng)
+            try:
+                _write_ckpt(ckpt, doc)
+                expected = _oracle_matrix(ckpt, doc, attrs, convert, raw_encode)
+                _register(
+                    self.fake_transformers,
+                    ckpt,
+                    FakeSpec(encode=raw_encode, convert=convert, attrs=attrs),
+                )
+                actual = portability_matrix(ckpt)
+                assert actual == expected, (
+                    f"status={actual.get('status')!r} detail={actual.get('detail')!r}"
+                )
+            except AssertionError as exc:
+                failures.append(f"case {n}: {exc}")
+        assert not failures, "\n".join(failures[:10]) + (
+            f"\n... {len(failures)} of {_MATRIX_FUZZ_CASES} fuzz cases failed" if failures else ""
+        )
+
+    def test_row_oracle_matches_core_on_fuzz_corpus(self):
+        """The hand-rolled row oracle agrees with the real core implementation.
+
+        Guards against an oracle bug masquerading as implementation
+        correctness: the oracle was written from the docstring, and must
+        reproduce ``core.template_tokenizer_compatibility`` exactly over the
+        randomized corpus.
+        """
+        rng = random.Random(0xC621)  # noqa: S311 -- deterministic test seed
+        for n in range(40):
+            doc, attrs, convert, raw_encode = _fuzz_matrix_stimulus(rng)
+            registered = _oracle_secondary_registered(doc, attrs, convert)
+
+            def encode(text: str, _re: Callable[[str], Any] = raw_encode) -> tuple[int, ...]:
+                return tuple(_re(text))
+
+            for family in sorted(CATALOG):
+                for fmt in candidates(family, mutate=True):
+                    inventory = _extract_special_tokens(fmt)
+                    token_rows = [
+                        _oracle_token_row(token, registered, encode) for token in inventory
+                    ]
+                    verdict, reason, detail = _oracle_row_verdict(fmt.name, token_rows)
+                    real = template_tokenizer_compatibility(fmt.name, inventory, registered, encode)
+                    assert real["format"] == fmt.name
+                    assert real["tokens"] == token_rows, (n, fmt.name)
+                    assert (real["verdict"], real["reason"], real["detail"]) == (
+                        verdict,
+                        reason,
+                        detail,
+                    ), (n, fmt.name)
 
 
 # ---------------------------------------------------------------------------
@@ -982,36 +1392,6 @@ def _fuzz_check_case(rng: random.Random) -> dict[str, Any]:
     return {"primary": primary, "boundary": boundary, "reference": reference}
 
 
-def test_fuzz_portability_check(fake_transformers, check_dirs):
-    rng = random.Random(0xC62)  # noqa: S311 -- deterministic test seed
-    failures: list[str] = []
-    for n in range(_CHECK_FUZZ_CASES):
-        case = _fuzz_check_case(rng)
-        reference = case["reference"]
-        try:
-            expected = _oracle_portability_check(
-                primary=case["primary"],
-                boundary=case["boundary"],
-                reference=reference,
-            )
-            actual = _run_check(
-                fake_transformers,
-                check_dirs,
-                primary=case["primary"],
-                boundary=case["boundary"],
-                load=reference["load"],
-                encode=reference["encode"],
-                construct_error=reference.get("construct_error"),
-            )
-            assert actual == expected, f"impl={actual} oracle={expected}"
-            assert set(actual) == {"status", "detail"}
-        except AssertionError as exc:
-            failures.append(f"case {n}: {exc}\n  spec={case!r}")
-    assert not failures, "\n".join(failures[:10]) + (
-        f"\n... {len(failures)} of {_CHECK_FUZZ_CASES} fuzz cases failed" if failures else ""
-    )
-
-
 # ---------------------------------------------------------------------------
 # portability_matrix: hand-pinned branch/edge tests
 # ---------------------------------------------------------------------------
@@ -1063,309 +1443,6 @@ def _assert_unavailable_shape(report: dict[str, Any], detail: str) -> None:
     assert report["rows"] == []
 
 
-def test_matrix_rejects_non_path(fake_transformers):
-    for bad in (123, None, b"x"):
-        with pytest.raises(ValueError, match="second_checkpoint must be a path"):
-            portability_matrix(bad)
-
-
-def test_matrix_missing_dir(fake_transformers, tmp_path):
-    target = tmp_path / "does-not-exist"
-    assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
-
-
-def test_matrix_path_is_file(fake_transformers, tmp_path):
-    target = tmp_path / "afile"
-    target.write_text("x", encoding="utf-8")
-    assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
-
-
-def test_matrix_missing_tokenizer_json(fake_transformers, tmp_path):
-    target = tmp_path / "nodoc"
-    target.mkdir()
-    report = portability_matrix(target)
-    _assert_unavailable_shape(report, "tokenizer_load_failed")
-    assert report["second_checkpoint"] == str(target)
-
-
-def test_matrix_malformed_tokenizer_json(fake_transformers, tmp_path):
-    target = _matrix_ckpt(tmp_path, "badjson", {})
-    (target / "tokenizer.json").write_text("{oops", encoding="utf-8")
-    report = portability_matrix(target)
-    _assert_unavailable_shape(report, "tokenizer_load_failed")
-
-
-def test_matrix_oversized_tokenizer_json(fake_transformers, tmp_path):
-    import os
-
-    target = _matrix_ckpt(tmp_path, "huge", {})
-    path = target / "tokenizer.json"
-    fd = os.open(path, os.O_WRONLY)
-    try:
-        os.ftruncate(fd, 128 * 1024 * 1024 + 1)  # sparse: no disk use
-    finally:
-        os.close(fd)
-    report = portability_matrix(target)
-    # the allowlisted fixed code surfaces verbatim, not "tokenizer_load_failed"
-    _assert_unavailable_shape(report, "oversized_tokenizer_file")
-
-
-def test_matrix_transformers_missing(fake_transformers, tmp_path):
-    target = _matrix_ckpt(tmp_path, "notk", {})
-    with _no_transformers():
-        report = portability_matrix(target)
-    _assert_unavailable_shape(report, "transformers_not_installed")
-
-
-def test_matrix_construct_raises(fake_transformers, tmp_path):
-    target = tmp_path / "matrix" / "boom"
-    _write_ckpt(target, {})
-    _register(fake_transformers, target, FakeSpec(construct_error=RuntimeError("boom")))
-    report = portability_matrix(target)
-    _assert_unavailable_shape(report, "tokenizer_load_failed")
-
-
-def test_matrix_construct_raises_allowlisted_code(fake_transformers, tmp_path):
-    target = tmp_path / "matrix" / "boom2"
-    _write_ckpt(target, {})
-    _register(
-        fake_transformers,
-        target,
-        FakeSpec(construct_error=ValueError("oversized_tokenizer_file")),
-    )
-    report = portability_matrix(target)
-    _assert_unavailable_shape(report, "oversized_tokenizer_file")
-
-
-def test_matrix_all_compatible_checkpoint(fake_transformers, tmp_path):
-    doc, ids = _full_coverage_doc()
-    target = tmp_path / "matrix" / "full"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (ids[text],), attrs={}),
-    )
-    assert report["status"] == "ok"
-    assert report["detail"] == (
-        f"{len(report['rows'])} candidates checked (tokenizer only, no weights)"
-    )
-    assert report["second_checkpoint"] == str(target.resolve())
-    assert report["asymmetry"] == _PORTABILITY_ASYMMETRY
-    expected_fmts = [fmt for family in sorted(CATALOG) for fmt in candidates(family, mutate=True)]
-    assert len(report["rows"]) == len(expected_fmts) == 118
-    for row, fmt in zip(report["rows"], expected_fmts, strict=True):
-        assert row["format"] == fmt.name
-        assert row["verdict"] == "compatible", row
-        assert row["reason"] == ""
-        assert row["bos_skipped"] == (fmt.bos == "")
-        for token_row in row["tokens"]:
-            assert token_row["status"] == "ok"
-            assert token_row["registered"] is True
-            assert token_row["single_token"] is True
-            assert token_row["id_match"] is True
-            assert token_row["encoded_id"] == token_row["registered_id"]
-
-
-def test_matrix_one_bad_literal_poisons_only_its_row(fake_transformers, tmp_path):
-    lit = _LITS[0]
-    doc, ids = _full_coverage_doc()
-
-    def encode(text: str) -> Any:
-        if text == lit:
-            raise RuntimeError("encode boom on one literal")
-        return (ids[text],)
-
-    target = tmp_path / "matrix" / "oneliteral"
-    report = _run_matrix(fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
-    assert report["status"] == "ok"  # the matrix itself is not poisoned
-    with_lit = [r for r in report["rows"] if lit in _INV_BY_NAME[r["format"]]]
-    without_lit = [r for r in report["rows"] if lit not in _INV_BY_NAME[r["format"]]]
-    assert with_lit and without_lit
-    for row in with_lit:
-        assert row["verdict"] == "unknown", row
-        assert row["reason"] == "encode_failed"
-        bad = [t for t in row["tokens"] if t["token"] == lit]
-        assert len(bad) == 1 and bad[0]["status"] == "encode_failed"
-    for row in without_lit:
-        assert row["verdict"] == "compatible", row
-
-
-def test_matrix_duplicate_added_tokens_first_wins(fake_transformers, tmp_path):
-    lit = _LITS[1]
-    doc, ids = _full_coverage_doc()
-    doc["added_tokens"].append({"content": lit, "id": ids[lit] + 5000})  # later dupe loses
-    target = tmp_path / "matrix" / "dupe"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (ids[text],), attrs={}),
-    )
-    assert report["status"] == "ok"
-    for row in report["rows"]:
-        for token_row in row["tokens"]:
-            if token_row["token"] == lit:
-                assert token_row["registered_id"] == ids[lit]
-                assert token_row["status"] == "ok"
-
-
-def test_matrix_unregistered_literal(fake_transformers, tmp_path):
-    lit = _LITS[2]
-    doc, ids = _full_coverage_doc()
-    doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
-    target = tmp_path / "matrix" / "unreg"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (ids[text],), attrs={}),
-    )
-    hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
-    assert hits
-    for row in hits:
-        assert row["verdict"] == "incompatible"
-        assert row["reason"] == "unregistered"
-        assert row["detail"] == f"unregistered on {lit!r}"
-        token_row = next(t for t in row["tokens"] if t["token"] == lit)
-        assert token_row["registered"] is False
-        assert token_row["registered_id"] is None
-        assert token_row["single_token"] is True  # encode was fine
-        assert token_row["id_match"] is None
-
-
-def test_matrix_fragmenting_literal(fake_transformers, tmp_path):
-    lit = _LITS[3]
-    doc, ids = _full_coverage_doc()
-
-    def encode(text: str) -> Any:
-        return (ids[text], ids[text] + 1) if text == lit else (ids[text],)
-
-    target = tmp_path / "matrix" / "frag"
-    report = _run_matrix(fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
-    hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
-    assert hits
-    for row in hits:
-        assert row["verdict"] == "incompatible"
-        assert row["reason"] == "fragments"
-        token_row = next(t for t in row["tokens"] if t["token"] == lit)
-        assert token_row["single_token"] is False
-        assert token_row["id_match"] is None
-
-
-def test_matrix_id_mismatch_literal(fake_transformers, tmp_path):
-    lit = _LITS[4]
-    doc, ids = _full_coverage_doc()
-
-    def encode(text: str) -> Any:
-        return (ids[text] + 1,) if text == lit else (ids[text],)
-
-    target = tmp_path / "matrix" / "mismatch"
-    report = _run_matrix(fake_transformers, target, doc, FakeSpec(encode=encode, attrs={}))
-    hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
-    assert hits
-    for row in hits:
-        assert row["verdict"] == "incompatible"
-        assert row["reason"] == "id_mismatch"
-        token_row = next(t for t in row["tokens"] if t["token"] == lit)
-        assert token_row["id_match"] is False
-        assert token_row["encoded_id"] == ids[lit] + 1
-        assert token_row["registered_id"] == ids[lit]
-
-
-def test_matrix_added_tokens_not_a_list_ignored(fake_transformers, tmp_path):
-    lit = _LITS[0]
-    doc = {"added_tokens": {lit: 123}}  # dict, not list -> ignored
-    target = tmp_path / "matrix" / "notalist"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (7,), attrs={}),
-    )
-    assert report["status"] == "ok"
-    hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
-    assert hits
-    for row in hits:
-        assert row["verdict"] == "incompatible"
-        assert row["reason"] == "unregistered"
-
-
-def test_matrix_convert_raises_attr_skipped(fake_transformers, tmp_path):
-    lit = _LITS[0]
-    doc, ids = _full_coverage_doc()
-    doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
-
-    def convert(token: str) -> Any:
-        raise RuntimeError("convert boom")
-
-    target = tmp_path / "matrix" / "convraise"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (ids[text],), convert=convert, attrs={"bos_token": lit}),
-    )
-    hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
-    assert hits
-    for row in hits:
-        token_row = next(t for t in row["tokens"] if t["token"] == lit)
-        assert token_row["registered"] is False  # suppressed exception -> skipped
-        assert row["reason"] == "unregistered"
-
-
-def test_matrix_empty_doc_all_encode_invalid(fake_transformers, tmp_path):
-    target = tmp_path / "matrix" / "emptydoc"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        {},
-        FakeSpec(encode=lambda text: (), attrs={}),
-    )
-    assert report["status"] == "ok"
-    assert report["rows"]
-    for row in report["rows"]:
-        assert row["verdict"] == "unknown", row
-        if row["tokens"]:
-            assert row["reason"] == "encode_invalid"
-        else:
-            assert row["reason"] == "empty_inventory"
-
-
-def test_matrix_never_raises_on_hostile_doc(fake_transformers, tmp_path):
-    doc = {
-        "added_tokens": [
-            {"content": 1, "id": 2},
-            "nope",
-            None,
-            {"content": "", "id": 3},
-            {"content": "<x>", "id": "s"},
-            {"content": "<y>", "id": -1},
-            {"content": "<z>", "id": True},
-            {},
-        ]
-    }
-    target = tmp_path / "matrix" / "hostile"
-    report = _run_matrix(
-        fake_transformers,
-        target,
-        doc,
-        FakeSpec(encode=lambda text: (1,), attrs={"bos_token": 123}),
-    )
-    assert report["status"] == "ok"
-    assert len(report["rows"]) == 118
-
-
-def test_matrix_str_and_path_agree(fake_transformers, tmp_path):
-    doc, ids = _full_coverage_doc()
-    target = tmp_path / "matrix" / "both"
-    spec = FakeSpec(encode=lambda text: (ids[text],), attrs={})
-    by_str = _run_matrix(fake_transformers, target, doc, spec)
-    _register(fake_transformers, target, spec)
-    by_path = portability_matrix(Path(target))
-    assert by_str == by_path
-
-
 # ---------------------------------------------------------------------------
 # _secondary_registered: direct unit tests
 # ---------------------------------------------------------------------------
@@ -1379,76 +1456,6 @@ class _AttrFake:
 
     def convert_tokens_to_ids(self, token: str) -> Any:
         return self._convert(token)
-
-
-def test_registered_first_wins_and_zero_id():
-    doc = {
-        "added_tokens": [
-            {"content": "<a>", "id": 1},
-            {"content": "<a>", "id": 2},
-            {"content": "<b>", "id": 0},
-        ]
-    }
-    assert _secondary_registered(_AttrFake({}), doc) == {"<a>": 1, "<b>": 0}
-
-
-def test_registered_rejects_malformed_entries():
-    doc = {
-        "added_tokens": [
-            {"content": "<bool>", "id": True},
-            {"content": "<neg>", "id": -3},
-            {"content": "<strid>", "id": "9"},
-            {"content": "", "id": 5},
-            {"content": 7, "id": 8},
-            {"id": 9},
-            {"content": "<noid>"},
-            "junk",
-            None,
-            {},
-            {"content": "<ok>", "id": 11},
-        ]
-    }
-    assert _secondary_registered(_AttrFake({}), doc) == {"<ok>": 11}
-
-
-def test_registered_ignores_non_list_section():
-    assert _secondary_registered(_AttrFake({}), {"added_tokens": {"<a>": 1}}) == {}
-    assert _secondary_registered(_AttrFake({}), {}) == {}
-
-
-def test_registered_attr_gap_fill_and_doc_wins():
-    doc = {"added_tokens": [{"content": "<d>", "id": 1}]}
-    seen: list[str] = []
-
-    def convert(token: str) -> int:
-        seen.append(token)
-        return {"<d>": 99, "<a>": 2}[token]
-
-    tok = _AttrFake({"bos_token": "<d>", "eos_token": "<a>"}, convert)
-    assert _secondary_registered(tok, doc) == {"<d>": 1, "<a>": 2}
-    assert seen == ["<a>"]  # doc-covered literal never consults convert
-
-
-def test_registered_convert_failures_suppressed():
-    def convert(token: str) -> Any:
-        raise RuntimeError("convert boom")
-
-    tok = _AttrFake({"bos_token": "<a>"}, convert)
-    assert _secondary_registered(tok, {"added_tokens": []}) == {}
-
-
-def test_registered_convert_bad_values_skipped():
-    for bad in (True, -1, "12", None):
-        tok = _AttrFake({"bos_token": "<a>"}, lambda token, b=bad: b)
-        assert _secondary_registered(tok, {"added_tokens": []}) == {}, bad
-
-
-def test_registered_non_string_attrs_skipped():
-    tok = _AttrFake(
-        {"bos_token": 123, "eos_token": "", "pad_token": None},
-        lambda token: (_ for _ in ()).throw(AssertionError("must not be called")),
-    )
-    assert _secondary_registered(tok, {"added_tokens": []}) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1578,57 +1585,5 @@ def _fuzz_matrix_stimulus(
     return doc, attrs, convert, raw_encode
 
 
-def test_fuzz_portability_matrix(fake_transformers, tmp_path):
-    rng = random.Random(0xC620)  # noqa: S311 -- deterministic test seed
-    failures: list[str] = []
-    for n in range(_MATRIX_FUZZ_CASES):
-        ckpt = tmp_path / "fuzz" / f"case{n}"
-        doc, attrs, convert, raw_encode = _fuzz_matrix_stimulus(rng)
-        try:
-            _write_ckpt(ckpt, doc)
-            expected = _oracle_matrix(ckpt, doc, attrs, convert, raw_encode)
-            _register(
-                fake_transformers,
-                ckpt,
-                FakeSpec(encode=raw_encode, convert=convert, attrs=attrs),
-            )
-            actual = portability_matrix(ckpt)
-            assert actual == expected, (
-                f"status={actual.get('status')!r} detail={actual.get('detail')!r}"
-            )
-        except AssertionError as exc:
-            failures.append(f"case {n}: {exc}")
-    assert not failures, "\n".join(failures[:10]) + (
-        f"\n... {len(failures)} of {_MATRIX_FUZZ_CASES} fuzz cases failed" if failures else ""
-    )
-
-
-def test_row_oracle_matches_core_on_fuzz_corpus():
-    """The hand-rolled row oracle agrees with the real core implementation.
-
-    Guards against an oracle bug masquerading as implementation
-    correctness: the oracle was written from the docstring, and must
-    reproduce ``core.template_tokenizer_compatibility`` exactly over the
-    randomized corpus.
-    """
-    rng = random.Random(0xC621)  # noqa: S311 -- deterministic test seed
-    for n in range(40):
-        doc, attrs, convert, raw_encode = _fuzz_matrix_stimulus(rng)
-        registered = _oracle_secondary_registered(doc, attrs, convert)
-
-        def encode(text: str, _re: Callable[[str], Any] = raw_encode) -> tuple[int, ...]:
-            return tuple(_re(text))
-
-        for family in sorted(CATALOG):
-            for fmt in candidates(family, mutate=True):
-                inventory = _extract_special_tokens(fmt)
-                token_rows = [_oracle_token_row(token, registered, encode) for token in inventory]
-                verdict, reason, detail = _oracle_row_verdict(fmt.name, token_rows)
-                real = template_tokenizer_compatibility(fmt.name, inventory, registered, encode)
-                assert real["format"] == fmt.name
-                assert real["tokens"] == token_rows, (n, fmt.name)
-                assert (real["verdict"], real["reason"], real["detail"]) == (
-                    verdict,
-                    reason,
-                    detail,
-                ), (n, fmt.name)
+if __name__ == "__main__":
+    unittest.main()
