@@ -3236,3 +3236,34 @@ Regression tests: tests/test_cycle60_concurrency_robustness.py (9 tests)
 pins PID-scoping at all six sites, runs two parallel mutant-sensitivity
 batteries, pins the sparse rejection path, and pins the disk-space skip
 via a mocked disk_usage. README test count updated to 3722.
+
+## 2026-10-16 (cycle 61: upstream drift re-check)
+
+All seven tracked items re-verified against primary sources; no drift:
+1. SGLang PR #42466: still open, CI red on all three lanes (Base/Extra/AMD
+   ROCm 10); intended earliest-occurrence tie-break unchanged.
+2. transformers: v5.20.0 still latest; stopping_criteria.py untouched since
+   the v5.19.0/v5.20.0 byte-identical baseline (only docstring/loop-hoist
+   PRs predate the freeze).
+3. vLLM: v0.31.0 still latest; no stop/detokenize changes.
+4. SGLang: v0.5.21 still latest.
+5. Mistral Large 4 (mistralai/Mistral-Large-4-1T-A52B): still "Upcoming
+   release", ETA October 31, 2026; no weights.
+6. Reflection Beam: no public weights (waitlist only); 501B/23B-active MoE,
+   23.8T tokens, 1M context per current coverage.
+7. Muse Spark Open weights (meta-models/Muse-Spark-Open-816B-A42B, released
+   2026-10-15, 816B/42B-active MoE, 1M context): already cataloged as the
+   repo's `muse_spark` family in cycle 52 (byte-exact from the official
+   chat_template.jinja via hf-internal-testing/tiny-muse-spark and
+   transformers PR #49644; system block, reasoning-effort mapping
+   low->8/medium->32/high->256/xhigh->512, multimodal placeholders all
+   pinned in tests/test_cycle52_muse_spark.py). Cross-checked against the
+   public gpt-oss Harmony template (minpeter/gpt-oss mirror): Muse Spark's
+   template is its own Glimmer-derived variant (<|eot|> closers,
+   `<|start|>assistant to=user<|message|>`), not gpt-oss's channel template
+   -- the repo models the correct one. One prose discrepancy noted and
+   dismissed: secondary coverage quotes the effort mapping as 16/64/256/512
+   while the actual jinja (primary source) renders 8/32/256/512; the repo
+   pins the jinja. No catalog change. Next candidates if templates emerge:
+   models newly supported in transformers v5.20.0 (Muse Glimmer, Ling 3.0
+   Flash, Kolibri 1, MiniCPM-V 4.7) -- need concrete template text first.
