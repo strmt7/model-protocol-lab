@@ -4331,3 +4331,19 @@ override exists in pyproject. 4 regression tests in
 `tests/test_cycle101_warning_cleanliness.py` pin warn-free imports,
 doctor/report smokes, and CLI startup via subprocess `-W error`.
 Test count 6112 -> 6116 (README + VALIDATION.md updated).
+
+## Cycle 102 — true OSError-branch coverage (2026-10-16)
+
+Coverage audit found the ``except OSError`` branches in
+``examine_model`` (doctor.py 444-448, 458-461, 473-477) uncovered:
+``_open_regular_read`` converts open-time OSError to ValueError, so the
+cycle-92 "without_root" tests (mocking ``os.open``) exercise the
+``except ValueError`` path — their docstrings incorrectly claimed the
+OSError branch. The OSError branches are defense-in-depth for post-open
+I/O errors (disk errors during read(), files vanishing between open
+and stat). Verified each branch reachable via a tracked-fd
+``os.fdopen`` replacement that raises OSError at read time for a named
+file (platform-independent, no /proc). 5 tests in
+``tests/test_cycle102_oserror_branches.py`` pin fail-closed behavior
+for all four branches; the 4 misleading docstrings were corrected.
+Test count 6116 -> 6121 (README + VALIDATION.md updated).

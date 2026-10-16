@@ -717,10 +717,15 @@ class AdversarialEdgeTests(_Base):
         """Root-independent regression test for the config OSError hole.
 
         The chmod-based test above self-skips when uid 0 (root bypasses
-        permission checks); this one mocks Path.open so it runs everywhere,
-        including CI. The manifest open succeeds and the config read raises,
-        exercising the config try-block's ``except OSError`` branch. Pre-fix,
-        the PermissionError escaped examine_model instead of failing closed.
+        permission checks); this one mocks os.open so it runs everywhere,
+        including CI. The manifest open succeeds and the config open
+        raises PermissionError; ``_open_regular_read`` converts it to
+        ``ValueError("missing_or_unsafe_asset")``, exercising the config
+        try-block's ``except ValueError`` branch (cycle 102: the
+        ``except OSError`` branch itself is covered by
+        ``test_cycle102_oserror_branches.py``, which injects the error at
+        read time, past the open conversion). Pre-fix, the
+        PermissionError escaped examine_model instead of failing closed.
         """
         root = self.healthy()
         with patch("os.open", self._denying_open("config.json", skip_first=1)):
@@ -733,7 +738,10 @@ class AdversarialEdgeTests(_Base):
 
         In the sharded layout _model_assets reads the weight index via
         _read_json; an unreadable index must fail the asset_layout check
-        with the fixed vocabulary instead of escaping.
+        with the fixed vocabulary instead of escaping. The mocked
+        PermissionError is converted to ValueError by _open_regular_read
+        (cycle 102: the raw ``except OSError`` branch is covered by
+        test_cycle102_oserror_branches.py via read-time injection).
         """
         root = self.mkroot()
         _write_sharded_layout(root, {"shard0.safetensors": _valid_safetensors_bytes()})
@@ -743,7 +751,10 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["asset_layout"]["detail"], "missing_or_unsafe_asset")
 
     def test_unreadable_tokenizer_fails_closed_without_root(self):
-        """Same OSError hole class in the tokenizer.json try-block."""
+        """Same OSError hole class in the tokenizer.json try-block
+        (mocked open error -> ValueError conversion path; the raw
+        ``except OSError`` branch is covered by
+        test_cycle102_oserror_branches.py)."""
         root = self.healthy()
         with patch("os.open", self._denying_open("tokenizer.json")):
             report = examine_model(root)
@@ -751,7 +762,9 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["tokenizer_file"]["detail"], "missing_or_unsafe_asset")
 
     def test_unreadable_weight_during_manifest_fails_closed_without_root(self):
-        """Same OSError hole class in the _manifest try-block."""
+        """Same OSError hole class in the _manifest try-block (mocked open
+        error -> ValueError conversion path; the raw ``except OSError``
+        branch is covered by test_cycle102_oserror_branches.py)."""
         root = self.healthy()
         with patch("os.open", self._denying_open("model.safetensors")):
             report = examine_model(root)
