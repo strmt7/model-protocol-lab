@@ -101,7 +101,13 @@ def load_dataset(path: str | Path) -> Split:
             raise ValueError("Fixture path is not a regular file")
         with os.fdopen(fd, "rb") as handle:
             fd = -1  # ownership moved to the file object
-            content = handle.read(MAX_BYTES + 1)
+            try:
+                content = handle.read(MAX_BYTES + 1)
+            except OSError:
+                # The open/fstat guards cannot catch every unreadable file:
+                # e.g. /proc files pass S_ISREG yet fail on read (EIO).
+                # Normalize so callers see the fixed error, not a traceback.
+                raise ValueError("Unreadable fixture file") from None
     finally:
         if fd != -1:
             os.close(fd)

@@ -81,7 +81,13 @@ def read_authoring_file(path: str | Path) -> str:
             raise ValueError("Authoring path is not a regular file")
         with os.fdopen(fd, "rb") as handle:
             fd = -1  # ownership moved to the file object
-            content = handle.read(MAX_BYTES + 1)
+            try:
+                content = handle.read(MAX_BYTES + 1)
+            except OSError:
+                # The open/fstat guards cannot catch every unreadable file:
+                # e.g. /proc files pass S_ISREG yet fail on read (EIO).
+                # Normalize so callers see the fixed error, not a traceback.
+                raise ValueError("Unreadable authoring file") from None
     finally:
         if fd != -1:
             os.close(fd)
@@ -123,15 +129,22 @@ def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
     reader = csv.reader(io.StringIO(text))
     header: list[str] | None = None
     rows: list[tuple[int, list[str]]] = []
-    for record in reader:
-        if header is None:
+    try:
+        for record in reader:
+            if header is None:
+                if not record or all(not cell for cell in record):
+                    continue  # leading blank lines are not a header
+                header = record
+                continue
             if not record or all(not cell for cell in record):
-                continue  # leading blank lines are not a header
-            header = record
-            continue
-        if not record or all(not cell for cell in record):
-            continue  # blank lines between rows carry no fixture
-        rows.append((reader.line_num, record))
+                continue  # blank lines between rows carry no fixture
+            rows.append((reader.line_num, record))
+    except csv.Error:
+        # A single field bigger than the csv module's field limit (131072
+        # chars) aborts the parser before the per-cell MAX_TEXT check below
+        # can run. Normalize to ValueError so callers (which catch only
+        # ValueError) report a fixed error instead of a traceback.
+        raise ValueError(f"CSV field exceeds the parser limit near row {reader.line_num}") from None
     if header is None:
         raise ValueError("CSV source has no header row")
     if tuple(header[:4]) != _FIXED_COLUMNS:
