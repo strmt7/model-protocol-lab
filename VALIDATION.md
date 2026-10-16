@@ -7,7 +7,7 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **6112 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **6116 tests collected**
   (final red-team sweep, 2026-10-16; collection only — full green
   executions are the coordinator's gate). Subtests numbered in the 68k+
   range in recent cycles. Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,

@@ -4319,3 +4319,15 @@ inline `_SCRIPT` contains no `</script` breakout, the CSP meta
 in `tests/test_cycle100_html_injection_audit.py`. Finding: no
 vulnerabilities. Test count 6103 -> 6112 (README + VALIDATION.md
 updated).
+
+## Cycle 101 — warning-cleanliness audit (2026-10-16)
+
+Promoted every warning to an error (`python -W error -m pytest`) across
+the full suite: 6105 passed, 7 skipped, zero warnings of any kind — no
+DeprecationWarning (forward-compat), no ResourceWarning (unclosed
+files/handles), no FutureWarning. Verified the flag is genuine (a
+deliberate `warnings.warn` raises) and that no `filterwarnings`
+override exists in pyproject. 4 regression tests in
+`tests/test_cycle101_warning_cleanliness.py` pin warn-free imports,
+doctor/report smokes, and CLI startup via subprocess `-W error`.
+Test count 6112 -> 6116 (README + VALIDATION.md updated).
