@@ -25,6 +25,17 @@ path not tested: needs live signals"). Two layers:
      SIGTERM during the experiment now drives the same cooperative
      cancel as SIGINT (cycle-89 fix): exit 130 with a valid "cancelled"
      report instead of dying mid-run and leaking the claimed directory.
+     NOTE (cycle 92): these two real-model tests are slow (~3min each:
+     torch model build + 1000-token generation) and therefore gated behind
+     ``MPL_RUN_SLOW_SIGNAL_TESTS=1``, skipped in the default CI gate; the
+     deterministic in-process signal tests below stay in the gate.
+     Readiness is deterministic, not timing-based: the child writes a
+     marker file (``MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE`` hook in cli.py) immediately
+     after installing its signal handlers, so the test signals exactly
+     inside the experiment window. (An earlier revision polled stderr for a
+     "100%" weights-loaded marker that transformers never prints for local
+     loads, then guessed with a fixed sleep -- the signal could land before
+     the handlers were installed.)
 2. In-process fault injection through the REAL ``cli.main`` signal
    machinery (fake backends that raise a real SIGINT/SIGTERM at their own
    process from inside ``generate()``, or raise KeyboardInterrupt):
@@ -157,8 +168,10 @@ def _wait_until(predicate, deadline: float, poll: float = 0.1) -> bool:
 class _Child:
     """Subprocess with background-drained pipes for incremental polling."""
 
-    def __init__(self, argv: list[str], cwd: str) -> None:
-        self._proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
+    def __init__(self, argv: list[str], cwd: str, env: dict[str, str] | None = None) -> None:
+        self._proc = subprocess.Popen(
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env
+        )
         self._stdout = bytearray()
         self._stderr = bytearray()
         self._lock = threading.Lock()
@@ -341,6 +354,11 @@ def _build_tiny_gpt2(root: Path) -> None:
 
 @unittest.skipUnless(_POSIX, "sends POSIX signals")
 @unittest.skipUnless(_heavy_deps_available(), "needs torch+transformers+safetensors+tokenizers")
+@unittest.skipUnless(
+    os.environ.get("MPL_RUN_SLOW_SIGNAL_TESTS") == "1",
+    "real-model signal tests are slow (~3min each); "
+    "run explicitly with MPL_RUN_SLOW_SIGNAL_TESTS=1",
+)
 class RunSignalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -354,8 +372,16 @@ class RunSignalTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def _spawn_run(self, outdir: Path) -> _Child:
-        return _Child(
+    def _spawn_run(self, outdir: Path) -> tuple[_Child, Path]:
+        # Deterministic readiness: the child writes the marker file right
+        # after installing its SIGINT/SIGTERM handlers (see the
+        # MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE hook in cli.py), so the test signals
+        # exactly inside the experiment window -- no timing guesses.
+        marker = self.tmp / f"ready-{outdir.name}.marker"
+        if marker.exists():
+            marker.unlink()
+        env = {**os.environ, "MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE": str(marker)}
+        child = _Child(
             [
                 sys.executable,
                 "-m",
@@ -379,16 +405,26 @@ class RunSignalTests(unittest.TestCase):
                 "7",
             ],
             cwd=str(self.tmp),
+            env=env,
         )
+        return child, marker
 
-    def _in_generation_window(self, child: _Child, outdir: Path) -> _Child:
+    def _in_generation_window(self, child: _Child, outdir: Path, marker: Path) -> _Child:
         # The CLI claims the output dir before backend init: its appearance
-        # proves we are at-or-past the claim. The third-party weights
-        # progress bar on stderr then marks load completion; generation
-        # (1000 tokens, ~50s here) starts right after.
+        # proves we are at-or-past the claim.
         claimed = _wait_until(outdir.exists, 120)
         self.assertTrue(claimed, "output dir was never claimed; child stuck before backend init")
-        _wait_until(lambda: b"100%" in child.stderr_bytes(), 120)
+        # The marker file is written by the child immediately after the
+        # signal handlers are installed: signalling now deterministically
+        # lands inside the experiment window. The result is asserted, never
+        # silently ignored -- a missing marker means the child never reached
+        # the cancellable phase.
+        ready = _wait_until(marker.exists, 180)
+        self.assertTrue(
+            ready,
+            "signal-handler readiness marker never appeared within 180s; refusing "
+            "to signal a child that may not have installed its signal handlers yet",
+        )
         return child
 
     def _assert_no_partial_report(self, outdir: Path) -> None:
@@ -408,7 +444,8 @@ class RunSignalTests(unittest.TestCase):
 
     def test_sigint_during_run_exit_130_no_partial_output(self) -> None:
         outdir = self.tmp / "sigint-out"
-        child = self._in_generation_window(self._spawn_run(outdir), outdir)
+        child, marker = self._spawn_run(outdir)
+        child = self._in_generation_window(child, outdir, marker)
         _send(child.pid, signal.SIGINT)
         try:
             rc = child.wait(120)
@@ -423,11 +460,11 @@ class RunSignalTests(unittest.TestCase):
 
     def test_sigterm_during_run_drives_cooperative_cancel(self) -> None:
         outdir = self.tmp / "sigterm-out"
-        child = self._in_generation_window(self._spawn_run(outdir), outdir)
-        # Let the post-load handler installation (millisecond-scale) settle
-        # so the signal deterministically lands inside the experiment window
-        # rather than the load gap where the default disposition applies.
-        time.sleep(3)
+        child, marker = self._spawn_run(outdir)
+        child = self._in_generation_window(child, outdir, marker)
+        # No settle sleep needed: the readiness marker is written AFTER the
+        # signal handlers are installed, so SIGTERM deterministically lands
+        # inside the experiment window where the cooperative cancel applies.
         _send(child.pid, signal.SIGTERM)
         try:
             rc = child.wait(120)

@@ -56,8 +56,11 @@ from pathlib import Path
 from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-os.chdir(REPO_ROOT)
-sys.path.insert(0, str(REPO_ROOT))
+# NOTE (cycle 92): no os.chdir / sys.path mutation at import time. An earlier
+# revision did both; mutating process-global CWD/sys.path during unittest
+# discovery is an import-order hazard (it changes name resolution for every
+# test module imported afterwards). All paths here are anchored at REPO_ROOT
+# and subprocesses get an explicit cwd=, so the mutations were unnecessary.
 
 from model_protocol_lab import datasets, fixtures  # noqa: E402
 from model_protocol_lab.cli import build_parser  # noqa: E402

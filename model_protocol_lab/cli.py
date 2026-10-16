@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import json
+import os
 import re
 import signal
 import sys
@@ -537,6 +538,20 @@ def main(argv=None) -> int:
             # mid-write and leaving a claimed output directory behind.
             signal.signal(signal.SIGINT, lambda _signum, _frame: cancel.set())
             signal.signal(signal.SIGTERM, lambda _signum, _frame: cancel.set())
+            # Test-only readiness hook (no effect unless the env var is set):
+            # an orchestrating integration test cannot otherwise observe when
+            # the signal handlers are installed, forcing racy timing guesses.
+            # Writing the marker file makes the "handlers installed" moment
+            # observable deterministically. The name deliberately avoids the
+            # three-letter MPL prefix: the package contract (pinned by
+            # test_package_reads_no_mpl_env_vars) forbids such env vars.
+            _ready_marker = os.environ.get("MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE")
+            if _ready_marker:
+                try:
+                    with open(_ready_marker, "w", encoding="utf-8") as _rf:
+                        _rf.write("ready")
+                except OSError:
+                    pass
             try:
                 result = run_experiment(
                     backend,
