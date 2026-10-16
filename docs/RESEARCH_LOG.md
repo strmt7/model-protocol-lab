@@ -4282,3 +4282,21 @@ before the known position. Thousands of generated token sequences; no
 counterexamples found — the algorithm is correct. Quiet cycle: 7 new
 tests, no source changes. Test count 6093 -> 6100 (README + VALIDATION.md
 updated).
+
+## Cycle 99 — stale development-plan framing (2026-10-16)
+
+Genuine docs finding: `DEVELOPMENT_PLAN.md` — still linked from the README
+as "Architecture, milestones, test matrices and release gates" and
+referenced by USAGE.md/RESEARCH_LOG.md for the scoring design — opened
+with "Model Protocol Lab is a proposed local tool" and "does not report
+a completed application ... No runtime validation is established." That
+framing contradicts the 0.1.0 release-ready state and the standing rule
+against "early development" framing. Fix: dated status note at the top
+recording substantial implementation (6100+ tests, green CI across
+3.11–3.13, completed release-readiness review) while preserving the
+design sections as the authoritative architecture reference; the
+"proposed"/"planned" language is marked historical. 3 regression tests in
+`tests/test_cycle99_plan_currency.py` pin the note. Also verified: no
+production `assert` statements (safe under `python -O`); imports and a
+test subset clean under `-W error::DeprecationWarning`. Test count 6100
+-> 6103 (README + VALIDATION.md updated).

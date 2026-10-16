@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 99 — stale development plan framing, 2026-10-16)
+
+- `DEVELOPMENT_PLAN.md` still opened by framing the lab as a "proposed"
+  tool with "no runtime validation established" — contradicting the 0.1.0
+  release-ready state (and the owner's no-"early development" rule). Added
+  a dated status note recording substantial implementation (6100+ tests,
+  green CI, release-readiness review) while preserving the design sections
+  as the authoritative architecture reference. Pinned by 3 regression
+  tests in `tests/test_cycle99_plan_currency.py`. Test count 6100 -> 6103.
+
 ### Added (cycle 98 — property-based core algorithm audit, 2026-10-16)
 
 - `tests/test_cycle98_boundary_properties.py` (7 Hypothesis property
