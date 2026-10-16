@@ -704,6 +704,8 @@ def logprob_diagnostic(
     backend: Backend,
     result: dict[str, Any],
     fixtures: tuple[Fixture, ...] | list[Fixture],
+    *,
+    cancel: Event | None = None,
 ) -> dict[str, Any]:
     """Teacher-forced log-likelihood diagnostic over recorded search observations.
 
@@ -723,6 +725,13 @@ def logprob_diagnostic(
     silent guess. Returns ``available: False`` with a fixed ``detail`` when
     the backend exposes no forward-logits primitive or no candidate could
     be scored.
+
+    ``cancel`` is an optional cooperative ``threading.Event`` (same contract
+    as ``evaluate``/``run_experiment``): when set, scoring stops at the next
+    fixture boundary -- the expensive unit is one forward pass -- and the
+    payload reports ``available: False`` with the fixed ``detail``
+    ``"cancelled"``. Candidates fully scored before the cancel are kept;
+    the in-progress candidate is dropped, never partially aggregated.
     """
     if type(result) is not dict or type(result.get("search")) is not list:
         raise ValueError("result must be a run_experiment result dict")
@@ -730,6 +739,9 @@ def logprob_diagnostic(
         fixtures = tuple(fixtures)
     if type(fixtures) is not tuple or any(type(item) is not Fixture for item in fixtures):
         raise ValueError("fixtures must be a tuple of Fixture")
+    if cancel is not None and not isinstance(cancel, Event):
+        raise ValueError("cancel must be a threading.Event")
+    event = cancel if cancel is not None else Event()
     expected_by_id = {item.id: item.expected for item in fixtures}
     payload: dict[str, Any] = {
         "available": False,
@@ -761,6 +773,14 @@ def logprob_diagnostic(
         fixture_scores: list[dict[str, Any]] = []
         engine_scores: list[TargetScore] = []
         for obs in observations:
+            if event.is_set():
+                # Cooperative cancellation: stop before the next forward
+                # pass. Candidates fully scored so far are kept; the
+                # in-progress candidate is dropped, never partially
+                # aggregated. available stays False with the fixed
+                # "cancelled" detail, like the other unavailable paths.
+                payload["detail"] = "cancelled"
+                return payload
             score_dict, engine_score = _diagnostic_observation(backend, obs, expected_by_id)
             fixture_scores.append(score_dict)
             if engine_score is not None:
