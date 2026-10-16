@@ -3660,3 +3660,23 @@ raising mid-evaluation -> fixed codes with no exception-text leaks,
 winner's own boundary used for held-out). Mutation gate 6/6 killed on
 /tmp copies with __file__ import-path assertion (cycle-76 trap guard).
 No genuine bugs -- CLEAN. README test count updated to 5624.
+
+## 2026-10-16 (cycle 79: core.evaluate engine audit)
+
+Adversarial audit of core.py::evaluate, the per-candidate evaluation
+engine (tests/test_cycle79_evaluate_engine_audit.py, 43 tests + 53
+subtests): hand-derived branch map in the docstring (validation,
+per-fixture loop, report assembly); scripted chr-codec fake backends
+routing per-fixture outcomes via prompt markers; observation-field
+fidelity (exact_match/boundary_found/stop-reason hand-derived);
+validation branches (NFC fixture-ID uniqueness, cap/seed/boundary/cancel
+bounds); aggregate_eligible/planned_count semantics across completed,
+cancelled and failed reports; minimal pairs; exception-text leak scans
+at all raise stages (fixed vocabulary only); cancellation injected at
+four points. Verified properties: boundary_found can be True on failed
+observations (cut computed before failure branches); attempted ==
+planned yet ineligible when the event sets during the final generate;
+the render->encode race window documented as unreachable with a fake
+backend. Mutation gate 6/6 killed on /tmp copies with __file__
+import-path assertion. No genuine bugs -- CLEAN. README test count
+updated to 5667.
