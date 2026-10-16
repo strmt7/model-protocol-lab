@@ -31,7 +31,7 @@ coordinator verification -- the worker's run got lucky and never drew a
 surrogate):
 
 * ``split_to_json_text`` crashed with a bare ``UnicodeEncodeError`` when a
-  Fixture contained a lone surrogate (e.g. ``expected='\ud800'``): the
+  Fixture contained a lone surrogate (e.g. ``expected='\\ud800'``): the
   ``json.dumps(..., ensure_ascii=False)`` call emits the surrogate raw
   into the text, and the by-construction ``parse_dataset`` re-parse then
   died on ``text.encode("utf-8")``. A lone surrogate is legal in a Python

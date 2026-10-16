@@ -114,7 +114,21 @@ All notable changes to this project are documented here. The format follows
   keys instead of leaking `TypeError`. Pinned by
   `tests/test_cycle39_catalog_integrity.py`.
 
-### Fixed (cycles 84–92 — real bugs and CI robustness, 2026-10-16)
+### Fixed (cycles 84–93 — real bugs and CI robustness, 2026-10-16)
+
+- **CI RED ROOT CAUSE, PROVEN (cycle 93):** the Python 3.13-only test-job
+  failures on cycles 87, 88 and 92 were *not* the docs-coherence test --
+  the CI job log names `tests/test_cycle86_serialization_properties.py`:
+  its module docstring contained a real lone-surrogate character (a
+  single-backslash `'\ud800'` escape in docstring prose, meant as literal
+  text). CPython 3.13's `compile()` encodes `__doc__` as strict UTF-8,
+  so the module fails at import time with `UnicodeEncodeError`, while
+  3.11/3.12 accept it (which masked it locally). Surrogate *constants*
+  in function bodies remain fine on 3.13 -- only docstrings are
+  affected. Fixed by doubling the backslash so the docstring renders the
+  escape as text (zero runtime change). `tests/test_ci_portability_guard.py`
+  gains `TestNoDocstringSurrogates`, an AST guard that fails any test
+  module whose module/class/function docstring holds a lone surrogate.
 
 - **REAL BUG (cycle 86, fixtures):** `split_to_json_text` raised a bare
   `UnicodeEncodeError` for lone surrogates (which this hypothesis
