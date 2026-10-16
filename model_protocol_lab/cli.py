@@ -724,7 +724,7 @@ def main(argv=None) -> int:
 
                     try:
                         result["logprob_diagnostic"] = logprob_diagnostic(
-                            backend, result, split.search
+                            backend, result, split.search, cancel=cancel
                         )
                     except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
                         result["logprob_diagnostic"] = {

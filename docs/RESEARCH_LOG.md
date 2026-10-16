@@ -4008,3 +4008,25 @@ unchanged (evaluate catches only Exception); save_report atomicity both
 files. Coordinator negative control: neutralizing the unlink calls fails
 both atomicity tests; fix restored byte-identical. 12 tests in
 tests/test_cycle89_signal_handling_audit.py.
+
+## Cycle 90 (2026-10-16) — cancellation-responsiveness audit: 1 REAL BUG FIXED
+
+Mapped the cancel Event: cli.run signal handlers -> run_experiment ->
+core.evaluate -> Backend.generate, plus every model-compute loop.
+run_experiment honors the event promptly (measured 0.5s to "cancelled" vs
+~10s uncancelled, ratio ~0.05). REAL BUG: experiments.logprob_diagnostic
+accepted no cancel event and ran its full forward-pass loop even with the
+event set (measured 2.0s of forward passes with a pre-set event,
+returning available=True). In production this runs after a Ctrl-C when
+--logprob-diagnostic is on, delaying the drain to the cancelled verdict.
+Fix: optional cancel Event (same threading.Event contract + ValueError
+validation as evaluate/run_experiment), checked per fixture (forward-pass
+granularity); returns available=False with fixed detail "cancelled";
+fully-scored candidates kept, in-progress dropped. cli.run now passes its
+signal-driven event through. prompt_sensitivity_sweep already forwards
+correctly. Deliberate exclusions (pinned by test): debug REPL, doctor /
+--portability-matrix, stop_matrix / budget_frontier / divergence_section,
+template_conformance (no model-compute loops by design). 10 tests in
+tests/test_cycle90_cancel_responsiveness_audit.py. Coordinator negative
+control: removing the is_set check fails both cancel tests; fix restored
+byte-identical.
