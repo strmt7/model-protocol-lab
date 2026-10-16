@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
+import stat
 from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -43,9 +46,41 @@ def _member(root: Path, name: str) -> Path:
     return path
 
 
+def _open_regular_read(path: Path) -> int:
+    """Open a checkpoint asset for reading without ever blocking on a FIFO.
+
+    Opens with ``O_NONBLOCK`` so a file swapped for a named FIFO (no
+    writer) between validation and open cannot hang the opener, then
+    ``fstat``s the fd and refuses anything that is not a regular file.
+    Checking the opened fd -- not the path -- closes the stat->open TOCTOU
+    window. Raises ``ValueError`` with the fixed vocabulary on any problem;
+    the caller owns the returned fd (``os.fdopen`` takes ownership).
+    Mirrors ``datasets.load_dataset`` / ``diffreports.load_results``.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        raise ValueError("missing_or_unsafe_asset") from None
+    try:
+        is_regular = stat.S_ISREG(os.fstat(fd).st_mode)
+    except OSError:
+        is_regular = False
+    if not is_regular:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        raise ValueError("missing_or_unsafe_asset")
+    return fd
+
+
 def _read_json(path: Path) -> dict:
-    with path.open("rb") as handle:
-        content = handle.read(128 * 1024 * 1024 + 1)
+    fd = _open_regular_read(path)
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            fd = -1  # ownership moved to the file object
+            content = handle.read(128 * 1024 * 1024 + 1)
+    finally:
+        if fd != -1:
+            os.close(fd)
     if len(content) > 128 * 1024 * 1024:
         raise ValueError("oversized_asset_json")
     try:
@@ -90,11 +125,19 @@ def _manifest(root: Path, names: tuple[str, ...]) -> list[dict]:
     records = []
     for name in names:
         path = _member(root, name)
-        before = path.stat()
-        digest = sha256()
-        with path.open("rb") as source:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
+        fd = _open_regular_read(path)
+        try:
+            # fstat the fd we actually read: the "before" snapshot of the
+            # opened file, closing the stat->open race for it.
+            before = os.fstat(fd)
+            digest = sha256()
+            with os.fdopen(fd, "rb") as source:
+                fd = -1  # ownership moved to the file object
+                while chunk := source.read(1024 * 1024):
+                    digest.update(chunk)
+        finally:
+            if fd != -1:
+                os.close(fd)
         after = path.stat()
         if (before.st_size, before.st_mtime_ns, before.st_ino) != (
             after.st_size,

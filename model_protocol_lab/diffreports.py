@@ -33,7 +33,9 @@ from typing import Any
 # from exhausting memory.
 MAX_RESULTS_BYTES = 32 * 1024 * 1024
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+# Lone surrogates are stripped too: they crash strict stream writes with
+# UnicodeEncodeError and are never valid text on their own.
 
 
 def _display_id(value: str) -> str:

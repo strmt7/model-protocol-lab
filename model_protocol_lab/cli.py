@@ -17,7 +17,9 @@ from .datasets import load_dataset
 from .experiments import run_experiment
 from .reporting import save_report
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+# Lone surrogates are stripped too: they crash strict stream writes with
+# UnicodeEncodeError and are never valid text on their own.
 
 
 def _display_id(value: str) -> str:

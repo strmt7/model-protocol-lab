@@ -685,25 +685,33 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["asset_manifest"]["detail"], "missing_or_unsafe_asset")
 
     def _denying_open(self, name: str, skip_first: int = 0):
-        """Path.open replacement raising PermissionError for one file name.
+        """os.open replacement raising PermissionError for one file name.
 
         ``skip_first`` allows the first N opens to succeed: the manifest
         stage hashes every asset before the config stage reads it, so
         reaching the config try-block requires config.json's manifest open
         to succeed (skip_first=1).
+
+        Targets ``os.open`` (not ``Path.open``) because the asset readers
+        open via ``_open_regular_read`` (O_NONBLOCK + fstat), which calls
+        ``os.open`` directly so a FIFO can never block the opener.
         """
-        real_open = Path.open
+        real_os_open = os.open
         calls = 0
 
-        def fake_open(self: Path, *args: object, **kwargs: object):  # noqa: ANN003
+        def fake_os_open(path: object, flags: int, *args: object, **kwargs: object):  # noqa: ANN003
             nonlocal calls
-            if self.name == name:
+            try:
+                base = os.path.basename(os.fspath(path))  # type: ignore[arg-type]
+            except TypeError:
+                base = ""
+            if base == name:
                 calls += 1
                 if calls > skip_first:
                     raise PermissionError(13, "Permission denied")
-            return real_open(self, *args, **kwargs)
+            return real_os_open(path, flags, *args, **kwargs)
 
-        return fake_open
+        return fake_os_open
 
     def test_unreadable_config_fails_closed_without_root(self):
         """Root-independent regression test for the config OSError hole.
@@ -715,7 +723,7 @@ class AdversarialEdgeTests(_Base):
         the PermissionError escaped examine_model instead of failing closed.
         """
         root = self.healthy()
-        with patch.object(Path, "open", self._denying_open("config.json", skip_first=1)):
+        with patch("os.open", self._denying_open("config.json", skip_first=1)):
             report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["config"]["detail"], "missing_or_unsafe_asset")
@@ -729,7 +737,7 @@ class AdversarialEdgeTests(_Base):
         """
         root = self.mkroot()
         _write_sharded_layout(root, {"shard0.safetensors": _valid_safetensors_bytes()})
-        with patch.object(Path, "open", self._denying_open("model.safetensors.index.json")):
+        with patch("os.open", self._denying_open("model.safetensors.index.json")):
             report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["asset_layout"]["detail"], "missing_or_unsafe_asset")
@@ -737,7 +745,7 @@ class AdversarialEdgeTests(_Base):
     def test_unreadable_tokenizer_fails_closed_without_root(self):
         """Same OSError hole class in the tokenizer.json try-block."""
         root = self.healthy()
-        with patch.object(Path, "open", self._denying_open("tokenizer.json")):
+        with patch("os.open", self._denying_open("tokenizer.json")):
             report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["tokenizer_file"]["detail"], "missing_or_unsafe_asset")
@@ -745,7 +753,7 @@ class AdversarialEdgeTests(_Base):
     def test_unreadable_weight_during_manifest_fails_closed_without_root(self):
         """Same OSError hole class in the _manifest try-block."""
         root = self.healthy()
-        with patch.object(Path, "open", self._denying_open("model.safetensors")):
+        with patch("os.open", self._denying_open("model.safetensors")):
             report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         checks = self.checks(report)

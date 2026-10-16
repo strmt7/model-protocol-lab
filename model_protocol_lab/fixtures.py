@@ -53,7 +53,9 @@ from .datasets import MAX_BYTES, MAX_CASES_PER_SPLIT, MAX_MESSAGES, MAX_TEXT, pa
 _FIXED_COLUMNS = ("id", "group", "partition", "expected")
 _PARTITIONS = ("search", "held_out")
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+# Lone surrogates are stripped too: they crash strict stream writes with
+# UnicodeEncodeError and are never valid text on their own.
 
 
 def _safe(value: str) -> str:

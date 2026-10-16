@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import shlex
 import struct
 from pathlib import Path
 from typing import Any
 
-from .backends import _directory, _manifest, _member, _model_assets, _read_json
+from .backends import (
+    _directory,
+    _manifest,
+    _member,
+    _model_assets,
+    _open_regular_read,
+    _read_json,
+)
 from .catalog import CATALOG, candidates
 from .core import (
     Fixture,
@@ -105,7 +113,15 @@ def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
         if not name.endswith(".safetensors"):
             continue
         try:
-            with (root / name).open("rb") as handle:
+            # _open_regular_read (not a plain open): a FIFO swapped in for
+            # the shard between validation and open must fail closed, never
+            # block the opener forever.
+            fd = _open_regular_read(root / name)
+        except ValueError:
+            return _check("failed", f"invalid_safetensors_header: {name}")
+        try:
+            with os.fdopen(fd, "rb") as handle:
+                fd = -1  # ownership moved to the file object
                 prefix = handle.read(8)
                 if len(prefix) < 8:
                     return _check("failed", f"invalid_safetensors_header: {name}")
@@ -117,9 +133,15 @@ def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
                     return _check("failed", f"invalid_safetensors_header: {name}")
         except OSError:
             return _check("failed", f"invalid_safetensors_header: {name}")
+        finally:
+            if fd != -1:
+                os.close(fd)
         try:
             header = json.loads(header_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+            # RecursionError: a deeply-nested header ([[[...]]]) exhausts the
+            # parser stack -- a hostile but small file; fail closed like
+            # _read_json does, never propagate.
             return _check("failed", f"invalid_safetensors_header: {name}")
         if type(header) is not dict:
             return _check("failed", f"invalid_safetensors_header: {name}")
@@ -317,6 +339,11 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
         doc = _read_json(_tokenizer_file(root))
     except ValueError as exc:
         return unavailable(_loader_failure_code(exc))
+    except OSError:
+        # Unreadable tokenizer.json (e.g. permission denied for a non-root
+        # user): the second checkpoint is unusable, not a crash. Fixed
+        # vocabulary, per this function's "never raises" contract.
+        return unavailable("missing_or_unsafe_asset")
     try:
         from transformers import PreTrainedTokenizerFast
 
@@ -451,7 +478,13 @@ def examine_model(
     model_type = config.get("model_type")
     rejected = [key for key in _REJECTED_CONFIG_KEYS if config.get(key)]
     if model_type not in _SUPPORTED_TYPES:
-        checks["config"] = _check("failed", f"unsupported model_type: {model_type!r}")
+        # model_type is checkpoint-controlled and unbounded (the asset cap is
+        # 128MB); truncate the preview so a hostile config cannot bloat the
+        # machine-readable report. The fixed code carries the verdict.
+        preview = repr(model_type)
+        if len(preview) > 200:
+            preview = preview[:200] + "..."
+        checks["config"] = _check("failed", f"unsupported model_type: {preview}")
     elif rejected:
         checks["config"] = _check("failed", f"rejected config keys: {', '.join(rejected)}")
     else:
@@ -644,6 +677,70 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
     }
 
 
+def _render_with_memory_cap(tokenizer: Any, conversation: list[dict[str, str]]) -> str:
+    """Render ``apply_chat_template`` with a transient address-space cap.
+
+    A hostile ``chat_template`` (e.g. ``{{ 'x' * 10**11 }}``) materializes
+    its full output *before* the ``_RENDERED_MAX_CHARS`` length check can
+    degrade the pair -- the 1MB template-source cap does not bound the
+    *rendered* size, so a 26-byte template can transiently allocate
+    gigabytes and OOM-kill the process. This bounds the render itself: a
+    temporary ``RLIMIT_AS`` of (current virtual size + 256MB headroom) is
+    installed around the single render call, so a bomb raises ``MemoryError``
+    (caught by the caller's ``except Exception`` -> ``"unavailable"``)
+    instead of killing the process. Legitimate renders peak far below the
+    headroom (output is capped at 1MB chars by the post-render check).
+
+    On platforms without ``resource(3)``/``/proc`` (non-Unix) or when the
+    limit cannot be installed, the render runs unbounded -- the pre-existing
+    behavior -- and the post-render length check still applies. An already
+    tighter ambient limit is respected, never loosened.
+    """
+
+    def render() -> str:
+        rendered = tokenizer.apply_chat_template(
+            conversation,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        if type(rendered) is not str:
+            raise ValueError("chat_template_did_not_render_text")
+        return rendered
+
+    try:
+        import resource
+    except ImportError:
+        return render()
+    vmsize: int | None = None
+    try:
+        with open("/proc/self/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("VmSize:"):
+                    vmsize = int(line.split()[1]) * 1024
+                    break
+    except OSError:
+        vmsize = None
+    if vmsize is None:
+        return render()
+    try:
+        old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
+    except OSError:
+        return render()
+    if old_soft != resource.RLIM_INFINITY:
+        # A tighter ambient limit already governs; respect it, don't touch.
+        return render()
+    new_soft = vmsize + 256 * 1024 * 1024
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (new_soft, old_hard))
+    except (OSError, ValueError):
+        return render()
+    try:
+        return render()
+    finally:
+        with contextlib.suppress(OSError, ValueError):
+            resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
+
+
 def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -732,14 +829,15 @@ def template_conformance(
                 hand_ids = tuple(
                     tokenizer.encode(fmt.render(case.messages), add_special_tokens=False)
                 )
-                rendered = tokenizer.apply_chat_template(
+                rendered = _render_with_memory_cap(
+                    tokenizer,
                     [{"role": m.role, "content": m.content} for m in case.messages],
-                    tokenize=False,
-                    add_generation_prompt=True,
                 )
-                if type(rendered) is not str or len(rendered) > _RENDERED_MAX_CHARS:
+                if len(rendered) > _RENDERED_MAX_CHARS:
                     # Checkpoint-controlled template rendered unbounded text;
                     # degrade the pair instead of encoding a memory bomb.
+                    # (The render itself was already memory-capped, so this
+                    # only sees outputs that fit comfortably.)
                     entry["status"] = "unavailable"
                 else:
                     template_ids = tuple(tokenizer.encode(rendered, add_special_tokens=False))

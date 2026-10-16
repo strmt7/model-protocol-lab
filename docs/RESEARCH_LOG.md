@@ -4179,3 +4179,67 @@ section reference `[Unreleased]` -> `[0.1.0]`; test count 5908 ->
 6063; ruff file count 139 -> 148; added the coverage-gate figure).
 The notes remain honestly marked DRAFT pending the owner's release
 tag. No source or test changes in this cycle.
+
+## Cycle 96 (2026-10-16) — final red-team sweep (release readiness)
+
+Last release-readiness gate. Three parallel adversarial agents probed
+novel surfaces only (rounds 1-3 vectors are regression-guarded) with
+executable PoCs: (A) `mpl debug` REPL + CLI input handling, (B)
+`doctor`/`examine_model` hostile checkpoints, (C) scoring / report-diff /
+backend-emulation modules. Eight genuine findings, all fixed with 20
+regression tests in `tests/test_cycle96_redteam_sweep.py`:
+
+- R4-1 (Medium): lone surrogates (`\ud800`) in hostile results.json /
+  fixture content crashed strict stream writes -- `mpl diff-reports`
+  died with uncaught UnicodeEncodeError on stderr; the debug REPL
+  session died, violating its "never die" invariant. All four
+  `_CONTROL_CHARS` regexes (debug.py, cli.py, diffreports.py,
+  fixtures.py) now strip `\ud800-\udfff`; astral characters (single
+  codepoints in Python) are unaffected -- pinned by test.
+- R4-2 (Medium): `BaseException` from a misbehaving backend escaped the
+  sanitization boundary -- `core.evaluate` (`except Exception` around
+  `backend.generate`) and `scoring.score_target_logprobs` (`except
+  Exception` around `forward_logits`) propagated, turning an hours-long
+  run into a total loss. Both now catch `BaseException` and map to the
+  fixed codes (`generate_failed` / `forward_failed`), with explicit
+  re-raise of `KeyboardInterrupt`/`SystemExit`.
+- R4-3 (Medium): raw `RecursionError` escaped `examine_model` via a
+  deeply-nested safetensors header (`_check_weight_headers` caught only
+  `UnicodeDecodeError`/`JSONDecodeError`, unlike `_read_json`). Now
+  caught -> `invalid_safetensors_header`.
+- R4-4 (Medium): FIFO-swap hang -- `_read_json`, `_manifest`,
+  `_check_weight_headers` used plain blocking `open()` after validation;
+  the race window spans the whole weight-hashing phase. New shared
+  `_open_regular_read()` helper (`O_NONBLOCK` + `fstat` `S_ISREG` on the
+  fd, the `datasets.py` pattern); `_manifest` now fstats the opened fd
+  for its before-snapshot. Verified: FIFO -> fixed-vocabulary failure,
+  no hang (thread + timeout PoC).
+- R4-5 (Medium): Jinja chat-template memory bomb -- `apply_chat_template`
+  materializes the full string *before* the 1MB `_RENDERED_MAX_CHARS`
+  check; `{{ 'x' * 500_000_000 }}` grew RSS +1.9GB first (larger
+  multipliers OOM-kill). The render now runs under a transient
+  `RLIMIT_AS` (current VmSize + 256MB headroom): a 500MB bomb raises
+  catchable `MemoryError` -> `"unavailable"` with zero RSS growth
+  (measured); legitimate renders unaffected. Falls back to unbounded on
+  non-Unix; respects an already-tighter ambient limit.
+- R4-6 (Low-Medium): `portability_matrix` raised raw `OSError` on an
+  unreadable second checkpoint (`except ValueError` only), breaking its
+  "never raises" contract. Now catches `OSError` -> `unavailable`.
+- R4-7 (Low): unbounded checkpoint-controlled `model_type` interpolated
+  into machine-readable output (5MB `model_type` -> 5MB detail string).
+  Preview truncated to 200 chars.
+- R4-8 (Low): quadratic transcript accounting in the debug REPL
+  (re-summed every command; ~20s for a 10k-line script at the caps).
+  Running `self._transcript_chars` counter, recomputed only on
+  truncation.
+
+Defended with PoC evidence (no change): `.read` recursion (14
+sub-probes), hostile renders (byte-level escape stripping), `.save`
+paths, `_parse_id_list` strictness, 128MB tokenizer cap on the debug
+path, argparse edges, `_build_primary_tokenizer` hostiles,
+symlink/special-file games, scoring NaN/inf/shape edges, diffreports /
+diffbackends hostile inputs, emulation bounds, experiments
+cancellation. `docs/SECURITY.md` updated (round-4 table).
+`docs/RELEASE_READINESS_0.1.0.md` written (all 10 checklist items
+evidenced; no tag created -- owner's decision). Test count 6063 ->
+6083 (README + VALIDATION.md updated).
