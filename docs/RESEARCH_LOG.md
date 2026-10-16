@@ -3844,3 +3844,93 @@ Changes applied (verified by execution):
 - docs/RELEASE_NOTES_DRAFT.md superseded by docs/RELEASE_NOTES_0.1.0.md.
 Historical dated entries mentioning 0.1.0a0 (CHANGELOG's [0.1.0a0]
 snapshot section, earlier log entries) are intentionally NOT rewritten.
+
+## 2026-10-16 (cycle 85: upstream drift re-check + README quick-start verification)
+
+Upstream drift re-check against primary sources (2026-10-16 ~12:00-12:30 CEST),
+~7h after the cycle-70 baseline. Verdicts per tracked item:
+
+1. SGLang PR #42466 (multi-stop earliest-occurrence fix): STILL OPEN, not
+   merged. Primary: the PR page itself (https://github.com/sgl-project/sglang/pull/42466)
+   shows the proposal with CI red on all three runs (Latest PR Test Base/Extra/AMD
+   ROCm) and no merged marker; a cross-check web search surfaced no merge
+   evidence. emulate_sglang_stop's first-listed tie-break stands; no code change.
+2. Mistral Large 4: still "Upcoming release" with ETA October 31, 2026 --
+   primary HF page (https://huggingface.co/mistralai/Mistral-Large-4.0-1T05-A52B)
+   verbatim: "Expected release October 31, 2026 Current ETA". Refinement vs
+   cycle 70: the model was announced 2026-10-06 as a public API preview
+   ("Le Chonk", 1.05T total / 49B active per token, 52B incl. embeddings per
+   the model card); the open WEIGHTS are what is still pending. No chat
+   template available, so no catalog impact.
+3. transformers: v5.20.0 (published 2026-10-15) still the latest release
+   (releases page crawled ~6h before this check shows v5.20.0 on top; no
+   newer tag). Pin >=4.57.1,<6 remains valid. v5.20.0 adds native Ling 3.0
+   Flash / Kolibri 1 / Muse Spark Open model support -- none new for the
+   catalog (Kolibri1 already covered; Ling 3.0 Flash weights date to July
+   2026; Muse Spark Open's template stays gated, see below).
+4. vLLM: v0.31.0 (2026-10-05) still latest (stable release confirmed via
+   Wikipedia infobox + release coverage crawled <24h ago). SGLang: v0.5.21
+   (2026-10-02) still latest (CVE advisories published 2026-10-12 reference
+   "through 0.5.21"; sglang-omni bumped to 0.5.21 on 2026-10-04). No new
+   releases, no stop/detokenization semantics changes on either. The
+   Jais-3-7B model card's serving recipe (vllm>=0.30.0, sglang>=0.5.20) is
+   consistent with these versions.
+5. New catalog-relevant releases since 2026-10-15:
+   - Jais 3 (MBZUAI/Inception42, released 2026-10-15): six open models
+     (0.9B/3.7B/7B/32B/MoVA-36B-A4B/375B-A23B) plus "-Uno" diffusion-decoding
+     LoRA adapters (Uno = lossless speculative speedup, NOT instruct
+     variants). Primary: https://huggingface.co/collections/IFM/jais-3 and
+     the inception42/Jais-3-7B model card. The fleet is built on the K2
+     Horizon architecture (same size ladder as the catalog's k2horizon
+     entry) and the model card mandates `--reasoning-parser k2_horizon` /
+     `--tool-call-parser k2_horizon` plus the same `reasoning_effort`
+     chat_template kwarg -- i.e. the existing k2horizon catalog entry covers
+     the framing. NO code change; follow-up: byte-verify a Jais-3
+     tokenizer_config against docs/evidence/k2horizon-chat-template.jinja
+     when convenient (tier-2 evidence today, not tier-1).
+   - Stepfun Step 5 Preview (open-sourced 2026-10-15, 600B MoE): chatml-based
+     per the cycle-70 note -- covered by the chatml entry. No change.
+   - Meta Muse Spark Open: weights released 2026-10-15 (BF16/NVFP4 on HF;
+     816B MoE). Cycle 70's "gated template, re-check once the license is
+     accepted" item stays open -- the template may now be verifiable with
+     license acceptance; no code change until then.
+   - Liquid AI d1-ultra (2026-10-15): decision-focused system, not a chat
+     model -- not catalog-relevant. LFM2.5-24B-A2B and NVIDIA Nemotron 3.5
+     Super VL 120B-A12B: already assessed in cycle 70 (covered by lfm25 /
+     nemotron35). FLUX 3 Image Klein: image model, not relevant.
+   - Watch item cleared: "Qwen3.5-9B" appears as a benchmark reference on the
+     Jais-3 card, but Qwen3.5 was released February 2026 -- not new, no drift.
+
+README quick-start verification (cycle-85 Task A): the cycle-84 fix
+(`python -m pip install -e ".[dev,hf]"`) was verified end-to-end as far as
+this sandbox allows. (a) Fresh venv at /tmp/mpl_qs_32532: `pip install
+--dry-run -e ".[dev,hf]"` from the repo root exited 0 and resolved the full
+tree from PyPI -- torch 2.14.1, transformers 5.20.0, safetensors 0.8.0,
+ruff/mypy/coverage/hypothesis/pytest -- i.e. the extras named by the fixed
+line exist and provide the ML stack the 9 module-level torch/transformers
+test modules need (the 9-module count re-verified by grep). PyPI egress is
+NOT blocked. (b) A real install into the fresh venv is infeasible here for
+a non-network reason: the equivalent installed env measures 1.4 GB while
+/tmp is a 512 MiB tmpfs (503 MB free) -- documented residual, established by
+measurement, not assumed. (c) The README's exact test command
+`python -m unittest discover -s tests -t .` was executed in the repo's own
+.venv (which satisfies [dev,hf]); outcome recorded in the cycle-85 worker
+report. New pin: tests/test_cycle85_readme_quickstart_audit.py (5 tests)
+asserts every README install-line extra exists in pyproject, [hf] names
+torch+transformers, and every module-level third-party test import resolves
+inside the recursive Requires-Dist closure of the README-named extras
+(hermetic; ruff+mypy clean).
+
+## Cycle 85 follow-up (2026-10-16, coordinator) — Jais-3 / k2horizon cross-check
+
+Verified the worker's Jais-3 finding against primary sources (all read
+2026-10-16): inception42/Jais-3-MoVA-36B-A4B config.json -> "architectures":
+["K2HorizonForCausalLM"]; tokenizer_config.json (253 bytes) has NO
+chat_template key; bos_token is byte-identical to the catalog's k2horizon
+BOS (<|ifm|begin_of_text|>); eos <|ifm|endoftext|>. The modeling file
+(modeling_k2_horizon.py, 49 KB, read as text -- never executed) contains
+no chat template: the template lives in serving code (the model card
+mandates --reasoning-parser k2_horizon), consistent with the worker's
+report. No separate catalog entry needed; added a one-line verified
+provenance note to the k2horizon comment in model_protocol_lab/catalog.py.
+No code change; evidence tier for k2horizon stays tier-1 (IFM template).
