@@ -213,12 +213,22 @@ class TestF32Contract(unittest.TestCase):
         # Just below the tie rounds down.
         self.assertEqual(_f32(1.0 + 2.0**-24 - 2.0**-60), 1.0)
 
-    def test_out_of_float32_range_raises(self) -> None:
-        # struct.pack("<f") cannot represent these: _f32 raises OverflowError
-        # rather than saturating to inf. Pinned as-is.
-        for v in (1e300, -1e300, 1e39, -1e39):
-            with self.subTest(value=v), self.assertRaises(OverflowError):
-                _f32(v)
+    def test_out_of_float32_range_saturates(self) -> None:
+        # Finite float64 values outside the float32 range saturate to
+        # +/-inf, matching IEEE-754 round-to-nearest-even and torch/numpy
+        # float32 conversion. (struct.pack("<f") would raise OverflowError
+        # here, which score_target_logprobs mislabeled as forward_failed
+        # even though the score is computable -- fixed in cycle 76.)
+        for v, want in (
+            (1e300, math.inf),
+            (-1e300, -math.inf),
+            (1e39, math.inf),
+            (-1e39, -math.inf),
+            (6.8e38, math.inf),
+            (-6.8e38, -math.inf),
+        ):
+            with self.subTest(value=v):
+                self.assertEqual(_f32(v), want)
 
     def test_monotone_on_sample(self) -> None:
         rng = random.Random("cycle38-f32-monotone")  # noqa: S311 -- deterministic string seed for test fuzz

@@ -3593,3 +3593,28 @@ contradictory fields pinned, no caller mutation). Mutation gate 6/6
 killed on PID-scoped /tmp copies (incl. an injected time.time() caught
 by the determinism check). No genuine bugs -- CLEAN. README test count
 updated to 5499.
+
+## 2026-10-16 (cycle 76: scoring-math audit -- 1 REAL BUG FIXED)
+
+A worker confirmed the bug by direct experiment (torch) but ended before
+writing anything; the coordinator completed the cycle. BUG: ``_f32`` in
+model_protocol_lab/scoring.py raised ``OverflowError`` for finite float64
+log-probabilities outside the float32 range (e.g. -6.8e38, legitimate from
+fp32-range logits via max-shift log-sum-exp) instead of saturating to
++/-inf. Through score_target_logprobs the OverflowError collapsed to
+``unavailable``/``forward_failed``, mislabeling a computable score. FIX:
+_f32 now saturates finite out-of-range values to +/-inf, matching
+IEEE-754 round-to-nearest-even and torch/numpy float32 conversion
+(+_FLT_MAX constant, math import). Negative control: 12 failures on
+reverted code, incl. the end-to-end test (fp32-range logits now score
+``ok`` with -inf per-token logprobs). The old pin
+test_out_of_float32_range_raises (cycle 38) was updated to the corrected
+saturation behavior. New tests/test_cycle76_scoring_semantics_audit.py
+(27 tests + 75 subtests): saturation boundaries, torch-agreement
+differential across magnitudes, end-to-end overflow scoring via a
+char-codec fake backend, plain-Python log-softmax oracle vs
+score_span_from_logits (exact equality, seeded), minimal pairs,
+fail-closed fixed codes (incl. torch-absent). Mutation gate 3/3 killed on
+/tmp copies (import-path verified; an early 0/3 was a harness artifact:
+``python -m`` puts cwd ahead of PYTHONPATH). README test count updated
+to 5526.
