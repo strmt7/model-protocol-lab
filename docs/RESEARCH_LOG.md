@@ -4140,3 +4140,32 @@ the escape as text; zero runtime change. Regression guard:
 AST-scans every test module's module/class/function docstrings for
 lone surrogates. Also bumped the README/VALIDATION test-count claims
 6062 -> 6063 for the new guard test.
+
+## Cycle 94 (2026-10-16) — fresh-venv install + CLI smoke test (release readiness)
+
+Release-readiness evidence, not a code change. Fresh venv, `pip install .`
+(no extras): installs clean, `__version__ == "0.1.0"`. All 8 CLI
+subcommands print `--help` from the installed entry point. Functional
+smoke on the installed package: `catalog` lists families; `inspect` on
+the example fixtures validates; `doctor` fails closed with a structured
+verdict on a weights-less stub checkpoint; `fixtures build` ->
+`inspect` round-trips; `diff-reports` on the sample report vs itself
+reports no differences. `run`/`debug`/`diff-backends` need a real
+tokenizer (`hf` extra) and stay covered by integration tests. Recorded
+in VALIDATION.md ("Fresh-install and CLI smoke test").
+
+## Cycle 94 continued — timing-threshold test robustness (real finding)
+
+While verifying cycle 94's push, the exact CI command
+(`coverage run -m unittest discover`) failed locally on
+`test_template_diff_long_equal_prefix_stays_fast`: 5.96s/5.18s vs a
+5.0s bound, twice in a row -- but the test passes in 1.6s in isolation
+and passed on CI 40 minutes earlier. Measured: the same
+`template_diff` call takes 1.47s uninstrumented vs 5.10s under
+`coverage run` (3.5x instrumentation overhead). The 5.0s bound was
+calibrated for uninstrumented runs yet the test always executes under
+coverage in the CI gate -- a test-design bug, not a product
+regression (no source changes in this cycle). Fix: threshold 5.0s ->
+15.0s with a comment documenting the measured overhead; still guards
+against pathological (minutes-scale) slowdown. Verified green under
+coverage before pushing.
