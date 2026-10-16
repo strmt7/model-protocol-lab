@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 102 — true OSError-branch coverage, 2026-10-16)
+
+- `tests/test_cycle102_oserror_branches.py` (5 tests): the
+  ``except OSError`` branches in ``examine_model`` are defense-in-depth
+  for I/O errors *after* a successful open (disk errors during
+  ``read()``) — ``_open_regular_read`` converts open-time failures to
+  ``ValueError`` first, so they were uncovered. A tracked-fd
+  ``os.fdopen`` replacement injects ``OSError`` at read time for a named
+  file, pinning fail-closed behavior for the `_model_assets`,
+  `_manifest`, config, and tokenizer branches (fixed
+  ``missing_or_unsafe_asset`` vocabulary, never a raw OSError).
+- Fixed misleading docstrings on the four cycle-92 "without_root"
+  tests: they exercise the ``ValueError`` conversion path, not the raw
+  ``except OSError`` branch — now stated accurately with a pointer to
+  the new coverage. Test count 6116 -> 6121.
+
 ### Added (cycle 101 — warning-cleanliness audit, 2026-10-16)
 
 - `tests/test_cycle101_warning_cleanliness.py` (4 tests): pins the
