@@ -4,6 +4,7 @@ import json
 import os
 import stat
 from pathlib import Path
+from typing import Any, NoReturn
 
 from .core import Fixture, Message, Split
 
@@ -13,8 +14,8 @@ MAX_MESSAGES = 21
 MAX_TEXT = 16_384
 
 
-def _unique_object(pairs):
-    result = {}
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError("Duplicate JSON field")
@@ -22,16 +23,16 @@ def _unique_object(pairs):
     return result
 
 
-def _reject_constant(_value):
+def _reject_constant(_value: str) -> NoReturn:
     raise ValueError("Nonfinite JSON")
 
 
-def _fields(value, expected):
+def _fields(value: Any, expected: tuple[str, ...]) -> None:
     if type(value) is not dict or set(value) != set(expected):
         raise ValueError("Unexpected or missing JSON fields")
 
 
-def _text(value, *, nonblank=False):
+def _text(value: Any, *, nonblank: bool = False) -> str:
     if type(value) is not str or len(value) > MAX_TEXT:
         raise ValueError("Invalid or oversized text field")
     if nonblank and not value.strip():
@@ -39,7 +40,7 @@ def _text(value, *, nonblank=False):
     return value
 
 
-def _fixture(value, label: str):
+def _fixture(value: Any, label: str) -> Fixture:
     _fields(value, ("id", "group", "messages", "expected"))
     messages = value["messages"]
     if type(messages) is not list or not 1 <= len(messages) <= MAX_MESSAGES:

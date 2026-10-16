@@ -45,7 +45,7 @@ import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .core import Fixture, Format, Message, Split
 from .datasets import MAX_BYTES, MAX_CASES_PER_SPLIT, MAX_MESSAGES, MAX_TEXT, parse_dataset
@@ -236,7 +236,7 @@ def split_to_json_text(split: Split) -> str:
     if type(split) is not Split:
         raise ValueError("split_to_json_text needs a Split")
 
-    def fixture_json(case: Fixture) -> dict:
+    def fixture_json(case: Fixture) -> dict[str, Any]:
         return {
             "id": case.id,
             "group": case.group,

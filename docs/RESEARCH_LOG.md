@@ -4366,3 +4366,21 @@ build-artifact leaks (183 files). Noted residual: UPLOAD_TO_GITHUB.md is an
 obsolete ZIP-upload doc nothing references, but the push helper cannot delete
 files from main, so it stays. Test count 6121 -> 6122 (README + VALIDATION.md
 updated).
+
+## Cycle 104 — mypy strict compliance (2026-10-16)
+
+`mypy --strict` reported 37 errors in 7 files (pyproject had
+`strict = false`). All fixed: annotations for the untyped dataset helpers
+(_unique_object/_reject_constant/_fields/_text/_fixture),
+experiments._failure_code/_summary typed on EvaluationReport,
+budget_frontier's `search` corrected to list[dict[str, Any]] (entries are
+search-record dicts; an initial list[Fixture] guess was caught by
+comparison-overlap — annotations verified against callers, not assumed),
+bare dict/list/tuple generics given arguments, cli.main argv typed, and the
+five PreTrainedTokenizerFast call sites given deliberate
+type: ignore[no-untyped-call] (mypy resolves it to the untyped
+TokenizersBackend factory; the ignore marks the documented third-party
+boundary, matching the file's existing explicit-Any pattern).
+`strict = true` set in pyproject.toml; TestMypyStrictPinned guards it.
+mypy clean in both default and --strict modes (15 files). Test count
+6122 -> 6123 (README + VALIDATION.md updated).

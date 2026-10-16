@@ -186,5 +186,26 @@ class TestPublicApiDocstrings(unittest.TestCase):
         )
 
 
+class TestMypyStrictPinned(unittest.TestCase):
+    """pyproject must keep mypy strict mode enabled.
+
+    Cycle 104 annotated the whole package for --strict (37 errors fixed);
+    flipping strict back to false would silently re-admit untyped defs and
+    bare generics. The CI lint job runs `mypy model_protocol_lab`, which
+    reads this setting.
+    """
+
+    def test_mypy_strict_enabled(self) -> None:
+        import tomllib
+
+        pyproject = TESTS_DIR.parent / "pyproject.toml"
+        with open(pyproject, "rb") as handle:
+            config = tomllib.load(handle)
+        self.assertTrue(
+            config.get("tool", {}).get("mypy", {}).get("strict") is True,
+            "mypy strict mode must stay enabled in pyproject.toml",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

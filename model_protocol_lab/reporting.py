@@ -1977,7 +1977,7 @@ def render_html(result: dict[str, Any]) -> str:
     )
 
 
-def prepare_report_dir(directory: str | Path, *, _allow_empty_existing=False) -> Path:
+def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = False) -> Path:
     """Create a fresh report directory with owner-only permissions.
 
     Creates ``directory`` (and any missing parents) with mode 0o700 so the
@@ -2017,11 +2017,11 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing=False) ->
 
 
 def save_report(
-    result: dict,
+    result: dict[str, Any],
     directory: str | Path,
     *,
-    include_evidence=False,
-    _allow_empty_existing=False,
+    include_evidence: bool = False,
+    _allow_empty_existing: bool = False,
 ) -> tuple[Path, Path]:
     """Write the report as results.json + report.html into a fresh directory.
 

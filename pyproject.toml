@@ -64,7 +64,7 @@ quote-style = "double"
 
 [tool.mypy]
 python_version = "3.11"
-strict = false
+strict = true
 warn_return_any = true
 warn_unused_configs = true
 warn_redundant_casts = true
