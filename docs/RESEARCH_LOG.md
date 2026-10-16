@@ -3574,3 +3574,22 @@ byte-identical template executed under stock Jinja2 -- output minus the
 documented synthesized system block is byte-identical to the catalog
 render, incl. the no-think variant). Mutation gate 6/6 killed on /tmp
 copies. No genuine mismatches -- CLEAN. README test count updated to 5473.
+
+## 2026-10-16 (cycle 75: reporting determinism + section-fidelity audit)
+
+Adversarial audit of reporting.py's report generation
+(tests/test_cycle75_reporting_determinism_audit.py, 26 tests + 58
+subtests): AST-based static nondeterminism scan (no timestamps/random/
+uuid/id()/hash-order iteration; the two set literals are safe); 10
+synthetic fixtures rendered 3x in-process plus fresh subprocesses with
+PYTHONHASHSEED in {0,42,987654321,7} -- byte-identical HTML+JSON every
+time; independent hand-derived oracles for selection_margin (all 5
+branches incl. runner-up tie lexicographic pin), token_overhead (sorted
+key order), TOC anchors, fingerprint truncation, all report sections,
+evidence stripping and ASCII-only JSON in results.json, and the
+allowlisted-script CSP hash; adversarial edges (empty result, hostile
+<script>/unicode payloads exactly escaped, 1200-fixture bulk render,
+contradictory fields pinned, no caller mutation). Mutation gate 6/6
+killed on PID-scoped /tmp copies (incl. an injected time.time() caught
+by the determinism check). No genuine bugs -- CLEAN. README test count
+updated to 5499.
