@@ -3342,3 +3342,25 @@ command instead of "unrecognized arguments" for unknown top-level flags
 (exit code still 2). Deliberately not verified: SIGINT exit-130 path;
 live-model run/doctor; pip install of the console script. README test
 count updated to 3933.
+
+## 2026-10-16 (cycle 65: backend seed-determinism & cache-isolation audit)
+
+Adversarial audit of the determinism foundation
+(tests/test_cycle65_backend_determinism_audit.py, 18 tests + 39
+subtests): LocalHFBackend (backends.py:728-1047), TruncatedPromptBackend
+(678-726), _TokenizerBackend (diffbackends.py:830-871). Proven by test:
+byte-identical (seed, input_ids, cap) outputs across independent
+instances, repeats, and a fresh subprocess; greedy seed-invariance;
+same-seed/different-prompts never confused; a 40-request "polluted"
+instance matches a fresh instance; generate/forward_logits leave global
+torch and random RNG state untouched; config.use_cache=False confirmed;
+seeds 0 and 2**64-1 valid while -1, 2**64, "7", True, None fail closed
+with invalid_seed; full evaluate + save_report twice -> byte-identical
+results.json AND report.html (zero allowed-difference fields -- no
+timestamps in the report path). Structural scan: no lru_cache/cache, no
+module-level mutable containers, no per-instance cache (the only "cache"
+is HF's KV-cache, disabled). Cycle-63's cited claims (backends.py:732-733,
+853-859) re-verified in the current file. No genuine bugs -- CLEAN.
+Deliberately not verified: cross-machine/GPU determinism; constructor-time
+RNG side effects; emulate_* stop functions (pure ports, out of scope).
+README test count updated to 3951.
