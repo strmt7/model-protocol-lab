@@ -678,8 +678,79 @@ class AdversarialEdgeTests(_Base):
             report = examine_model(root)
         finally:
             (root / "config.json").chmod(0o644)
+        # The manifest stage hashes every asset before the config stage
+        # reads it, so an unreadable config.json fails the manifest check
+        # (fail-closed with the fixed vocabulary), not the config check.
+        self.assertEqual(report["verdict"], "failed")
+        self.assertEqual(self.checks(report)["asset_manifest"]["detail"], "missing_or_unsafe_asset")
+
+    def _denying_open(self, name: str, skip_first: int = 0):
+        """Path.open replacement raising PermissionError for one file name.
+
+        ``skip_first`` allows the first N opens to succeed: the manifest
+        stage hashes every asset before the config stage reads it, so
+        reaching the config try-block requires config.json's manifest open
+        to succeed (skip_first=1).
+        """
+        real_open = Path.open
+        calls = 0
+
+        def fake_open(self: Path, *args: object, **kwargs: object):  # noqa: ANN003
+            nonlocal calls
+            if self.name == name:
+                calls += 1
+                if calls > skip_first:
+                    raise PermissionError(13, "Permission denied")
+            return real_open(self, *args, **kwargs)
+
+        return fake_open
+
+    def test_unreadable_config_fails_closed_without_root(self):
+        """Root-independent regression test for the config OSError hole.
+
+        The chmod-based test above self-skips when uid 0 (root bypasses
+        permission checks); this one mocks Path.open so it runs everywhere,
+        including CI. The manifest open succeeds and the config read raises,
+        exercising the config try-block's ``except OSError`` branch. Pre-fix,
+        the PermissionError escaped examine_model instead of failing closed.
+        """
+        root = self.healthy()
+        with patch.object(Path, "open", self._denying_open("config.json", skip_first=1)):
+            report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["config"]["detail"], "missing_or_unsafe_asset")
+
+    def test_unreadable_weight_index_fails_closed_without_root(self):
+        """Same OSError hole class in the _model_assets try-block.
+
+        In the sharded layout _model_assets reads the weight index via
+        _read_json; an unreadable index must fail the asset_layout check
+        with the fixed vocabulary instead of escaping.
+        """
+        root = self.mkroot()
+        _write_sharded_layout(root, {"shard0.safetensors": _valid_safetensors_bytes()})
+        with patch.object(Path, "open", self._denying_open("model.safetensors.index.json")):
+            report = examine_model(root)
+        self.assertEqual(report["verdict"], "failed")
+        self.assertEqual(self.checks(report)["asset_layout"]["detail"], "missing_or_unsafe_asset")
+
+    def test_unreadable_tokenizer_fails_closed_without_root(self):
+        """Same OSError hole class in the tokenizer.json try-block."""
+        root = self.healthy()
+        with patch.object(Path, "open", self._denying_open("tokenizer.json")):
+            report = examine_model(root)
+        self.assertEqual(report["verdict"], "failed")
+        self.assertEqual(self.checks(report)["tokenizer_file"]["detail"], "missing_or_unsafe_asset")
+
+    def test_unreadable_weight_during_manifest_fails_closed_without_root(self):
+        """Same OSError hole class in the _manifest try-block."""
+        root = self.healthy()
+        with patch.object(Path, "open", self._denying_open("model.safetensors")):
+            report = examine_model(root)
+        self.assertEqual(report["verdict"], "failed")
+        checks = self.checks(report)
+        self.assertEqual(checks["asset_layout"], {"status": "ok", "detail": "2 assets"})
+        self.assertEqual(checks["asset_manifest"]["detail"], "missing_or_unsafe_asset")
 
 
 class DoctorOrchestrationTests(_Base):

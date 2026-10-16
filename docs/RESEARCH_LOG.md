@@ -3699,3 +3699,63 @@ round-trip, determinism). Mutation gate 6/6 killed on /tmp copies with
 __file__ import-path assertion (one first-attempt mutant survived
 correctly as semantically equivalent -- replaced). No genuine bugs --
 CLEAN. README test count updated to 5700.
+
+## 2026-10-16 (cycle 81: LocalHFBackend lifecycle + generate-contract audit)
+
+Adversarial audit of backends.py's LocalHFBackend and TruncatedPromptBackend
+(tests/test_cycle81_localhf_backend_audit.py, 52 tests + 51 subtests)
+against the locally built tiny GPT-2 checkpoint (no downloads/network):
+generate contract (exact cap at 1/2/8/63, continuation-only valid ids,
+forced-EOS still returns full cap with reason="limit", byte-identical
+outputs across instances with different seeds, global RNG untouched,
+pre-set and mid-generation cancellation, 16-case fixed error-code matrix);
+init validation (every failure mode -> RuntimeError with EXACTLY the fixed
+code and __cause__ None -- no HF-internal text leaks; over-declared window
+keeps its distinct code); forward_logits codes (invalid_input_ids,
+context_limit_exceeded at 64/65, local_backend_not_initialized pinned
+white-box, local_forward_failed; [T, vocab] fp32 detached/contiguous/finite
+contract); adversarial edges (context boundary, 4096 cap bound, double
+__init__, 4-thread concurrent generate/forward_logits with no cross-talk,
+lock release after inference failure, encode/decode codes);
+TruncatedPromptBackend (init, fingerprint, tail-byte truncation,
+codepoint-split error, pass-throughs). Mutation gate 6/6 killed on /tmp
+copies with __file__ import-path assertion. No genuine bugs -- CLEAN.
+README test count updated to 5752.
+
+## 2026-10-16 (CI red fix: cycles 79/80 test-job failures)
+
+CI's test jobs went red on the cycle-79/80 pushes (all three Pythons)
+while local pytest was green: five distinct failures, all masked locally
+by root + Python 3.12. Fixed without pushing until the CI-equivalent
+command passes locally.
+1. REAL PRODUCTION BUG: examine_model did not fail closed on unreadable
+   assets for non-root users. _read_json's path.open("rb") raises OSError
+   (PermissionError), but the _model_assets/_manifest/config/tokenizer
+   try-blocks in examine_model caught ValueError only, so the OSError
+   escaped. Fixed: except OSError alongside ValueError in all four
+   blocks, mapping to the fixed vocabulary "missing_or_unsafe_asset"
+   (doctor.py). Sibling audit: _check_weight_headers already catches
+   OSError internally; _directory already normalizes OSError to
+   ValueError. The cycle-72 chmod test (which self-skips under root, so
+   it never ran locally) had its detail assertion corrected: the manifest
+   stage hashes config.json before the config stage reads it, so an
+   unreadable config.json fails the asset_manifest check, not the config
+   check. Added 4 root-independent regression tests mocking Path.open to
+   raise PermissionError (config/tokenizer/manifest/weight-index blocks);
+   negative control: all 4 fail on reverted source.
+2. test_python_312 pinned (3, 12): now asserts the interpreter satisfies
+   pyproject's requires-python range via SpecifierSet.
+3. test_torch_version pinned "2.14.1+cpu": now compares the base version
+   (split("+")[0]) so CI's CUDA wheel passes.
+4. test_transformers_version pinned "5.19.0": now checks membership in
+   pyproject's hf-extra pin (>=4.57.1,<6) via SpecifierSet.
+5. test_bandit_zero_issues_at_any_severity shelled out to a bandit binary
+   that only exists in the security-audit job: now skipTest when
+   shutil.which("bandit") is None.
+Standing guard added (tests/test_ci_portability_guard.py): AST scan over
+the test suite forbidding exact sys.version_info tuple comparisons and
+bare torch/transformers __version__ string equality, so this failure
+class cannot recur (negative control: flags the four old patterns).
+README test count updated to 5757. Lesson: the verification gate must
+run the exact CI test command (coverage run -m unittest discover), not
+just pytest.
