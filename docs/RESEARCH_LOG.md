@@ -3267,3 +3267,24 @@ All seven tracked items re-verified against primary sources; no drift:
    pins the jinja. No catalog change. Next candidates if templates emerge:
    models newly supported in transformers v5.20.0 (Muse Glimmer, Ling 3.0
    Flash, Kolibri 1, MiniCPM-V 4.7) -- need concrete template text first.
+
+## 2026-10-16 (cycle 62: doctor portability-matrix adversarial audit)
+
+Closed the cycle-59 gap: adversarial differential audit of
+doctor._portability_check (doctor.py:159) and doctor.portability_matrix
+(doctor.py:273) using SYNTHETIC tokenizers only (a fake `transformers`
+module injected into sys.modules; no checkpoints, no network, no real HF
+objects) -- tests/test_cycle62_doctor_portability_audit.py, 60 tests.
+Established the exact consumed interfaces (primary: .decode only;
+reference: .encode(text, add_special_tokens=False);
+.convert_tokens_to_ids + 7 special-token attrs), 57 hand-pinned
+branch tests, 220+130 seeded differential fuzz subtests vs independent
+oracles with full-dict equality, and a 40-case cross-check reproducing
+core.template_tokenizer_compatibility exactly. Notable pinned non-bugs:
+tuple()-normalisation of list/generator encodes, empty-tuple reference
+encode -> mismatch (not degradation), per-literal failure isolation,
+bool ids excluded via type() is int. Mutation gate 6/6 killed on /tmp
+copies (control pristine PASS). No genuine bugs -- CLEAN. Deliberately
+not verified: real transformers/tokenizers against real checkpoint files;
+examine_model/doctor() integration beyond these functions. README test
+count updated to 3782.
