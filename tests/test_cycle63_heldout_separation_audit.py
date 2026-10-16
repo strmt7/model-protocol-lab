@@ -98,12 +98,11 @@ from __future__ import annotations
 
 import json
 import random
+import unittest
 from dataclasses import FrozenInstanceError
 from hashlib import sha256
 from types import SimpleNamespace
 from typing import Any
-
-import pytest
 
 from model_protocol_lab import core as real_core
 from model_protocol_lab import experiments as real_exp
@@ -542,24 +541,249 @@ def audit_seed_separation(exp_mod: Any, core_mod: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_ambiguous_selection_abstains_without_touching_held_out():
-    audit_ambiguous_abstains(real_exp, real_core)
+class HeldoutSeparationAuditTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
 
+    def test_ambiguous_selection_abstains_without_touching_held_out(self):
+        audit_ambiguous_abstains(real_exp, real_core)
 
-def test_unique_winner_flow_measures_held_out_once_fresh():
-    audit_unique_winner_flow(real_exp, real_core)
+    def test_unique_winner_flow_measures_held_out_once_fresh(self):
+        audit_unique_winner_flow(real_exp, real_core)
 
+    def test_compatible_flow_when_held_out_passes(self):
+        audit_compatible_flow(real_exp, real_core)
 
-def test_compatible_flow_when_held_out_passes():
-    audit_compatible_flow(real_exp, real_core)
+    def test_no_candidate_flow_never_measures_held_out(self):
+        audit_no_candidate_flow(real_exp, real_core)
 
+    def test_request_seeds_disjoint_and_runs_deterministic(self):
+        audit_seed_separation(real_exp, real_core)
 
-def test_no_candidate_flow_never_measures_held_out():
-    audit_no_candidate_flow(real_exp, real_core)
+    def test_split_rejects_empty_search(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(search=(), held_out=(_fx("H1"),))
 
+    def test_split_rejects_empty_held_out(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(search=(_fx("S1"),), held_out=())
 
-def test_request_seeds_disjoint_and_runs_deterministic():
-    audit_seed_separation(real_exp, real_core)
+    def test_split_rejects_duplicate_id_across_splits(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(search=(_fx("DUP"),), held_out=(_fx("DUP", text="other?"),))
+
+    def test_split_rejects_nfc_variant_duplicate_id(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(search=(_fx("caf\u00e9"),), held_out=(_fx("cafe\u0301"),))
+
+    def test_split_rejects_shared_group_across_splits(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(
+                search=(_fx("S1", group="shared-group"),),
+                held_out=(_fx("H1", group="shared-group"),),
+            )
+
+    def test_split_rejects_identical_messages_across_splits(self):
+        with self.assertRaises(ValueError):
+            real_core.Split(
+                search=(_fx("S1", text="same prompt?"),),
+                held_out=(_fx("H1", text="same prompt?"),),
+            )
+
+    def test_run_experiment_rejects_unvalidated_split(self):
+        sc = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+        )
+        with self.assertRaises(ValueError):
+            real_exp.run_experiment(
+                sc.backend,
+                sc.formats,
+                ("not", "a", "split"),  # type: ignore[arg-type]
+                boundary=_boundary_ids(),
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=sc.exp_seed,
+            )
+
+    def test_run_experiment_rejects_empty_or_duplicate_candidates(self):
+        sc = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+        )
+        with self.assertRaises(ValueError):
+            real_exp.run_experiment(
+                sc.backend, (), sc.split, boundary=_boundary_ids(), seed=sc.exp_seed
+            )
+        with self.assertRaises(ValueError):
+            real_exp.run_experiment(
+                sc.backend,
+                (sc.formats[0], sc.formats[0]),
+                sc.split,
+                boundary=_boundary_ids(),
+                seed=sc.exp_seed,
+            )
+
+    def test_evaluate_rejects_non_tuple_cases(self):
+        sc = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+        )
+        with self.assertRaises(ValueError):
+            real_core.evaluate(
+                sc.backend,
+                sc.formats[0],
+                [sc.split.search[0]],  # type: ignore[arg-type] -- must be a tuple
+                boundary=_boundary_ids(),
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=sc.exp_seed,
+            )
+
+    def test_split_and_fixtures_are_immutable(self):
+        sc = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            sc.split.search = ()  # type: ignore[assignment]
+        with self.assertRaises(FrozenInstanceError):
+            sc.split.search[0].id = "mutated"  # type: ignore[assignment]
+        assert type(sc.split.search) is tuple and type(sc.split.held_out) is tuple
+
+    def test_no_shared_mutable_state_between_runs(self):
+        """Mutating one run's result document cannot affect any later run."""
+        kwargs = {
+            "exp_seed": 7,
+            "search_specs": [("S1", "sq?", "a")],
+            "held_specs": [("H1", "hq?", "a")],
+            # Unique search winner (cand-A) so the held-out stage actually runs.
+            "behavior": {("cand-B", "S1"): "fail_answer"},
+        }
+        result1 = run_experiment_on(real_exp, make_scenario(real_core, **kwargs))
+        snapshot = json.dumps(result1, sort_keys=True)
+        # Hostile in-place mutation of the returned document...
+        result1["search"][0]["observations"][0]["answer"] = "MUTATED"
+        result1["held_out"]["observations"][0]["output_ids"] = [0]
+        # ...must not leak into a fresh run: every run builds fresh records.
+        result3 = run_experiment_on(real_exp, make_scenario(real_core, **kwargs))
+        assert json.dumps(result3, sort_keys=True) == snapshot
+
+    def test_result_documents_are_fresh_objects_per_run(self):
+        behavior = {("cand-B", "S1"): "fail_answer"}
+        sc1 = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+            behavior=behavior,
+        )
+        sc2 = make_scenario(
+            real_core,
+            exp_seed=7,
+            search_specs=[("S1", "sq?", "a")],
+            held_specs=[("H1", "hq?", "a")],
+            behavior=behavior,
+        )
+        r1 = run_experiment_on(real_exp, sc1)
+        r2 = run_experiment_on(real_exp, sc2)
+        assert r1["search"][0]["observations"][0] is not r2["search"][0]["observations"][0]
+        assert r1["held_out"] is not r2["held_out"]
+        assert json.dumps(r1, sort_keys=True) == json.dumps(r2, sort_keys=True)
+
+    def test_fuzz_separation_matches_independent_oracle(self):
+        for trial in range(24):
+            with self.subTest(trial=trial):
+                rng = random.Random(0xC63 + trial)  # noqa: S311 -- seeded fuzz PRNG, not cryptographic
+                n_search = rng.choice([2, 3, 4])
+                n_held = rng.choice([1, 2, 3])
+                pool = [f"F{i}" for i in range(n_search + n_held)]
+                rng.shuffle(pool)
+                search_ids, held_ids = pool[:n_search], pool[n_search:]
+
+                # Randomize fixture order inside each partition: the audit must be
+                # order-agnostic, and observations must follow the split's order.
+                search_specs = [(fid, f"question {fid}?", f"ans-{fid}") for fid in search_ids]
+                held_specs = [(fid, f"question {fid}?", f"ans-{fid}") for fid in held_ids]
+                rng.shuffle(search_specs)
+                rng.shuffle(held_specs)
+
+                behavior: dict[tuple[str, str], str] = {}
+                for cand in CANDIDATES:
+                    for fid in search_ids + held_ids:
+                        roll = rng.random()
+                        if roll >= 0.55:
+                            behavior[(cand, fid)] = (
+                                "fail_answer" if rng.random() < 0.5 else "fail_boundary"
+                            )
+
+                sc = make_scenario(
+                    real_core,
+                    exp_seed=1000 + trial,
+                    search_specs=search_specs,
+                    held_specs=held_specs,
+                    behavior=behavior,
+                )
+                result = run_experiment_on(real_exp, sc)
+
+                want_decision, want_winner = _oracle_decision(
+                    behavior, CANDIDATES, sc.search_ids, sc.held_ids
+                )
+                assert result["decision"] == want_decision, (
+                    f"trial {trial}: lab decided {result['decision']!r}, "
+                    f"oracle says {want_decision!r}"
+                )
+                assert result["selected_candidate"] == want_winner
+
+                # Backend call audit: every call attributable; each (candidate, search
+                # fixture) measured exactly once; held-out measured iff there is a
+                # unique winner, exactly once per held-out fixture, for the winner, and
+                # strictly after every search-stage call.
+                seq = _call_sequence(sc)
+                search_set, held_set = set(sc.search_ids), set(sc.held_ids)
+                assert all(
+                    cand in CANDIDATES and fid in search_set | held_set for cand, fid in seq
+                ), f"trial {trial}: backend measured an unknown fixture: {seq}"
+                search_calls = [(c, f) for c, f in seq if f in search_set]
+                held_calls = [(c, f) for c, f in seq if f in held_set]
+                assert sorted(search_calls) == sorted(
+                    (c, f) for c in CANDIDATES for f in sc.search_ids
+                ), f"trial {trial}: search-stage coverage wrong: {search_calls}"
+                if want_winner is None:
+                    assert held_calls == [], f"trial {trial}: held-out measured without a winner"
+                    assert result["held_out"] is None
+                else:
+                    assert held_calls == [(want_winner, h) for h in sc.held_ids], (
+                        f"trial {trial}: held-out stage wrong: {held_calls}"
+                    )
+                    assert result["held_out"] is not None
+                    last_search = max(i for i, s in enumerate(seq) if s in search_calls)
+                    first_held = min(i for i, s in enumerate(seq) if s in held_calls)
+                    assert last_search < first_held, f"trial {trial}: stages interleaved"
+                    held_obs = result["held_out"]["observations"]
+                    assert [o["fixture"] for o in held_obs] == sc.held_ids
+                    for obs in held_obs:
+                        assert obs["candidate"] == want_winner
+                        assert tuple(obs["output_ids"]) == sc.backend.expected_output_ids(
+                            want_winner, obs["fixture"], MAX_NEW_TOKENS
+                        ), (
+                            f"trial {trial}: held-out observation "
+                            f"for {obs['fixture']} is stale/reused"
+                        )
+
+                # Search records: one entry per candidate, observations follow the
+                # split's (shuffled) order, verdicts match the behavior table.
+                assert [e["format"]["name"] for e in result["search"]] == list(CANDIDATES)
+                for entry in result["search"]:
+                    assert [o["fixture"] for o in entry["observations"]] == sc.search_ids, (
+                        f"trial {trial}: search observations do not follow split order"
+                    )
+                _search_verdicts_match_behavior(result, behavior)
 
 
 # ---------------------------------------------------------------------------
@@ -577,160 +801,9 @@ def _fx(fid: str, text: str = "q?", expected: str = "a", group: str | None = Non
     )
 
 
-def test_split_rejects_empty_search():
-    with pytest.raises(ValueError):
-        real_core.Split(search=(), held_out=(_fx("H1"),))
-
-
-def test_split_rejects_empty_held_out():
-    with pytest.raises(ValueError):
-        real_core.Split(search=(_fx("S1"),), held_out=())
-
-
-def test_split_rejects_duplicate_id_across_splits():
-    with pytest.raises(ValueError):
-        real_core.Split(search=(_fx("DUP"),), held_out=(_fx("DUP", text="other?"),))
-
-
-def test_split_rejects_nfc_variant_duplicate_id():
-    # "café" in NFC vs NFD must not evade the uniqueness check.
-    with pytest.raises(ValueError):
-        real_core.Split(search=(_fx("caf\u00e9"),), held_out=(_fx("cafe\u0301"),))
-
-
-def test_split_rejects_shared_group_across_splits():
-    with pytest.raises(ValueError):
-        real_core.Split(
-            search=(_fx("S1", group="shared-group"),),
-            held_out=(_fx("H1", group="shared-group"),),
-        )
-
-
-def test_split_rejects_identical_messages_across_splits():
-    with pytest.raises(ValueError):
-        real_core.Split(
-            search=(_fx("S1", text="same prompt?"),),
-            held_out=(_fx("H1", text="same prompt?"),),
-        )
-
-
-def test_run_experiment_rejects_unvalidated_split():
-    sc = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-    )
-    with pytest.raises(ValueError):
-        real_exp.run_experiment(
-            sc.backend,
-            sc.formats,
-            ("not", "a", "split"),  # type: ignore[arg-type]
-            boundary=_boundary_ids(),
-            max_new_tokens=MAX_NEW_TOKENS,
-            seed=sc.exp_seed,
-        )
-
-
-def test_run_experiment_rejects_empty_or_duplicate_candidates():
-    sc = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-    )
-    with pytest.raises(ValueError):
-        real_exp.run_experiment(
-            sc.backend, (), sc.split, boundary=_boundary_ids(), seed=sc.exp_seed
-        )
-    with pytest.raises(ValueError):
-        real_exp.run_experiment(
-            sc.backend,
-            (sc.formats[0], sc.formats[0]),
-            sc.split,
-            boundary=_boundary_ids(),
-            seed=sc.exp_seed,
-        )
-
-
-def test_evaluate_rejects_non_tuple_cases():
-    sc = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-    )
-    with pytest.raises(ValueError):
-        real_core.evaluate(
-            sc.backend,
-            sc.formats[0],
-            [sc.split.search[0]],  # type: ignore[arg-type] -- must be a tuple
-            boundary=_boundary_ids(),
-            max_new_tokens=MAX_NEW_TOKENS,
-            seed=sc.exp_seed,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Red team: shared mutable state, in-place mutation, result freshness.
 # ---------------------------------------------------------------------------
-
-
-def test_split_and_fixtures_are_immutable():
-    sc = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-    )
-    with pytest.raises(FrozenInstanceError):
-        sc.split.search = ()  # type: ignore[assignment]
-    with pytest.raises(FrozenInstanceError):
-        sc.split.search[0].id = "mutated"  # type: ignore[assignment]
-    assert type(sc.split.search) is tuple and type(sc.split.held_out) is tuple
-
-
-def test_no_shared_mutable_state_between_runs():
-    """Mutating one run's result document cannot affect any later run."""
-    kwargs = {
-        "exp_seed": 7,
-        "search_specs": [("S1", "sq?", "a")],
-        "held_specs": [("H1", "hq?", "a")],
-        # Unique search winner (cand-A) so the held-out stage actually runs.
-        "behavior": {("cand-B", "S1"): "fail_answer"},
-    }
-    result1 = run_experiment_on(real_exp, make_scenario(real_core, **kwargs))
-    snapshot = json.dumps(result1, sort_keys=True)
-    # Hostile in-place mutation of the returned document...
-    result1["search"][0]["observations"][0]["answer"] = "MUTATED"
-    result1["held_out"]["observations"][0]["output_ids"] = [0]
-    # ...must not leak into a fresh run: every run builds fresh records.
-    result3 = run_experiment_on(real_exp, make_scenario(real_core, **kwargs))
-    assert json.dumps(result3, sort_keys=True) == snapshot
-
-
-def test_result_documents_are_fresh_objects_per_run():
-    # Unique search winner (cand-A) so the held-out stage actually runs.
-    behavior = {("cand-B", "S1"): "fail_answer"}
-    sc1 = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-        behavior=behavior,
-    )
-    sc2 = make_scenario(
-        real_core,
-        exp_seed=7,
-        search_specs=[("S1", "sq?", "a")],
-        held_specs=[("H1", "hq?", "a")],
-        behavior=behavior,
-    )
-    r1 = run_experiment_on(real_exp, sc1)
-    r2 = run_experiment_on(real_exp, sc2)
-    assert r1["search"][0]["observations"][0] is not r2["search"][0]["observations"][0]
-    assert r1["held_out"] is not r2["held_out"]
-    assert json.dumps(r1, sort_keys=True) == json.dumps(r2, sort_keys=True)
 
 
 # ---------------------------------------------------------------------------
@@ -756,82 +829,5 @@ def _oracle_decision(
     return ("compatible_on_fixture_set" if held_ok else "held_out_failed"), winner
 
 
-@pytest.mark.parametrize("trial", range(24))
-def test_fuzz_separation_matches_independent_oracle(trial: int):
-    rng = random.Random(0xC63 + trial)  # noqa: S311 -- seeded fuzz PRNG, not cryptographic
-    n_search = rng.choice([2, 3, 4])
-    n_held = rng.choice([1, 2, 3])
-    pool = [f"F{i}" for i in range(n_search + n_held)]
-    rng.shuffle(pool)
-    search_ids, held_ids = pool[:n_search], pool[n_search:]
-
-    # Randomize fixture order inside each partition: the audit must be
-    # order-agnostic, and observations must follow the split's order.
-    search_specs = [(fid, f"question {fid}?", f"ans-{fid}") for fid in search_ids]
-    held_specs = [(fid, f"question {fid}?", f"ans-{fid}") for fid in held_ids]
-    rng.shuffle(search_specs)
-    rng.shuffle(held_specs)
-
-    behavior: dict[tuple[str, str], str] = {}
-    for cand in CANDIDATES:
-        for fid in search_ids + held_ids:
-            roll = rng.random()
-            if roll >= 0.55:
-                behavior[(cand, fid)] = "fail_answer" if rng.random() < 0.5 else "fail_boundary"
-
-    sc = make_scenario(
-        real_core,
-        exp_seed=1000 + trial,
-        search_specs=search_specs,
-        held_specs=held_specs,
-        behavior=behavior,
-    )
-    result = run_experiment_on(real_exp, sc)
-
-    want_decision, want_winner = _oracle_decision(behavior, CANDIDATES, sc.search_ids, sc.held_ids)
-    assert result["decision"] == want_decision, (
-        f"trial {trial}: lab decided {result['decision']!r}, oracle says {want_decision!r}"
-    )
-    assert result["selected_candidate"] == want_winner
-
-    # Backend call audit: every call attributable; each (candidate, search
-    # fixture) measured exactly once; held-out measured iff there is a
-    # unique winner, exactly once per held-out fixture, for the winner, and
-    # strictly after every search-stage call.
-    seq = _call_sequence(sc)
-    search_set, held_set = set(sc.search_ids), set(sc.held_ids)
-    assert all(cand in CANDIDATES and fid in search_set | held_set for cand, fid in seq), (
-        f"trial {trial}: backend measured an unknown fixture: {seq}"
-    )
-    search_calls = [(c, f) for c, f in seq if f in search_set]
-    held_calls = [(c, f) for c, f in seq if f in held_set]
-    assert sorted(search_calls) == sorted((c, f) for c in CANDIDATES for f in sc.search_ids), (
-        f"trial {trial}: search-stage coverage wrong: {search_calls}"
-    )
-    if want_winner is None:
-        assert held_calls == [], f"trial {trial}: held-out measured without a winner"
-        assert result["held_out"] is None
-    else:
-        assert held_calls == [(want_winner, h) for h in sc.held_ids], (
-            f"trial {trial}: held-out stage wrong: {held_calls}"
-        )
-        assert result["held_out"] is not None
-        last_search = max(i for i, s in enumerate(seq) if s in search_calls)
-        first_held = min(i for i, s in enumerate(seq) if s in held_calls)
-        assert last_search < first_held, f"trial {trial}: stages interleaved"
-        held_obs = result["held_out"]["observations"]
-        assert [o["fixture"] for o in held_obs] == sc.held_ids
-        for obs in held_obs:
-            assert obs["candidate"] == want_winner
-            assert tuple(obs["output_ids"]) == sc.backend.expected_output_ids(
-                want_winner, obs["fixture"], MAX_NEW_TOKENS
-            ), f"trial {trial}: held-out observation for {obs['fixture']} is stale/reused"
-
-    # Search records: one entry per candidate, observations follow the
-    # split's (shuffled) order, verdicts match the behavior table.
-    assert [e["format"]["name"] for e in result["search"]] == list(CANDIDATES)
-    for entry in result["search"]:
-        assert [o["fixture"] for o in entry["observations"]] == sc.search_ids, (
-            f"trial {trial}: search observations do not follow split order"
-        )
-    _search_verdicts_match_behavior(result, behavior)
+if __name__ == "__main__":
+    unittest.main()

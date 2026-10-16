@@ -4420,3 +4420,38 @@ Also fixed: the initial ``except RuntimeError: raise`` passthrough was too
 broad (let a transformers vocabulary-mismatch RuntimeError escape raw);
 replaced with a dedicated ``_MissingHfExtraError`` following the existing
 ``_ContextWindowError`` pattern.
+
+## 2026-10-17 — Cycle 106: CI unittest gate silently skipped 2533 tests
+
+Measured: pytest collects 6131 tests; `python -m unittest discover` runs
+only 3598. The gap = 9 pytest-style test files (module-level `def test_`
+functions and pytest-style classes) that unittest discovery collects zero
+tests from. Includes security-relevant suites: hostile parser properties
+(cycle 88), held-out separation (cycle 63), diff-reports security (cycle
+13), doctor portability (cycle 62). The project documents both runners
+(VALIDATION.md), and research log lines show unittest is the deliberate
+canonical gate (mutation testing uses it). Fix: converted all 9 files to
+`unittest.TestCase` (pytest also runs TestCase natively), NOT changing CI.
+
+Conversion via AST-based `/tmp/convert_tests3.py`: module-level `def
+test_*` → TestCase methods; pytest-style classes → TestCase subclasses;
+`@pytest.mark.parametrize` (single/multi-line, tuple-names, `ids=`) →
+`for`+`subTest` loops; `pytest.raises` → `assertRaises`/`assertRaisesRegex`;
+`pytest.skip` → `self.skipTest`; `pytest.fail` → `self.fail` (methods) /
+`AssertionError` (helpers); `@given`/`@settings` preserved (work on
+TestCase methods natively). Fixtures: `tmp_path`/`capsys` via setUp with
+TemporaryDirectory/_CaptureShim; `monkeypatch.chdir` → `os.chdir` +
+`addCleanup`; `monkeypatch.setitem(sys.modules)` → manual save/restore in
+tearDown; `@pytest.fixture` generators → setUp/tearDown.
+
+Lessons: (1) Trailing-comma in multi-line parametrize caused silent
+1-tuple iteration (fixed in parser). (2) Interleaved helpers closed the
+class early → nested dead code (v3 consolidates). (3) unittest runs
+alphabetically — order-dependent test renamed `test_zzz_` with rationale.
+(4) Module-level helpers can't use `self` — regex was overbroad, fixed
+manually. (5) `@given` strategy must be defined before the class (moved
+_WrongValue etc. up). (6) `import unittest` must go AFTER module
+docstring (E402). (7) pytest count 6131→4913 (parametrize→subTest);
+unittest 3598→3873 (+275, exact). README/VALIDATION.md updated; CHANGELOG
+entry added. All 9 files green under BOTH runners; ruff/mypy-strict/bandit
+clean.

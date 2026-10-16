@@ -68,9 +68,9 @@ and ``test_roundtrip_identity`` fail on surrogate draws.
 """
 
 import unicodedata
+import unittest
 from importlib.metadata import PackageNotFoundError, version
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -167,22 +167,113 @@ def _valid_split(draw):
     return Split(search, held_out)
 
 
-@given(split=_valid_split())
-@settings(max_examples=40, deadline=5000)
-def test_roundtrip_identity(split):
-    """Property: parse_dataset(split_to_json_text(s)) deep-equals s."""
-    assert parse_dataset(split_to_json_text(split)) == split
+class SerializationPropertiesTests(unittest.TestCase):
+    """unittest entry point; pytest runs TestCase classes natively."""
 
+    @given(split=_valid_split())
+    @settings(max_examples=40, deadline=5000)
+    def test_roundtrip_identity(self, split):
+        """Property: parse_dataset(split_to_json_text(s)) deep-equals s."""
+        assert parse_dataset(split_to_json_text(split)) == split
 
-@given(split=_valid_split())
-@settings(max_examples=40, deadline=5000)
-def test_byte_framing_and_idempotence(split):
-    """Property: exactly one trailing newline, valid UTF-8, byte-identical re-emit."""
-    text = split_to_json_text(split)
-    text.encode("utf-8")  # raises UnicodeEncodeError if not valid UTF-8
-    assert text.endswith("\n")
-    assert not text.endswith("\n\n")
-    assert split_to_json_text(parse_dataset(text)) == text
+    @given(split=_valid_split())
+    @settings(max_examples=40, deadline=5000)
+    def test_byte_framing_and_idempotence(self, split):
+        """Property: exactly one trailing newline, valid UTF-8, byte-identical re-emit."""
+        text = split_to_json_text(split)
+        text.encode("utf-8")  # raises UnicodeEncodeError if not valid UTF-8
+        assert text.endswith("\n")
+        assert not text.endswith("\n\n")
+        assert split_to_json_text(parse_dataset(text)) == text
+
+    @given(blank=st.sampled_from(["", " ", "  \t "]))
+    @settings(max_examples=10, deadline=5000)
+    def test_rejection_blank_id(self, blank):
+        """Property: a blank-id fixture is always refused, never emitted."""
+        forged = _forged_fixture(fixture_id=blank, messages=(Message("user", "hi"),))
+        with self.assertRaises(ValueError):
+            split_to_json_text(_rejection_split(forged))
+
+    def test_rejection_empty_messages(self):
+        """A fixture with zero messages is always refused, never emitted."""
+        forged = _forged_fixture(fixture_id="c86-empty", messages=())
+        with self.assertRaises(ValueError):
+            split_to_json_text(_rejection_split(forged))
+
+    @given(
+        field=st.sampled_from(["id", "group", "content", "expected"]),
+        surrogate=st.sampled_from(["\ud800", "\udfff", "a\udb00b", "\ud800\udc00"]),
+    )
+    @settings(max_examples=16, deadline=5000)
+    def test_rejection_lone_surrogate(self, field, surrogate):
+        """Property: a lone surrogate anywhere in the fixture is refused.
+
+        A lone surrogate is legal in a Python str but cannot be UTF-8 encoded,
+        so no fixture file could ever hold it. split_to_json_text must refuse
+        with the fixed ValueError vocabulary, never die with a bare
+        UnicodeEncodeError. (Found by the round-trip property itself: hypothesis
+        drew expected='\\ud800' and the serializer crashed before this test
+        existed.)
+        """
+        forged = _forged_fixture(
+            fixture_id=surrogate if field == "id" else "c86-surr-id",
+            messages=(Message("user", f"pre-{surrogate}-post" if field == "content" else "plain"),),
+            group=surrogate if field == "group" else "c86-surr-group",
+        )
+        if field == "expected":
+            object.__setattr__(forged, "expected", surrogate)
+        with self.assertRaisesRegex(ValueError, "lone surrogate"):
+            split_to_json_text(_rejection_split(forged))
+
+    @given(count=st.integers(23, 29).filter(lambda n: n % 2 == 1))
+    @settings(max_examples=25, deadline=5000)
+    def test_rejection_too_many_messages(self, count):
+        """Property: >MAX_MESSAGES messages are always refused, never emitted.
+
+        Odd counts keep alternation and the end-with-user discipline intact, so
+        the message count is the ONLY schema violation under test.
+        """
+        messages = tuple(
+            Message("user" if i % 2 == 0 else "assistant", f"c86-overflow-{i}")
+            for i in range(count)
+        )
+        fixture = Fixture(id="c86-overflow", messages=messages, expected="", group="c86-overflow-g")
+        with self.assertRaises(ValueError):
+            split_to_json_text(_rejection_split(fixture))
+
+    def test_message_count_boundary(self):
+        """Pin the exact boundary: MAX_MESSAGES is accepted; MAX_MESSAGES+2 refused.
+
+        The task brief guessed "21+ refused"; the loader actually accepts 21
+        (datasets.MAX_MESSAGES), so 22+ is the true rejection boundary.
+        """
+        assert MAX_MESSAGES == 21
+
+        def conversation(count, tag):
+            return Fixture(
+                id=f"c86-bound-{tag}",
+                messages=tuple(
+                    Message("user" if i % 2 == 0 else "assistant", f"{tag}-{i}")
+                    for i in range(count)
+                ),
+                expected="",
+                group=f"c86-bound-g-{tag}",
+            )
+
+        accepted = Split((conversation(MAX_MESSAGES, "a"),), (conversation(3, "b"),))
+        assert parse_dataset(split_to_json_text(accepted)) == accepted
+        with self.assertRaises(ValueError):
+            split_to_json_text(
+                Split((conversation(MAX_MESSAGES + 2, "c"),), (conversation(3, "d"),))
+            )
+
+    def test_distribution_version_matches_package(self):
+        """importlib.metadata version must equal model_protocol_lab.__version__."""
+        try:
+            dist_version = version("model-protocol-lab")
+        except PackageNotFoundError:
+            self.skipTest("distribution metadata absent (package not installed)")
+        assert dist_version == model_protocol_lab.__version__
 
 
 def _forged_fixture(*, fixture_id, messages, group="c86-reject"):
@@ -211,92 +302,5 @@ def _rejection_split(fixture):
     return Split((fixture,), (companion,))
 
 
-@given(blank=st.sampled_from(["", " ", "  \t "]))
-@settings(max_examples=10, deadline=5000)
-def test_rejection_blank_id(blank):
-    """Property: a blank-id fixture is always refused, never emitted."""
-    forged = _forged_fixture(fixture_id=blank, messages=(Message("user", "hi"),))
-    with pytest.raises(ValueError):
-        split_to_json_text(_rejection_split(forged))
-
-
-def test_rejection_empty_messages():
-    """A fixture with zero messages is always refused, never emitted."""
-    forged = _forged_fixture(fixture_id="c86-empty", messages=())
-    with pytest.raises(ValueError):
-        split_to_json_text(_rejection_split(forged))
-
-
-@given(
-    field=st.sampled_from(["id", "group", "content", "expected"]),
-    surrogate=st.sampled_from(["\ud800", "\udfff", "a\udb00b", "\ud800\udc00"]),
-)
-@settings(max_examples=16, deadline=5000)
-def test_rejection_lone_surrogate(field, surrogate):
-    """Property: a lone surrogate anywhere in the fixture is refused.
-
-    A lone surrogate is legal in a Python str but cannot be UTF-8 encoded,
-    so no fixture file could ever hold it. split_to_json_text must refuse
-    with the fixed ValueError vocabulary, never die with a bare
-    UnicodeEncodeError. (Found by the round-trip property itself: hypothesis
-    drew expected='\\ud800' and the serializer crashed before this test
-    existed.)
-    """
-    forged = _forged_fixture(
-        fixture_id=surrogate if field == "id" else "c86-surr-id",
-        messages=(Message("user", f"pre-{surrogate}-post" if field == "content" else "plain"),),
-        group=surrogate if field == "group" else "c86-surr-group",
-    )
-    if field == "expected":
-        object.__setattr__(forged, "expected", surrogate)
-    with pytest.raises(ValueError, match="lone surrogate"):
-        split_to_json_text(_rejection_split(forged))
-
-
-@given(count=st.integers(23, 29).filter(lambda n: n % 2 == 1))
-@settings(max_examples=25, deadline=5000)
-def test_rejection_too_many_messages(count):
-    """Property: >MAX_MESSAGES messages are always refused, never emitted.
-
-    Odd counts keep alternation and the end-with-user discipline intact, so
-    the message count is the ONLY schema violation under test.
-    """
-    messages = tuple(
-        Message("user" if i % 2 == 0 else "assistant", f"c86-overflow-{i}") for i in range(count)
-    )
-    fixture = Fixture(id="c86-overflow", messages=messages, expected="", group="c86-overflow-g")
-    with pytest.raises(ValueError):
-        split_to_json_text(_rejection_split(fixture))
-
-
-def test_message_count_boundary():
-    """Pin the exact boundary: MAX_MESSAGES is accepted; MAX_MESSAGES+2 refused.
-
-    The task brief guessed "21+ refused"; the loader actually accepts 21
-    (datasets.MAX_MESSAGES), so 22+ is the true rejection boundary.
-    """
-    assert MAX_MESSAGES == 21
-
-    def conversation(count, tag):
-        return Fixture(
-            id=f"c86-bound-{tag}",
-            messages=tuple(
-                Message("user" if i % 2 == 0 else "assistant", f"{tag}-{i}") for i in range(count)
-            ),
-            expected="",
-            group=f"c86-bound-g-{tag}",
-        )
-
-    accepted = Split((conversation(MAX_MESSAGES, "a"),), (conversation(3, "b"),))
-    assert parse_dataset(split_to_json_text(accepted)) == accepted
-    with pytest.raises(ValueError):
-        split_to_json_text(Split((conversation(MAX_MESSAGES + 2, "c"),), (conversation(3, "d"),)))
-
-
-def test_distribution_version_matches_package():
-    """importlib.metadata version must equal model_protocol_lab.__version__."""
-    try:
-        dist_version = version("model-protocol-lab")
-    except PackageNotFoundError:
-        pytest.skip("distribution metadata absent (package not installed)")
-    assert dist_version == model_protocol_lab.__version__
+if __name__ == "__main__":
+    unittest.main()
