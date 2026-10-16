@@ -768,6 +768,15 @@ class _ContextWindowError(Exception):
     """
 
 
+class _MissingHfExtraError(Exception):
+    """The ``hf`` extra (torch/transformers) is not installed.
+
+    Converted to a distinct fixed RuntimeError code (not collapsed into the
+    generic init failure) so the operator gets the actionable install hint
+    instead of a dead-end message.
+    """
+
+
 class LocalHFBackend:
     """Built-in GPT-2/Llama only; self-contained local assets; no download fallback.
 
@@ -814,8 +823,17 @@ class LocalHFBackend:
             if token_model.get("dropout") not in (None, 0, 0.0):
                 raise ValueError("stochastic_tokenizer_not_supported")
 
-            import torch
-            from transformers import AutoConfig, AutoModelForCausalLM, PreTrainedTokenizerFast
+            try:
+                import torch
+                from transformers import (  # noqa: E402 -- deferred optional import
+                    AutoConfig,
+                    AutoModelForCausalLM,
+                    PreTrainedTokenizerFast,
+                )
+            except ImportError:
+                # The hf extra is not installed: fail with the actionable code,
+                # not the generic initialization failure. Fixed vocabulary.
+                raise _MissingHfExtraError from None
 
             self._torch = torch
             self._device = torch.device(effective_device)
@@ -920,6 +938,9 @@ class LocalHFBackend:
         except _ContextWindowError:
             self._model = self._tokenizer = None
             raise RuntimeError("local_context_limit_exceeds_declared_window") from None
+        except _MissingHfExtraError:
+            self._model = self._tokenizer = None
+            raise RuntimeError("local_hf_extra_not_installed") from None
         except Exception:  # noqa: BLE001 -- init must fail closed on any dependency error
             self._model = self._tokenizer = None
             raise RuntimeError("local_backend_initialization_failed") from None

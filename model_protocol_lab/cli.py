@@ -346,6 +346,26 @@ def _matrix_stage_rows(
     )
 
 
+def _backend_failure_message(message: str) -> str:
+    """Render a backend RuntimeError code as a sanitized CLI message.
+
+    Only fixed ``local_*`` codes are shown; anything else stays generic so
+    arbitrary runtime text never reaches the terminal. The missing-extra code
+    carries its own actionable install hint.
+    """
+    if message == "local_hf_extra_not_installed":
+        return (
+            "Operation failed [local_hf_extra_not_installed]: this command needs "
+            'the Hugging Face extra. Install it with: pip install "model-protocol-lab[hf]".'
+        )
+    if message.startswith("local_"):
+        return f"Operation failed [{message}]. See docs/USAGE.md."
+    return (
+        "Operation failed. Check input paths, local model support, "
+        "dependencies and output permissions."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: parse argv and dispatch to the requested subcommand.
 
@@ -834,16 +854,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except RuntimeError as exc:
         # Backend failures use fixed "local_*" codes; show those, but not
-        # arbitrary runtime text.
-        message = str(exc)
-        if message.startswith("local_"):
-            print(f"Operation failed [{message}]. See docs/USAGE.md.", file=sys.stderr)
-        else:
-            print(
-                "Operation failed. Check input paths, local model support, "
-                "dependencies and output permissions.",
-                file=sys.stderr,
-            )
+        # arbitrary runtime text (see _backend_failure_message).
+        print(_backend_failure_message(str(exc)), file=sys.stderr)
         return 1
     except (OSError, ImportError):
         # These may carry local paths or dependency text; keep them generic.

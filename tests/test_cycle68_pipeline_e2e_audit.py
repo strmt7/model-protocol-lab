@@ -361,9 +361,10 @@ class PipelineAdversarialTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stderr)
         self.assertNotIn("Traceback", proc.stderr)
         self.assertIn(
-            "Operation failed [local_backend_initialization_failed]. See docs/USAGE.md.",
+            "Operation failed [local_hf_extra_not_installed]",
             proc.stderr,
         )
+        self.assertIn('pip install "model-protocol-lab[hf]"', proc.stderr)
         # No report directory is left behind by the failed run.
         self.assertFalse(outdir.exists())
 
