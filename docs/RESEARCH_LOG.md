@@ -3968,3 +3968,22 @@ postdates the CVE-2025-3000 fix. Not-reachable claim checked locally:
 grep over model_protocol_lab/ finds zero torch.export.* or bare
 torch.load( calls; weights load only via from_pretrained with
 use_safetensors=True/weights_only=True. Note remains accurate.
+
+## Cycle 88 (2026-10-16) — hostile-input property fuzzing of parse_dataset/load_dataset, CLEAN
+
+Property-fuzzed the rejection side (cycle 86 covered valid inputs): 48
+tests in tests/test_cycle88_parser_hostile_properties.py (~0.7s).
+Universal contract held for every hostile input -- valid Split or
+ValueError, never another exception, never a hang, never a malformed
+Split. Strategies: arbitrary st.text (NUL/surrogates/astral), valid-JSON
+mutations (truncation/substitution/splicing/rotation), 22-case type-shape
+battery at every schema level, number attacks (10**1000, 5000-digit
+literal, 1e308, NaN/Infinity splices), nesting 50-500 + 20000/300000-deep
+probes (ValueError "Dataset nesting too deep", no RecursionError), and
+load_dataset file attacks (directory, FIFO via O_NONBLOCK+fstat, non-UTF8,
+missing, oversize, bad path types). Fixed-vocabulary substrings pinned
+from datasets.py verbatim. Negative control: patching _fields to raise
+TypeError failed 11 tests as required. No source changes. Observation
+(deliberately not fixed): NUL byte in path raises ValueError("embedded
+null byte") from os.open rather than "Unreadable fixture file" -- still a
+ValueError, zero contract gain from normalizing.
