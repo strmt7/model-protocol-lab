@@ -3392,3 +3392,28 @@ audit (4 mutants, /tmp copies) 4/4 caught. Minor doc drift noted (not
 fixed): whitespace-only lines are treated as data rows ("fixture id is
 blank") while USAGE.md says blank lines carry no fixture. README test
 count updated to 4025.
+
+## 2026-10-16 (cycle 67: diff-reports comparison-semantics audit + 1 bug fix)
+
+Adversarial audit of diff-reports comparison semantics
+(tests/test_cycle67_diffreports_audit.py, 44 tests + 819 subtests):
+decision raw !=; winner normalization; verdict rules (first candidate-name
+wins, pass iff int planned/passes + eligible + planned>0 + passes==planned);
+per-fixture exact string matching with order normalization, last-wins
+duplicate fixture IDs, malformed rows skipped-and-counted; config drift in
+fixed order; summary dedup rules; evidence-symmetry requirement for
+"identical". Method: independent oracle + 400 seeded randomized pairs x2
+(800 full-dict comparisons), 13 one-field minimal pairs, 4x4
+evidence-presence matrix, red-team (duplicates both directions, unicode,
+case-sensitivity, deeply-nested extras). ONE REAL BUG FOUND AND FIXED
+(low): diff_reports kept selected_candidate="" as-is in the winner
+section while _held_verdict treats "" as absent, so two winnerless runs
+compared as "winner CHANGED" with no verdict change (diffreports.py:361).
+Fix: normalize "" to None in the winner extraction, matching
+_held_verdict. Negative control: the pinned test + 188 fuzz subtests fail
+on the reverted code, all pass fixed. The audit's oracle initially
+mirrored the buggy normalization to get the fuzz green -- corrected to
+the fixed behavior as part of this fix. Mutation gate 4/4 caught on /tmp
+copies. Documented non-bugs: first-wins/last-wins duplicate handling,
+cross-stage evidence emitting absent-diffs + set drift, flips excluding
+absent legs. README test count updated to 4069.

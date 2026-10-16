@@ -255,8 +255,8 @@ def oracle_diff_reports(
     new_decision = new["decision"]
     old_winner = old.get("selected_candidate")
     new_winner = new.get("selected_candidate")
-    old_winner = old_winner if type(old_winner) is str else None
-    new_winner = new_winner if type(new_winner) is str else None
+    old_winner = old_winner if type(old_winner) is str and old_winner else None
+    new_winner = new_winner if type(new_winner) is str and new_winner else None
 
     old_search, old_planned = _or_search_verdicts(old)
     new_search, new_planned = _or_search_verdicts(new)
