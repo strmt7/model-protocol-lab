@@ -114,6 +114,46 @@ All notable changes to this project are documented here. The format follows
   keys instead of leaking `TypeError`. Pinned by
   `tests/test_cycle39_catalog_integrity.py`.
 
+### Fixed (cycles 84–92 — real bugs and CI robustness, 2026-10-16)
+
+- **REAL BUG (cycle 86, fixtures):** `split_to_json_text` raised a bare
+  `UnicodeEncodeError` for lone surrogates (which this hypothesis
+  version's `st.characters()` does emit) instead of the documented
+  `ValueError`. Now fails closed with `ValueError("... contains a lone
+  surrogate ...")`. Pinned by
+  `tests/test_cycle86_serialization_properties.py`.
+- **REAL BUGS (cycle 89, signal handling):** (1) `save_report` left a
+  half-written `results.json` when `KeyboardInterrupt` landed mid-write;
+  now unlinks on `BaseException` per file and removes the pair if the
+  second write fails. (2) SIGTERM during `run` used the default
+  disposition (exit -15, claimed output dir leaked); now wired to the
+  same cooperative cancel `Event` as SIGINT, draining to a valid
+  "cancelled" report and exit 130. Pinned by
+  `tests/test_cycle89_signal_handling_audit.py`.
+- **REAL BUG (cycle 90, cancellation):** `logprob_diagnostic` ignored the
+  cancel `Event`, running its full forward-pass loop even with the event
+  set. Now accepts an optional `cancel` event checked per fixture,
+  returning `available=False` / `detail="cancelled"`. Pinned by
+  `tests/test_cycle90_cancel_responsiveness_audit.py`.
+- **CI ROBUSTNESS (cycle 92):** the real-model signal tests
+  (`RunSignalTests`) signalled a child process on a timing guess: the
+  "100%" stderr readiness marker they polled for is never printed by
+  transformers for local checkpoint loads, so the signal could land
+  before the child's signal handlers were installed (SIGTERM -> -15
+  instead of 130 on slow CI CPUs). `cli.run` now writes a
+  `MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE` marker immediately after
+  installing its handlers (test-only, env-gated, zero production
+  impact); the tests wait for the marker deterministically. The two
+  slow real-model tests are gated behind `MPL_RUN_SLOW_SIGNAL_TESTS=1`
+  (skipped in the default CI gate); the deterministic in-process signal
+  tests stay in the gate. Also removed import-time `os.chdir` /
+  `sys.path` mutation from `test_cycle87_docs_coherence_audit.py`
+  (import-order hazard during unittest discovery).
+- Cycles 84, 85, 87, 88, 91: CLEAN audits (release versioning,
+  README quick-start verification, docs coherence, hostile-input
+  fuzzing, hostile backend-output probing) with pinning tests, no
+  source changes required.
+
 ### Added
 
 - `mpl diff-reports OLD_RESULTS NEW_RESULTS`: deterministic comparison of
