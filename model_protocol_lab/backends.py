@@ -842,9 +842,11 @@ class LocalHFBackend:
             if tokenizer_path.stat().st_size > 128 * 1024 * 1024:
                 raise ValueError("oversized_tokenizer_file")
             # transformers ships without type stubs (PreTrainedTokenizerFast
-            # resolves to the untyped TokenizersBackend factory); the ignore
-            # marks this deliberate untyped third-party boundary.
-            tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
+            # resolves to the untyped TokenizersBackend factory). Bind it
+            # through a typed Callable so strict mode stays clean whether or
+            # not transformers is installed (missing imports become Any).
+            _factory: Callable[..., Any] = PreTrainedTokenizerFast
+            tokenizer: Any = _factory(
                 tokenizer_file=str(tokenizer_path),
                 clean_up_tokenization_spaces=False,
             )

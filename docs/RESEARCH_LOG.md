@@ -4384,3 +4384,13 @@ boundary, matching the file's existing explicit-Any pattern).
 `strict = true` set in pyproject.toml; TestMypyStrictPinned guards it.
 mypy clean in both default and --strict modes (15 files). Test count
 6122 -> 6123 (README + VALIDATION.md updated).
+
+Cycle 104 follow-up — warn_unused_ignores vs. missing optional deps: the
+initial `type: ignore[no-untyped-call]` fix passed locally but failed CI's
+lint job, which installs without the `hf` extra: with
+`ignore_missing_imports`, the transformers import resolves to `Any`, the
+ignore becomes unused, and strict's `warn_unused_ignores` errors. Fixed by
+binding the factory through `Callable[..., Any]` instead — typed in both
+environments, verified via `mypy --no-site-packages --strict` (0 errors,
+fresh cache). Lesson: any third-party-boundary typing fix must be checked
+in both the with-deps and without-deps configurations.

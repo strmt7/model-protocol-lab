@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import struct
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -210,8 +211,10 @@ def _portability_check(
         ref_root = _directory(reference_model_path)
         from transformers import PreTrainedTokenizerFast
 
-        # Untyped transformers boundary (see backends.py); ignore is deliberate.
-        ref_tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
+        # Untyped transformers boundary: bind through a typed Callable so
+        # strict mode stays clean with or without transformers installed.
+        _factory: Callable[..., Any] = PreTrainedTokenizerFast
+        ref_tokenizer: Any = _factory(
             tokenizer_file=str(_tokenizer_file(ref_root)),
             clean_up_tokenization_spaces=False,
         )
@@ -348,8 +351,10 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
     try:
         from transformers import PreTrainedTokenizerFast
 
-        # Untyped transformers boundary (see backends.py); ignore is deliberate.
-        tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
+        # Untyped transformers boundary: bind through a typed Callable so
+        # strict mode stays clean with or without transformers installed.
+        _factory: Callable[..., Any] = PreTrainedTokenizerFast
+        tokenizer: Any = _factory(
             tokenizer_file=str(_tokenizer_file(root)),
             clean_up_tokenization_spaces=False,
         )
@@ -796,8 +801,10 @@ def template_conformance(
             }
         from transformers import PreTrainedTokenizerFast
 
-        # Untyped transformers boundary (see backends.py); ignore is deliberate.
-        tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
+        # Untyped transformers boundary: bind through a typed Callable so
+        # strict mode stays clean with or without transformers installed.
+        _factory: Callable[..., Any] = PreTrainedTokenizerFast
+        tokenizer: Any = _factory(
             tokenizer_file=str(_tokenizer_file(root)),
             clean_up_tokenization_spaces=False,
         )
@@ -862,8 +869,10 @@ def _build_primary_tokenizer(root: Path) -> Any:
     """
     from transformers import PreTrainedTokenizerFast
 
-    # Untyped transformers boundary (see backends.py); ignore is deliberate.
-    result: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
+    # Untyped transformers boundary: bind through a typed Callable so
+    # strict mode stays clean with or without transformers installed.
+    _factory: Callable[..., Any] = PreTrainedTokenizerFast
+    result: Any = _factory(
         tokenizer_file=str(_tokenizer_file(root)),
         clean_up_tokenization_spaces=False,
     )

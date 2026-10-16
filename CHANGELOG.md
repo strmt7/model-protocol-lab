@@ -23,6 +23,13 @@ All notable changes to this project are documented here. The format follows
   the CI lint job enforces it.
 - `TestMypyStrictPinned` in `tests/test_ci_portability_guard.py` fails
   if `strict` is ever flipped back to false. Test count 6122 -> 6123.
+- Follow-up fix (same cycle): the first attempt used
+  `type: ignore[no-untyped-call]` on the five `PreTrainedTokenizerFast`
+  call sites, which broke CI's lint job — it runs without the `hf`
+  extra, so the import becomes `Any` via `ignore_missing_imports` and
+  strict's `warn_unused_ignores` flags the then-unused ignore. Replaced
+  with a typed `Callable[..., Any]` binding, which is clean in both
+  environments (verified with `--no-site-packages`).
 
 ### Added (cycle 103 — public API docstring completion, 2026-10-16)
 
