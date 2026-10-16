@@ -775,7 +775,13 @@ def evaluate(
             result = backend.generate(
                 input_ids, max_new_tokens=max_new_tokens, seed=request_seed, cancel=event
             )
-        except Exception:  # noqa: BLE001 -- sanitization boundary, see pyproject
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:  # noqa: BLE001 -- sanitization boundary, see pyproject
+            # A misbehaving backend may raise BaseException subclasses (not
+            # just Exception); those become one failed observation, not a
+            # lost run. KeyboardInterrupt/SystemExit still propagate so
+            # Ctrl+C keeps working.
             return terminate(
                 "failed", case, input_ids, output_ids, answer, cut, raw_reason, "generate_failed"
             )

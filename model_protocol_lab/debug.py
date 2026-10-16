@@ -57,10 +57,13 @@ _ROLE_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.*)$", re.DOTALL)
 # from fixture data, user input, or audit findings before printing, so a
 # hostile fixture file cannot inject terminal escape sequences (notably ESC,
 # which introduces ANSI sequences) into the operator's terminal. Tab, LF and
-# CR are kept so multi-line renders stay readable. Mirrors cli._display_id's
+# CR are kept so multi-line renders stay readable. Lone surrogates
+# (\ud800-\udfff) are stripped too: they are never valid text on their own
+# (astral characters are single codepoints in Python) and they crash strict
+# stream writes with UnicodeEncodeError. Mirrors cli._display_id's
 # rationale (which strips all controls from short IDs); kept local so
 # debug.py stays importable without cli.
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]")
 
 
 def _sanitize_display(value: str) -> str:
@@ -192,6 +195,9 @@ class DebugShell(cmd.Cmd):
         self._buffered: tuple[Message, ...] | None = None
         self._transcript: list[str] = []
         self._transcript_truncated = False
+        # Running char count: re-summing the transcript on every command is
+        # O(commands x transcript); the counter keeps .read scripts cheap.
+        self._transcript_chars = 0
         self._read_depth = 0
         entries: tuple[tuple[str, str, Callable[[str], bool]], ...] = (
             (".help", "Show help for dot-commands", self._cmd_help),
@@ -254,13 +260,15 @@ class DebugShell(cmd.Cmd):
                 print(f"error: {_sanitize_display(str(exc))}")
                 stop = False
         text = buffer.getvalue()
-        self._transcript.append(f"{echo_prompt}{line}\n")
+        echo_chunk = f"{echo_prompt}{line}\n"
+        self._transcript.append(echo_chunk)
+        self._transcript_chars += len(echo_chunk)
         if text:
             self._transcript.append(text)
+            self._transcript_chars += len(text)
         # Bound transcript memory: keep the most recent output; .save notes
         # the truncation so a saved transcript never silently loses its head.
-        total = sum(len(chunk) for chunk in self._transcript)
-        if total > _MAX_SAVE_BYTES:
+        if self._transcript_chars > _MAX_SAVE_BYTES:
             marker = "[... transcript truncated ...]\n"
             kept: list[str] = []
             # Budget the marker itself so the truncated transcript still
@@ -273,6 +281,7 @@ class DebugShell(cmd.Cmd):
                 remaining -= len(kept[-1])
             kept.reverse()
             self._transcript = [marker, *kept]
+            self._transcript_chars = sum(len(chunk) for chunk in self._transcript)
             self._transcript_truncated = True
         self.stdout.write(text)
         return stop

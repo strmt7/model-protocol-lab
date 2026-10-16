@@ -108,7 +108,36 @@ Probed and verified defended (PoC evidence, no change needed):
 - **vLLM emulation vs the real `vllm/v1/engine/detokenizer.py`:** the `find` window, earliest-completion selection, `bisect_left` truncation and `stop_buffer_length` semantics all match the fetched upstream source; the `new_char_count == 0` early-return is now ported too -- the old "cannot observably diverge" claim was wrong: for single-character stops (e.g. `"\n"`) the window start `1 - len(stop)` is 0 on a zero-new-char step, so a stop completed during the `min_tokens` gate was refound where upstream stays silent (found by the `tests/test_cycle14_holdback.py` differential harness, fixed 2026-10-15). Approximation documented: per-prefix batch decodes vs incremental `DecodeStream` (can differ on UTF-8 fragments), `min_tokens=0` assumed.
 - **Old surfaces:** fixture-loading hostile inputs, report-dir permissions and the sanitized error vocabulary re-verified via the full suite (361 tests); new code paths emit only fixed-vocabulary details (int step counts, int ID lists) — no raw checkpoint/backend text.
 
-### Proven safe (adversarial PoCs, observed not inferred)
+#### Red-team round 4 — final pre-release sweep (2026-10-16)
+
+Three parallel adversarial agents probed novel surfaces only (rounds 1–3
+vectors were covered by the regression suite): the `mpl debug` REPL + CLI
+input handling, `doctor`/`examine_model` hostile checkpoints, and the
+scoring / report-diff / backend-emulation modules. Eight genuine findings,
+all fixed with regression tests in `tests/test_cycle96_redteam_sweep.py`:
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| R4-1 | Medium | Lone surrogates (`\ud800`) in hostile `results.json` / fixture content crashed strict stream writes: `mpl diff-reports` died with uncaught `UnicodeEncodeError` on stderr, and the debug REPL session died (violating its "never die" invariant). The `_CONTROL_CHARS` sanitizers did not cover `\ud800–\udfff`. | All four `_CONTROL_CHARS` regexes (`debug.py`, `cli.py`, `diffreports.py`, `fixtures.py`) now strip lone surrogates; astral characters (single codepoints) are unaffected. |
+| R4-2 | Medium | `BaseException` from a misbehaving backend escaped the sanitization boundary: `core.evaluate` (`except Exception` around `backend.generate`) and `scoring.score_target_logprobs` (`except Exception` around `forward_logits`) propagated, turning an hours-long run into a total loss instead of one failed observation. | Both sites now catch `BaseException` and map to the fixed codes (`generate_failed` / `forward_failed`), with explicit re-raise of `KeyboardInterrupt`/`SystemExit` so Ctrl+C keeps working. |
+| R4-3 | Medium | Raw `RecursionError` escaped `examine_model` via a deeply-nested safetensors header (`doctor._check_weight_headers`): `json.loads` was wrapped in `except (UnicodeDecodeError, json.JSONDecodeError)` only, unlike `_read_json` which also catches `RecursionError`. | Added `RecursionError` to the except tuple, mirroring `_read_json`. |
+| R4-4 | Medium | FIFO-swap hang: `_read_json`, `_manifest` (backends.py) and `_check_weight_headers` (doctor.py) used plain blocking `open()` after validation, so a FIFO swapped in for an asset hung the opener forever. The race window spans the whole weight-hashing phase. | New shared `_open_regular_read()` helper: `O_NONBLOCK` open + `fstat` `S_ISREG` check on the fd (the `datasets.py` pattern); `_manifest` now fstats the opened fd for its before-snapshot. All three call sites fail closed with fixed vocabulary. |
+| R4-5 | Medium | Jinja chat-template memory bomb: `template_conformance` called `apply_chat_template` which materializes the full rendered string *before* the 1MB `_RENDERED_MAX_CHARS` check -- a 26-byte `{{ 'x' * 500_000_000 }}` template grew RSS by 1.9GB first (larger multipliers OOM-kill). | The render now runs under a transient `RLIMIT_AS` (current virtual size + 256MB headroom): a bomb raises catchable `MemoryError` -> `"unavailable"` with zero RSS growth; legitimate renders unaffected. Falls back to unbounded render on non-Unix platforms. |
+| R4-6 | Low–Medium | `portability_matrix` raised raw `OSError` on an unreadable second checkpoint (`_read_json` wrapped in `except ValueError` only), breaking its "never raises for checkpoint problems" contract for direct API users. | Now catches `OSError` -> `"unavailable"` / `"missing_or_unsafe_asset"`. |
+| R4-7 | Low | Unbounded checkpoint-controlled `model_type` interpolated into machine-readable output (`f"unsupported model_type: {model_type!r}"`): a 5MB `model_type` produced a 5MB detail string, breaking the fixed-vocabulary discipline. | Preview truncated to 200 chars. |
+| R4-8 | Low | Quadratic transcript accounting in the debug REPL: `onecmd` re-summed the entire transcript on every command (~20s for a 10k-line script at the advertised caps). | Running `self._transcript_chars` counter, recomputed only on truncation. |
+
+Probed and verified defended (PoC evidence, no change needed): `.read`
+recursion/nesting (14 sub-probes), hostile renders (escape stripping at
+byte level), `.save` path handling, `_parse_id_list` strictness, the 128MB
+tokenizer cap on the debug path, argparse edges on all subcommands,
+`_build_primary_tokenizer` hostiles, symlink/special-file games,
+`examine_dataset` hostiles, scoring NaN/inf/empty/shape edges,
+`diffreports`/`diffbackends` hostile inputs (40MB files, 10k nesting,
+duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
+`experiments.py` cancellation/corruption handling.
+
+## Proven safe (adversarial PoCs, observed not inferred)
 
 - **XSS:** hostile payloads in every dynamic `render_html` field render fully
   neutralized (`html.escape`, `quote=True`), including inside `data-sort`

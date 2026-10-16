@@ -346,7 +346,11 @@ def score_target_logprobs(
         return _unavailable("logits_not_supported", target_byte_length, len(prompt_ids))
     try:
         logits = provider(prompt_ids + target_ids)
-    except Exception as exc:  # noqa: BLE001 -- provider failures become fixed codes
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:  # noqa: BLE001 -- provider failures become fixed codes
+        # As in core.py: a misbehaving logits provider raising BaseException
+        # becomes one unavailable score, not a lost run. Interrupts propagate.
         return _unavailable(_provider_code(exc), target_byte_length, len(prompt_ids))
     try:
         per_token, total, mean = score_span_from_logits(

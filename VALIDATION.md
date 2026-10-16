@@ -7,11 +7,10 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **6063 tests collected**
-  (release-readiness audit, 2026-10-16; collection only — full green
-  executions are the coordinator's gate, last verified green in the
-  cycle-83 state). Subtests numbered in the 68k+ range in recent cycles.
-  Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,
+- `python -m pytest -q -p no:cacheprovider` — **6083 tests collected**
+  (final red-team sweep, 2026-10-16; collection only — full green
+  executions are the coordinator's gate). Subtests numbered in the 68k+
+  range in recent cycles. Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,
   gemma4, qwen3, qwen38, deepseek, deepseek41, mistral, mistral_large,
   phi4, glm4, glm45, glm53, kimi2, kimi3, kolibri, lfm25, nemotron35,
   muse_glimmer, muse_spark, laguna, ling, k2horizon, hy4, minimax3,
