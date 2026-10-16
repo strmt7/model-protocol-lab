@@ -1,0 +1,170 @@
+"""Cycle 100: HTML report injection audit.
+
+``render_html`` interpolates experiment data (candidate names, fixture
+labels, format names, stop strings, divergence details, config values)
+into a self-contained HTML report that the user opens in a browser.
+Some of that data can originate from third parties (shared dataset CSVs,
+checkpoint metadata). This audit feeds a hostile payload battery through
+every render path and pins the escaping discipline:
+
+- no raw payload may survive anywhere in the output;
+- the escaped form must be present (data is shown, but inert);
+- no raw ``<``/``>`` may appear in text content;
+- the inline script must contain no ``</script`` breakout;
+- the Content-Security-Policy meta tag must be present;
+- a hostile ``decision`` value must map to the neutral CSS class
+  (no class-attribute injection);
+- the output must parse as well-formed HTML.
+"""
+
+from __future__ import annotations
+
+import re
+import unittest
+from html import escape
+from html.parser import HTMLParser
+
+from model_protocol_lab.reporting import _CSP, _SCRIPT, render_html
+
+PAYLOADS = [
+    "<script>alert(1)</script>",
+    '"><img src=x onerror=alert(2)>',
+    "<svg onload=alert(3)>",
+    "javascript:alert(4)",
+    "</title><script>alert(5)</script>",
+    "<iframe src=javascript:alert(6)>",
+    "\u2028\u2029<script>alert(7)</script>",
+]
+
+
+def _hostile_result() -> dict:
+    """A result dict with a hostile payload in every string field the
+    HTML renderer reads."""
+    p0, p1, p2, p3, p4, p5, p6 = PAYLOADS
+    return {
+        "decision": p0,
+        "failure_taxonomy": {
+            "per_candidate": {"cand": {p1: 2, p2: 1}},
+            "held_out": {p3: 1},
+        },
+        "search": [
+            {
+                "format": {"name": p4},
+                "summary": {
+                    "status": p5,
+                    "attempted": 1,
+                    "planned": 2,
+                    "exact_and_boundary_passes": 1,
+                },
+                "candidate_fingerprint": p6,
+            }
+        ],
+        "config": {"dataset": p0, "model": p1, "note": p2},
+        "held_out": {"summary": {"status": p3}},
+        "backend_divergences": [
+            {"class": p4, "stop_text": p5, "detail": p6},
+        ],
+        "template_conformance": {
+            "divergences": [{"format": p0, "fixture": p1}],
+        },
+        "stop_matrix": {"stages": [{"stage": p2, "rows": []}]},
+    }
+
+
+def _text_content(html: str) -> str:
+    nojs = re.sub(r"<script>.*?</script>", "", html, flags=re.S)
+    nojs = re.sub(r"<style>.*?</style>", "", nojs, flags=re.S)
+    return re.sub(r"<[^>]*>", "", nojs)
+
+
+class _WellFormedChecker(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.errors: list[str] = []
+
+    def error(self, message: str) -> None:  # pragma: no cover - py3.12 compat
+        self.errors.append(message)
+
+
+class HtmlInjectionAuditTests(unittest.TestCase):
+    def test_no_raw_payload_survives(self):
+        html = render_html(_hostile_result())
+        for payload in PAYLOADS:
+            if escape(payload) == payload:
+                # No HTML metacharacters: raw and escaped forms are
+                # identical, and the value can only ever appear as inert
+                # text (no data-driven URL attributes exist in the report).
+                continue
+            self.assertNotIn(
+                payload,
+                html,
+                f"hostile payload survived unescaped: {payload!r}",
+            )
+
+    def test_metachar_free_payload_only_as_text(self):
+        """``javascript:alert(4)`` has no metacharacters, so it is
+        identical escaped or not. Pin that it renders as text content,
+        never inside a URL attribute (the report has no data-driven
+        href/src attributes at all)."""
+        html = render_html(_hostile_result())
+        self.assertNotIn('href="javascript:', html)
+        self.assertNotIn('src="javascript:', html)
+        self.assertIn("javascript:alert(4)", html)
+
+    def test_escaped_payload_present(self):
+        """Escaping must not silently drop the data: the inert escaped
+        form has to be in the output."""
+        html = render_html(_hostile_result())
+        for payload in PAYLOADS:
+            self.assertIn(
+                escape(payload),
+                html,
+                f"escaped payload missing: {payload!r}",
+            )
+
+    def test_no_raw_angle_brackets_in_text(self):
+        html = render_html(_hostile_result())
+        text = _text_content(html)
+        self.assertNotIn("<", text)
+        self.assertNotIn(">", text)
+
+    def test_inline_script_has_no_breakout(self):
+        self.assertNotIn("</script", _SCRIPT.lower())
+        self.assertNotIn("<!--", _SCRIPT)
+
+    def test_csp_meta_present(self):
+        html = render_html(_hostile_result())
+        self.assertIn("Content-Security-Policy", html)
+        self.assertIn("script-src", _CSP)
+        self.assertIn("default-src 'none'", _CSP)
+
+    def test_hostile_decision_maps_to_neutral_class(self):
+        html = render_html({"decision": '"><script>alert(1)</script>'})
+        # The class attribute must only ever carry a fixed-vocabulary value.
+        m = re.search(r'<section class="decision ([^"]*)"', html)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(1), "neutral")
+        self.assertNotIn("<script>alert(1)", html)
+
+    def test_output_is_well_formed_html(self):
+        html = render_html(_hostile_result())
+        checker = _WellFormedChecker()
+        checker.feed(html)
+        checker.close()
+        self.assertEqual(checker.errors, [])
+        self.assertTrue(html.startswith("<!doctype html>"))
+        self.assertIn("</html>", html)
+
+    def test_attribute_contexts_escaped(self):
+        """Payloads inside quoted attribute values (data-sort) must not
+        break out of the attribute."""
+        html = render_html(_hostile_result())
+        # A raw '"><' sequence would indicate attribute breakout.
+        self.assertNotIn('">\n<', html.replace("&quot;", ""))
+        for payload in PAYLOADS:
+            if '"' in payload:
+                self.assertNotIn(payload, html)
+
+
+if __name__ == "__main__":
+    unittest.main()

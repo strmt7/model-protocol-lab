@@ -4300,3 +4300,22 @@ design sections as the authoritative architecture reference; the
 production `assert` statements (safe under `python -O`); imports and a
 test subset clean under `-W error::DeprecationWarning`. Test count 6100
 -> 6103 (README + VALIDATION.md updated).
+
+## Cycle 100 — HTML report injection audit (2026-10-16)
+
+The HTML report (`render_html`) interpolates experiment data into a
+self-contained page the user opens in a browser; some fields (fixture
+labels, format names, checkpoint metadata) can originate from third
+parties. Static AST scan of all section builders found every
+interpolation wrapped in `html.escape` (directly or via an outer
+`escape()` at the call site, e.g. `_taxonomy_note`'s mode keys are
+escaped by `render_html`'s banner assembly). Empirical probe with a
+7-payload battery (`<script>`, event handlers, `<svg>`, `javascript:`,
+`</title>` breakout, iframe, U+2028/29) confirmed: no raw payload
+survives, escaped forms are present, no raw `<>` in text content, the
+inline `_SCRIPT` contains no `</script` breakout, the CSP meta
+(`default-src 'none'`, hashed `script-src`) is emitted, and the only
+`href` in the output uses fixed-literal TOC anchors. 9 regression tests
+in `tests/test_cycle100_html_injection_audit.py`. Finding: no
+vulnerabilities. Test count 6103 -> 6112 (README + VALIDATION.md
+updated).

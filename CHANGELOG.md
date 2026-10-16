@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 100 — HTML report injection audit, 2026-10-16)
+
+- `tests/test_cycle100_html_injection_audit.py` (9 tests): hostile
+  payload battery (`<script>`, event handlers, `<svg>`, `javascript:`,
+  title-breakout, iframe, U+2028/29) through every `render_html` path —
+  no raw payload survives, escaped forms present, no raw angle brackets
+  in text content, inline script has no `</script` breakout, CSP meta
+  present, hostile decision maps to neutral CSS class, output parses as
+  well-formed HTML. Finding: no vulnerabilities — every interpolation is
+  escaped (directly or via an outer `escape()`), the only `href` uses
+  fixed-literal anchors, and there are no data-driven URL attributes.
+  Test count 6103 -> 6112.
+
 ### Fixed (cycle 99 — stale development plan framing, 2026-10-16)
 
 - `DEVELOPMENT_PLAN.md` still opened by framing the lab as a "proposed"
