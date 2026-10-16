@@ -529,8 +529,14 @@ def main(argv=None) -> int:
             backend = LocalHFBackend(args.model, device=args.device, max_context=args.max_context)
             eos_id = _backend_eos_id(backend)
             cancel = Event()
-            previous = signal.getsignal(signal.SIGINT)
+            previous_int = signal.getsignal(signal.SIGINT)
+            previous_term = signal.getsignal(signal.SIGTERM)
+            # Both SIGINT (Ctrl-C) and SIGTERM (orchestrated shutdown) drive
+            # the same cooperative cancellation: the experiment drains to a
+            # "cancelled" verdict and a valid report instead of dying
+            # mid-write and leaving a claimed output directory behind.
             signal.signal(signal.SIGINT, lambda _signum, _frame: cancel.set())
+            signal.signal(signal.SIGTERM, lambda _signum, _frame: cancel.set())
             try:
                 result = run_experiment(
                     backend,
@@ -544,7 +550,8 @@ def main(argv=None) -> int:
                     eos_id=eos_id,
                 )
             finally:
-                signal.signal(signal.SIGINT, previous)
+                signal.signal(signal.SIGINT, previous_int)
+                signal.signal(signal.SIGTERM, previous_term)
             # Diagnosis sections; none of these may fail the run.
             try:
                 from .doctor import template_conformance
