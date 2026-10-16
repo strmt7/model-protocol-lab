@@ -4268,3 +4268,17 @@ initial test expectations were corrected to the actual contract
 (ValueError, not raw OSError/FileExistsError — a deliberate clean-error
 mapping). Quiet cycle: 10 regression tests, no source changes. Test count
 6083 -> 6093 (README + VALIDATION.md updated).
+
+## Cycle 98 — property-based correctness audit of core algorithms (2026-10-16)
+
+Example-based tests (97 cycles) pin specific behaviors. This cycle used
+Hypothesis to verify *universal* properties of `first_boundary`
+(`model_protocol_lab.core`) — the exact subsequence-match the lab's
+boundary measurement depends on. 7 properties in
+`tests/test_cycle98_boundary_properties.py`: found-index-is-exact-match,
+None-iff-absent, first-occurrence (not just any), index-in-range,
+empty-stop-raises, overlong-stop-returns-None, embedded-stop found at or
+before the known position. Thousands of generated token sequences; no
+counterexamples found — the algorithm is correct. Quiet cycle: 7 new
+tests, no source changes. Test count 6093 -> 6100 (README + VALIDATION.md
+updated).
