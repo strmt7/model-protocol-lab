@@ -33,11 +33,16 @@ refusal with a fixed ``reason`` code).
 
 from __future__ import annotations
 
+import math
 import struct
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from .core import Backend
+
+# Largest finite float32 value (exact): finite float64 magnitudes above
+# this round to +/-inf under round-to-nearest-even.
+_FLT_MAX = float.fromhex("0x1.fffffep+127")
 
 ScoreStatus = Literal["ok", "ok_empty", "unavailable"]
 """Lifecycle of a target score: scored, defined-empty, or explicitly refused."""
@@ -130,7 +135,16 @@ class AlignmentCheck:
 
 
 def _f32(value: float) -> float:
-    """Round a float64 value to the nearest float32, returned as float."""
+    """Round a float64 value to the nearest float32, returned as float.
+
+    Finite values outside the float32 range saturate to +/-inf, matching
+    IEEE-754 round-to-nearest-even and torch/numpy float32 conversion
+    semantics. (struct.pack alone would raise OverflowError here, which the
+    scoring pipeline would then mislabel as ``forward_failed`` even though
+    the score is computable.) NaN and the infinities pass through unchanged.
+    """
+    if math.isfinite(value) and abs(value) > _FLT_MAX:
+        return math.copysign(math.inf, value)
     rounded: float = struct.unpack("<f", struct.pack("<f", value))[0]
     return rounded
 
