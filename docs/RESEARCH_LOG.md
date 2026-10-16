@@ -3955,3 +3955,16 @@ needs no change: split_to_json_text is the only in-package producer of
 fixture text, and its partial-write cleanup already handles encode
 failures. No remote-code-execution concern: the Jais-3 modeling file was
 read as text only, never executed.
+
+## 2026-10-16 (cycle 87: docs-coherence sweep — SECURITY.md torch CVE note verification)
+
+Manual re-verification of the 2026-10-12 torch CVE posture note in
+docs/SECURITY.md (F2). Web read, public sources only: NVD entry
+CVE-2025-3000 (PyTorch 2.6.0, memory corruption via torch.jit.script;
+fixed per PYSEC-2025-194/GHSA-rrmf-rvhw-rf47 in torch>=2.13.0) and
+PYSEC-2026-139 / CVE-2026-4538 (pt2 loading handler, torch.export.load;
+no fixed release published). Repo venv holds torch 2.14.1+cpu, which
+postdates the CVE-2025-3000 fix. Not-reachable claim checked locally:
+grep over model_protocol_lab/ finds zero torch.export.* or bare
+torch.load( calls; weights load only via from_pretrained with
+use_safetensors=True/weights_only=True. Note remains accurate.
