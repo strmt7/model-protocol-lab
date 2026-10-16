@@ -3680,3 +3680,22 @@ the render->encode race window documented as unreachable with a fake
 backend. Mutation gate 6/6 killed on /tmp copies with __file__
 import-path assertion. No genuine bugs -- CLEAN. README test count
 updated to 5667.
+
+## 2026-10-16 (cycle 80: special-token literal auditor audit)
+
+Adversarial audit of fixtures.py's special-token literal auditor
+(tests/test_cycle80_token_literal_audit.py, 33 tests + 243 subtests):
+hand-derived rule map (extraction shapes most-specific-first, leftmost
+non-overlapping greedy, inventory ordering; scan exact case-sensitive
+with offset+1 resumption; deterministic finding order; sidecar schema).
+Independent oracles validated before use: extraction oracle (from-scratch
+character scanner) vs source on all 29 catalog formats + 4000 fuzzed
+field soups (0 mismatches); scan oracle (naive O(n*m)) differential over
+19 tricky texts x 9 format-sets. Minimal pairs (9 one-char flips);
+adversarial edges (split tokens, adjacent/overlapping, unicode
+lookalikes, empty inputs, CSV non-message columns silent vs message
+cells flagged); fidelity (offset->line/col, field naming, sidecar
+round-trip, determinism). Mutation gate 6/6 killed on /tmp copies with
+__file__ import-path assertion (one first-attempt mutant survived
+correctly as semantically equivalent -- replaced). No genuine bugs --
+CLEAN. README test count updated to 5700.
