@@ -4243,3 +4243,28 @@ cancellation. `docs/SECURITY.md` updated (round-4 table).
 `docs/RELEASE_READINESS_0.1.0.md` written (all 10 checklist items
 evidenced; no tag created -- owner's decision). Test count 6063 ->
 6083 (README + VALIDATION.md updated).
+
+## Cycle 97 — hostile-environment robustness audit (2026-10-16)
+
+The red-team sweeps (cycles 91, 96) probed hostile *inputs*. This cycle
+probed hostile *environments*: the filesystem/OS conditions under which
+`prepare_report_dir`, `save_report`, and `write_fixture_file` must fail
+cleanly. 10 tests in `tests/test_cycle97_hostile_environment.py`:
+
+- `prepare_report_dir`: mocked PermissionError on mkdir -> clean OSError,
+  no partial directory; existing file -> FileExistsError; non-empty dir ->
+  FileExistsError; concurrent claims -> exactly one wins; empty dir with
+  `_allow_empty_existing` accepted.
+- `save_report`: mocked os.open failure -> OSError with no half-written
+  pair; second-file failure removes the first (pair atomicity); unwritable
+  parent -> clean OSError.
+- `write_fixture_file`: permission denied -> clean ValueError("not
+  writable"); existing file -> ValueError("already exists"), original
+  bytes untouched (O_EXCL no-clobber).
+
+Finding: no bugs. All write paths already fail cleanly (the O_EXCL /
+O_NONBLOCK discipline plus the cycle-89 half-write cleanup holds). Two
+initial test expectations were corrected to the actual contract
+(ValueError, not raw OSError/FileExistsError — a deliberate clean-error
+mapping). Quiet cycle: 10 regression tests, no source changes. Test count
+6083 -> 6093 (README + VALIDATION.md updated).
