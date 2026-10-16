@@ -1,0 +1,456 @@
+"""Cycle 88 property-based audit: hostile-input fuzzing of the dataset parsers.
+
+METHOD
+------
+Target: ``datasets.parse_dataset`` / ``datasets.load_dataset`` -- the
+REJECTION side of the parser contract. Cycle 86 fuzzed schema-valid inputs
+(round-trip identity); no cycle has property-fuzzed hostile inputs. Every
+test below asserts the universal parser contract for EVERY input it
+generates: the call either returns a structurally valid ``Split`` or raises
+``ValueError`` -- never another exception type (``TypeError``, ``KeyError``,
+bare ``RecursionError``, ...), never a hang, never a malformed ``Split``.
+
+(``UnicodeDecodeError``/``UnicodeEncodeError`` are ``ValueError`` subclasses,
+so they satisfy the contract when they escape; the file-based tests confirm
+they are normalized to the fixed vocabulary anyway.)
+
+Strategies (hypothesis, derandomized, modest max_examples):
+1. ``st.text()`` -- arbitrary Unicode: NUL, lone surrogates, astral planes,
+   huge strings.
+2. Mutations of a known-valid fixture JSON: truncation at every offset,
+   single-character substitution, ``"zz": 1`` splicing at every offset,
+   rotation.
+3. Type-shape attacks: a recursive strategy emitting wrong JSON types at the
+   top level (array/string/number/null/bool, nested junk), plus a
+   deterministic battery hitting every schema level (fixture as string,
+   messages as dict/string, message as string, role as number/null, content
+   as list/dict/number, id/expected/group wrong types, extra and missing
+   keys at every object level, 22-message overflow).
+4. Number attacks: 10**1000 integers, a 5000-digit literal (trips the
+   4300-digit int<->str cap), 1e308/-1e308/1e-9999, raw ``NaN``/``Infinity``/
+   ``-Infinity`` tokens spliced into valid JSON, 0-message conversations.
+5. Nesting attacks: list/dict nesting at depths 50-500 (property -- must be
+   ``ValueError``, never ``RecursionError``), nesting spliced inside a
+   fixture, and deterministic 20000/300000-deep probes of the
+   ``RecursionError`` -> ``ValueError("Dataset nesting too deep")`` guard
+   (probed in a subprocess first: no segfault, no hang, inside the 2MB byte
+   cap).
+6. ``load_dataset`` file attacks: hostile payloads written to PID-scoped
+   temp files (``tempfile``, no hard-coded /tmp), plus directory path, FIFO,
+   non-UTF8 bytes, missing file, >MAX_BYTES file, and wrong-type paths.
+
+Fixed-vocabulary pins -- substrings read verbatim from ``datasets.py`` (not
+guessed): "Duplicate JSON field", "Nonfinite JSON", "Unexpected or missing
+JSON fields", "conversation must have 1-{MAX_MESSAGES} messages" (built from
+the imported constant), "Dataset nesting too deep", "Fixture path is not a
+regular file", "Fixture file is not valid UTF-8", "Unreadable fixture file",
+"Dataset exceeds size limit", "Invalid fixture path".
+
+FINDINGS
+--------
+CLEAN: no bug found. Every hostile input probed during development (direct
+probes plus the full property runs below) either raised ``ValueError`` or --
+for mutations that happened to stay schema-valid -- returned a structurally
+valid ``Split``. No ``TypeError``/``KeyError``/bare ``RecursionError``/hang
+observed anywhere, including 300000-deep nesting inside the byte cap and
+FIFO/directory/non-UTF8 file attacks. One vocabulary observation (not a
+contract violation, deliberately NOT "fixed"): a NUL byte in the path raises
+``ValueError("embedded null byte")`` straight from ``os.open`` instead of
+the module's "Unreadable fixture file" -- still a ``ValueError``, so the
+universal contract holds; normalizing it would churn the source for zero
+contract gain.
+
+VERIFIED BY RUNNING
+-------------------
+2026-10-16: ``python -m pytest tests/test_cycle88_parser_hostile_properties.py``
+green (48 tests from 17 test functions incl. parametrized cases, ~1s);
+``ruff check`` / ``ruff format --check`` clean; ``mypy`` clean. Negative
+control: the contract helper was sanity-checked against a deliberately
+broken local copy of ``datasets.py`` (``_fields`` raising ``TypeError``
+instead of ``ValueError``) and 11 tests failed as required, proving the
+harness actually detects non-ValueError escapes; the source file was
+restored byte-identical afterwards (diff-verified).
+"""
+
+import json
+import os
+import re
+import tempfile
+from pathlib import Path
+
+import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
+from model_protocol_lab.core import Fixture, Message, Split
+from model_protocol_lab.datasets import (
+    MAX_BYTES,
+    MAX_MESSAGES,
+    load_dataset,
+    parse_dataset,
+)
+
+FUZZ = settings(
+    derandomize=True,
+    max_examples=30,
+    # Same rationale as tests/test_fuzz_boundary.py: differing_executors fires
+    # on in-process re-runs (a harness artifact), not on flakiness; these
+    # tests are deterministic, so the check is suppressed with justification.
+    suppress_health_check=[HealthCheck.differing_executors],
+)
+FILE_FUZZ = settings(
+    derandomize=True,
+    max_examples=15,
+    suppress_health_check=[HealthCheck.differing_executors],
+)
+
+
+def _fixture_dict(fid, group, content):
+    return {
+        "id": fid,
+        "group": group,
+        "messages": [{"role": "user", "content": content}],
+        "expected": "ok",
+    }
+
+
+_SEARCH_FIX = _fixture_dict("s1", "gs", "Search question?")
+_HELD_FIX = _fixture_dict("h1", "gh", "Held-out question?")
+_VALID_TEXT = json.dumps({"search": [_SEARCH_FIX], "held_out": [_HELD_FIX]})
+
+
+def assert_valid_split(split):
+    """Deep structural check: a returned Split must never be malformed."""
+    assert type(split) is Split, f"not a Split: {type(split)!r}"
+    for name in ("search", "held_out"):
+        part = getattr(split, name)
+        assert type(part) is tuple and len(part) >= 1, f"bad {name}: {part!r}"
+    cases = split.search + split.held_out
+    assert all(type(case) is Fixture for case in cases)
+    ids = [case.id for case in cases]
+    assert all(type(i) is str and i.strip() for i in ids)
+    assert len(set(ids)) == len(ids), "duplicate fixture ids"
+    for case in cases:
+        assert type(case.messages) is tuple
+        assert 1 <= len(case.messages) <= MAX_MESSAGES
+        assert all(type(m) is Message for m in case.messages)
+        assert all(type(m.content) is str for m in case.messages)
+        roles = [m.role for m in case.messages]
+        assert roles[0] == "user" and roles[-1] == "user"
+        assert all(r == ("user" if i % 2 == 0 else "assistant") for i, r in enumerate(roles))
+        assert type(case.expected) is str
+        assert type(case.group) is str and case.group.strip()
+
+
+def check_contract(make_call):
+    """Universal parser contract: ValueError or a structurally valid Split.
+
+    Anything else -- another exception type escaping, or a malformed Split
+    being returned -- is a real bug and fails the test loudly.
+    """
+    try:
+        result = make_call()
+    except ValueError:
+        return None
+    except Exception as exc:  # noqa: BLE001 -- the contract under test forbids these
+        pytest.fail(f"non-ValueError escaped: {type(exc).__name__}: {exc!r}")
+    assert_valid_split(result)
+    return result
+
+
+def check_rejected(text):
+    """Strict form: this input is known-invalid, so it must raise ValueError."""
+    with pytest.raises(ValueError):
+        parse_dataset(text)
+
+
+@pytest.fixture()
+def pid_tmpdir():
+    """PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp)."""
+    with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
+        yield Path(path)
+
+
+# ---------------------------------------------------------------------------
+# Sanity: the mutation base is itself a valid dataset.
+# ---------------------------------------------------------------------------
+
+
+def test_valid_text_sanity():
+    split = check_contract(lambda: parse_dataset(_VALID_TEXT))
+    assert split is not None
+    assert [c.id for c in split.search] == ["s1"]
+    assert [c.id for c in split.held_out] == ["h1"]
+
+
+# ---------------------------------------------------------------------------
+# 1. Arbitrary Unicode text.
+# ---------------------------------------------------------------------------
+
+
+@FUZZ
+@given(st.text())
+def test_arbitrary_text_contract(text):
+    check_contract(lambda: parse_dataset(text))
+
+
+# ---------------------------------------------------------------------------
+# 2. Mutations of a valid fixture JSON.
+# ---------------------------------------------------------------------------
+
+
+@FUZZ
+@given(st.integers(0, len(_VALID_TEXT)))
+def test_truncation_contract(cut):
+    check_contract(lambda: parse_dataset(_VALID_TEXT[:cut]))
+
+
+@FUZZ
+@given(st.data())
+def test_char_substitution_contract(data):
+    index = data.draw(st.integers(0, len(_VALID_TEXT) - 1))
+    replacement = data.draw(st.characters())
+    mutated = _VALID_TEXT[:index] + replacement + _VALID_TEXT[index + 1 :]
+    check_contract(lambda: parse_dataset(mutated))
+
+
+@FUZZ
+@given(st.integers(1, len(_VALID_TEXT) - 1))
+def test_rotation_contract(split_at):
+    rotated = _VALID_TEXT[split_at:] + _VALID_TEXT[:split_at]
+    check_contract(lambda: parse_dataset(rotated))
+
+
+@FUZZ
+@given(st.integers(0, len(_VALID_TEXT)))
+def test_key_splice_contract(index):
+    mutated = _VALID_TEXT[:index] + '"zz": 1, ' + _VALID_TEXT[index:]
+    check_contract(lambda: parse_dataset(mutated))
+
+
+# ---------------------------------------------------------------------------
+# 3. Type-shape attacks.
+# ---------------------------------------------------------------------------
+
+_WRONG_SCALAR = st.one_of(
+    st.none(),
+    st.booleans(),
+    st.integers(min_value=-(10**300), max_value=10**300),
+    st.floats(allow_nan=False, allow_infinity=False),
+    st.text(max_size=30),
+)
+_WRONG_VALUE = st.recursive(
+    _WRONG_SCALAR,
+    lambda children: st.one_of(
+        st.lists(children, max_size=4),
+        st.dictionaries(st.text(min_size=1, max_size=10), children, max_size=4),
+    ),
+    max_leaves=8,
+)
+
+
+@FUZZ
+@given(_WRONG_VALUE)
+def test_wrong_top_level_shape_property(value):
+    check_contract(lambda: parse_dataset(json.dumps(value)))
+
+
+def _doc(search, held=None):
+    return json.dumps({"search": [search], "held_out": [held or _HELD_FIX]})
+
+
+_MSGS_22 = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(22)]
+
+_SHAPE_CASES = [
+    ("fixture-is-string", _doc("nope")),
+    ("messages-is-dict", _doc(dict(_SEARCH_FIX, messages={"role": "user"}))),
+    ("messages-is-string", _doc(dict(_SEARCH_FIX, messages="nope"))),
+    ("message-is-string", _doc(dict(_SEARCH_FIX, messages=["nope"]))),
+    ("role-is-number", _doc(dict(_SEARCH_FIX, messages=[{"role": 5, "content": "x"}]))),
+    ("role-is-null", _doc(dict(_SEARCH_FIX, messages=[{"role": None, "content": "x"}]))),
+    (
+        "content-is-list",
+        _doc(dict(_SEARCH_FIX, messages=[{"role": "user", "content": ["x"]}])),
+    ),
+    (
+        "content-is-dict",
+        _doc(dict(_SEARCH_FIX, messages=[{"role": "user", "content": {"t": 1}}])),
+    ),
+    (
+        "content-is-number",
+        _doc(dict(_SEARCH_FIX, messages=[{"role": "user", "content": 7}])),
+    ),
+    ("id-is-number", _doc(dict(_SEARCH_FIX, id=7))),
+    ("expected-is-dict", _doc(dict(_SEARCH_FIX, expected={"x": 1}))),
+    ("group-is-list", _doc(dict(_SEARCH_FIX, group=["g"]))),
+    ("group-is-blank", _doc(dict(_SEARCH_FIX, group="  "))),
+    ("extra-top-level-key", json.dumps({"search": [_SEARCH_FIX], "held_out": [_HELD_FIX], "z": 1})),
+    ("missing-top-level-key", json.dumps({"search": [_SEARCH_FIX]})),
+    ("fixture-extra-key", _doc(dict(_SEARCH_FIX, zzz=1))),
+    ("fixture-missing-key", _doc({k: v for k, v in _SEARCH_FIX.items() if k != "expected"})),
+    (
+        "message-extra-key",
+        _doc(
+            dict(
+                _SEARCH_FIX,
+                messages=[{"role": "user", "content": "x", "zzz": 1}],
+            )
+        ),
+    ),
+    ("22-messages", _doc(dict(_SEARCH_FIX, messages=_MSGS_22))),
+    ("search-is-dict", json.dumps({"search": {"a": 1}, "held_out": [_HELD_FIX]})),
+    ("held-out-is-null", json.dumps({"search": [_SEARCH_FIX], "held_out": None})),
+    ("top-is-empty-dict", "{}"),
+]
+
+
+@pytest.mark.parametrize("name,text", _SHAPE_CASES, ids=[n for n, _ in _SHAPE_CASES])
+def test_type_shape_attacks_at_every_level(name, text):
+    check_rejected(text)
+
+
+@pytest.mark.parametrize("bad", [None, 123, 4.5, b"{}", bytearray(b"{}"), ["x"], {"a": 1}, True])
+def test_non_string_inputs_rejected(bad):
+    with pytest.raises(ValueError):
+        parse_dataset(bad)  # type: ignore[arg-type]
+
+
+def test_str_subclass_rejected():
+    class Sneaky(str):
+        pass
+
+    with pytest.raises(ValueError):
+        parse_dataset(Sneaky("{}"))
+
+
+# ---------------------------------------------------------------------------
+# 4. Number attacks.
+# ---------------------------------------------------------------------------
+
+
+def test_number_attacks():
+    check_rejected(json.dumps({"search": 10**1000, "held_out": []}))
+    check_rejected('{"search": [' + "9" * 5000 + "]}")  # trips the 4300-digit cap
+    for token in ("1e308", "-1e308", "1e-9999"):
+        check_rejected(_VALID_TEXT.replace('"Search question?"', token, 1))
+
+
+# ---------------------------------------------------------------------------
+# 5. Nesting attacks.
+# ---------------------------------------------------------------------------
+
+
+@FUZZ
+@given(st.integers(50, 500), st.sampled_from(["[]", "{}"]))
+def test_nesting_depth_property(depth, kind):
+    text = "[" * depth + "]" * depth if kind == "[]" else '{"k":' * depth + "0" + "}" * depth
+    # Must be ValueError -- a bare RecursionError escaping is the F5 bug class.
+    check_contract(lambda: parse_dataset(text))
+
+
+def test_nesting_spliced_inside_fixture():
+    deep = "[" * 300 + "]" * 300
+    bad = _VALID_TEXT.replace('[{"role": "user", "content": "Search question?"}]', deep, 1)
+    check_rejected(bad)
+
+
+@pytest.mark.parametrize("depth", [20000, 300000])
+def test_deep_nesting_guard_fixed_vocabulary(depth):
+    with pytest.raises(ValueError, match=re.escape("Dataset nesting too deep")):
+        parse_dataset("[" * depth + "]" * depth)
+
+
+# ---------------------------------------------------------------------------
+# Fixed-vocabulary pins (substrings read verbatim from datasets.py).
+# ---------------------------------------------------------------------------
+
+
+def test_fixed_vocabulary_pins():
+    dup = _VALID_TEXT.replace('"id": "s1"', '"id": "s1", "id": "s2"', 1)
+    with pytest.raises(ValueError, match=re.escape("Duplicate JSON field")):
+        parse_dataset(dup)
+
+    for token in ("NaN", "Infinity", "-Infinity"):
+        bad = _VALID_TEXT.replace('"Search question?"', token, 1)
+        with pytest.raises(ValueError, match=re.escape("Nonfinite JSON")):
+            parse_dataset(bad)
+
+    for bad in ("[]", '"x"', "42", "null", "true"):
+        with pytest.raises(ValueError, match=re.escape("Unexpected or missing JSON fields")):
+            parse_dataset(bad)
+
+    zero = _doc(dict(_SEARCH_FIX, messages=[]))
+    with pytest.raises(
+        ValueError,
+        match=re.escape(f"conversation must have 1-{MAX_MESSAGES} messages"),
+    ):
+        parse_dataset(zero)
+
+
+# ---------------------------------------------------------------------------
+# Size boundary.
+# ---------------------------------------------------------------------------
+
+
+def test_oversize_text_rejected():
+    with pytest.raises(ValueError, match=re.escape("Dataset exceeds size limit")):
+        parse_dataset(" " * (MAX_BYTES + 1))
+    # Exactly at the cap: still rejected, but by the JSON layer, not the guard.
+    check_rejected(" " * MAX_BYTES)
+
+
+# ---------------------------------------------------------------------------
+# 6. load_dataset file attacks.
+# ---------------------------------------------------------------------------
+
+_HOSTILE_FILE_BYTES = st.one_of(
+    st.text(max_size=500).map(lambda s: s.encode("utf-8", errors="surrogatepass")),
+    st.binary(max_size=300),
+    st.integers(0, len(_VALID_TEXT)).map(lambda k: _VALID_TEXT[:k].encode("utf-8")),
+)
+
+
+@FILE_FUZZ
+@given(_HOSTILE_FILE_BYTES)
+def test_load_dataset_hostile_files(payload):
+    # Temp dir is managed inline (not via the function-scoped fixture):
+    # hypothesis reuses one fixture instance across examples, and a fresh
+    # PID-scoped dir per example keeps the file attacks fully isolated.
+    with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
+        target = Path(path) / "hostile.json"
+        target.write_bytes(payload)
+        check_contract(lambda: load_dataset(target))
+
+
+def test_load_dataset_valid_file(pid_tmpdir):
+    target = pid_tmpdir / "valid.json"
+    target.write_text(_VALID_TEXT, encoding="utf-8")
+    split = check_contract(lambda: load_dataset(target))
+    assert split is not None
+
+
+def test_load_dataset_path_attacks(pid_tmpdir):
+    with pytest.raises(ValueError, match=re.escape("Fixture path is not a regular file")):
+        load_dataset(pid_tmpdir)  # a directory is never loadable
+
+    fifo = pid_tmpdir / f"fifo-{os.getpid()}"
+    os.mkfifo(fifo)
+    with pytest.raises(ValueError, match=re.escape("Fixture path is not a regular file")):
+        load_dataset(fifo)  # refused via O_NONBLOCK + fstat: cannot hang
+
+    bad = pid_tmpdir / "bad.bin"
+    bad.write_bytes(b"\xff\xfe\x00not-json")
+    with pytest.raises(ValueError, match=re.escape("Fixture file is not valid UTF-8")):
+        load_dataset(bad)
+
+    with pytest.raises(ValueError, match=re.escape("Unreadable fixture file")):
+        load_dataset(pid_tmpdir / "missing.json")
+
+    big = pid_tmpdir / "big.json"
+    big.write_bytes(b" " * (MAX_BYTES + 1))
+    with pytest.raises(ValueError, match=re.escape("Dataset exceeds size limit")):
+        load_dataset(big)
+
+    for wrong in (123, None, ["x"]):
+        with pytest.raises(ValueError, match=re.escape("Invalid fixture path")):
+            load_dataset(wrong)  # type: ignore[arg-type]
