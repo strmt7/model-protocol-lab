@@ -912,6 +912,15 @@ _QWEN38_THINKING_OFF_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
 
 
 def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
+    """Return the prompt-format candidates for a catalog family.
+
+    With mutate=False (default) returns just the family's base Format.
+    With mutate=True also returns the BOS/prefix local-repair variants
+    (plus the thinking-off branch for families that define one), so the
+    experiment can test small template mutations alongside the base.
+    Raises ValueError for an unknown family name.
+    """
+
     if type(family) is not str or family not in CATALOG:
         raise ValueError("Unknown format family")
     base = CATALOG[family]

@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 103 — public API docstring completion, 2026-10-16)
+
+- All 16 public classes/functions in the shipped package that lacked
+  docstrings now have them: the seven core data-model dataclasses
+  (`Message`, `Format`, `Fixture`, `Split`, `Generation`, `Observation`,
+  `EvaluationReport`), `catalog.candidates`, the CLI entry points
+  (`parse_boundary`, `build_parser`, `main`), `datasets.parse_dataset`
+  / `load_dataset`, `experiments.run_experiment`, and
+  `reporting.render_html` / `save_report`. Public docstring coverage is
+  now 74/74.
+- `TestPublicApiDocstrings` in `tests/test_ci_portability_guard.py`:
+  AST-scans the package and fails on any public top-level def/class
+  without a docstring, so the coverage cannot regress. Test count
+  6121 -> 6122.
+
 ### Added (cycle 102 — true OSError-branch coverage, 2026-10-16)
 
 - `tests/test_cycle102_oserror_branches.py` (5 tests): the

@@ -14,6 +14,11 @@ from typing import Any, Literal, Protocol
 
 @dataclass(frozen=True)
 class Message:
+    """A single conversation turn: a role ("user" or "assistant") plus text content.
+
+    Role and content are validated on construction; anything else raises ValueError.
+    """
+
     role: Literal["user", "assistant"]
     content: str
 
@@ -26,6 +31,16 @@ class Message:
 
 @dataclass(frozen=True)
 class Format:
+    """One prompt-format hypothesis: how a conversation is rendered to text.
+
+    A Format names a template family and carries its literal framing pieces:
+    the BOS text, per-role prefixes, and turn terminators. The optional
+    per-role terminators (user_turn_end, assistant_turn_end) and open_suffix
+    override the shared turn_end / assistant_prefix when a real template
+    needs it; None means "use the shared value". Empty-string overrides are
+    honored and are not treated as None.
+    """
+
     name: str
     bos: str
     user_prefix: str
@@ -122,6 +137,14 @@ def local_repairs(base: Format) -> tuple[Format, ...]:
 
 @dataclass(frozen=True)
 class Fixture:
+    """One evaluation case: an id, a nonempty tuple of Messages, the expected
+    answer string, and a group label.
+
+    Fixtures sharing a group are related/paraphrased variants of the same
+    underlying case; the Split validation uses the group to keep related
+    fixtures from crossing the search/held-out boundary.
+    """
+
     id: str
     messages: tuple[Message, ...]
     expected: str
@@ -144,6 +167,14 @@ class Fixture:
 
 @dataclass(frozen=True)
 class Split:
+    """The search/held-out fixture partition with anti-leakage guarantees.
+
+    Both splits must be nonempty tuples of Fixture. Construction enforces,
+    on NFC-normalized keys: globally unique fixture IDs, no shared groups
+    across the split, and no identical message inputs across the split. Stored
+    fixture data stays byte-exact; only the comparisons normalize.
+    """
+
     search: tuple[Fixture, ...]
     held_out: tuple[Fixture, ...]
 
@@ -185,6 +216,14 @@ class Split:
 
 @dataclass(frozen=True)
 class Generation:
+    """A backend generation outcome.
+
+    token_ids holds continuation-only token IDs (prompt tokens excluded).
+    reason is "limit" when the token cap was reached, "cancelled" on
+    cooperative cancellation, or "error" on backend failure; error carries
+    the private adapter diagnostic (never exported) when reason is "error".
+    """
+
     token_ids: tuple[int, ...]
     reason: Literal["limit", "cancelled", "error"]
     error: str | None = None
@@ -218,6 +257,15 @@ RunStatus = Literal["completed", "cancelled", "failed"]
 
 @dataclass(frozen=True)
 class Observation:
+    """The recorded outcome of running one candidate format on one fixture.
+
+    Captures the exact token sequences (input_ids, output_ids), the decoded
+    answer, whether it exactly matched the expected answer, whether the
+    response boundary was found, and the run status. boundary_text_match is a
+    diagnostic cross-check only (never part of the pass criterion): None when
+    the check could not run.
+    """
+
     candidate: str
     fixture: str
     input_ids: tuple[int, ...]
@@ -239,6 +287,13 @@ class Observation:
 
 @dataclass(frozen=True)
 class EvaluationReport:
+    """The outcome of an evaluation run: its observations plus run metadata.
+
+    planned_count is the number of runs that were scheduled; observations may
+    hold fewer entries when the run was cancelled or failed partway (it never
+    holds more). status is "completed", "cancelled", or "failed".
+    """
+
     observations: tuple[Observation, ...]
     planned_count: int
     status: RunStatus

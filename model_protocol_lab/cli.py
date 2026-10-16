@@ -30,6 +30,13 @@ def _display_id(value: str) -> str:
 
 
 def parse_boundary(value: str) -> tuple[int, ...]:
+    """Argparse type: parse 1-16 comma-separated ASCII token IDs.
+
+    Only ASCII digits are accepted (Unicode digits would silently coerce via
+    int()); IDs must fit below 2**31. Raises argparse.ArgumentTypeError on
+    any malformed input.
+    """
+
     parts = value.split(",")
     # ASCII digits only: isdecimal() accepts Unicode digits (e.g. fullwidth),
     # which would silently coerce. Token IDs are ASCII by convention.
@@ -60,6 +67,13 @@ def parse_boundary_map(value: str) -> tuple[str, tuple[int, ...]]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the top-level argument parser with all subcommands.
+
+    Abbreviation is disabled on every parser so option prefixes can never
+    silently resolve to the wrong flag. New top-level commands are dispatched
+    in main() at the ANCHOR comment.
+    """
+
     parser = argparse.ArgumentParser(prog="model-protocol-lab", allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("catalog", help="List bounded text-only protocol hypotheses", allow_abbrev=False)
@@ -333,6 +347,12 @@ def _matrix_stage_rows(
 
 
 def main(argv=None) -> int:
+    """CLI entry point: parse argv and dispatch to the requested subcommand.
+
+    Returns the process exit code (0 on success). Accepts an optional argv
+    list for programmatic/testing use; defaults to sys.argv.
+    """
+
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
