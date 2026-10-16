@@ -360,8 +360,10 @@ def diff_reports(
     new_decision = new["decision"]
     old_winner = old.get("selected_candidate")
     new_winner = new.get("selected_candidate")
-    old_winner = old_winner if type(old_winner) is str else None
-    new_winner = new_winner if type(new_winner) is str else None
+    # Normalize "" to None, matching _held_verdict (which treats a falsy
+    # winner as absent): otherwise two winnerless runs disagree across axes.
+    old_winner = old_winner if type(old_winner) is str and old_winner else None
+    new_winner = new_winner if type(new_winner) is str and new_winner else None
 
     # Candidate verdict flips on search and held-out.
     old_search, old_planned = _search_verdicts(old)
