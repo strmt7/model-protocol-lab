@@ -1,5 +1,14 @@
 # Model Protocol Lab Development Plan
 
+> **Status note (2026-10-16, v0.1.0):** This plan was written when the lab
+> was a proposal. It has since been substantially implemented and validated:
+> 6100 tests passing, CI green on Python 3.11–3.13, `ruff`/`mypy`/`bandit`
+> clean, and a completed release-readiness review
+> (`docs/RELEASE_READINESS_0.1.0.md`). The design sections below remain the
+> authoritative reference for the architecture; the "proposed"/"planned"
+> language in the original text is historical. See `CHANGELOG.md` for what
+> has shipped.
+
 Model Protocol Lab is a proposed local tool for inspecting and repairing model conversation formats through raw token-ID probes. The intended workflow is to inspect a model and tokenizer, choose a documented format family, evaluate a bounded set of explicit mutations, inspect exact boundary and continuation evidence, test a frozen choice on independent held-out fixtures, and export a format only when its behavior can be reproduced.
 
 This document is an implementation and validation plan for contributors. It does not report a completed application, a tested model adapter, measured repair accuracy, or a competitive benchmark result. Its central release requirement is that every recommendation remain traceable to recorded evidence, including limitations and reasons to abstain.
