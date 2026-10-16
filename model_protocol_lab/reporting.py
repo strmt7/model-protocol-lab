@@ -1,6 +1,7 @@
 """Local JSON and escaped HTML reports with no external assets."""
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
@@ -2028,13 +2029,33 @@ def save_report(
     # invoking user, regardless of the process umask.
     target = prepare_report_dir(directory, _allow_empty_existing=_allow_empty_existing)
     json_path, html_path = target / "results.json", target / "report.html"
-    for path, text in ((json_path, json_text), (html_path, html_text)):
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            handle = os.fdopen(fd, "w", encoding="utf-8")
-        except BaseException:
-            os.close(fd)
-            raise
-        with handle:
-            handle.write(text)
+    written: list[Path] = []
+    try:
+        for path, text in ((json_path, json_text), (html_path, html_text)):
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                handle = os.fdopen(fd, "w", encoding="utf-8")
+            except BaseException:
+                os.close(fd)
+                with contextlib.suppress(OSError):
+                    os.unlink(path)
+                raise
+            try:
+                with handle:
+                    handle.write(text)
+            except BaseException:
+                # Never leave a half-written report behind: an interrupted
+                # (KeyboardInterrupt) or failed write removes the partial
+                # file, mirroring fixtures.write_fixture_file's discipline.
+                with contextlib.suppress(OSError):
+                    os.unlink(path)
+                raise
+            written.append(path)
+    except BaseException:
+        # The second file failed after the first was fully written: remove
+        # it too, so a failed save never leaves a half-built report pair.
+        for done in written:
+            with contextlib.suppress(OSError):
+                os.unlink(done)
+        raise
     return json_path, html_path

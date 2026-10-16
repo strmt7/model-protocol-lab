@@ -3987,3 +3987,24 @@ TypeError failed 11 tests as required. No source changes. Observation
 (deliberately not fixed): NUL byte in path raises ValueError("embedded
 null byte") from os.open rather than "Unreadable fixture file" -- still a
 ValueError, zero contract gain from normalizing.
+
+## Cycle 89 (2026-10-16) — signal/interrupt audit: 2 REAL BUGS FIXED
+
+1. reporting.save_report left a half-written results.json on
+   KeyboardInterrupt mid-write (reproduced: 10 partial bytes on disk).
+   Fix: unlink-on-BaseException discipline per file, extended to remove
+   the first file when the second write fails -- never a half-built
+   report pair (mirrors fixtures.write_fixture_file). O_EXCL semantics
+   preserved.
+2. SIGTERM during `run` used the default disposition (exit -15), leaving
+   the claimed output directory behind so a retry tripped "Output path
+   already exists". Fix (cli.py): wire SIGTERM to the same cooperative
+   cancel Event as SIGINT around run_experiment, restored in finally;
+   SIGTERM now drains to a valid "cancelled" report and exit 130.
+Pinned contracts: debug --script SIGINT/double-SIGINT -> 130, no
+traceback; run SIGINT -> 130 with complete "cancelled" report or removed
+dir, never partial; KeyboardInterrupt from generate() propagates
+unchanged (evaluate catches only Exception); save_report atomicity both
+files. Coordinator negative control: neutralizing the unlink calls fails
+both atomicity tests; fix restored byte-identical. 12 tests in
+tests/test_cycle89_signal_handling_audit.py.
