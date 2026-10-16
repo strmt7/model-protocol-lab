@@ -417,6 +417,10 @@ def examine_model(
     try:
         manifest = _manifest(root, names)
     except ValueError as exc:
+        # Asset enumeration succeeded, so the asset_layout stage is ok even
+        # though manifesting failed (e.g. a file vanished between the two
+        # stages): report both, like every other stage does.
+        checks["asset_layout"] = _check("ok", f"{len(names)} assets")
         checks["asset_manifest"] = _check("failed", str(exc))
         return _model_result("failed", checks)
     checks["asset_layout"] = _check("ok", f"{len(names)} assets")
