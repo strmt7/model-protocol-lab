@@ -3505,3 +3505,31 @@ fail-closed backends (tokenizer-only loading proved with garbage weight
 files; loader failures collapse to fixed codes without echoing paths),
 CLI wiring. Mutation gate 6/6 killed on PID-scoped /tmp copies. No genuine
 bugs -- CLEAN. README test count updated to 4207.
+
+## 2026-10-16 (cycle 72: examine_model/doctor() integration audit)
+
+Adversarial integration audit of doctor.py's examine_model/doctor() flow
+(tests/test_cycle72_doctor_integration_audit.py, 47 tests + 35 subtests):
+independent-oracle differential testing on synthetic model dirs (PID-scoped
+/tmp; headers only, no weight execution) covering check ordering, early-return
+branches, fail-fast vs continue semantics per stage, verdict-precedence
+minimal pairs (one-corrupt-shard vs all-corrupt, missing vs malformed config,
+unsupported-type vs rejected-keys precedence), context-window degradation,
+boundary_ids/map validation, portability informational semantics, dataset
+verdict propagation, suggestion gating, determinism/JSON-serializability,
+and adversarial edges (empty dir, 0-byte/garbage files, JSON-list header,
+128 MiB+1 config, unicode paths, symlinked dirs, symlink loops,
+both-layouts-present, bad weight indexes, adapters). Mutation gate 6/6
+killed on /tmp copies. 1 GENUINE BUG FOUND AND FIXED: when _manifest()
+raised ValueError (TOCTOU asset race), examine_model recorded
+asset_manifest: failed but silently dropped the completed asset_layout
+stage -- fixed by recording asset_layout: ok with the standard "N assets"
+detail in that branch (doctor.py, +3 lines, matching the code's own
+convention); regression test fails on pre-fix source, passes post-fix. Test-harness fix
+(post-audit): test_oversized_config_rejected wrote a real 128 MiB file to
+the 512 MiB /tmp tmpfs and flaked once in three full-suite runs (ENOSPC
+signature -- the cycle-60 failure mode); replaced with a sparse file via
+truncate(), which exercises the identical _read_json oversized path
+(holes read as zeros) while consuming ~0 blocks -- 5/5 green with /tmp
+at 75% full.
+README test count updated to 4254.
