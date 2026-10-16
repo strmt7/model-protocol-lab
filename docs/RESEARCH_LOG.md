@@ -3759,3 +3759,24 @@ class cannot recur (negative control: flags the four old patterns).
 README test count updated to 5757. Lesson: the verification gate must
 run the exact CI test command (coverage run -m unittest discover), not
 just pytest.
+
+## Cycle 82 (2026-10-16) — fixture serialization round-trip audit, CLEAN
+
+Adversarial audit of ``fixtures.split_to_json_text`` (the "verified by
+construction" claim), ``fixtures.write_fixture_file`` (exclusive creation,
+0o600, partial-write cleanup), and ``datasets.parse_dataset`` /
+``datasets.load_dataset`` (fixed rejection vocabulary). 80 tests in
+``tests/test_cycle82_fixture_serialization_audit.py``; verdict CLEAN, no
+source changes, no bugs found. Round-trip fidelity pinned over adversarial
+Splits (NFD/NFC unicode, emoji, CJK, RTL, newlines, quotes, backslashes,
+empty expected, MAX_TEXT-sized fields, 21-message conversations,
+100-fixture partitions, duplicate-looking ids): byte-exact NFD survival,
+text byte-identical to an independent ``json.dumps(ensure_ascii=False,
+indent=2) + "\n"`` reconstruction; schema-violating Splits refused by
+``split_to_json_text`` (internal re-parse is load-bearing). Every fixed
+rejection code pinned with minimal inputs, including "Dataset nesting too
+deep", "Nonfinite JSON", "Duplicate JSON field", load_dataset FIFO /
+directory / non-UTF8 / oversize guards. Mutation gate 6/6 killed (mutant
+files verified imported from /tmp via conftest guard per cycle-76 lesson;
+coordinator spot-verified one kill). Non-finding: lone-surrogate str ->
+UnicodeEncodeError, still a ValueError subclass. README test count 5837.
