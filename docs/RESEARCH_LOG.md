@@ -3641,3 +3641,22 @@ failed 3/3 full-suite runs with ENOSPC (proven by constraining /tmp to
 23M free); replaced with a sparse truncate(), which exercises the
 identical load_results results_too_large path -- green at 96% /tmp full.
 README test count updated to 5590.
+
+## 2026-10-16 (cycle 78: run_experiment decision-orchestration audit)
+
+Adversarial audit of experiments.py::run_experiment (the decision heart:
+per-candidate search loop, aggregate_eligible early-return gates,
+conservative unique-winner rule, cancellation, held-out confirmation;
+tests/test_cycle78_run_experiment_audit.py, 34 tests): scripted
+chr-codec fake backends controlling per-(candidate, fixture) search and
+held-out outcomes independently; hand-derived branch map in the docstring
+(GATEs 1-4); all decision branches covered (compatible_on_fixture_set,
+held_out_failed, ambiguous, no_candidate, cancelled, failed passthrough);
+minimal pairs (one flipped observation moves the decision; the
+ambiguous/unique boundary is exactly one winner); deterministic
+post-loop cancellation race via an ArmingEvent (no threads/sleeps);
+adversarial edges (empty candidates, duplicate names raise, backend
+raising mid-evaluation -> fixed codes with no exception-text leaks,
+winner's own boundary used for held-out). Mutation gate 6/6 killed on
+/tmp copies with __file__ import-path assertion (cycle-76 trap guard).
+No genuine bugs -- CLEAN. README test count updated to 5624.
