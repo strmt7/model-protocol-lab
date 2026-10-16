@@ -1,25 +1,29 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–44 + fix rounds (executed 2026-10-15, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–83 + fix rounds (executed 2026-10-16, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
-(2026-10-14 → 2026-10-15). All commands run from the repository root in
+(2026-10-14 → 2026-10-16). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **3374 tests + 43319 subtests,
-  all passing**, across **3 consecutive green executions** (no variance, no
-  flakiness). Includes 29 format families (kolibri, lfm25, nemotron35,
-  muse_glimmer, laguna, ling, gemma4, deepseek41, kimi2, kimi3, muse_spark,
-  qwen38 added this period), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
+- `python -m pytest -q -p no:cacheprovider` — **5908 tests collected**
+  (release-readiness audit, 2026-10-16; collection only — full green
+  executions are the coordinator's gate, last verified green in the
+  cycle-83 state). Subtests numbered in the 68k+ range in recent cycles.
+  Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,
+  gemma4, qwen3, qwen38, deepseek, deepseek41, mistral, mistral_large,
+  phi4, glm4, glm45, glm53, kimi2, kimi3, kolibri, lfm25, nemotron35,
+  muse_glimmer, muse_spark, laguna, ling, k2horizon, hy4, minimax3,
+  nanbeige42), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
   `diff-reports`, `doctor --portability-matrix`, the teacher-forced
   log-likelihood diagnostic, and differential-verification suites with
   mutation gates for every module.
-- `ruff check` — clean; `ruff format --check` — clean (101 files).
+- `ruff check` — clean; `ruff format --check` — clean (139 files).
 - `mypy model_protocol_lab` — clean (15 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
-  severity/confidence (the two B105 false positives on report-schema
-  fields carry targeted `# nosec B105` suppressions).
+  severity/confidence (the targeted `# nosec B105` suppressions on
+  report-schema fields carry justifications).
 - `pip-audit` — no known vulnerabilities in auditable dependencies;
   `torch 2.14.1+cpu` keeps its local version tag (invisible to the OSV DB —
   the accepted residual, unchanged).

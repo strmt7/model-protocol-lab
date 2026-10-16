@@ -124,6 +124,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import struct
 import subprocess
 import sys
@@ -1001,7 +1002,11 @@ class DebugTest(unittest.TestCase):
             timeout=60,
         )
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("model-protocol-lab debug 0.1.0a0", proc.stdout)
+        match = re.search(
+            r'^version\s*=\s*"([^"]+)"', (REPO_ROOT / "pyproject.toml").read_text(), re.M
+        )
+        assert match is not None
+        self.assertIn(f"model-protocol-lab debug {match.group(1)}", proc.stdout)
         self.assertIn(
             "dataset: examples/fixtures.json (4 fixtures) | family: chatml | "
             "tokenizer: none (rerun with --model PATH)",

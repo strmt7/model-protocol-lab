@@ -514,7 +514,7 @@ render, so the "extra" control tokens stop being invisible):
 
 ```text
 $ python -m model_protocol_lab debug --dataset examples/fixtures.json
-model-protocol-lab debug 0.1.0a0
+model-protocol-lab debug 0.1.0
 dataset: examples/fixtures.json (4 fixtures) | family: chatml | tokenizer: none (rerun with --model PATH)
 Enter .help for usage hints.
 mpl:chatml fixture-1 > .fixture 1
