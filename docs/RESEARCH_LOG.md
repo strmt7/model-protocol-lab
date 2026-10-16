@@ -3417,3 +3417,24 @@ the fixed behavior as part of this fix. Mutation gate 4/4 caught on /tmp
 copies. Documented non-bugs: first-wins/last-wins duplicate handling,
 cross-stage evidence emitting absent-diffs + set drift, flips excluding
 absent legs. README test count updated to 4069.
+
+## 2026-10-16 (cycle 68: end-to-end pipeline audit)
+
+End-to-end audit of fixtures build -> run -> diff-reports, all via
+subprocess CLI invocations with synthetic/local pieces only
+(tests/test_cycle68_pipeline_e2e_audit.py, 8 tests). fixtures build:
+authored 2-case CSV -> exit 0, summary counts, fixture JSON + .audit.json
+sidecar, round-trip through load_dataset. run: tiny GPT-2 backend built
+on the fly (no downloads) -> exit code matches the decision contract
+(no_candidate -> 2), results.json byte-identical through
+diffreports.load_results, evidence on every search entry, self-contained
+report.html. diff-reports: self-diff (dir form vs file form) ->
+identical=true, zero changes; one flipped observation -> identical=false,
+fixtures_flipped=1 naming exactly the perturbed cell, all other axes
+untouched. Adversarial: oversize CSV field -> exit 1 with the cycle-66
+fixed error (no traceback, no fixture left behind); run with torch/
+transformers stubbed out -> exit 1 local_backend_initialization_failed
+(fail-closed, no traceback); report directory accepted, bare directory
+rejected with fixed code. No genuine bugs -- CLEAN. Deliberately not
+verified: --sensitivity-sweep / --logprob-diagnostic paths
+(compute-heavy). README test count updated to 4077.
