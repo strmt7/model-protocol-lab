@@ -3533,3 +3533,20 @@ truncate(), which exercises the identical _read_json oversized path
 (holes read as zeros) while consuming ~0 blocks -- 5/5 green with /tmp
 at 75% full.
 README test count updated to 4254.
+
+## 2026-10-16 (cycle 73: diff-backends comparison-semantics audit)
+
+Adversarial audit of diffbackends.py's comparison layer below the emulate_*
+functions (tests/test_cycle73_diffbackends_audit.py, 70 tests + 327
+subtests): all four emulate_* entry points stubbed at the module boundary,
+so every cell is a fully synthetic (available, fired, detail,
+truncated_ids, returned_text) tuple. Independent brute-force oracle
+re-derives every (class, stop_text) verdict from the docstring rules;
+minimal pairs flip one input fact per verdict; adversarial edges
+(fired-but-no-step, malformed truncated_ids, unavailable mixes, decode
+failures, cap-boundary id lists, unicode stops); fail-closed validation
+vocabulary pinned (ValueError with fixed codes, never tracebacks);
+300-pair fuzz vs oracle -- identical verdict sets; CLI wiring incl.
+sanitized loader/encode failure paths. Mutation gate 6/6 killed on
+PID-scoped /tmp copies. No genuine bugs -- CLEAN. README test count
+updated to 4324.
