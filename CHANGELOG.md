@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 98 — property-based core algorithm audit, 2026-10-16)
+
+- `tests/test_cycle98_boundary_properties.py` (7 Hypothesis property
+  tests): universal properties of `first_boundary` — found index is an
+  exact match, None iff absent, result is the *first* occurrence, index
+  in range, empty stop raises, overlong stop returns None, embedded stop
+  found at or before the known position. Thousands of generated cases;
+  no counterexamples. Test count 6093 -> 6100.
+
 ### Added (cycle 97 — hostile-environment robustness audit, 2026-10-16)
 
 - `tests/test_cycle97_hostile_environment.py` (10 tests): hostile
