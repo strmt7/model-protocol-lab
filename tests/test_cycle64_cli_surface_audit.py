@@ -871,12 +871,13 @@ class DiffReportsValidationTests(unittest.TestCase):
 
     def test_oversized_input_reports_results_too_large(self):
         with TemporaryDirectory() as tmp:
-            big = self._write(
-                Path(tmp),
-                "big.json",
-                # 34 MiB of pad: over the 32 MiB MAX_RESULTS_BYTES cap.
-                b'{"decision": "x", "search": [], "pad": "' + b"y" * (34 * 1024 * 1024) + b'"}',
-            )
+            # Sparse file: load_results reads byte content (holes read as
+            # zeros), so the >32 MiB results_too_large path triggers while
+            # consuming ~0 tmpfs blocks. A real 34 MiB write flakes with
+            # ENOSPC on the 512 MiB /tmp tmpfs (cycles 60/72 precedent).
+            big = Path(tmp) / "big.json"
+            with big.open("wb") as handle:
+                handle.truncate(34 * 1024 * 1024)
             new = self._write(Path(tmp), "new.json", json.dumps(self.MINIMAL))
             proc = run_cli("diff-reports", str(big), str(new))
         self.assertEqual(proc.returncode, 1)

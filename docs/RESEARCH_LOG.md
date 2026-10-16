@@ -3618,3 +3618,26 @@ fail-closed fixed codes (incl. torch-absent). Mutation gate 3/3 killed on
 /tmp copies (import-path verified; an early 0/3 was a harness artifact:
 ``python -m`` puts cwd ahead of PYTHONPATH). README test count updated
 to 5526.
+
+## 2026-10-16 (cycle 77: classification + failure-taxonomy audit)
+
+Adversarial audit of experiments.py's analytical core
+(tests/test_cycle77_classification_taxonomy_audit.py, 64 tests + 12,088
+subtests): independent oracles re-derived from docstrings (explicit
+if/elif chains, manual EOS loop, while-loop subsequence search)
+differential-tested over the full field cartesian product (4,320
+observation combos; 2,720 stop-cell shapes); 13 minimal-pair tests pinning
+failure-priority order; adversarial edges (empty ids, contradictions,
+unicode, 100k-id observations, missing keys, wrong types -- fail-closed
+with fixed codes); hand-computed taxonomy aggregations; one fully
+hand-derived end-to-end stop-matrix case. Verified design property: the
+taxonomy is closed -- every non-passing observation maps to exactly one
+of FAILURE_MODES, no ambiguous/unclassified escape hatch. Mutation gate
+6/6 killed on PID-scoped /tmp copies with __file__ import-path assertion
+(the cycle-76 cwd-import trap). No genuine bugs -- CLEAN. Test-harness
+fix (post-audit): test_oversized_input_reports_results_too_large
+(cycle-64 file) wrote a real 34 MiB file to the 512 MiB /tmp tmpfs and
+failed 3/3 full-suite runs with ENOSPC (proven by constraining /tmp to
+23M free); replaced with a sparse truncate(), which exercises the
+identical load_results results_too_large path -- green at 96% /tmp full.
+README test count updated to 5590.
