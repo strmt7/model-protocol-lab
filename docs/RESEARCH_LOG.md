@@ -3438,3 +3438,25 @@ transformers stubbed out -> exit 1 local_backend_initialization_failed
 rejected with fixed code. No genuine bugs -- CLEAN. Deliberately not
 verified: --sensitivity-sweep / --logprob-diagnostic paths
 (compute-heavy). README test count updated to 4077.
+
+## 2026-10-16 (cycle 69: run-command diagnostics audit)
+
+Adversarial audit of the run diagnostics (tests/test_cycle69_diagnostics_audit.py,
+47 tests): budget_frontier (experiments.py:275; always-on, post-hoc, zero
+model calls; recomputes per-candidate pass counts and the selection
+decision at every smaller token budget), logprob_diagnostic (703;
+opt-in, teacher-forced per-fixture scores, bands mean>=-2.0 derailed /
+mean<-5.0 weights-don't-know), prompt_sensitivity_sweep (789; opt-in,
+native + one re-run per drop depth, winner_changed = winner!=native OR
+decision!=native; CLI wiring asserted structurally -- no --budget-frontier
+flag exists). Method: independent hand-rolled oracles with full-payload
+equality, minimal-pair tests (boundary shifted 3 tokens -> exactly +3 on
+that cell), adversarial edges (budget-0-never-appears, ambiguous/
+no_candidate/held_out_failed natives, identical logprobs, exact band
+edges, no-op perturbation -> no false flag, UTF-8 split depths, 10
+ValueError rejection cases). Mutation gate 5/5 caught on /tmp copies
+(frontier off-by-one, band edge >= vs >, sweep or->and, flip == vs !=,
+aggregate mean denominator). No genuine bugs -- CLEAN. Deliberately not
+verified: live-model backends; subprocess mpl run; report-HTML rendering
+of diagnostic sections; statistical power of the sweep. README test count
+updated to 4124.
