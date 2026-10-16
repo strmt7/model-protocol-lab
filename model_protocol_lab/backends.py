@@ -72,7 +72,7 @@ def _open_regular_read(path: Path) -> int:
     return fd
 
 
-def _read_json(path: Path) -> dict:
+def _read_json(path: Path) -> dict[str, Any]:
     fd = _open_regular_read(path)
     try:
         with os.fdopen(fd, "rb") as handle:
@@ -121,7 +121,7 @@ def _model_assets(root: Path) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
-def _manifest(root: Path, names: tuple[str, ...]) -> list[dict]:
+def _manifest(root: Path, names: tuple[str, ...]) -> list[dict[str, Any]]:
     records = []
     for name in names:
         path = _member(root, name)
@@ -841,7 +841,10 @@ class LocalHFBackend:
             tokenizer_path = _member(root, "tokenizer.json")
             if tokenizer_path.stat().st_size > 128 * 1024 * 1024:
                 raise ValueError("oversized_tokenizer_file")
-            tokenizer = PreTrainedTokenizerFast(
+            # transformers ships without type stubs (PreTrainedTokenizerFast
+            # resolves to the untyped TokenizersBackend factory); the ignore
+            # marks this deliberate untyped third-party boundary.
+            tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
                 tokenizer_file=str(tokenizer_path),
                 clean_up_tokenization_spaces=False,
             )

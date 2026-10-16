@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 104 — mypy strict compliance, 2026-10-16)
+
+- The full package now passes `mypy --strict` (37 errors fixed across 7
+  files): type annotations added to the untyped dataset helpers
+  (`_unique_object`, `_reject_constant`, `_fields`, `_text`, `_fixture`),
+  `experiments._failure_code` / `_summary` (now typed on
+  `EvaluationReport`), `budget_frontier` (corrected to
+  `list[dict[str, Any]]` — entries are search-record dicts, not Fixtures;
+  the wrong first attempt tripped `comparison-overlap`), bare `dict` /
+  `list` / `tuple` generics given type arguments, `cli.main` argv typed,
+  and the five `PreTrainedTokenizerFast` call sites (which mypy resolves
+  to the untyped `TokenizersBackend` factory) marked with deliberate
+  `type: ignore[no-untyped-call]` at the documented untyped
+  third-party boundary. `strict = true` is now set in pyproject.toml so
+  the CI lint job enforces it.
+- `TestMypyStrictPinned` in `tests/test_ci_portability_guard.py` fails
+  if `strict` is ever flipped back to false. Test count 6122 -> 6123.
+
 ### Added (cycle 103 — public API docstring completion, 2026-10-16)
 
 - All 16 public classes/functions in the shipped package that lacked

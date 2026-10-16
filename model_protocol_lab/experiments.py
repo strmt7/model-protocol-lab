@@ -16,7 +16,16 @@ from .backends import (
     emulate_hf_stop_string,
     emulate_vllm_holdback,
 )
-from .core import Backend, Fixture, Format, Split, _valid_token_ids, evaluate, first_boundary
+from .core import (
+    Backend,
+    EvaluationReport,
+    Fixture,
+    Format,
+    Split,
+    _valid_token_ids,
+    evaluate,
+    first_boundary,
+)
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 
 FAILURE_MODES = (
@@ -162,7 +171,7 @@ def stop_matrix(
     backend: Backend,
     candidate_name: str,
     fixtures: tuple[Fixture, ...],
-    observations: tuple[dict, ...],
+    observations: tuple[dict[str, Any], ...],
     *,
     boundary: tuple[int, ...],
     eos_id: int | None = None,
@@ -273,7 +282,7 @@ def stop_matrix(
 
 
 def budget_frontier(
-    search: list | tuple,
+    search: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     *,
     boundary: tuple[int, ...],
     max_new_tokens: int,
@@ -893,7 +902,7 @@ def candidate_fingerprint(fmt: Format) -> str:
     return "sha256:" + sha256(text.encode("utf-8")).hexdigest()
 
 
-def _failure_code(report) -> str | None:
+def _failure_code(report: EvaluationReport) -> str | None:
     """Sanitized failure code of a failed evaluation, for the report banner.
 
     Scans the observations from the end for the first fixed-vocabulary
@@ -910,7 +919,7 @@ def _failure_code(report) -> str | None:
     return None
 
 
-def _summary(report):
+def _summary(report: EvaluationReport) -> dict[str, Any]:
     passed = sum(o.exact_match and o.boundary_found for o in report.observations)
     return {
         "status": report.status,
@@ -970,7 +979,7 @@ def run_experiment(
     seed: int = 0,
     cancel: Event | None = None,
     eos_id: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Run the full protocol experiment and return the result dict.
 
     Renders each candidate format over the search split, generates with the
@@ -1024,7 +1033,7 @@ def run_experiment(
         "selected_candidate": None,
     }
 
-    def finish() -> dict:
+    def finish() -> dict[str, Any]:
         # Every return path carries the failure taxonomy so the decision
         # banner can cite it; it is deterministic from the stored records.
         output["failure_taxonomy"] = failure_taxonomy(output, eos_id)

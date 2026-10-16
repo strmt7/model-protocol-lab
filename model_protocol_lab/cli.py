@@ -319,7 +319,7 @@ def _matrix_stage_rows(
     """Build stop-matrix rows for one stage from a run_experiment result."""
     if stage_key == "search":
         entries = result.get("search") or []
-        observations: list | None = None
+        observations: list[dict[str, Any]] | None = None
         for entry in entries:
             if (
                 type(entry) is dict
@@ -346,7 +346,7 @@ def _matrix_stage_rows(
     )
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry point: parse argv and dispatch to the requested subcommand.
 
     Returns the process exit code (0 on success). Accepts an optional argv

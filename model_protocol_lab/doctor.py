@@ -152,7 +152,7 @@ def _model_result(
     verdict: str,
     checks: dict[str, dict[str, str]],
     *,
-    assets: list[dict] | None = None,
+    assets: list[dict[str, Any]] | None = None,
     special_tokens: dict[str, int] | None = None,
     added_tokens: dict[str, int] | None = None,
     context_window: int | None = None,
@@ -210,7 +210,8 @@ def _portability_check(
         ref_root = _directory(reference_model_path)
         from transformers import PreTrainedTokenizerFast
 
-        ref_tokenizer = PreTrainedTokenizerFast(
+        # Untyped transformers boundary (see backends.py); ignore is deliberate.
+        ref_tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
             tokenizer_file=str(_tokenizer_file(ref_root)),
             clean_up_tokenization_spaces=False,
         )
@@ -249,7 +250,7 @@ _PORTABILITY_ASYMMETRY = (
 )
 
 
-def _secondary_registered(tokenizer: Any, doc: dict) -> dict[str, int]:
+def _secondary_registered(tokenizer: Any, doc: dict[str, Any]) -> dict[str, int]:
     """Added/special token map of a second checkpoint, literal -> id.
 
     Parsed from the checkpoint's own ``tokenizer.json`` document (the
@@ -347,7 +348,8 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
     try:
         from transformers import PreTrainedTokenizerFast
 
-        tokenizer = PreTrainedTokenizerFast(
+        # Untyped transformers boundary (see backends.py); ignore is deliberate.
+        tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
             tokenizer_file=str(_tokenizer_file(root)),
             clean_up_tokenization_spaces=False,
         )
@@ -794,7 +796,8 @@ def template_conformance(
             }
         from transformers import PreTrainedTokenizerFast
 
-        tokenizer = PreTrainedTokenizerFast(
+        # Untyped transformers boundary (see backends.py); ignore is deliberate.
+        tokenizer: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
             tokenizer_file=str(_tokenizer_file(root)),
             clean_up_tokenization_spaces=False,
         )
@@ -859,10 +862,12 @@ def _build_primary_tokenizer(root: Path) -> Any:
     """
     from transformers import PreTrainedTokenizerFast
 
-    return PreTrainedTokenizerFast(
+    # Untyped transformers boundary (see backends.py); ignore is deliberate.
+    result: Any = PreTrainedTokenizerFast(  # type: ignore[no-untyped-call]
         tokenizer_file=str(_tokenizer_file(root)),
         clean_up_tokenization_spaces=False,
     )
+    return result
 
 
 _DEFAULT_NEW_TOKENS = 64
