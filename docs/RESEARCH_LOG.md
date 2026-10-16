@@ -3288,3 +3288,29 @@ copies (control pristine PASS). No genuine bugs -- CLEAN. Deliberately
 not verified: real transformers/tokenizers against real checkpoint files;
 examine_model/doctor() integration beyond these functions. README test
 count updated to 3782.
+
+## 2026-10-16 (cycle 63: search/held-out separation adversarial audit)
+
+Adversarial audit of the search/held-out separation hard constraint
+(tests/test_cycle63_heldout_separation_audit.py, 41 tests). Separation
+mechanism as found: Split frozen dataclass (core.py:136-188) enforces
+non-empty partitions, globally unique NFC-normalized fixture IDs, no
+shared groups, no identical inputs across the split; CSV loader assigns
+partition from an explicit column (fixtures.py:150-208); search stage
+evaluates once per candidate (experiments.py:1008); selection gate
+(len(winners)!=1 -> abstain) runs BEFORE any held-out evaluate
+(experiments.py:1032-1034); held-out measured exactly once on the unique
+winner (1035,1042-1056); per-call request seeds sha256(seed, case.id)
+keep stages disjoint under seed-keyed caches; reporting strips held-out
+observations by default. Method: SeedSpyBackend (output a pure function
+of (candidate, fixture) from a hidden behavior table), planted canary
+held-out fixture with distinctive answer, full-equality assertions on
+exact ordered backend call sequences, 24 seeded fuzz trials vs an
+independent oracle. Mutation gate 4/4 caught on /tmp copies (canonical
+leak: search loop measuring split.held_out -- detected by the canary;
+dropped unique-winner guard; held-out reusing search observations;
+held-out measuring split.search). No genuine leaks -- CLEAN. By-design
+note: `mpl debug` REPL merges partitions for interactive inspection,
+outside the automated selection pipeline. Deliberately not verified:
+live-model backends; statistical strength of the split itself. README
+test count updated to 3823.
