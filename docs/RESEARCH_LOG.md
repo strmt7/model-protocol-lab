@@ -4347,3 +4347,22 @@ file (platform-independent, no /proc). 5 tests in
 ``tests/test_cycle102_oserror_branches.py`` pin fail-closed behavior
 for all four branches; the 4 misleading docstrings were corrected.
 Test count 6116 -> 6121 (README + VALIDATION.md updated).
+
+## Cycle 103 — public API docstring completion (2026-10-16)
+
+AST audit of model_protocol_lab/ found 16 public top-level classes/functions
+without docstrings (74 public defs, 58 documented): the seven core data-model
+dataclasses (Message, Format, Fixture, Split, Generation, Observation,
+EvaluationReport), catalog.candidates, cli.parse_boundary/build_parser/main,
+datasets.parse_dataset/load_dataset, experiments.run_experiment, and
+reporting.render_html/save_report. All 16 now have accurate docstrings written
+from the implementation (validation rules, return contracts, error behavior);
+public docstring coverage is 74/74. TestPublicApiDocstrings added to
+tests/test_ci_portability_guard.py AST-scans the package and fails on any
+undocumented public def/class (dunder/private excluded). Verified no backslash
+escapes that could trip the 3.13 docstring-surrogate guard. Dead-code scan
+(defined-but-unreferenced top-level names) found zero hits; main has no
+build-artifact leaks (183 files). Noted residual: UPLOAD_TO_GITHUB.md is an
+obsolete ZIP-upload doc nothing references, but the push helper cannot delete
+files from main, so it stays. Test count 6121 -> 6122 (README + VALIDATION.md
+updated).

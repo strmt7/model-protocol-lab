@@ -971,6 +971,17 @@ def run_experiment(
     cancel: Event | None = None,
     eos_id: int | None = None,
 ) -> dict:
+    """Run the full protocol experiment and return the result dict.
+
+    Renders each candidate format over the search split, generates with the
+    backend (greedy, exact token sequences), scores exact answers and
+    response boundaries, then applies the conservative selection rule: one
+    candidate must pass every search fixture or the decision abstains
+    ("ambiguous" on ties, "no_candidate" when all fail). The returned dict
+    carries the decision, per-candidate observations, and the failure
+    taxonomy on every return path.
+    """
+
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
         raise ValueError("Supply between 1 and 24 candidates")
     if any(type(fmt) is not Format for fmt in formats):

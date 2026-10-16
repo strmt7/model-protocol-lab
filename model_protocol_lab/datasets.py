@@ -62,6 +62,15 @@ def _fixture(value, label: str):
 
 
 def parse_dataset(text: str) -> Split:
+    """Parse dataset JSON text into a validated Split.
+
+    Enforces the byte cap, rejects duplicate object keys and non-JSON
+    constants, requires the "search"/"held_out" partitions with bounded
+    fixture counts, and lets Split enforce the anti-leakage guarantees.
+    Raises ValueError with the module's fixed error vocabulary on any
+    malformed input.
+    """
+
     if type(text) is not str or len(text.encode("utf-8")) > MAX_BYTES:
         raise ValueError("Dataset exceeds size limit")
     try:
@@ -83,6 +92,13 @@ def parse_dataset(text: str) -> Split:
 
 
 def load_dataset(path: str | Path) -> Split:
+    """Load a dataset file from disk into a validated Split.
+
+    Opens the path defensively: only regular files are accepted (never FIFOs,
+    devices, sockets, or directories), reads are size-capped, and the file is
+    validated through parse_dataset. Raises ValueError on any problem.
+    """
+
     if not isinstance(path, (str, Path)):
         raise ValueError("Invalid fixture path")
     target = Path(path)

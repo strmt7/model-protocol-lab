@@ -159,5 +159,32 @@ class TestNoDocstringSurrogates(unittest.TestCase):
         )
 
 
+class TestPublicApiDocstrings(unittest.TestCase):
+    """Every public class/function in the shipped package needs a docstring.
+
+    A 0.1.0 release documents its public API; an undocumented public name is
+    a docs regression. Only top-level defs are checked (methods inherit their
+    class contract); dunder and private names are excluded.
+    """
+
+    def test_all_public_api_has_docstrings(self) -> None:
+        pkg = TESTS_DIR.parent / "model_protocol_lab"
+        missing: list[str] = []
+        for path in sorted(pkg.glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                if node.name.startswith("_"):
+                    continue
+                if not ast.get_docstring(node):
+                    missing.append(f"{path.name}:{node.lineno} {node.name}")
+        self.assertEqual(
+            missing,
+            [],
+            "public API without docstrings (release docs gap):\n" + "\n".join(missing),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

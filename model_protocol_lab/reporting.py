@@ -1872,6 +1872,13 @@ def _frontier_section(result: dict[str, Any]) -> str:
 
 
 def render_html(result: dict[str, Any]) -> str:
+    """Render an experiment result dict as a self-contained HTML report string.
+
+    All dynamic content is HTML-escaped (injection-safe); the output embeds
+    its own styling and needs no external assets. Expects the enriched result
+    shape produced by attach_diagnostics.
+    """
+
     decision = str(result.get("decision", ""))
     dclass = _DECISION_CLASS.get(decision, "neutral")
     dhelp = _DECISION_HELP.get(decision, "Unrecognized decision value.")
@@ -2016,6 +2023,16 @@ def save_report(
     include_evidence=False,
     _allow_empty_existing=False,
 ) -> tuple[Path, Path]:
+    """Write the report as results.json + report.html into a fresh directory.
+
+    The directory is created with owner-only permissions and both files are
+    written atomically (O_EXCL, no overwrite) with 0o600, since reports may
+    contain sensitive evidence. The JSON holds the public view (raw
+    observations stripped unless include_evidence is set); the HTML is the
+    full enriched rendering. Returns the (json_path, html_path) tuple.
+    Raises ValueError if the directory is not fresh and empty.
+    """
+
     # Automatic diagnostics: pure functions of the recorded search
     # outcomes, attached to a copy so the caller's dict is untouched. The
     # JSON keeps them (they are safe aggregates) while _public_view strips
