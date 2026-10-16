@@ -3460,3 +3460,31 @@ aggregate mean denominator). No genuine bugs -- CLEAN. Deliberately not
 verified: live-model backends; subprocess mpl run; report-HTML rendering
 of diagnostic sections; statistical power of the sweep. README test count
 updated to 4124.
+
+## 2026-10-16 (cycle 70: upstream drift re-check)
+
+Re-verified all 7 tracked items against primary sources (2026-10-16 ~05:40 CEST);
+nothing changed vs the 2026-10-16 ~03:00 CEST baseline. No repo changes needed.
+1. SGLang PR #42466 (multi-stop earliest-occurrence): still open, not merged
+   (GitHub API: state=open, merged=false, updated 2026-10-12; CI red on all
+   three runs). If merged, emulate_sglang_stop tie-break becomes earliest
+   occurrence in decoded text (ties keep list order).
+2. transformers: latest v5.20.0 (published 2026-10-15); no post-freeze change
+   to stopping_criteria.py (last touch 2026-09-18, docstring fix) -- no
+   StopStringCriteria change.
+3. vLLM: latest v0.31.0 (2026-10-05); no detokenization/stop-handling change.
+4. SGLang: latest v0.5.21 (2026-10-02); no stop-string-logic change.
+5. Mistral Large 4 (mistralai/Mistral-Large-4-1T-A52B): still "Upcoming
+   release", ETA October 31, 2026 (primary HF page; a secondary source claims
+   Oct 27 -- primary wins).
+6. Reflection Beam: still waitlist-only, no public weights; full 501B MoE
+   weights ship later in October 2026 under Apache 2.0 after red-teaming.
+7. New releases in last ~30h vs 29-family catalog -- no new framing:
+   Meta Muse Spark Open (2026-10-15, gated repo: chat_template.jinja returns
+   401, unverifiable; repo keeps muse_spark from the cycle-52/61
+   cross-check, no unverified claim made), NVIDIA Nemotron 3.5 Super VL
+   120B-A12B and Bolt 74B-A9B (both <|im_start|>/<|im_end|> chatml framing,
+   covered by nemotron35), Stepfun Step-5-Preview (chatml-based, covered by
+   chatml), LFM2.5-24B-A2B (covered by lfm25). News sweep: no other chat-model
+   releases. Next round: re-check Muse Spark Open's gated template once the
+   license is accepted, and any Beam weight drop.
