@@ -4169,3 +4169,13 @@ regression (no source changes in this cycle). Fix: threshold 5.0s ->
 15.0s with a comment documenting the measured overhead; still guards
 against pathological (minutes-scale) slowdown. Verified green under
 coverage before pushing.
+
+## Cycle 95 (2026-10-16) — release-readiness: CHANGELOG finalized, release notes refreshed
+
+Finalized `CHANGELOG.md` for the 0.1.0 release: the `[Unreleased]`
+section (cycles 14-94) is now `## [0.1.0] — 2026-10-16`. Refreshed
+`docs/RELEASE_NOTES_0.1.0.md`: fixed three stale claims (CHANGELOG
+section reference `[Unreleased]` -> `[0.1.0]`; test count 5908 ->
+6063; ruff file count 139 -> 148; added the coverage-gate figure).
+The notes remain honestly marked DRAFT pending the owner's release
+tag. No source or test changes in this cycle.

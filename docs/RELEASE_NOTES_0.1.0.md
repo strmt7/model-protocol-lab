@@ -46,7 +46,7 @@ snapshot that was never executed). Since that snapshot:
   verified against the real implementations over thousands of
   adversarial differential trials.
 
-See `CHANGELOG.md` (`[Unreleased]`) for the full per-cycle record,
+See `CHANGELOG.md` (`[0.1.0]`) for the full per-cycle record,
 including every real bug found and fixed during the audit cycles.
 
 ## Breaking changes
@@ -85,10 +85,11 @@ source as above is the supported path. Upgrade from a source checkout:
 
 ## Verified for this release (2026-10-16)
 
-- `ruff check` clean; `ruff format --check` clean (139 files);
+- `ruff check` clean; `ruff format --check` clean (148 files);
   `mypy model_protocol_lab` clean (15 files);
   `bandit -r model_protocol_lab` — no issues identified.
-- Suite: 5908 tests collected (was 5900; +8 release-readiness pins).
+- Suite: 6063 tests collected; `coverage report --fail-under=95` passes
+  (98% total line coverage).
 - `python -m build` wheel verified: 21 files, no `__pycache__` /
   `.pytest_cache` / tests shipped; installs in a network-isolated fresh
   venv; all 8 subcommands' `--help` exit 0 there.
