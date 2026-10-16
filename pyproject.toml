@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "model-protocol-lab"
-version = "0.1.0a0"
+version = "0.1.0"
 description = "Local conversation protocol experiments with held-out evidence"
 readme = "README.md"
 requires-python = ">=3.11"

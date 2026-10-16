@@ -3808,3 +3808,39 @@ mutations (inspect return 1->0; dropped token/context range check;
 dropped duplicate boundary-map check) killed by 11 tests, all restored.
 README test count 5900. External: parent confirmed via GitHub Actions API
 that the fc7e7e14 CI-red-fix commit is now fully green on all six jobs.
+
+## 2026-10-16 (cycle 84: release version decision — 0.1.0)
+
+Owner directive (2026-10-16): decide the release version — 1.0.0 if the
+API is stable, otherwise the honest pre-release number — and update it
+everywhere. DECISION: **0.1.0**, recorded here with rationale; no git tag
+created (tagging is the owner's call).
+
+Rationale:
+- 1.0.0 (semver) signals a long-term API-stability commitment. This is
+  the first public release; the 0.1.0a0 label marked an unexecuted
+  snapshot, so keeping any alpha/dev suffix now would be dishonest (the
+  suite executes: 5908 tests, CI green on all six jobs, packaging
+  verified in a network-isolated fresh venv).
+- The CLI surface has been stable across 80+ development cycles and a
+  public-API-surface audit exists (cycle 41), but honest limits remain
+  (no real-model runs beyond the synthetic checkpoint, no browser
+  rendering checks, single-platform CI matrix). 0.1.0 communicates
+  "initial release, API may still evolve" — the honest pre-release
+  number, not a stability promise the project has not yet earned.
+
+Changes applied (verified by execution):
+- pyproject.toml, model_protocol_lab/__init__.py, CITATION.cff: 0.1.0a0 -> 0.1.0.
+- docs/USAGE.md: the debug banner example (real output; the banner prints
+  __version__) updated to "model-protocol-lab debug 0.1.0".
+- tests/test_cycle41_api_surface_verify.py: the banner pin and the
+  mutant-bump pin no longer hard-code the version string -- both derive
+  it from pyproject.toml (the repo's own cycle-79/80 lesson: derive,
+  don't hard-code).
+- tests/test_cycle46_docs_accuracy_audit.py: banner pin derives from
+  pyproject.toml.
+- tests/test_cycle84_release_readiness.py: new pin asserting the final
+  release shape ^\d+\.\d+\.\d+$ so a future alpha/dev label is deliberate.
+- docs/RELEASE_NOTES_DRAFT.md superseded by docs/RELEASE_NOTES_0.1.0.md.
+Historical dated entries mentioning 0.1.0a0 (CHANGELOG's [0.1.0a0]
+snapshot section, earlier log entries) are intentionally NOT rewritten.

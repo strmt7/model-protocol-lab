@@ -381,7 +381,11 @@ class TestDebugRepl(unittest.TestCase):
     def test_banner_matches_doc(self) -> None:
         proc = run_mpl("debug", "--dataset", "examples/fixtures.json", input_text=".quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("model-protocol-lab debug 0.1.0a0", proc.stdout)
+        match = re.search(
+            r'^version\s*=\s*"([^"]+)"', (REPO_ROOT / "pyproject.toml").read_text(), re.M
+        )
+        assert match is not None
+        self.assertIn(f"model-protocol-lab debug {match.group(1)}", proc.stdout)
         self.assertIn(
             "dataset: examples/fixtures.json (4 fixtures) | family: chatml | tokenizer: none",
             proc.stdout,
@@ -1135,9 +1139,7 @@ class TestSensitivityControls(unittest.TestCase):
 
     def test_mutant_bumped_version_detected(self) -> None:
         source = (
-            (REPO_ROOT / "model_protocol_lab" / "__init__.py")
-            .read_text()
-            .replace("0.1.0a0", "9.9.9")
+            (REPO_ROOT / "model_protocol_lab" / "__init__.py").read_text().replace("0.1.0", "9.9.9")
         )
         mutant = self._load_mutant_init(source, "version")
         with self.assertRaises(AssertionError):

@@ -6,6 +6,114 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycles 14–15, 52, 54 — catalog to 29 families, 2026-10-15)
+
+- Format catalog expanded 23 -> 29 families (all pinned by byte-exact
+  tests in `tests/test_cycle14_*`, `tests/test_cycle15_*`,
+  `tests/test_cycle52_muse_spark.py`, `tests/test_cycle54_qwen38.py`):
+  `k2horizon` (cycle 14, K2-Horizon), `hy4` (Tencent Hy4 preview),
+  `minimax3` (MiniMax-M3), `nanbeige42` (Nanbeige 4.2-3B; all three cycle
+  15, re-verified against primary sources this round -- official
+  chat_template.jinja / tokenizer_config.json preserved byte-identical
+  under `docs/evidence/`), `muse_spark` (cycle 52, Meta Muse Spark Open),
+  `qwen38` (cycle 54, Qwen3.8-27B, thinking-on default opening the
+  generation prompt with `<think>`). The `doctor` portability matrix now
+  renders 118 mutate candidates (110 -> 114 -> 118). Evidence tiers and
+  out-of-scope branches are documented in the catalog comments and
+  `docs/RESEARCH_LOG.md`.
+
+### Added (cycles 45–83 — audit record, 2026-10-15 → 2026-10-16)
+
+- Audit cycles 45–51, 55–65, 68–75, 77–83 (see
+  `docs/RESEARCH_LOG.md`): differential re-verifications of
+  run_experiment, docs command examples, the sample-report pipeline,
+  canary evidence-leak sweeps, logprob numerics, HF stop-emulation,
+  core.evaluate, the prompt-sensitivity sweep, budget frontier, HTML
+  escaping, boundary portability, harness concurrency, doctor
+  portability-matrix semantics, search/held-out separation, the CLI
+  surface, backend seed-determinism, LocalHFBackend lifecycle, reporting
+  determinism, classification/failure taxonomy, run orchestration, the
+  core.evaluate engine, and the special-token auditor. Upstream drift
+  re-checks (cycles 51, 61, 70): no change. Cycles with real findings are
+  under Fixed; the rest are CLEAN with mutation gates run on hermetic
+  /tmp copies.
+- `tests/test_ci_portability_guard.py`: standing AST guard forbidding
+  exact `sys.version_info` tuple comparisons and bare torch/transformers
+  `__version__` string equality anywhere in the test suite (the failure
+  class behind the cycles-79/80 CI red).
+- Cycle-83 CLI wiring audit (`tests/test_cycle83_cli_wiring_audit.py`,
+  63 tests): the exit-code contract is pinned by subprocess -- 0/1/2/130
+  for compatible/failed/cancelled/ambiguous/held_out_failed/
+  no_candidate run decisions, bad subcommands, missing args, invalid
+  enum values, unreadable inputs, unwritable outputs, malformed fixtures,
+  nonexistent checkpoints, contradictory ranges -- plus `--help`
+  byte-stability across runs for every subcommand (fixed COLUMNS, no
+  PID/tmpdir/timestamp leaks) and console-script equivalence with
+  `python -m model_protocol_lab`.
+- Cycle-82 fixture serialization round-trip audit
+  (`tests/test_cycle82_fixture_serialization_audit.py`, 80 tests):
+  `fixtures.split_to_json_text` round-trip fidelity over adversarial
+  Splits, `write_fixture_file` exclusive creation (0o600, partial-write
+  cleanup), and the fixed dataset rejection vocabulary. CLEAN, no source
+  changes.
+
+### Fixed (cycles 36–83 — real bugs and robustness, 2026-10-15 → 2026-10-16)
+
+- **REAL BUG, CI-red root cause (cycles 79/80):** `examine_model`
+  caught only `ValueError` around config/tokenizer reads, so an
+  unreadable asset (`OSError`, e.g. `PermissionError` on
+  `path.open("rb")`) escaped instead of failing closed. `doctor.py` now
+  catches `OSError` alongside `ValueError` in all four blocks, mapping
+  to the fixed `missing_or_unsafe_asset` check code. Four
+  root-independent regression tests mock `Path.open` to raise
+  `PermissionError` (config/tokenizer/manifest/weight-index blocks);
+  negative control: all four fail on reverted source. Sibling fixes in
+  the same round: the Python-version test now checks the
+  `requires-python` range (not `(3, 12)`), the torch test compares the
+  base version (so CI's CUDA wheel passes), the transformers test checks
+  membership in the `hf` pin range (not `"5.19.0"`), and the bandit test
+  skips when no `bandit` binary is on PATH (it only exists in the
+  security-audit job).
+- **REAL BUG (cycle 76, scoring):** `_f32` in `scoring.py` raised
+  `OverflowError` for finite float64 log-probabilities outside the
+  float32 range (legitimate from fp32-range logits via max-shift
+  log-sum-exp), collapsing through `score_target_logprobs` to
+  `unavailable`/`forward_failed` and mislabeling a computable score.
+  `_f32` now saturates finite out-of-range values to +/-inf, matching
+  IEEE-754 round-to-nearest-even and torch/numpy float32 conversion
+  (`+_FLT_MAX` constant); the old `test_out_of_float32_range_raises` pin
+  was updated to the corrected saturation behavior. Pinned by
+  `tests/test_cycle76_scoring_semantics_audit.py` (27 tests + 75
+  subtests; negative control: 12 failures on reverted code).
+- **REAL BUG (cycle 67, diff-reports):** two winnerless runs compared
+  as "winner CHANGED" because `diff_reports` kept
+  `selected_candidate=""` while `_held_verdict` treats `""` as absent.
+  Winner extraction now normalizes `""` to `None`
+  (`diffreports.py:361`). Pinned by `tests/test_cycle67_diffreports_audit.py`
+  (44 tests + 819 subtests; negative control: the pinned test + 188 fuzz
+  subtests fail on reverted code).
+- **REAL BUG (cycle 66, fixtures):** a single CSV field over the csv
+  module's 131072-char field limit raised `csv.Error`, escaping the
+  documented `ValueError` contract and giving `fixtures build` an
+  unhandled traceback; read-time `OSError` after a successful open
+  (e.g. `/proc/self/mem`) escaped as `OSError` to the CLI. `csv.Error`
+  is now caught around the parse loop and raised as
+  `ValueError("CSV field exceeds the parser limit near row N")`; reads
+  wrap the read call and map `OSError` to the existing
+  `"Unreadable ..."` codes. Pinned by
+  `tests/test_cycle66_fixture_loading_audit.py`.
+- **REAL BUG (cycle 36, debug REPL):** truncated transcripts could never
+  be saved -- truncation kept `_MAX_SAVE_BYTES` of content then
+  prepended the 29-char marker, pushing the total back over the bound so
+  `.save` always refused. The marker is now budgeted inside the
+  truncation (`debug.py`). Pinned by
+  `TestTranscript.test_truncated_transcript_save_succeeds`.
+- ROBUSTNESS (cycle 39, catalog): `candidates()` type-gates non-str
+  family keys before the `CATALOG` lookup, so the documented
+  `ValueError("Unknown format family")` holds for unhashable and non-str
+  keys instead of leaking `TypeError`. Pinned by
+  `tests/test_cycle39_catalog_integrity.py`.
+
 ### Added
 
 - `mpl diff-reports OLD_RESULTS NEW_RESULTS`: deterministic comparison of
