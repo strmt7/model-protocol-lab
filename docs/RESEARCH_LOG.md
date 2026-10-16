@@ -3550,3 +3550,27 @@ vocabulary pinned (ValueError with fixed codes, never tracebacks);
 sanitized loader/encode failure paths. Mutation gate 6/6 killed on
 PID-scoped /tmp copies. No genuine bugs -- CLEAN. README test count
 updated to 4324.
+
+## 2026-10-16 (cycle 74: catalog render-correctness audit)
+
+First adversarial audit of the 29-family prompt-format catalog's hand
+renders themselves (tests/test_cycle74_catalog_render_audit.py, 1149
+tests): structural invariants over all 29 families x all
+candidates(mutate=True) variants (118 renders) -- render-twice
+determinism, non-empty output, distinct user/assistant markers, no
+None/placeholder leakage, exact one-turn mechanics rebuilt from field
+values, 3-turn alternation, unicode preservation; variant inventory pin
+(118 total, exact branch-variant names for the 9 generation-prompt-branch
+families, base-first ordering). Primary-source cross-checks for 6 families
+(fetched 2026-10-16, URLs + template lines pinned in the test docstring):
+llama3 (llama-models prompt_format.md) byte-exact; gemma
+(ai.google.dev/gemma/docs/formatting) byte-exact; qwen3 (Qwen3-8B
+tokenizer_config.json) byte-exact; deepseek (DeepSeek-V3
+tokenizer_config.json, incl. U+FF5C/U+2581) byte-exact; mistral v0.3
+version-pin coherence (catalog pins the 2024-05-22 release form; current
+Hub file exhibits exactly the rewrite the catalog comment describes);
+hy4 (tencent/Hy4-preview chat_template.jinja + the locally preserved
+byte-identical template executed under stock Jinja2 -- output minus the
+documented synthesized system block is byte-identical to the catalog
+render, incl. the no-think variant). Mutation gate 6/6 killed on /tmp
+copies. No genuine mismatches -- CLEAN. README test count updated to 5473.
