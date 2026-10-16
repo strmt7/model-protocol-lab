@@ -3314,3 +3314,31 @@ note: `mpl debug` REPL merges partitions for interactive inspection,
 outside the automated selection pipeline. Deliberately not verified:
 live-model backends; statistical strength of the split itself. README
 test count updated to 3823.
+
+## 2026-10-16 (cycle 64: CLI-surface adversarial audit)
+
+Adversarial audit of the full CLI surface (tests/test_cycle64_cli_surface_audit.py,
+110 tests + 78 subtests): all 8 subcommands (catalog, inspect, doctor, run,
+fixtures build, diff-reports, diff-backends, debug) plus top-level -- bare
+invocation, unknown subcommand, abbreviation rejection, --help everywhere,
+missing/wrong-type/out-of-range args, malformed --boundary-ids and
+--boundary-map, nonexistent/unreadable/directory/FIFO paths, existing
+--output, sidecar collision, the 32 MiB results.json cap, stdout-vs-stderr
+routing per row, debug REPL read-only-ness (Split/CATALOG snapshot-identical
+after a command battery; no experiments import; partitions merged into a
+fresh tuple), and console-script equivalence (model-protocol-lab vs
+python -m). Every USAGE.md-documented error code emitted verbatim; exit
+discipline holds (2 argparse, 1 fixed-code input failure, 0/1/2/130 run
+decisions). No genuine code bugs -- CLEAN. One genuine doc fix from the
+audit: USAGE.md (and the load_results docstring) claimed diff-reports
+refuses directories with results_not_regular_file -- reality: a directory
+is accepted as a report directory holding results.json (diffreports.py:77;
+pinned by test_report_directory_form_accepted). Fixed both wordings.
+Precision notes (not bugs): `mpl` is docs shorthand, not an installed
+command (only model-protocol-lab is); the 1 MB --prompt-text/--output-text
+argparse bounds are unreachable via real execve on Linux (MAX_ARG_STRLEN
+128 KiB) -- defense-in-depth, pinned unit-level; argparse reports a missing
+command instead of "unrecognized arguments" for unknown top-level flags
+(exit code still 2). Deliberately not verified: SIGINT exit-130 path;
+live-model run/doctor; pip install of the console script. README test
+count updated to 3933.

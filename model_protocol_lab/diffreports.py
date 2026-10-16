@@ -64,7 +64,8 @@ def load_results(path: str | Path) -> dict[str, Any]:
     """Read a ``results.json`` (or a report directory holding one).
 
     The read is bounded and side-channel free: the path must resolve to a
-    regular file (FIFOs, devices, sockets and directories are refused), at
+    regular file (a directory resolves to the ``results.json`` inside it;
+    FIFOs, devices and sockets are refused), at
     most ``MAX_RESULTS_BYTES`` are read, and every failure mode maps to a
     fixed error code raised as ``ValueError`` -- never a traceback and never
     file content echoed into the message.

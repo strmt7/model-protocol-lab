@@ -752,8 +752,9 @@ Exit code is 0 whenever the comparison succeeds -- differences are the
 tool's useful output, not a failure. Exit 1 means an input problem, with a
 fixed error code on stderr and no traceback. Input bounds (all fixed
 codes): at most 32 MB per `results.json` (`results_too_large`); the path
-must be a regular file -- FIFOs, devices, sockets and directories are
-refused (`results_not_regular_file`); duplicate JSON fields and non-finite
+must resolve to a regular file -- a directory is accepted when it holds
+`results.json`, while FIFOs, devices and sockets are refused
+(`results_not_regular_file`); duplicate JSON fields and non-finite
 numbers are rejected (`results_duplicate_field`, `results_nonfinite_number`);
 operator-visible identifiers (fixture IDs, candidate names) are stripped
 of control characters before they reach stderr.
