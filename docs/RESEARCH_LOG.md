@@ -4394,3 +4394,29 @@ binding the factory through `Callable[..., Any]` instead — typed in both
 environments, verified via `mypy --no-site-packages --strict` (0 errors,
 fresh cache). Lesson: any third-party-boundary typing fix must be checked
 in both the with-deps and without-deps configurations.
+
+## Cycle 105 — optional-dependency audit (2026-10-17)
+
+The base package declares ``dependencies = []`` — it must work with zero
+third-party packages. Verified: all torch/transformers imports are deferred
+(function-local) or ``TYPE_CHECKING``-guarded; ``safetensors`` is declared in
+the hf extra but never imported directly (transitive only). Real gap found:
+a missing hf extra collapsed into the generic
+``local_backend_initialization_failed``, a dead-end message. ``LocalHFBackend``
+now raises the distinct ``local_hf_extra_not_installed`` code (the outer
+``except Exception`` passes coded ``RuntimeError``s through untouched), and
+the CLI renders it with the install hint
+``pip install "model-protocol-lab[hf]"`` via the extracted, unit-tested
+``_backend_failure_message`` helper. New
+``tests/test_cycle105_optional_dependency_audit.py`` (7 tests): AST guard
+against module-level third-party imports (with negative control), blocked-hf
+behavioral test, CLI hint/leak tests. Test count 6123 -> 6131 (README + VALIDATION.md updated).
+
+Caught during verification: the first version of the new test deleted
+torch/transformers from ``sys.modules`` to simulate the missing extra —
+this segfaulted the full suite (C-extension re-import hazard). Rewrote to
+patch ``builtins.__import__`` instead, leaving ``sys.modules`` untouched.
+Also fixed: the initial ``except RuntimeError: raise`` passthrough was too
+broad (let a transformers vocabulary-mismatch RuntimeError escape raw);
+replaced with a dedicated ``_MissingHfExtraError`` following the existing
+``_ContextWindowError`` pattern.
