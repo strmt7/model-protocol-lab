@@ -3488,3 +3488,20 @@ nothing changed vs the 2026-10-16 ~03:00 CEST baseline. No repo changes needed.
    chatml), LFM2.5-24B-A2B (covered by lfm25). News sweep: no other chat-model
    releases. Next round: re-check Muse Spark Open's gated template once the
    license is accepted, and any Beam weight drop.
+
+## 2026-10-16 (cycle 71: debug REPL deeper-paths audit)
+
+Adversarial audit of the mpl debug REPL beyond cycle 36's command basics
+(tests/test_cycle71_debug_repl_audit.py, 83 tests): independent brute-force
+oracles for _overhang/first-boundary (explicit-loop implementations, 25
+LCG walks + hand-computed walk), minimal-pair boundaries (16 vs 17 ids,
+4096 vs 4097, 1MB vs 1MB+1 .say bytes, 10000 vs 10001 lines, 512 vs 513
+display ids, 2^31-1 vs 2^31), 13-command multi-turn session with prompt
+transitions, state-pollution checks (failed commands leave prior state
+intact), parsing edges (uppercase, tabs, unicode, CRLF, NUL, 20k-char
+input, nested .read depth-counter restoration), error recovery (exploding
+tokenizers degrade, EOF mid-.say ends session -- pinned as the safe choice),
+fail-closed backends (tokenizer-only loading proved with garbage weight
+files; loader failures collapse to fixed codes without echoing paths),
+CLI wiring. Mutation gate 6/6 killed on PID-scoped /tmp copies. No genuine
+bugs -- CLEAN. README test count updated to 4207.
