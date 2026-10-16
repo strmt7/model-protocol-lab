@@ -3364,3 +3364,31 @@ is HF's KV-cache, disabled). Cycle-63's cited claims (backends.py:732-733,
 Deliberately not verified: cross-machine/GPU determinism; constructor-time
 RNG side effects; emulate_* stop functions (pure ports, out of scope).
 README test count updated to 3951.
+
+## 2026-10-16 (cycle 66: fixture-loading adversarial audit + 2 bug fixes)
+
+Adversarial audit of fixture loading (tests/test_cycle66_fixture_loading_audit.py,
+73 tests + 1 skipped): fixtures.read_authoring_file / parse_fixture_csv
+(fixtures.py:60-208) and datasets.load_dataset / parse_dataset
+(datasets.py:85-138). Partition column honored exactly/case-sensitively;
+NFC/NFD duplicate IDs, group overlap, message leakage rejected via Split;
+CRLF/quoted fields/BOM/CRLF edge cases; all size caps enforced at exact
+boundaries; FIFO/dir/dev/null/symlink/dangling/missing/null-byte inputs ->
+fixed ValueErrors; UTF-16-with-BOM and latin-1 refused. TWO REAL BUGS
+FOUND AND FIXED (with regression tests):
+- BUG-1 (medium): parse_fixture_csv -- a single CSV field over the csv
+  module's 131072-char field limit raised _csv.Error (not ValueError),
+  escaping the documented contract; `fixtures build` catches only
+  ValueError -> unhandled traceback. Fix: catch csv.Error around the
+  parse loop, raise ValueError("CSV field exceeds the parser limit near
+  row N").
+- BUG-2 (low): read_authoring_file / load_dataset -- read-time OSError
+  after a successful open (e.g. /proc/self/mem passes S_ISREG, read
+  raises EIO) escaped as OSError -> CLI traceback. Fix: wrap the read,
+  map OSError to the existing "Unreadable ..." ValueError codes.
+Negative control: the 3 updated regression tests fail against the
+reverted code and pass against the fixed code. Mutation gate on the
+audit (4 mutants, /tmp copies) 4/4 caught. Minor doc drift noted (not
+fixed): whitespace-only lines are treated as data rows ("fixture id is
+blank") while USAGE.md says blank lines carry no fixture. README test
+count updated to 4025.
