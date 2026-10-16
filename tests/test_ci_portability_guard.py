@@ -112,5 +112,52 @@ class TestNoExactVersionPins(unittest.TestCase):
         )
 
 
+def _is_lone_surrogate(char: str) -> bool:
+    return 0xD800 <= ord(char) <= 0xDFFF
+
+
+def _docstring_surrogate_hits(path: Path) -> list[str]:
+    """Find docstrings containing lone-surrogate characters.
+
+    Regression guard for the cycle-92 CI red: CPython 3.13's compile()
+    encodes ``__doc__`` as strict UTF-8, so a module whose docstring
+    holds a real lone-surrogate character (e.g. a single-backslash
+    ``'\\ud800'`` escape in the docstring source) fails at import time
+    with ``UnicodeEncodeError`` -- while 3.11/3.12 accept it, which is
+    why the local suite stayed green. Docstrings must show the escape
+    as literal text (double the backslash); surrogate *test data*
+    belongs in runtime-constructed strings (``chr(0xD800)``), never in
+    docstring prose.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    hits: list[str] = []
+
+    def _check(label: str, lineno: int, doc: str | None) -> None:
+        if doc and any(_is_lone_surrogate(c) for c in doc):
+            hits.append(f"{path.name}:{lineno}: {label} docstring holds a lone surrogate")
+
+    _check("module", 1, ast.get_docstring(tree))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            _check(f"{type(node).__name__} {node.name}", node.lineno, ast.get_docstring(node))
+    return hits
+
+
+class TestNoDocstringSurrogates(unittest.TestCase):
+    def test_no_docstring_lone_surrogates(self) -> None:
+        hits: list[str] = []
+        for path in sorted(TESTS_DIR.glob("test_*.py")):
+            if path.name == _GUARD_NAME:
+                continue
+            hits.extend(_docstring_surrogate_hits(path))
+        self.assertEqual(
+            hits,
+            [],
+            "lone surrogates in docstrings make the module unimportable on "
+            "Python 3.13 (compile() encodes __doc__ as strict UTF-8); "
+            "double the backslash so the escape renders as text:\n" + "\n".join(hits),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

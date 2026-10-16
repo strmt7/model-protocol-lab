@@ -4103,3 +4103,40 @@ MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE in cli.py and the test;
 also reworded the explanatory comment to avoid the MPL_ substring the
 pin scans for. The pin now passes; the hook remains test-only and
 env-gated with zero production impact.
+
+## Cycle 93 (2026-10-16) — 3.13-only CI red: root cause PROVEN via CI job log
+
+The repair commit 72c0de563e07 went green on 3.11/3.12 but the Python
+3.13 test job failed again -- the same 3.13-only signature as cycles
+87/88, whose root cause was never proven (cycle 92's best-effort fix
+removed import-time global mutations from the docs-coherence test).
+This cycle pulled the 3.13 job log (job 117049410991) and found the
+exact failing test:
+
+- `ImportError: Failed to import test module:
+  tests.test_cycle86_serialization_properties` --
+  `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800'
+  in position 1565: surrogates not allowed`, raised from
+  `compile()` during `__import__` (and identically from pytest's
+  assertion-rewrite `compile()`).
+- Downstream: `test_readme_test_count_matches_discovered_suite` and
+  `test_suite_count_meets_documented_floor` failed only because pytest
+  collection aborted (exit 2).
+
+Root cause, confirmed by local AST analysis plus external reports
+(CPython 3.13 behavior change): the module's *docstring* contained a
+real lone-surrogate character -- a single-backslash `'\ud800'` escape
+in docstring prose (line 33, meant as literal text, as the
+double-backslash `\\ud800` two lines below shows). CPython 3.13's
+`compile()` encodes `__doc__` as strict UTF-8, so the module is
+unimportable on 3.13; 3.11/3.12 accept it, which masked it locally
+(the suite runs as root on 3.12). Surrogate *constants* in function
+bodies (test_core.py, test_cycle32/42/56/91) are unaffected on 3.13 --
+only docstrings trigger it, which is why exactly one module failed.
+
+Fix (one character): doubled the backslash so the docstring renders
+the escape as text; zero runtime change. Regression guard:
+`TestNoDocstringSurrogates` in `tests/test_ci_portability_guard.py`
+AST-scans every test module's module/class/function docstrings for
+lone surrogates. Also bumped the README/VALIDATION test-count claims
+6062 -> 6063 for the new guard test.
