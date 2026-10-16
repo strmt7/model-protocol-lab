@@ -129,6 +129,12 @@ All notable changes to this project are documented here. The format follows
   escape as text (zero runtime change). `tests/test_ci_portability_guard.py`
   gains `TestNoDocstringSurrogates`, an AST guard that fails any test
   module whose module/class/function docstring holds a lone surrogate.
+- **TEST ROBUSTNESS (cycle 94):** `test_template_diff_long_equal_prefix_stays_fast`
+  asserted a 5.0s wall-clock bound calibrated for uninstrumented runs,
+  but the CI gate runs under `coverage run` (measured 3.5x overhead:
+  1.47s -> 5.10s for the same input), so it failed spuriously under
+  coverage. Threshold raised to 15.0s with a comment documenting the
+  overhead; still catches algorithmic blowup (minutes-scale).
 
 - **REAL BUG (cycle 86, fixtures):** `split_to_json_text` raised a bare
   `UnicodeEncodeError` for lone surrogates (which this hypothesis

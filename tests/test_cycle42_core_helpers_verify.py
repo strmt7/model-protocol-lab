@@ -1086,6 +1086,10 @@ class TestRedTeam(unittest.TestCase):
 
     def test_template_diff_long_equal_prefix_stays_fast(self):
         # difflib is linear-ish here; guard against pathological slowdown.
+        # The CI gate runs under `coverage run` (3-4x instrumentation
+        # overhead: ~1.5s uninstrumented vs ~5.1s covered for this input),
+        # so the threshold must clear coverage overhead with margin; it
+        # still catches algorithmic blowup, which would take minutes.
         import time
 
         hand = (0,) * 3000 + (1, 2, 3)
@@ -1093,7 +1097,7 @@ class TestRedTeam(unittest.TestCase):
         start = time.monotonic()
         segments = real_core.template_diff(hand, template)
         elapsed = time.monotonic() - start
-        self.assertLess(elapsed, 5.0)
+        self.assertLess(elapsed, 15.0)
         self.assertEqual(_reconstruct_template(hand, segments), template)
         self.assertEqual(len(segments), 1)
 

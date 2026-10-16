@@ -279,3 +279,22 @@ reproducible from the repository root in a fresh virtual environment.
 ## Release gate
 
 Do not tag this source as a validated release until the execution, dependency, integration, privacy, scientific-evaluation and reproducibility gates in DEVELOPMENT_PLAN.md are satisfied with retained evidence. Record failures as well as passing results. Do not weaken assertions merely to obtain a green suite.
+
+## Fresh-install and CLI smoke test (cycle 94, 2026-10-16)
+
+- Fresh venv (`python3 -m venv`, no extras): `pip install .` exits 0;
+  `model_protocol_lab.__version__` reports `0.1.0`.
+- All 8 CLI subcommands (`catalog`, `inspect`, `doctor`, `run`,
+  `fixtures`, `diff-reports`, `diff-backends`, `debug`) print `--help`
+  cleanly from the installed entry point.
+- Functional smoke (installed package, no dev checkout):
+  `catalog` lists families; `inspect examples/fixtures.json` ->
+  `{"search_cases": 2, "held_out_cases": 2, "valid": true}`;
+  `doctor --model` on a weights-less stub fails closed with a
+  structured `failed` verdict (`require_one_standard_safetensors_layout`);
+  `fixtures build examples/fixtures.csv --output` ->
+  `inspect` round-trip valid; `diff-reports` on the sample report
+  against itself reports "No differences".
+- `run` / `debug` / `diff-backends` were not exercised here: they need
+  a real tokenizer/checkpoint (`hf` extra), covered by the
+  integration tests instead.
