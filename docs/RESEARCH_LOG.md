@@ -3934,3 +3934,24 @@ mandates --reasoning-parser k2_horizon), consistent with the worker's
 report. No separate catalog entry needed; added a one-line verified
 provenance note to the k2horizon comment in model_protocol_lab/catalog.py.
 No code change; evidence tier for k2horizon stays tier-1 (IFM template).
+
+## Cycle 86 follow-up (2026-10-16, coordinator) — REAL BUG: lone-surrogate crash in split_to_json_text
+
+The worker's property file passed its own run, but coordinator verification
+failed test_roundtrip_identity: hypothesis drew expected='\ud800' and
+split_to_json_text crashed with a bare UnicodeEncodeError. Root cause:
+json.dumps(..., ensure_ascii=False) emits the lone surrogate raw into the
+text; the by-construction parse_dataset re-parse then dies on
+text.encode("utf-8"). A lone surrogate is legal in a Python str but can
+never be written to a UTF-8 fixture file. Fix (model_protocol_lab/
+fixtures.py): deliberate fail-closed refusal with the fixed ValueError
+vocabulary ("...contains a lone surrogate...") before the re-parse.
+Direct probe disproved the worker's "st.characters() excludes surrogates"
+assumption (drew 0xdbec/0xdd70/... in 2000 examples); the round-trip
+strategy now filters to valid Unicode explicitly. New regression test
+test_rejection_lone_surrogate (4 fields x 4 surrogate shapes). Negative
+control: reverting the fix makes the refusal test fail. write_fixture_file
+needs no change: split_to_json_text is the only in-package producer of
+fixture text, and its partial-write cleanup already handles encode
+failures. No remote-code-execution concern: the Jais-3 modeling file was
+read as text only, never executed.

@@ -249,6 +249,17 @@ def split_to_json_text(split: Split) -> str:
         "held_out": [fixture_json(case) for case in split.held_out],
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    # A lone surrogate is legal in a Python str but cannot be encoded to the
+    # UTF-8 bytes a fixture file requires. Refuse deliberately with the fixed
+    # ValueError vocabulary instead of letting the encode (or the later file
+    # write) die with a bare UnicodeEncodeError.
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            "split_to_json_text: fixture text contains a lone surrogate "
+            "(not valid Unicode -- cannot be written to a UTF-8 fixture file)"
+        ) from exc
     # By-construction guarantee: the runtime loader must accept what we emit.
     parse_dataset(text)
     return text
