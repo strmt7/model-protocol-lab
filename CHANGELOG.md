@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 101 — warning-cleanliness audit, 2026-10-16)
+
+- `tests/test_cycle101_warning_cleanliness.py` (4 tests): pins the
+  verified property that the package emits zero warnings — all module
+  imports, a `doctor` smoke run, a report render, and CLI startup each
+  run warn-free under `python -W error` in a subprocess. Full-suite
+  audit (`python -W error -m pytest`, 6105 tests) passes with every
+  warning promoted to an error: no DeprecationWarning, FutureWarning,
+  ResourceWarning, or any other warning fires anywhere. Test count
+  6112 -> 6116.
+
 ### Added (cycle 100 — HTML report injection audit, 2026-10-16)
 
 - `tests/test_cycle100_html_injection_audit.py` (9 tests): hostile
