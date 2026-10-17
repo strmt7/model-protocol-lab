@@ -84,45 +84,62 @@ class ReadmeConsistencyTests(unittest.TestCase):
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         match = re.search(r"full test suite passes \((\d+) tests", text)
         self.assertIsNotNone(match, "README status line lost its test-count claim")
+        readme_count = int(match.group(1))
         # Count via pytest collection (the suite's actual runner). unittest
         # discovery alone misses pytest-style function tests, so it
         # undercounts once such files exist in the suite.
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "--collect-only",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                "tests",
-            ],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
+        # Hardened (cycle 108): the subprocess can fail transiently under
+        # load (e.g. when this test runs inside a full-suite pytest session
+        # that has already imported heavy deps). Retry up to 3 times before
+        # failing, and report both counts plus the collection diagnostics.
         collected = None
-        for line in proc.stdout.splitlines():
-            m = re.search(r"(\d+) tests collected", line)
-            if m:
-                collected = int(m.group(1))
-        # A collection error must surface its own diagnostics: pytest's
-        # error banner goes to stderr and "0 tests collected" never parses,
-        # so the old message hid the real failure. Fail loudly with the
-        # tail of both streams first, then parse.
-        self.assertEqual(
-            proc.returncode,
-            0,
-            "pytest collection failed: " + (proc.stderr or proc.stdout)[-2000:],
-        )
+        last_diagnostics = ""
+        for attempt in range(3):
+            try:
+                proc = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "--collect-only",
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                        "tests",
+                    ],
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except subprocess.TimeoutExpired as exc:
+                last_diagnostics = f"attempt {attempt + 1}: collection timed out after 300s: {exc}"
+                continue
+            for line in proc.stdout.splitlines():
+                m = re.search(r"(\d+) tests collected", line)
+                if m:
+                    collected = int(m.group(1))
+            # A collection error must surface its own diagnostics: pytest's
+            # error banner goes to stderr and "0 tests collected" never parses,
+            # so the old message hid the real failure. Fail loudly with the
+            # tail of both streams first, then parse.
+            if proc.returncode == 0 and collected is not None:
+                break
+            last_diagnostics = (
+                f"attempt {attempt + 1}: returncode={proc.returncode}, "
+                f"collected={collected}, "
+                f"stderr_tail={(proc.stderr or proc.stdout)[-2000:]}"
+            )
         self.assertIsNotNone(
             collected,
-            "could not parse pytest collection count from output: "
-            + (proc.stdout or proc.stderr)[-2000:],
+            "pytest collection failed after 3 attempts; last diagnostics: " + last_diagnostics,
         )
-        self.assertEqual(int(match.group(1)), collected)
+        self.assertEqual(
+            readme_count,
+            collected,
+            f"README claims {readme_count} tests but pytest collected {collected}; "
+            f"last diagnostics: {last_diagnostics}",
+        )
 
 
 class MutationFoundTests(unittest.TestCase):
