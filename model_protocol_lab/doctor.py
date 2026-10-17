@@ -1056,20 +1056,28 @@ def marker_isolation(
             if isinstance(raw_special, (list, tuple, set, frozenset))
             else set()
         )
+
         # Some tokenizers under-declare all_special_ids while the
         # tokenizer.json marks added tokens as special; union both so the
         # probe measures what the tokenizer actually treats as special.
+        def _special_id(pair: Any) -> int | None:
+            _id, _tok = pair
+            if not getattr(_tok, "special", False):
+                return None
+            try:
+                return int(_id)
+            except (TypeError, ValueError):
+                return None
+
         try:
             decoder = tokenizer.added_tokens_decoder
             items = decoder.items() if hasattr(decoder, "items") else []
         except Exception:  # noqa: BLE001 -- best effort, all_special_ids suffices
             items = []
-        for _id, _tok in items:
-            try:
-                if getattr(_tok, "special", False):
-                    special_ids.add(int(_id))
-            except Exception:  # noqa: BLE001,S112 -- skip malformed entries
-                continue
+        for pair in items:
+            sid = _special_id(pair)
+            if sid is not None:
+                special_ids.add(sid)
     except Exception:  # noqa: BLE001 -- conformance must not fail the run
         return {"status": "unavailable", "detail": "tokenizer_load_failed", "probes": []}
     if not special_ids:
