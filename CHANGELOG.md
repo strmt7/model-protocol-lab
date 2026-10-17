@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 111 — end-to-end determinism audit, 2026-10-17)
+
+- New `tests/test_cycle111_determinism_audit.py`: runs the full `run` pipeline
+  twice in separate subprocesses with different `PYTHONHASHSEED` values and
+  asserts `results.json` and `report.html` are byte-identical across runs.
+  Any hash-order-dependent serialization (e.g. set iteration leaking into
+  output) would flip bytes and fail the test. The audit verified determinism
+  holds for the base path and for `--mutate` + `--sensitivity-sweep`. Pytest
+  4140 → 4141; unittest 4066 → 4067. README/VALIDATION.md counts updated.
+
 ### Added (cycle 109 — Hypothesis properties for Split anti-leakage, 2026-10-17)
 
 - New `tests/test_cycle109_split_properties.py`: 5 Hypothesis property tests
