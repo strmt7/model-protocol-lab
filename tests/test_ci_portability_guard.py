@@ -211,26 +211,23 @@ class TestDualRunnerContribution(unittest.TestCase):
     """Every test file must contribute tests under BOTH runners.
 
     Cycle 106 found 9 pytest-style files (2533 test executions) that CI's
-    `unittest discover` silently skipped; cycle 107 found 4 more (1040
-    executions). VALIDATION.md documents both runners, so a file that
-    collects zero tests under either runner is a coverage lie. This guard
-    fails if any tests/test_*.py file yields zero tests from unittest's
-    TestLoader or from pytest's collector.
+    `unittest discover` silently skipped; cycle 107/108 converted 5 more.
+    VALIDATION.md documents both runners, so a file that collects zero tests
+    under either runner is a coverage lie. This guard fails if any
+    tests/test_*.py file yields zero tests from unittest's TestLoader or from
+    pytest's collector.
 
-    Known exception (cycle 108): test_cycle66_fixture_loading_audit.py was
-    reverted to pytest-style after its TestCase conversion triggered a
-    CI-only 3.12/3.13 unittest failure (root cause under investigation).
-    It is excluded from the unittest-contribution check until the
-    conversion can be safely redone.
+    Cycle 113 note: test_cycle66_fixture_loading_audit.py's TestCase
+    conversion is being re-attempted as a diagnostic experiment (cycle 112
+    added CI failure-artifact upload so a CI-only failure is now
+    diagnosable). The exemption below is empty while the experiment runs.
     """
 
     # Files exempt from the unittest-contribution check, with reasons.
-    _UNITTEST_EXEMPT = {
-        "test_cycle66_fixture_loading_audit.py": (
-            "cycle 108: TestCase conversion causes CI-only 3.12/3.13 failure; "
-            "reverted to pytest-style pending root-cause investigation"
-        ),
-    }
+    # Currently empty: the cycle-108 test_cycle66 exemption was lifted for
+    # the cycle-113 diagnostic re-attempt (CI failure artifacts now make a
+    # CI-only failure diagnosable). Reinstate if the experiment fails.
+    _UNITTEST_EXEMPT: dict[str, str] = {}
 
     def test_every_test_file_collected_by_unittest(self) -> None:
         import unittest
