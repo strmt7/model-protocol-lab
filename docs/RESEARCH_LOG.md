@@ -4580,3 +4580,38 @@ inspected after any CI-only failure. Job gets least-privilege `permissions`
 **Next:** With this in place, the test_cycle66 conversion can be re-attempted
 as a diagnostic experiment: if CI fails, the artifact will name the exact
 failing test for the first time.
+
+## 2026-10-17 — Cycle 113: test_cycle66 CI mystery SOLVED via failure artifact
+
+**Root cause identified.** Cycle 112's CI failure-artifact upload worked: the
+`unittest-py3.12.log` artifact from the re-attempted conversion named the
+exact failure for the first time:
+
+```
+FAIL: test_null_byte_in_path (...TestReadAuthoringFileAdversarial)
+AssertionError: "embedded null byte" does not match
+                "open: embedded null character in path"
+```
+
+The test asserted `assertRaisesRegex(ValueError, "embedded null byte")`,
+but CPython changed the interpreter's null-path error message across
+releases: Python <=3.12.3 and 3.11 say `embedded null byte`; newer 3.12
+patch releases and 3.13+ say `open: embedded null character in path`.
+CI installs the latest patch (via setup-python), while the local venv is
+3.12.3 -- hence "passes locally everywhere, fails CI on 3.12/3.13".
+
+**Why the conversion exposed it:** the pytest-style original used
+`pytest.raises(ValueError, match="embedded null byte")` -- `match` is a
+`re.search`, and... no. Both forms do substring/regex search. The real
+reason it surfaced now: the original file was never collected by CI's
+unittest runner at all (pytest-only file, zero unittest tests -- the
+cycle-106 gap). The conversion made the test RUN under unittest in CI for
+the first time, where the newer patch-level message broke the assertion.
+Under pytest the same assertion would have failed identically on the newer
+patch -- the test was always version-fragile; it just never executed in
+the version-skewed environment before.
+
+**Fix:** version-agnostic regex `embedded null (byte|character)` matching
+the stable core of both messages; docstring updated to note the variance.
+A repo-wide grep confirmed this is the only assertion on that message
+(test_cycle88 mentions it in a docstring observation only).
