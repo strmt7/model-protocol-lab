@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import shlex
 import signal
@@ -790,13 +791,18 @@ def _render_with_time_budget(
 
     The previous ``SIGALRM`` handler and timer are saved and restored, so a
     caller-owned alarm is never lost (its remaining time may shift by the
-    render duration -- acceptable for a lab tool). A non-positive
-    ``budget_s`` disables the watchdog (documented escape hatch). Outside
-    the main thread or on platforms without ``setitimer`` (Windows), the
-    render runs unbounded -- the pre-existing behavior -- and only the
-    memory cap and the post-render length check apply.
+    render duration -- acceptable for a lab tool). A non-positive or
+    non-finite ``budget_s`` disables the watchdog (documented escape hatch;
+    ``inf``/``nan`` cannot arm ``setitimer``). Outside the main thread or on
+    platforms without ``setitimer`` (Windows), the render runs unbounded --
+    the pre-existing behavior -- and only the memory cap and the post-render
+    length check apply. Teardown blocks ``SIGALRM`` while the timer is
+    disarmed and the previous handler restored, so an alarm that becomes
+    pending in that window cannot fire mid-restore (the budget exception is
+    a ``ValueError``, which the cleanup guards would otherwise swallow,
+    leaving the handler inconsistent).
     """
-    if budget_s <= 0:
+    if budget_s <= 0 or not math.isfinite(budget_s):
         return _render_with_memory_cap(tokenizer, conversation)
     if not hasattr(signal, "setitimer"):
         return _render_with_memory_cap(tokenizer, conversation)
@@ -823,13 +829,27 @@ def _render_with_time_budget(
     try:
         return _render_with_memory_cap(tokenizer, conversation)
     finally:
-        with contextlib.suppress(OSError, ValueError):
-            signal.setitimer(signal.ITIMER_REAL, 0)
-        with contextlib.suppress(OSError, ValueError, RuntimeError):
-            signal.signal(signal.SIGALRM, old_handler)
-        if old_delay > 0:
+        # Block SIGALRM across teardown: disarming the timer does not retract
+        # an already-pending alarm, which would otherwise fire mid-restore.
+        # A pending alarm delivered here is deferred until the mask is lifted
+        # and then reaches the restored previous handler -- honest Unix
+        # semantics, and the handler/timer restoration stays atomic.
+        try:
+            saved_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+        except (AttributeError, OSError, ValueError, RuntimeError):
+            saved_mask = None
+        try:
             with contextlib.suppress(OSError, ValueError):
-                signal.setitimer(signal.ITIMER_REAL, old_delay, old_interval)
+                signal.setitimer(signal.ITIMER_REAL, 0)
+            with contextlib.suppress(OSError, ValueError, RuntimeError):
+                signal.signal(signal.SIGALRM, old_handler)
+            if old_delay > 0:
+                with contextlib.suppress(OSError, ValueError):
+                    signal.setitimer(signal.ITIMER_REAL, old_delay, old_interval)
+        finally:
+            if saved_mask is not None:
+                with contextlib.suppress(OSError, ValueError, RuntimeError):
+                    signal.pthread_sigmask(signal.SIG_SETMASK, saved_mask)
 
 
 def template_conformance(

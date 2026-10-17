@@ -4740,3 +4740,44 @@ eliminated the double weight-file hash) and documented the CVE-2026-80047
 posture in the SECURITY.md supply-chain section.
 
 **Verification:** 4/4 new tests pass; full battery green (see cycle report).
+
+## Cycle 118 (2026-10-17) — red-team audit: render watchdog hardening
+
+**Target:** `_render_with_time_budget` in `model_protocol_lab/doctor.py`
+(the cycle-116 SIGALRM watchdog bounding checkpoint-controlled Jinja CPU
+burns) and the cycle-115 stat-fingerprint manifest code. Adversarial review
+of the two most recent security-sensitive changes.
+
+**Finding 1 (deterministic bug):** a non-finite `budget_s` (`float("inf")`)
+passed the `budget_s <= 0` guard and reached `signal.setitimer`, which
+raises `OverflowError` -- not in the `except (OSError, ValueError)`
+fallback clause. The function's defensive contract ("every setup step
+falls back to the unbounded render") was violated; the exception escaped
+to the caller. Reproduced: `setitimer(ITIMER_REAL, inf)` ->
+`OverflowError: timestamp out of range for platform time_t`. Not
+attacker-reachable in production (call site uses the constant), but a
+genuine contract violation. Fix: `if budget_s <= 0 or not
+math.isfinite(budget_s)` disables the watchdog; docstring updated.
+
+**Finding 2 (narrow race):** teardown disarmed the timer via
+`setitimer(ITIMER_REAL, 0)` but did not block `SIGALRM`. Disarming does
+not retract an already-pending alarm; if it fired mid-restore, the
+`_on_alarm` handler would raise `_RenderTimeBudgetExceeded` -- a
+`ValueError`, so the `contextlib.suppress(OSError, ValueError)` cleanup
+guards would swallow it, leaving the previous handler (and timer)
+inconsistent. Window is microseconds and requires a pre-existing armed
+timer or our own timer firing at the exact wrong moment, but the code is
+security-critical. Fix: `signal.pthread_sigmask(SIG_BLOCK, {SIGALRM})`
+across teardown; a pending alarm is then delivered to the restored
+previous handler after unblocking (honest Unix semantics), and the
+restoration is atomic.
+
+**Not pursued:** the `_manifest_entries` / `_verify_manifest_fingerprints`
+stat-triple code (cycle 115) survived the audit -- fd-based hashing with
+before/after stat comparison closes the TOCTOU, `_member` rejects
+symlinks, `_open_regular_read` refuses non-regular files via fstat. The
+nanosecond-mtime-forgery trade-off remains documented and accepted.
+
+**Verification:** 4 new tests in
+`tests/test_cycle118_render_watchdog_hardening_audit.py` (inf/nan
+budgets, mask restoration, stale mid-render alarm); full battery green.
