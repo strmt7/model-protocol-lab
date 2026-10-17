@@ -1749,6 +1749,24 @@ colors regardless of dict insertion order or hash seed.
 _FRONTIER_CHART_W = 560
 _FRONTIER_CHART_H = 240
 
+_DECISION_RIBBON_COLORS = {
+    "selected": "#16a34a",
+    "ambiguous": "#d97706",
+    "no_candidate": "#64748b",
+}
+"""Ribbon colors for the selection-decision band under the frontier chart.
+
+Darker shades than the candidate palette so the two legends never share
+a color; unknown decision values fall back to the neutral gray.
+"""
+
+_DECISION_RIBBON_LABELS = {
+    "selected": "selected",
+    "ambiguous": "ambiguous",
+    "no_candidate": "no candidate",
+}
+_DECISION_RIBBON_ORDER = ("selected", "ambiguous", "no_candidate")
+
 
 def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     """Multi-series token-budget frontier chart as deterministic inline SVG.
@@ -1756,7 +1774,10 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     One exact step curve per candidate: pass count (0..n fixtures) over
     token budget (1..max_new_tokens), drawn from each candidate's recorded
     ``pass_steps``. Axes with integer tick labels, gridlines, a wrapped
-    legend, and the native winner drawn last with a heavier stroke.
+    legend, and the native winner drawn last with a heavier stroke. Below
+    the x-axis, a decision ribbon colors every budget span by the
+    post-hoc selection outcome (selected / ambiguous / no candidate)
+    from the recorded ``decision_steps``.
 
     All geometry is integer arithmetic over recorded observation counts,
     the palette is assigned in sorted name order, and all dynamic text is
@@ -1799,6 +1820,30 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
         series.append((name, total, steps, full if type(full) is int else None))
     if not series:
         return ""
+
+    # Decision spans: (lo, hi, decision) with 1 <= lo <= hi <= max_tokens,
+    # derived from the recorded decision_steps; adjacent spans with the
+    # same decision merge. Malformed entries are skipped.
+    raw_decisions = frontier.get("decision_steps") or []
+    dec_points: list[tuple[int, str]] = []
+    for point in raw_decisions:
+        if (
+            type(point) is list
+            and len(point) == 3
+            and type(point[0]) is int
+            and type(point[1]) is str
+        ):
+            dec_points.append((point[0], point[1]))
+    dec_points.sort()
+    dec_spans: list[tuple[int, int, str]] = []
+    for i, (budget, decision) in enumerate(dec_points):
+        lo = max(1, min(budget, max_tokens))
+        hi = dec_points[i + 1][0] - 1 if i + 1 < len(dec_points) else max_tokens
+        hi = max(lo, min(hi, max_tokens))
+        if dec_spans and dec_spans[-1][2] == decision and dec_spans[-1][1] == lo - 1:
+            dec_spans[-1] = (dec_spans[-1][0], hi, decision)
+        else:
+            dec_spans.append((lo, hi, decision))
 
     width, height = _FRONTIER_CHART_W, _FRONTIER_CHART_H
     denom_x = max(max_tokens - 1, 1)
@@ -1884,6 +1929,33 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
         + '" text-anchor="middle" font-size="10" fill="#a9bcd2">'
         "token budget</text>"
     )
+    # Decision ribbon: one rect per decision span, directly below the
+    # x-axis. Spans tile [0, width] exactly (x_of is monotone), so the
+    # band is fully covered with no gaps or overlaps.
+    ribbon_top = height + 38
+    ribbon_h = 12
+    for lo, hi, decision in dec_spans:
+        rx = x_of(lo)
+        rx1 = x_of(hi + 1) if hi < max_tokens else width
+        elems.append(
+            '<rect x="'
+            + str(rx)
+            + '" y="'
+            + str(ribbon_top)
+            + '" width="'
+            + str(rx1 - rx)
+            + '" height="'
+            + str(ribbon_h)
+            + '" fill="'
+            + _DECISION_RIBBON_COLORS.get(decision, "#64748b")
+            + '"/>'
+        )
+    elems.append(
+        '<text x="-6" y="'
+        + str(ribbon_top + ribbon_h // 2)
+        + '" text-anchor="end" dominant-baseline="central" font-size="10" '
+        'fill="#a9bcd2">decision</text>'
+    )
 
     # The native winner draws last (on top) with a heavier stroke.
     # Colors identify candidates: assigned in sorted name order (``series``
@@ -1933,13 +2005,20 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
             + (", full pass at budget " + str(full) if full is not None else ", never fully passes")
         )
 
-    # Legend: wrapped rows below the plot; item widths use a fixed
+    # Legend: decision swatches first (they key the ribbon above), then
+    # candidates. Wrapped rows below the plot; item widths use a fixed
     # per-character estimate so layout is byte-deterministic.
-    legend_top = height + 38
+    legend_top = height + 58
     lx, ly = 0, legend_top
     row_h = 18
     legend_elems: list[str] = []
-    for name, color in drawn:
+    legend_items: list[tuple[str, str]] = [
+        (_DECISION_RIBBON_LABELS[d], _DECISION_RIBBON_COLORS[d])
+        for d in _DECISION_RIBBON_ORDER
+        if any(s[2] == d for s in dec_spans)
+    ]
+    legend_items.extend(drawn)
+    for name, color in legend_items:
         item_w = 14 + 7 * len(name) + 12
         if lx > 0 and lx + item_w > width:
             lx, ly = 0, ly + row_h
@@ -1966,7 +2045,16 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
 
     margin_left, margin_top, margin_right = 40, 8, 8
     outer_w = margin_left + width + margin_right
-    outer_h = margin_top + height + 38 + legend_h
+    outer_h = margin_top + height + 58 + legend_h
+    decision_bits = [
+        "decision "
+        + _DECISION_RIBBON_LABELS.get(decision, decision)
+        + " at budgets "
+        + str(lo)
+        + "\u2013"
+        + str(hi)
+        for lo, hi, decision in dec_spans
+    ]
     aria = (
         "Token-budget frontier chart: "
         + str(len(ordered))
@@ -1976,6 +2064,7 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
         + str(max_tokens)
         + ". "
         + "; ".join(label_bits)
+        + ("; " + "; ".join(decision_bits) if decision_bits else "")
     )
     return (
         '<svg class="frontier-svg" width="'
@@ -2011,7 +2100,9 @@ def _frontier_chart_svg_block(frontier: dict[str, Any]) -> str:
         '<p class="chart-note">Exact step curves: each candidate\u2019s pass '
         "count at every token budget, derived post-hoc from the recorded "
         "minimal passing budgets (no extra model calls). The native "
-        "winner, when one exists, is drawn last with a heavier stroke.</p>"
+        "winner, when one exists, is drawn last with a heavier stroke. "
+        "The decision ribbon below the axis colors every budget span by "
+        "the post-hoc selection outcome.</p>"
     )
 
 
