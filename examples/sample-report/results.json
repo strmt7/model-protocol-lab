@@ -219,6 +219,126 @@
     "held_out": null,
     "eos_id_considered": false
   },
+  "budget_frontier": {
+    "max_new_tokens": 16,
+    "native_decision": "compatible_on_fixture_set",
+    "native_search_decision": "selected",
+    "native_winner": "llama3",
+    "candidates": {
+      "llama3": {
+        "fixture_ids": [
+          "search-copy-blue",
+          "search-latest-green"
+        ],
+        "min_budget_per_fixture": [
+          5,
+          6
+        ],
+        "pass_steps": [
+          [
+            1,
+            0
+          ],
+          [
+            5,
+            1
+          ],
+          [
+            6,
+            2
+          ]
+        ],
+        "full_pass_budget": 6
+      },
+      "llama3/toggle-bos": {
+        "fixture_ids": [
+          "search-copy-blue",
+          "search-latest-green"
+        ],
+        "min_budget_per_fixture": [
+          null,
+          null
+        ],
+        "pass_steps": [
+          [
+            1,
+            0
+          ]
+        ],
+        "full_pass_budget": null
+      },
+      "llama3/no-bos": {
+        "fixture_ids": [
+          "search-copy-blue",
+          "search-latest-green"
+        ],
+        "min_budget_per_fixture": [
+          null,
+          null
+        ],
+        "pass_steps": [
+          [
+            1,
+            0
+          ]
+        ],
+        "full_pass_budget": null
+      },
+      "llama3/prefix-newline": {
+        "fixture_ids": [
+          "search-copy-blue",
+          "search-latest-green"
+        ],
+        "min_budget_per_fixture": [
+          null,
+          null
+        ],
+        "pass_steps": [
+          [
+            1,
+            0
+          ]
+        ],
+        "full_pass_budget": null
+      },
+      "llama3/prefix-trim": {
+        "fixture_ids": [
+          "search-copy-blue",
+          "search-latest-green"
+        ],
+        "min_budget_per_fixture": [
+          null,
+          null
+        ],
+        "pass_steps": [
+          [
+            1,
+            0
+          ]
+        ],
+        "full_pass_budget": null
+      }
+    },
+    "decision_steps": [
+      [
+        1,
+        "no_candidate",
+        null
+      ],
+      [
+        6,
+        "selected",
+        "llama3"
+      ]
+    ],
+    "flip_ranges": [
+      [
+        1,
+        5
+      ]
+    ],
+    "budget_robust": false
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 123 — sample report exercises the frontier, 2026-10-17)
+
+- `examples/make_sample_report.py` now attaches the token-budget
+  frontier exactly as `mpl run` does, so the committed golden sample
+  report demonstrates the frontier chart and decision ribbon (5
+  candidates, decision flip at budget 6 in the demo). The
+  `test_json_report_schema_complete` audit's pinned top-level key list
+  now includes `budget_frontier`, locking the coverage in.
+
 ### Added (cycle 122 — decision ribbon on the frontier chart, 2026-10-17)
 
 - The token-budget frontier chart now carries a decision ribbon: a

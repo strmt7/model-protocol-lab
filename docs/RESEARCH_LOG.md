@@ -4814,6 +4814,26 @@ of scope). Mutation-tested: dropping either keyword or adding a
 supply-chain section documents the CVE-2025-32434 / CVE-2026-24747
 posture; CHANGELOG entry added.
 
+## Cycle 123 (2026-10-17) — sample report exercises the frontier
+
+**Research:** the golden sample report (`examples/sample-report/`) had
+no `budget_frontier` section — its builder calls `run_experiment` +
+`save_report` directly, bypassing the CLI's frontier attachment. The
+repo's showcase artifact therefore never demonstrated the frontier
+chart/ribbon built in cycles 121–122.
+
+**Plan:** attach `budget_frontier` in `make_sample_report.py` exactly as
+`mpl run` does (same arguments, same defensive try/except degrading to
+an "unavailable" marker), regenerate the golden files deterministically,
+and update the schema audit's pinned top-level key list.
+
+**Built:** one builder change; the demo now yields 5 candidates with a
+decision flip at budget 6 (`no_candidate` → `selected`), and the sample
+HTML renders the full chart. The byte-identity golden tests and the
+schema audit lock the new coverage in.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.
+
 ## Cycle 122 (2026-10-17) — decision ribbon on the frontier chart
 
 **Research:** cycle 121's chart answers "how many fixtures pass at each
