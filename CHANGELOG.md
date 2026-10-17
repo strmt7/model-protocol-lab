@@ -8,10 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
 
+- **Isolated the cycle-107 CI failure to test_cycle66_fixture_loading_audit.py**:
+  converting files #1 (test_cycle29) and #2 (test_cycle30) passed CI on all
+  Pythons, but file #3 (test_cycle66) reproduced the exact 3.12/3.13 failure
+  (3.11 green). Reverted test_cycle66 to the cycle-106 pytest-style version
+  to restore green CI. The converted version passes locally on 3.12 under
+  both runners; the failure is a CI-environment × 3.12/3.13 interaction
+  still under investigation. Files #1-2 remain converted and green.
 - Converted test_cycle66_fixture_loading_audit.py to `unittest.TestCase`
   (third of the cycle-107 conversions, redone individually). Pytest
   collection 4136 → 4127; unittest discovery 4015 → 4080.
-  README/VALIDATION.md counts updated.
+  README/VALIDATION.md counts updated. [REVERTED — see above]
 - Converted test_cycle30_datasets_verify.py to `unittest.TestCase`
   (second of the cycle-107 conversions, redone individually). Pytest
   collection 4854 → 4136; unittest discovery 3953 → 4015.
