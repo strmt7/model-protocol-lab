@@ -4709,3 +4709,34 @@ the budget (also verified end-to-end against an actual Jinja
 after return, previous handler/timer restored, non-main-thread fallback
 returns the result, `MemoryError` from the memory cap still propagates, and
 `budget_s=0` disables the watchdog. Full battery green (see cycle report).
+
+## Cycle 117 — local-only loading invariant (CVE-2026-80047 class), 2026-10-17
+
+**Research:** CVE-2026-80047 (CERT/CC) — Hugging Face transformers
+4.49.0–5.8.1 wrote attacker-controlled Python files from a model repository
+to the local disk (`~/.cache/huggingface/modules`) *before* evaluating the
+user's `trust_remote_code` consent prompt. `get_cached_module_file()` copied
+`custom_generate/generate.py` unconditionally; declining the prompt left the
+files behind, and reused cache paths could execute them later (CVSS 7.8 per
+CISA-ADP). A related 2026-03 RCE (CVE-2026-4372, fixed in transformers
+5.3.0) was a config-injection path in the same trust boundary.
+
+**Assessment for this lab:** architecturally immune by construction — the
+only model-loading entry points are two `from_pretrained` calls in
+`backends.py`, both with `local_files_only=True`, `trust_remote_code=False`,
+`token=False`; no `hf_hub_download`/`snapshot_download`/sockets/HTTP clients
+anywhere. The vulnerable code path (remote repo → module cache write) is
+unreachable. But no test pinned the invariant: a future "simplification"
+dropping a keyword would silently reopen the attack class with CI staying
+green.
+
+**Change:** `tests/test_cycle117_local_loading_invariant_audit.py` (4
+unittest.TestCase tests, both runners): AST scans asserting no
+`trust_remote_code=True` in the package, every `from_pretrained` passes
+`local_files_only=True`, no `huggingface_hub` imports or
+`snapshot_download`/`hf_hub_download` calls, no truthy `token=`. Also
+retired SECURITY.md residual risk #3 (cycle 115's single-pass manifesting
+eliminated the double weight-file hash) and documented the CVE-2026-80047
+posture in the SECURITY.md supply-chain section.
+
+**Verification:** 4/4 new tests pass; full battery green (see cycle report).

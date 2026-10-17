@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security (cycle 117 — local-only loading invariant, 2026-10-17)
+
+- Pinned the local-only model loading invariant with AST regression tests
+  (`tests/test_cycle117_local_loading_invariant_audit.py`, 4 tests): no
+  `trust_remote_code=True` anywhere in the package, every `from_pretrained`
+  call passes `local_files_only=True`, no `snapshot_download` /
+  `hf_hub_download` / `huggingface_hub` imports, no truthy `token=`. This is
+  the structural defense against the CVE-2026-80047 class (transformers
+  4.49.0–5.8.1 writing remote repository code to the local module cache
+  before the trust-consent check): the lab never loads remote repositories
+  and never enables `trust_remote_code`, so the vulnerable code path is
+  unreachable. Documented in `docs/SECURITY.md`.
+- Retired SECURITY.md residual risk #3: cycle 115's single-pass weight
+  manifesting (hash once + stat-fingerprint verify) eliminated the double
+  full-hash of weight files.
+
 ### Security (cycle 116 — CPU budget for Jinja renders, 2026-10-17)
 
 - Closed the remaining hostile-template CPU-burn residual: a checkpoint's

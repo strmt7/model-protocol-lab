@@ -155,7 +155,14 @@ duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
   (`local_files_only=True`, `trust_remote_code=False`, `token=False`), one
   `PreTrainedTokenizerFast(tokenizer_file=…)` (local file), and
   `importlib.metadata.version()` (local). No `hf_hub_download`,
-  `snapshot_download`, sockets, or HTTP clients anywhere.
+  `snapshot_download`, sockets, or HTTP clients anywhere. This is the
+  structural defense against the CVE-2026-80047 class (transformers writing
+  remote repository code to the local module cache before the trust-consent
+  check): the lab never loads remote repositories and never enables
+  `trust_remote_code`, so the vulnerable code path is unreachable. Pinned by
+  `tests/test_cycle117_local_loading_invariant_audit.py` (AST guards:
+  no `trust_remote_code=True`, every `from_pretrained` passes
+  `local_files_only=True`, no download helpers, no truthy `token=`).
 - **TOCTOU:** `_manifest` hashes every asset before and after HF loading and
   compares size/mtime/ino + sha256; swaps fail closed.
 - **Cancellation:** the generate `Event` is checked before lock acquisition, in
@@ -167,8 +174,14 @@ duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
    needs manual re-verification on every bump.
 2. No hash-pinned lockfile: fresh installs trust PyPI within the declared
    ranges; mitigated by the CI `pip-audit` gate.
-3. `_manifest` reads every weight file twice per run (before/after init) —
-   hundreds of GB of I/O on very large checkpoints; documented, not a defect.
+3. ~~`_manifest` reads every weight file twice per run (before/after init) —
+   hundreds of GB of I/O on very large checkpoints; documented, not a defect.~~
+   **Retired 2026-10-17 (cycle 115):** the backend now hashes each weight
+   file once and verifies a cheap stat fingerprint
+   (`st_size`, `st_mtime_ns`, `st_ino`) after the load; the double full-hash
+   is gone. Documented trade-off: a content swap preserving size,
+   nanosecond mtime *and* inode inside the load window would evade the
+   stat check — catching it needs the full re-hash.
 4. ~~Runtime network isolation of the adapter has not been verified by test
    (code review only).~~ **Retired 2026-10-12:** verified dynamically under a
    socket firewall (zero `connect` attempts across `doctor`, backend init and
