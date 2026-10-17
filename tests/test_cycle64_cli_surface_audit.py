@@ -202,6 +202,7 @@ class TopLevelSurfaceTests(unittest.TestCase):
                 "fixtures",
                 "inspect",
                 "run",
+                "verify",
             ],
         )
 

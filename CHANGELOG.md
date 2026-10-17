@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 131 — independent results-integrity replay + hostile-payload robustness, 2026-10-17)
+
+- New `mpl verify` subcommand: independently re-derives an experiment's
+  recorded decision, winner, and post-hoc diagnostics from `results.json`
+  through independent code paths (N-version cross-check). The selection
+  rule is re-implemented as `verify.oracle_select_winner` (Hypothesis
+  cross-tested against `experiments._select_winner`); the token-budget
+  frontier and held-out budget floor are recomputed from the recorded
+  observations and compared for exact equality; the search/held-out
+  split is checked for fixture overlap. Every check reports
+  passed/failed/unavailable -- cancelled runs and observation-stripped
+  artifacts report "unavailable" instead of pretending. Exit 0/2/1.
+  New `tests/test_cycle131_verify_audit.py` (62 tests); 4/4 targeted
+  mutants killed; the new module is at 100% line coverage.
+- Hostile-payload hardening for the frontier/diff surface (perf findings,
+  both reproduced before fixing): a shared `MAX_FRONTIER_STEP_POINTS`
+  cap (100k) in `_frontier_series`/`_valid_frontier` -- oversized
+  frontiers degrade to unchartable/one-sided instead of hanging the
+  comparison for hours; O(log n) step lookups (`_count_at_budget` key
+  hoisting, `_step_function` bisect); budget-only sort plus
+  first-occurrence dedup of duplicate `decision_steps` budgets (a foreign
+  payload with mixed None/str winners crashed `diff_frontiers` with an
+  uncaught TypeError). 6 regression tests.
+- Docs: fixed 5 wrong/stale items from the coherence audit (retired
+  residual risks #3/#4 in RELEASE_READINESS, RELEASE_NOTES counts,
+  `local_repairs` reference and the incomplete thinking-variant list in
+  USAGE.md §4 and the `--boundary-map` help); removed the stale `build/`
+  directory.
+
 ### Added (cycle 130 — held-out budget floor, 2026-10-17)
 
 - New `experiments.held_out_budget_floor`: post-hoc token-budget floor

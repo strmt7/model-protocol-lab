@@ -125,11 +125,18 @@ Total: every finding ever raised has a fix and a regression test.
 1. `torch`'s `+cpu` local tag is invisible to `pip-audit` (manual CVE
    re-verification on every bump).
 2. No hash-pinned lockfile (CI `pip-audit` gate mitigates).
-3. `_manifest` reads weight files twice per run (I/O cost on very large
-   checkpoints; documented).
-4. Hostile Jinja templates can still burn CPU *inside* the render (same
-   exposure as HF's own `apply_chat_template`); memory bombs are now
-   capped, output is capped at 1MB.
+3. ~~`_manifest` reads weight files twice per run (I/O cost on very large
+   checkpoints).~~ **Retired 2026-10-17 (cycle 115):** the backend now
+   hashes each weight file once and verifies a cheap stat fingerprint
+   after the load; the double full-hash is gone (documented trade-off in
+   `docs/SECURITY.md`: a content swap preserving size, nanosecond mtime
+   *and* inode inside the load window would evade the stat check).
+4. Hostile Jinja templates can still burn CPU *inside* the render on
+   off-main-thread or non-Unix platforms (same exposure as HF's own
+   `apply_chat_template`); on Unix, in the main thread, each render runs
+   under a 10 s SIGALRM wall-clock budget (cycle 116) and degrades to
+   "unavailable" on expiry. Template source and rendered output are
+   capped at 1 MB each; memory bombs are capped.
 5. `template_diff` degrades (not hangs) after a 10s budget on
    adversarially fragmented inputs.
 6. Do not expose the CLI as a multi-user network service (no auth,

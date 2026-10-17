@@ -141,9 +141,12 @@ def build_parser() -> argparse.ArgumentParser:
         "Each candidate is measured with its own boundary; the default "
         "--boundary-ids applies to candidates without an entry. Names must "
         "match the evaluated candidates (see `catalog`, plus /toggle-bos, "
-        "/no-bos, /prefix-newline, /prefix-trim with --mutate, and "
-        "kolibri/thinking-off, nemotron35/thinking-off, "
-        "laguna/thinking-on).",
+        "/no-bos, /prefix-newline, /prefix-trim with --mutate, and the "
+        "thinking/effort variants: kolibri/thinking-off, "
+        "nemotron35/thinking-off, ling/thinking-off, laguna/thinking-on, "
+        "qwen38/thinking-off, nanbeige42/thinking-off, "
+        "k2horizon/effort-medium, k2horizon/effort-low, hy4/no-think, "
+        "minimax3/thinking-disabled, minimax3/thinking-enabled).",
     )
     run.add_argument("--max-new-tokens", type=int, default=64)
     run.add_argument("--max-context", type=int, default=2048)
@@ -195,6 +198,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="New fixture JSON file; an existing path is never overwritten",
     )
     # ANCHOR: new top-level subparsers are registered here (one block per command).
+    from .verify import build_verify_parser
+
+    build_verify_parser(sub)
     diff_reports_cmd = sub.add_parser(
         "diff-reports",
         help="Compare two experiment result directories (or results.json files)",
@@ -389,6 +395,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps([asdict(fmt) for fmt in CATALOG.values()], indent=2))
             return 0
         # ANCHOR: new top-level command dispatch goes here (one block per command).
+        if args.command == "verify":
+            from .verify import run_verify
+
+            return run_verify(args, parser)
         if args.command == "diff-reports":
             from .diffreports import run_diff_reports
 

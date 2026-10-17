@@ -85,14 +85,14 @@ source as above is the supported path. Upgrade from a source checkout:
 
 ## Verified for this release (2026-10-16)
 
-- `ruff check` clean; `ruff format --check` clean (148 files);
-  `mypy model_protocol_lab` clean (15 files);
+- `ruff check` clean; `ruff format --check` clean (164 files);
+  `mypy model_protocol_lab` clean (16 files);
   `bandit -r model_protocol_lab` — no issues identified.
-- Suite: 6063 tests collected; `coverage report --fail-under=95` passes
+- Suite: 4391 tests collected; `coverage report --fail-under=95` passes
   (98% total line coverage).
 - `python -m build` wheel verified: 21 files, no `__pycache__` /
   `.pytest_cache` / tests shipped; installs in a network-isolated fresh
-  venv; all 8 subcommands' `--help` exit 0 there.
+  venv; all 9 subcommands' `--help` exit 0 there.
 - Zero real TODOs in shipped code (the only TODO-shaped strings are
   quotes of upstream SGLang's `# TODO(lmzheng)` in docstrings/research
   notes).

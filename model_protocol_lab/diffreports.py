@@ -24,6 +24,7 @@ import os
 import re
 import stat
 import sys
+from bisect import bisect_right
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -524,7 +525,20 @@ def diff_reports(
 
 
 def _valid_frontier(value: Any) -> bool:
-    """Light validation: is this a comparable ``budget_frontier`` payload?"""
+    """Light validation: is this a comparable ``budget_frontier`` payload?
+
+    Also bounds the total validated step-point count at
+    ``reporting.MAX_FRONTIER_STEP_POINTS``: a foreign payload can carry
+    millions of ``pass_steps`` points inside the 32 MiB ``results.json``
+    cap, and the span/leader derivations are superlinear in that count --
+    an unbounded hang (perf finding 1A). Beyond the bound the frontier
+    degrades to one-sided instead of hanging the comparison. The import
+    is lazy and absolute: this module is also loaded standalone by the
+    cycle-67 mutation-gate harness (a bare copy in a temp dir with no
+    parent package), where a module-level relative import fails.
+    """
+    from model_protocol_lab.reporting import MAX_FRONTIER_STEP_POINTS  # noqa: PLC0415
+
     if type(value) is not dict:
         return False
     candidates = value.get("candidates")
@@ -533,6 +547,8 @@ def _valid_frontier(value: Any) -> bool:
     max_tokens = value.get("max_new_tokens")
     if type(max_tokens) is not int or max_tokens <= 0:
         return False
+    found = False
+    total_points = 0
     for data in candidates.values():
         if type(data) is not dict:
             continue
@@ -546,8 +562,11 @@ def _valid_frontier(value: Any) -> bool:
                 and type(point[1]) is int
                 and 1 <= point[0] <= max_tokens
             ):
-                return True
-    return False
+                found = True
+                total_points += 1
+                if total_points > MAX_FRONTIER_STEP_POINTS:
+                    return False
+    return found
 
 
 def _normalize_attribution(value: Any) -> list[dict[str, Any]] | None:
@@ -601,17 +620,17 @@ def _step_function(points: list[tuple[int, Any]]) -> Callable[[int], Any]:
     The value at ``budget`` is the last change point at or below it; the
     value before the first point is the ``("unknown", None)`` sentinel --
     callers only compare budgets inside the compared range, so unknown
-    never silently equals a real value.
+    never silently equals a real value. Sorted on the budget only (stable):
+    duplicate budgets keep first-occurrence order, so a foreign payload
+    can never crash the sort by comparing incomparable values (perf
+    finding 1B). Lookups are O(log n) via bisect.
     """
-    ordered = sorted(points)
+    ordered = sorted(points, key=lambda point: point[0])
+    keys = [budget for budget, _ in ordered]
 
     def value_at(budget: int) -> Any:
-        value: Any = ("unknown", None)
-        for point_budget, point_value in ordered:
-            if point_budget > budget:
-                break
-            value = point_value
-        return value
+        index = bisect_right(keys, budget) - 1
+        return ordered[index][1] if index >= 0 else ("unknown", None)
 
     return value_at
 
@@ -689,7 +708,11 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     }
 
     def decision_points(frontier: dict[str, Any]) -> list[tuple[int, tuple[str, Any]]]:
+        # Duplicate budgets are contradictory data (native payloads never
+        # duplicate); the first occurrence wins so a foreign payload can
+        # never crash the comparison (perf finding 1B).
         points = []
+        seen_budgets: set[int] = set()
         for entry in frontier.get("decision_steps") or []:
             if (
                 type(entry) is list
@@ -697,7 +720,9 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
                 and type(entry[0]) is int
                 and type(entry[1]) is str
                 and 1 <= entry[0] <= frontier["max_new_tokens"]
+                and entry[0] not in seen_budgets
             ):
+                seen_budgets.add(entry[0])
                 points.append((entry[0], (entry[1], entry[2])))
         return points
 

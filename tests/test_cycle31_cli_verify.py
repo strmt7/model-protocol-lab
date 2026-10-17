@@ -244,6 +244,7 @@ class TestParserContract(unittest.TestCase):
                 "diff-reports",
                 "diff-backends",
                 "debug",
+                "verify",
             },
         )
 
