@@ -702,6 +702,12 @@ def main(argv: list[str] | None = None) -> int:
                 result["template_conformance"] = template_conformance(
                     args.model, formats, split.search
                 )
+                # Chat-marker isolation (research R2/R4 line): hostile marker
+                # strings injected into user text must not become real
+                # control tokens. Pure tokenizer check, never fails the run.
+                from .doctor import marker_isolation
+
+                result["marker_isolation"] = marker_isolation(args.model, formats, split.search)
                 if result["selected_candidate"] is not None:
                     winner = result["selected_candidate"]
                     # The stop matrix re-measures the winner under its own

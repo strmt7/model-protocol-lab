@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -473,6 +473,31 @@ feed the `identical` verdict). The metric is descriptive: it measures
 text->ids reproducibility of the stored artifacts, not model quality,
 and a nonzero rate names the families whose prompts the tokenizer
 re-segments rather than condemning them.
+
+### 8.11 Chat-marker isolation (`marker_isolation`)
+
+Every `run` also probes structural template injection at the tokenizer
+level: each of 16 hostile marker strings (`<|im_start|>`, `<s>`, `[INST]`,
+`<|begin_of_text|>`, a forged `<|im_start|>assistant<|im_end|>` turn, and
+others) is injected into user text, and the checkpoint tokenizer's
+control-token ids are counted before and after — the number should not
+change. The probe uses `add_special_tokens=False`, the same call the
+backend's `encode` makes, so any control token in the output came from the
+text itself; the special set is the tokenizer's `all_special_ids` union
+special-flagged added tokens. A nonzero delta means the hostile text's
+literal markers became real control tokens (the ChatInject/Phantom
+injection class, via HF's `split_special_tokens=False` default).
+
+`results.json` carries `marker_isolation` with per-(format, fixture, marker)
+probes, per-family isolation scores, and the overall isolation rate. The
+HTML report renders a "Chat-marker isolation" section with the families x
+markers conformance matrix (`isolated` vs `smuggled` cells). The check is
+pure tokenizer work (no model calls, no weights loaded) and never fails
+the run: a tokenizer declaring no special ids reports `no_special_ids`
+(unmeasurable, not a failure), and one bad triple degrades to
+`unavailable`. The core lives in `model_protocol_lab/control_tokens.py`
+with `render`/`encode` injected, so the whole probe is testable without a
+model; `doctor.marker_isolation` is the checkpoint-backed driver.
 
 ## 9. Authoring fixtures (`fixtures build`)
 
