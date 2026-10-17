@@ -369,6 +369,10 @@
     "safe_budget_floor": 6,
     "budget_robust": false
   },
+  "contamination": {
+    "worst_tier": "clean",
+    "pairs": []
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

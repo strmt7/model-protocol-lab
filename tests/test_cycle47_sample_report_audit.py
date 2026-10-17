@@ -64,6 +64,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "failure_taxonomy",
     "budget_frontier",
     "held_out_budget_floor",
+    "contamination",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

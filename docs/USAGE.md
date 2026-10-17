@@ -12,6 +12,8 @@ Limits include a 2 MB UTF-8 file, 100 fixtures per partition, 21 messages per fi
 
 Empty `expected` answers are allowed but pass vacuously: any output that emits only the boundary token satisfies them. `inspect` and `run` warn on stderr naming such fixtures so the measurement gap is visible.
 
+`inspect` also runs a search/held-out contamination check: every held-out fixture is compared against every search fixture over NFKC-normalized, format-char-stripped, lowercased, whitespace-collapsed user text plus the expected answer, using character-level `SequenceMatcher` ratio and token-3-gram Jaccard. Pairs at `duplicate` (ratio ≥ 0.98), `near_duplicate` (≥ 0.90) or `paraphrase_suspect` (≥ 0.80 or Jaccard ≥ 0.85) print a stderr warning and appear in the JSON `contamination` block. The check is advisory -- thresholds are heuristic and heavy paraphrases still evade -- and never fails the command. `doctor --dataset` reports the same block, and `run` records it in `results.json` with a "Fixture hygiene" line in the report's run-configuration section.
+
 ```sh
 python -m model_protocol_lab inspect examples/fixtures.json
 python -m model_protocol_lab catalog
@@ -465,7 +467,9 @@ held-number,held-integer,held_out,7,Return only the numeral 7.,,
 
 `partition` is exactly `search` or `held_out` -- the split assignment is
 explicit per row, so leakage is caught while authoring instead of at
-`inspect` time. The conversation ends at the first empty message cell; an
+`inspect` time. The built split is contamination-checked exactly like
+`inspect`: near-duplicate search/held-out pairs print a stderr warning and
+appear in the JSON `contamination` block (advisory; see §1). The conversation ends at the first empty message cell; an
 empty cell followed by content is an error (empty-string message content is
 not expressible here -- use JSON for that). Quoted cells may contain
 newlines. Cells are used verbatim: no whitespace stripping, no formula
@@ -565,6 +569,14 @@ mpl:chatml fixture-1 > .step 1,2,8,3
 ...
 mpl:chatml fixture-1 > .quit
 ```
+
+Display caveat: the REPL keeps tab, newline and carriage return in fixture
+content so multi-line renders stay readable; every other terminal control
+(including ESC) is stripped. A fixture containing a line such as
+`render: family=chatml ...` can therefore visually mimic a REPL status line
+-- plain-text mimicry only, and fixture content always follows a genuine
+status line, but treat `.save` transcripts (and pasted sessions) with that
+in mind.
 
 ## 11. Differential backend stop testing (`diff-backends`)
 

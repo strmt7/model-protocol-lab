@@ -966,7 +966,7 @@ class InspectSweep43(LeakAsserts):
             proc = _run_cli("inspect", str(path))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         payload = json.loads(proc.stdout)
-        self.assertEqual(set(payload), {"search_cases", "held_out_cases", "valid"})
+        self.assertEqual(set(payload), {"search_cases", "held_out_cases", "valid", "contamination"})
         self.assertEqual((payload["search_cases"], payload["held_out_cases"]), (2, 1))
         self.assertNoCanary(proc.stdout, "mpl inspect stdout")
         self.assertNoCanary(proc.stderr, "mpl inspect stderr")

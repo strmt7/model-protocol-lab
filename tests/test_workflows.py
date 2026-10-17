@@ -219,9 +219,35 @@ class CLITests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main(["inspect", str(path)]), 0)
+            # The synthetic "question:s1"/"question:h1" fixtures differ by a
+            # single character, so the contamination check (correctly) flags
+            # them as near-duplicates; the values are deterministic.
             self.assertEqual(
                 json.loads(output.getvalue()),
-                {"search_cases": 2, "held_out_cases": 2, "valid": True},
+                {
+                    "search_cases": 2,
+                    "held_out_cases": 2,
+                    "valid": True,
+                    "contamination": {
+                        "worst_tier": "near_duplicate",
+                        "pairs": [
+                            {
+                                "held_out": "h1",
+                                "search": "s1",
+                                "ratio": 0.9286,
+                                "jaccard": 0.0,
+                                "tier": "near_duplicate",
+                            },
+                            {
+                                "held_out": "h2",
+                                "search": "s2",
+                                "ratio": 0.9286,
+                                "jaccard": 0.0,
+                                "tier": "near_duplicate",
+                            },
+                        ],
+                    },
+                },
             )
 
     def test_boundary_parser(self):

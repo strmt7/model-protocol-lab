@@ -575,7 +575,15 @@ class TestInspect(unittest.TestCase):
             kind, code, out, _err = run_cli(["inspect", str(fixture)])
         self.assertEqual((kind, code), ("return", 0))
         payload = json.loads(out)
-        self.assertEqual(payload, {"search_cases": 1, "held_out_cases": 1, "valid": True})
+        self.assertEqual(
+            payload,
+            {
+                "search_cases": 1,
+                "held_out_cases": 1,
+                "valid": True,
+                "contamination": {"worst_tier": "clean", "pairs": []},
+            },
+        )
 
     def test_missing_positional_exits_two(self):
         kind, code, _out, _err = run_cli(["inspect"])
@@ -657,6 +665,7 @@ class TestFixturesBuild(unittest.TestCase):
                     "output": str(out),
                     "audit_findings": 0,
                     "audit_path": str(out) + ".audit.json",
+                    "contamination": {"worst_tier": "clean", "pairs": []},
                 },
             )
             self.assertTrue(out.exists())

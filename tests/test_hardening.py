@@ -1422,7 +1422,10 @@ class RoundThreeFixTests(unittest.TestCase):
     def test_prepare_report_dir_never_chmods_through_symlink(self):
         # os.chmod follows symlinks: claiming a report dir through a symlinked
         # leaf used to tighten permissions on the link target, a directory
-        # outside the requested tree.
+        # outside the requested tree. A symlinked leaf is now rejected
+        # outright (FileExistsError), even with _allow_empty_existing --
+        # report files must never be written through a link into an
+        # attacker-chosen directory.
         import os
         import stat as _stat
 
@@ -1437,11 +1440,13 @@ class RoundThreeFixTests(unittest.TestCase):
             before = _stat.S_IMODE(os.stat(real).st_mode)
             link = Path(tmp) / "link"
             link.symlink_to(real, target_is_directory=True)
-            prepare_report_dir(link, _allow_empty_existing=True)
+            with self.assertRaises(FileExistsError):
+                prepare_report_dir(link, _allow_empty_existing=True)
             after = _stat.S_IMODE(os.stat(real).st_mode)
             self.assertEqual(
                 after, before, f"link target mode changed {oct(before)} -> {oct(after)}"
             )
+            self.assertEqual(list(real.iterdir()), [])
 
     def test_prepare_report_dir_still_secures_real_components(self):
         # The symlink guard must not weaken the normal guarantee: created
