@@ -281,6 +281,40 @@ def stop_matrix(
     return rows
 
 
+def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> int | None:
+    """Minimal token budget at which one recorded observation passes.
+
+    For an observation that passed natively with its boundary first
+    occurring at token offset ``cut``, it passes at every budget
+    ``b >= cut + len(boundary)`` (the boundary occurrence and the answer
+    region are unchanged) and at no smaller budget (``cut`` is the first
+    occurrence, so no complete boundary fits in a shorter prefix) --
+    exact under greedy decoding, by the same post-hoc argument as the
+    stop matrix. Returns None for observations that did not pass
+    natively (truncation cannot create a boundary or repair the answer
+    region) and for malformed records. The ``status == "completed"`` gate
+    is defense-in-depth: the ``Observation`` construction site already
+    gates ``exact_match`` on it, so on legitimate records this never
+    excludes a pass (see
+    tests/test_cycle129_selection_consistency_audit.py).
+    """
+    if not (
+        type(obs) is dict
+        and obs.get("status") == "completed"
+        and obs.get("exact_match") is True
+        and obs.get("boundary_found") is True
+    ):
+        return None
+    raw = obs.get("output_ids")
+    output_ids = tuple(raw) if isinstance(raw, (list, tuple)) else ()
+    if not output_ids or not all(type(token) is int for token in output_ids):
+        return None
+    cut = first_boundary(output_ids, boundary)
+    if cut is None:
+        return None
+    return cut + len(boundary)
+
+
 def budget_frontier(
     search: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     *,
@@ -398,19 +432,7 @@ def budget_frontier(
             if type(obs) is not dict:
                 raise ValueError("observations must be dicts")
             ids.append(str(obs.get("fixture")))
-            min_budget: int | None = None
-            if (
-                obs.get("status") == "completed"
-                and obs.get("exact_match") is True
-                and obs.get("boundary_found") is True
-            ):
-                raw = obs.get("output_ids")
-                output_ids = tuple(raw) if isinstance(raw, (list, tuple)) else ()
-                if output_ids and all(type(token) is int for token in output_ids):
-                    cut = first_boundary(output_ids, entry_boundary)
-                    if cut is not None:
-                        min_budget = cut + len(entry_boundary)
-            min_budgets.append(min_budget)
+            min_budgets.append(_observation_min_budget(obs, entry_boundary))
         if fixture_ids and ids != fixture_ids:
             raise ValueError("search entries must cover the same fixtures in order")
         fixture_ids = ids
@@ -538,6 +560,79 @@ def budget_frontier(
         "budget_robust": not flip_ranges,
         "safe_budget_floor": safe_floor,
         "flip_attribution": flip_attribution,
+    }
+
+
+def held_out_budget_floor(
+    observations: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    *,
+    boundary: tuple[int, ...],
+    max_new_tokens: int,
+    native_verdict: str,
+) -> dict[str, Any]:
+    """Post-hoc token-budget floor for the held-out verification stage.
+
+    Recomputes, from the recorded held-out observations alone, at which
+    token budgets the verification verdict would still have held --
+    answering "was the token cap load-bearing for the verification?".
+    No model calls, by the same greedy prefix-determinism argument as
+    :func:`budget_frontier`.
+
+    The held-out verdict is monotone in the budget: a natively-passing
+    observation passes at every budget ``b >= min_budget`` and at no
+    smaller one, so the verdict flips from ``held_out_failed`` to
+    ``compatible_on_fixture_set`` at most once -- at the maximum of the
+    per-fixture minimal budgets. Returns the per-fixture minimal budgets,
+    the native verdict, ``safe_budget_floor`` (that flip budget, or None
+    when the held-out did not pass natively: no budget achieves a passing
+    verification), and ``budget_robust`` (the verdict is identical at
+    every budget 1..max_new_tokens -- true exactly when the floor is 1,
+    or when the held-out failed natively and the failure holds
+    everywhere).
+
+    Raises ValueError when the observations are malformed or
+    inconsistent with ``native_verdict`` (a compatible verdict alongside
+    a failing fixture, or a failed verdict with every fixture passing).
+    """
+    if type(observations) not in (list, tuple) or not observations:
+        raise ValueError("observations must be a nonempty list of observation dicts")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if native_verdict not in ("compatible_on_fixture_set", "held_out_failed"):
+        raise ValueError("native_verdict must be a completed held-out verdict")
+    fixture_ids: list[str] = []
+    min_budgets: list[int | None] = []
+    for obs in observations:
+        if type(obs) is not dict:
+            raise ValueError("observations must be dicts")
+        fixture_ids.append(str(obs.get("fixture")))
+        min_budgets.append(_observation_min_budget(obs, boundary))
+    passing = [mb for mb in min_budgets if mb is not None]
+    all_pass = len(passing) == len(min_budgets)
+    if native_verdict == "compatible_on_fixture_set" and not all_pass:
+        raise ValueError("compatible verdict is inconsistent with failing observations")
+    if native_verdict == "held_out_failed" and all_pass:
+        raise ValueError("failed verdict is inconsistent with all-passing observations")
+    floor: int | None
+    if native_verdict == "compatible_on_fixture_set":
+        # All min_budgets are non-None here; the verdict flips to
+        # compatible exactly at their maximum (monotone by construction).
+        floor = max(passing)
+        robust = floor == 1
+    else:
+        # A natively-failing fixture can never pass at a smaller budget,
+        # so the failed verdict holds at every budget in the sweep.
+        floor = None
+        robust = True
+    return {
+        "max_new_tokens": max_new_tokens,
+        "native_verdict": native_verdict,
+        "fixture_ids": fixture_ids,
+        "min_budget_per_fixture": min_budgets,
+        "safe_budget_floor": floor,
+        "budget_robust": robust,
     }
 
 

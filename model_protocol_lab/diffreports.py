@@ -470,6 +470,13 @@ def diff_reports(
     evidence_asymmetric = evidence_present["old"] != evidence_present["new"]
     frontier_diff = diff_frontiers(old.get("budget_frontier"), new.get("budget_frontier"))
     frontier_asymmetric = frontier_diff["available"] not in ("both", "neither")
+    held_out_floor_diff = diff_held_out_floor(
+        old.get("held_out_budget_floor"), new.get("held_out_budget_floor")
+    )
+    held_out_floor_asymmetric = held_out_floor_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -479,6 +486,8 @@ def diff_reports(
         and not evidence_asymmetric
         and not frontier_diff["changed"]
         and not frontier_asymmetric
+        and not held_out_floor_diff["changed"]
+        and not held_out_floor_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -489,6 +498,8 @@ def diff_reports(
         "evidence_asymmetric": evidence_asymmetric,
         "frontier_changed": frontier_diff["changed"],
         "frontier_asymmetric": frontier_asymmetric,
+        "held_out_floor_changed": held_out_floor_diff["changed"],
+        "held_out_floor_asymmetric": held_out_floor_asymmetric,
         "identical": identical,
     }
     return {
@@ -498,6 +509,7 @@ def diff_reports(
         "decision": {"old": old_decision, "new": new_decision, "changed": decision_changed},
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": frontier_diff,
+        "held_out_floor": held_out_floor_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -753,6 +765,89 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_held_out_floor(value: Any) -> bool:
+    """Light validation: is this a comparable ``held_out_budget_floor`` payload?"""
+    if type(value) is not dict or value.get("available", True) is False:
+        return False
+    if value.get("native_verdict") not in (
+        "compatible_on_fixture_set",
+        "held_out_failed",
+    ):
+        return False
+    max_tokens = value.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return False
+    floor = value.get("safe_budget_floor")
+    return not (floor is not None and type(floor) is not int)
+
+
+def diff_held_out_floor(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``held_out_budget_floor`` payloads; deterministic.
+
+    Answers "did the verification's token-budget story change between
+    runs?": the floor from which the held-out verification passes
+    unchanged, and whether the verification verdict was budget-robust.
+    A side without a recorded floor is reported plainly instead of
+    compared. No model, no network.
+    """
+    old_ok = _valid_held_out_floor(old)
+    new_ok = _valid_held_out_floor(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_floor = old.get("safe_budget_floor")
+    new_floor = new.get("safe_budget_floor")
+    old_robust = old.get("budget_robust")
+    new_robust = new.get("budget_robust")
+    floor_changed = old_floor != new_floor
+    robust_changed = old_robust != new_robust
+    result["safe_budget_floor"] = {
+        "old": old_floor,
+        "new": new_floor,
+        "changed": floor_changed,
+    }
+    result["budget_robust"] = {
+        "old": old_robust,
+        "new": new_robust,
+        "changed": robust_changed,
+    }
+    result["changed"] = bool(floor_changed or robust_changed)
+    return result
+
+
+def _render_held_out_floor_summary(floor_diff: dict[str, Any]) -> list[str]:
+    """Held-out budget-floor comparison lines for the stderr summary."""
+    available = floor_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [f"Held-out budget floor comparison unavailable: {missing} run did not record one."]
+    lines: list[str] = []
+
+    def _fmt(value: Any) -> str:
+        return str(value) if type(value) is int else "(none)"
+
+    robust = floor_diff["budget_robust"]
+    yes_no = {True: "yes", False: "no"}
+    lines.append(
+        "Held-out verification budget-robust: "
+        f"{yes_no.get(robust['old'], robust['old'])} -> "
+        f"{yes_no.get(robust['new'], robust['new'])}"
+    )
+    floor = floor_diff["safe_budget_floor"]
+    lines.append(f"Held-out verification floor: {_fmt(floor['old'])} -> {_fmt(floor['new'])}")
+    return lines
+
+
 def _compact(value: Any) -> str:
     """One-line JSON for a drift value in the stderr summary."""
     return json.dumps(value, ensure_ascii=True, sort_keys=True)
@@ -859,6 +954,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     new_w = winner["new"] if winner["new"] is not None else "(none)"
     lines.append(f"Winner: {_display_id(old_w)} -> {_display_id(new_w)}")
     lines.extend(_render_frontier_summary(diff["frontier"]))
+    lines.extend(_render_held_out_floor_summary(diff["held_out_floor"]))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
@@ -892,6 +988,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("per-fixture evidence")
         if diff["frontier"]["available"] == "both":
             axes.append("token-budget frontier")
+        if diff["held_out_floor"]["available"] == "both":
+            axes.append("held-out budget floor")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."

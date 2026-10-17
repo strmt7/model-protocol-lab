@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 130 — held-out budget floor, 2026-10-17)
+
+- New `experiments.held_out_budget_floor`: post-hoc token-budget floor
+  for the held-out verification stage -- the first budget from which
+  the verification verdict holds unchanged (the maximum of the
+  per-fixture minimal passing budgets; None when the held-out failed
+  natively), plus `budget_robust`. The held-out verdict is monotone in
+  the budget, so this single number is the whole story. `mpl run`
+  attaches it as `held_out_budget_floor`, the HTML held-out section
+  calls it out, and `mpl diff-reports` compares it between runs
+  (`held_out_floor` section feeding `identical`, with summary lines).
+  This cycle also extracts the shared `_observation_min_budget` helper
+  used by both `budget_frontier` and the new function (no behavior
+  change -- the oracle suites prove it).
+- New `tests/test_cycle130_held_out_floor_audit.py` (35 tests): exact
+  derivation and validation, the shared helper, end-to-end agreement on
+  a real run, the HTML callout, and the diff-reports wiring; 4/4
+  targeted mutants killed.
+
 ### Added (cycle 129 — selection-rule consistency audit, 2026-10-17)
 
 - Proved and pinned: the frontier's post-hoc `decision_at` is exactly the

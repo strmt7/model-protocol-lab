@@ -234,6 +234,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "decision": {"old": "select_best", "new": "select_best", "changed": False},
         "winner": {"old": "alpha", "new": "alpha", "changed": False},
         "frontier": {"available": "neither", "changed": False},
+        "held_out_floor": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -252,6 +253,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "evidence_asymmetric": False,
             "frontier_changed": False,
             "frontier_asymmetric": False,
+            "held_out_floor_changed": False,
+            "held_out_floor_asymmetric": False,
             "identical": True,
         },
     }
@@ -433,6 +436,55 @@ def _o_frontier(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return {"available": available, "changed": False}, False, available not in ("both", "neither")
 
 
+def _o_held_out_floor_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict or value.get("available", True) is False:
+        return False
+    if value.get("native_verdict") not in (
+        "compatible_on_fixture_set",
+        "held_out_failed",
+    ):
+        return False
+    max_tokens = value.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return False
+    floor = value.get("safe_budget_floor")
+    return not (floor is not None and type(floor) is not int)
+
+
+def _o_held_out_floor(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle held-out-floor section: availability and field comparison."""
+    old_ok = _o_held_out_floor_valid(old)
+    new_ok = _o_held_out_floor_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    floor_changed = old.get("safe_budget_floor") != new.get("safe_budget_floor")
+    robust_changed = old.get("budget_robust") != new.get("budget_robust")
+    diff["safe_budget_floor"] = {
+        "old": old.get("safe_budget_floor"),
+        "new": new.get("safe_budget_floor"),
+        "changed": floor_changed,
+    }
+    diff["budget_robust"] = {
+        "old": old.get("budget_robust"),
+        "new": new.get("budget_robust"),
+        "changed": robust_changed,
+    }
+    changed = bool(floor_changed or robust_changed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _oracle_diff(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -529,6 +581,9 @@ def _oracle_diff(
     o_frontier, o_frontier_changed, o_frontier_asymmetric = _o_frontier(
         old.get("budget_frontier"), new.get("budget_frontier")
     )
+    o_hof, o_hof_changed, o_hof_asymmetric = _o_held_out_floor(
+        old.get("held_out_budget_floor"), new.get("held_out_budget_floor")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -538,6 +593,8 @@ def _oracle_diff(
         and not evidence_asymmetric
         and not o_frontier_changed
         and not o_frontier_asymmetric
+        and not o_hof_changed
+        and not o_hof_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -546,6 +603,7 @@ def _oracle_diff(
         "decision": {"old": old["decision"], "new": new["decision"], "changed": decision_changed},
         "winner": {"old": old_w, "new": new_w, "changed": winner_changed},
         "frontier": o_frontier,
+        "held_out_floor": o_hof,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -560,6 +618,8 @@ def _oracle_diff(
             "evidence_asymmetric": evidence_asymmetric,
             "frontier_changed": o_frontier_changed,
             "frontier_asymmetric": o_frontier_asymmetric,
+            "held_out_floor_changed": o_hof_changed,
+            "held_out_floor_asymmetric": o_hof_asymmetric,
             "identical": identical,
         },
     }
@@ -685,6 +745,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "evidence_asymmetric": False,
                 "frontier_changed": False,
                 "frontier_asymmetric": False,
+                "held_out_floor_changed": False,
+                "held_out_floor_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1684,6 +1746,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not evidence_asymmetric\n"
             '        and not frontier_diff["changed"]\n'
             "        and not frontier_asymmetric\n"
+            '        and not held_out_floor_diff["changed"]\n'
+            "        and not held_out_floor_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -1694,6 +1758,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or evidence_asymmetric\n"
             '        or frontier_diff["changed"]\n'
             "        or frontier_asymmetric\n"
+            '        or held_out_floor_diff["changed"]\n'
+            "        or held_out_floor_asymmetric\n"
             "    )\n",
             scenario,
         )

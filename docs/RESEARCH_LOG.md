@@ -5130,3 +5130,39 @@ selection rule is the kind of correctness evidence that makes the
 frontier trustworthy rather than decorative.
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 130 (2026-10-17) — held-out budget floor
+
+**Research:** the token-budget frontier (cycles 121-129) answers "was the
+token cap load-bearing?" for the search stage only. The held-out
+verification stage -- the experiment's actual compatibility claim -- had
+no budget-robustness story: an operator could not tell whether the
+verification needed the full cap or would have passed at a fraction of
+it.
+
+**Plan:** `experiments.held_out_budget_floor`: pure, post-hoc, exact.
+The held-out verdict is monotone in the budget (a natively-passing
+observation passes at every budget >= its minimal budget), so the
+verdict flips at most once -- the maximum of the per-fixture minimal
+budgets is the whole story. Records `safe_budget_floor` (None when the
+held-out failed natively), `budget_robust`, and per-fixture minimal
+budgets; validates fail-closed against inconsistent verdicts. Wired into
+`mpl run` (same degrade-to-unavailable pattern as the search frontier),
+the HTML held-out section (callout), the sample report, and
+`mpl diff-reports` (new `held_out_floor` section feeding `identical`,
+with summary lines). Also extracted the shared `_observation_min_budget`
+helper used by both frontier functions.
+
+**Built:** the function + helper extraction in `experiments.py`, CLI
+wiring, `_held_out_floor_callout` in `reporting.py`, `diff_held_out_floor`
++ wiring + summary in `diffreports.py`, sample builder attachment,
+`tests/test_cycle130_held_out_floor_audit.py` (35 tests). Mutation
+results: 4/4 killed (min-for-max floor; always-robust; hardcoded
+diff unchanged; swapped callout conditions).
+
+**Differentiation review:** post-hoc verification-budget analysis,
+exact and monotone, closing the loop on "was the cap load-bearing?"
+for the full pipeline. Professional: single-number story where a
+single number suffices, no chart for a step function.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

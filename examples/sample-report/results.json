@@ -355,6 +355,20 @@
       }
     ]
   },
+  "held_out_budget_floor": {
+    "max_new_tokens": 16,
+    "native_verdict": "compatible_on_fixture_set",
+    "fixture_ids": [
+      "held-number",
+      "held-latest-word"
+    ],
+    "min_budget_per_fixture": [
+      2,
+      6
+    ],
+    "safe_budget_floor": 6,
+    "budget_robust": false
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

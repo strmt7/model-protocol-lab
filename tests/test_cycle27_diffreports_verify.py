@@ -383,6 +383,36 @@ def oracle_diff_reports(
     else:
         _o_available = "neither"
     _o_frontier_asymmetric = _o_available not in ("both", "neither")
+
+    # Held-out floor axis: availability from the rules, mirroring the
+    # implementation. The report pairs exercised here never carry
+    # held_out_budget_floor payloads, so the comparison below agrees with
+    # the implementation on every input this oracle sees.
+    def _or_hof_valid(value: Any) -> bool:
+        if type(value) is not dict or value.get("available", True) is False:
+            return False
+        if value.get("native_verdict") not in (
+            "compatible_on_fixture_set",
+            "held_out_failed",
+        ):
+            return False
+        max_tokens = value.get("max_new_tokens")
+        if type(max_tokens) is not int or max_tokens <= 0:
+            return False
+        floor = value.get("safe_budget_floor")
+        return not (floor is not None and type(floor) is not int)
+
+    _hof_old_ok = _or_hof_valid(old.get("held_out_budget_floor"))
+    _hof_new_ok = _or_hof_valid(new.get("held_out_budget_floor"))
+    if _hof_old_ok and _hof_new_ok:
+        _o_hof_available = "both"
+    elif _hof_old_ok:
+        _o_hof_available = "old"
+    elif _hof_new_ok:
+        _o_hof_available = "new"
+    else:
+        _o_hof_available = "neither"
+    _o_hof_asymmetric = _o_hof_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -391,6 +421,7 @@ def oracle_diff_reports(
         and not config_drift
         and not evidence_asymmetric
         and not _o_frontier_asymmetric
+        and not _o_hof_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -401,6 +432,8 @@ def oracle_diff_reports(
         "evidence_asymmetric": evidence_asymmetric,
         "frontier_changed": False,
         "frontier_asymmetric": _o_frontier_asymmetric,
+        "held_out_floor_changed": False,
+        "held_out_floor_asymmetric": _o_hof_asymmetric,
         "identical": identical,
     }
     return {
@@ -410,6 +443,7 @@ def oracle_diff_reports(
         "decision": {"old": old_decision, "new": new_decision, "changed": decision_changed},
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": {"available": _o_available, "changed": False},
+        "held_out_floor": {"available": _o_hof_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

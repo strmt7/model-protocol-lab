@@ -1459,8 +1459,8 @@ __CHECK__
 _MUTANTS: list[tuple[str, str, str, str]] = [
     (
         "M1 frontier min-budget off-by-one",
-        "min_budget = cut + len(entry_boundary)",
-        "min_budget = cut + 1",
+        "return cut + len(boundary)",
+        "return cut + 1",
         """
 B = (60, 62)
 obs = [_obs("S1", (1, 2, 3, 4, 5, 60, 62, 9), exact=True, bfound=True)]

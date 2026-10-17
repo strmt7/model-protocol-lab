@@ -560,6 +560,7 @@ class HtmlEscapingAuditTests(unittest.TestCase):
             "decision": {"old": "failed", "new": hostile},
             "winner": {"old": None, "new": None},
             "frontier": {"available": "neither", "changed": False},
+            "held_out_floor": {"available": "neither", "changed": False},
             "candidate_verdicts": [],
             "evidence": {"old": False, "new": False},
             "summary": {

@@ -1865,11 +1865,49 @@ def _held_out_section(result: dict[str, Any]) -> str:
     )
     return (
         '<section id="held-out-stage"><h2>Held-out stage</h2>'
-        '<div class="cards">' + cards + "</div>"
-        "<p>Held-out observations are excluded from this HTML view; "
+        '<div class="cards">'
+        + cards
+        + "</div>"
+        + _held_out_floor_callout(result.get("held_out_budget_floor"))
+        + "<p>Held-out observations are excluded from this HTML view; "
         "see results.json with --include-evidence for the raw records.</p>"
         "</section>"
     )
+
+
+def _held_out_floor_callout(floor: Any) -> str:
+    """Verification budget-floor callout for the held-out section.
+
+    Renders nothing for missing, unavailable-marker, or malformed
+    payloads; never raises.
+    """
+    if type(floor) is not dict or floor.get("available", True) is False:
+        return ""
+    native = floor.get("native_verdict")
+    safe = floor.get("safe_budget_floor")
+    max_tokens = floor.get("max_new_tokens", "?")
+    if native == "compatible_on_fixture_set" and floor.get("budget_robust") is True:
+        return (
+            '<p><span class="badge pass">verification robust</span> '
+            "The held-out verification passes at every token budget 1&ndash;"
+            + escape(str(max_tokens))
+            + ".</p>"
+        )
+    if native == "compatible_on_fixture_set" and type(safe) is int:
+        return (
+            '<p><span class="badge pass">verification floor</span> '
+            "Held-out verification floor: <strong>&ge; "
+            + escape(str(safe))
+            + " tokens</strong> &mdash; the verification passes unchanged "
+            "from budget " + escape(str(safe)) + " through " + escape(str(max_tokens)) + ".</p>"
+        )
+    if native == "held_out_failed":
+        return (
+            '<p><span class="badge fail">verification failed</span> '
+            "The held-out verification failed natively; no budget floor "
+            "applies &mdash; the failing fixtures never pass within the sweep.</p>"
+        )
+    return ""
 
 
 def _sparkline(counts: list[int], total: int) -> str:
