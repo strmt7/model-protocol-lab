@@ -4955,3 +4955,34 @@ Mutation results: 4/4 killed (margin sign flip; tied-lead nonzero
 margin; inverted leader test; inverted y-axis).
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 125 (2026-10-17) — frontier comparison in diff-reports
+
+**Research:** `mpl diff-reports` compares outcomes, verdicts, evidence
+and config drift between two runs, but the token-budget robustness
+story (cycles 121-124) was invisible to it: tweaking a template and
+re-running could change *where* the decision flips without changing the
+native verdict, and the operator would never know. The recorded
+`budget_frontier` payloads make that comparison exact and post-hoc.
+
+**Plan:** pure `diffreports.diff_frontiers(old, new)` — availability
+tri-state per side, sweep-range drift (compared over the common
+prefix), budget_robust flips, merged [lo, hi] spans where the post-hoc
+decision, post-hoc winner, or margin-trajectory leader differ (step
+functions compared at the union of change budgets: exact). Wire into
+`diff_reports` (new `frontier` section, `frontier_changed` /
+`frontier_asymmetric` summary flags breaking `identical`) and
+`render_summary` (sanitized span lines). 16 tests incl. a committed
+4-mutant kill gate.
+
+**Built:** `_valid_frontier`, `_step_function`, `_diff_spans`,
+`diff_frontiers`, `_render_frontier_summary`, wiring, summary-line and
+axes updates; `tests/test_cycle125_frontier_diff_audit.py`. During
+testing, a sanitization probe confirmed the module's threat model:
+`_display_id` strips terminal control chars for stderr (ESC and bidi
+gone; the printable remainder is inert) — the test now pins that real
+invariant instead of an HTML-escaping one that never applied to stderr.
+Mutation results: 4/4 killed (dropped winner axis; ignored robustness
+change; broken span merge; misreported availability).
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

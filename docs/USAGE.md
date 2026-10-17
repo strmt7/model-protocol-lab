@@ -712,16 +712,19 @@ Fixture outcome diffs (4 changed):
   held_out/llama3/h2: absent -> pass
   search/llama3/f1: fail -> pass
   search/llama3/f2: fail -> pass
-Summary: decision CHANGED, winner CHANGED, 1 candidate(s) changed verdict, 2 fixture(s) flipped, 1 config drift warning(s).
+Summary: decision CHANGED, winner CHANGED, frontier CHANGED, 1 candidate(s) changed verdict, 2 fixture(s) flipped, 1 config drift warning(s).
 ```
 
 The stdout JSON carries the same information in machine form: `decision`
-and `winner` (old/new/changed), `config_drift` (the comparability
-warnings), `candidate_verdicts` (per-candidate pass/fail flips on search
-and held-out), `fixture_diffs` (per-fixture old/new outcomes per
-candidate), `evidence` (whether each side carried `--include-evidence`
-observations), and a `summary` with counts (`fixtures_flipped`,
-`candidates_changed_status`, `config_drift_warnings`, `identical`).
+and `winner` (old/new/changed), `frontier` (the token-budget frontier
+comparison: sweep-range drift, budget-robustness flip, and the exact
+budget spans where the post-hoc decision, winner, or per-budget leader
+differ), `config_drift` (the comparability warnings), `candidate_verdicts`
+(per-candidate pass/fail flips on search and held-out), `fixture_diffs`
+(per-fixture old/new outcomes per candidate), `evidence` (whether each
+side carried `--include-evidence` observations), and a `summary` with
+counts (`fixtures_flipped`, `candidates_changed_status`,
+`config_drift_warnings`, `frontier_changed`, `identical`).
 
 What it compares, exactly:
 
@@ -742,6 +745,12 @@ What it compares, exactly:
   sets, different per-candidate boundary token IDs, different
   `--max-new-tokens`, different backend fingerprints (model identity), or
   different fixture sets.
+- **Token-budget frontier**: when both runs recorded one, the tool
+  compares the post-hoc robustness story -- sweep-range drift, whether
+  the selection stayed budget-robust, and the exact budget spans where
+  the post-hoc decision, post-hoc winner, or per-budget leader differ
+  (e.g. `budgets 3–4: alpha -> beta`). A run without a recorded frontier
+  is reported plainly instead of compared.
 
 Per-fixture comparison needs per-fixture evidence: `results.json` carries
 `observations` only when the run used `--include-evidence`. When either

@@ -233,6 +233,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "new": {"source": "new"},
         "decision": {"old": "select_best", "new": "select_best", "changed": False},
         "winner": {"old": "alpha", "new": "alpha", "changed": False},
+        "frontier": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -249,6 +250,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "fixtures_flipped": 0,
             "config_drift_warnings": 0,
             "evidence_asymmetric": False,
+            "frontier_changed": False,
+            "frontier_asymmetric": False,
             "identical": True,
         },
     }
@@ -382,6 +385,54 @@ def _o_drift(old_snap: dict[str, Any], new_snap: dict[str, Any]) -> list[dict[st
     ]
 
 
+def _o_frontier_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    max_tokens = value.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return False
+    for data in candidates.values():
+        if type(data) is not dict or len(data.get("fixture_ids") or []) <= 0:
+            continue
+        for point in data.get("pass_steps") or []:
+            if (
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+            ):
+                return True
+    return False
+
+
+def _o_frontier(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle frontier section: availability from the rules.
+
+    Span-level comparison (decision/winner/leader flips) is covered by the
+    dedicated cycle-125 audit with hand-derived spans and its own mutation
+    gate; the differential fuzz inputs here never carry budget_frontier
+    payloads, so the oracle asserts the availability contract and
+    changed=False, which the implementation guarantees whenever the
+    comparison is one-sided or absent.
+    """
+    old_ok = _o_frontier_valid(old)
+    new_ok = _o_frontier_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    return {"available": available, "changed": False}, False, available not in ("both", "neither")
+
+
 def _oracle_diff(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -475,6 +526,9 @@ def _oracle_diff(
                 config_drift.append({"field": f"fixtures:{stage}", "old": old_ids, "new": new_ids})
 
     evidence_asymmetric = old_ok != new_ok
+    o_frontier, o_frontier_changed, o_frontier_asymmetric = _o_frontier(
+        old.get("budget_frontier"), new.get("budget_frontier")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -482,6 +536,8 @@ def _oracle_diff(
         and not changed_sorted
         and not config_drift
         and not evidence_asymmetric
+        and not o_frontier_changed
+        and not o_frontier_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -489,6 +545,7 @@ def _oracle_diff(
         "new": {"source": new_label},
         "decision": {"old": old["decision"], "new": new["decision"], "changed": decision_changed},
         "winner": {"old": old_w, "new": new_w, "changed": winner_changed},
+        "frontier": o_frontier,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -501,6 +558,8 @@ def _oracle_diff(
             "fixtures_flipped": len(flips),
             "config_drift_warnings": len(config_drift),
             "evidence_asymmetric": evidence_asymmetric,
+            "frontier_changed": o_frontier_changed,
+            "frontier_asymmetric": o_frontier_asymmetric,
             "identical": identical,
         },
     }
@@ -624,6 +683,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "fixtures_flipped": 0,
                 "config_drift_warnings": 0,
                 "evidence_asymmetric": False,
+                "frontier_changed": False,
+                "frontier_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1350,7 +1411,8 @@ class DiffreportsAuditTest(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "Summary: decision unchanged, winner unchanged, 0 candidate(s) changed verdict, "
+            "Summary: decision unchanged, winner unchanged, frontier unchanged, "
+            "0 candidate(s) changed verdict, "
             "0 fixture(s) flipped, 0 config drift warning(s).",
             text,
         )
@@ -1620,6 +1682,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not changed_fixture_diffs\n"
             "        and not config_drift\n"
             "        and not evidence_asymmetric\n"
+            '        and not frontier_diff["changed"]\n'
+            "        and not frontier_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -1628,6 +1692,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or changed_fixture_diffs\n"
             "        or config_drift\n"
             "        or evidence_asymmetric\n"
+            '        or frontier_diff["changed"]\n'
+            "        or frontier_asymmetric\n"
             "    )\n",
             scenario,
         )
