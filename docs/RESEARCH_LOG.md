@@ -5057,3 +5057,35 @@ it stays professional (no hype, honest "candidate causes" framing, empty
 spans not overclaimed).
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 128 (2026-10-17) — flip-attribution comparison in diff-reports
+
+**Research:** `diff_frontiers` (cycle 125) compares spans, robustness,
+floor, sweep drift -- but two runs can share identical flip spans while
+the *drivers* of the flip differ: a template tweak can move the flip
+from fixture X to fixture Y without moving the span, and the diff would
+call the robustness story identical. The recorded `flip_attribution`
+makes that comparison exact and post-hoc.
+
+**Plan:** `_normalize_attribution` canonicalizes each side (malformed
+entries skipped, crossings sorted by (min_budget, candidate, fixture),
+absent field -> None distinct from present-but-empty); `diff_frontiers`
+gains a `flip_attribution` {old, new, changed} section feeding the
+top-level `changed` flag and hence the `identical` verdict (consistent
+with the existing convention that a missing field counts as a change,
+as `budget_robust` already does); `_render_frontier_summary` prints
+per-span old/new crossing lines with `_display_id` sanitization, or a
+"not recorded by {old,new} run" line.
+
+**Built:** the normalizer, wiring, and summary rendering in
+`model_protocol_lab/diffreports.py`; `tests/test_cycle128_attribution_diff_audit.py`
+(16 tests). Mutation results: 4/4 killed (hardcoded changed=False;
+order-sensitive comparison; dropped sanitization; dropped
+top-level wiring).
+
+**Differentiation review:** cross-run causal attribution of *why* budget
+sensitivity moved -- not just where -- is the kind of analysis that
+turns the frontier from a chart into a debugging tool. Professional:
+exact, normalized, sanitized, no overclaim.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

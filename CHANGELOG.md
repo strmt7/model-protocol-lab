@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 128 — flip-attribution comparison in diff-reports, 2026-10-17)
+
+- `mpl diff-reports` now compares `flip_attribution` per side via
+  `diff_frontiers`: two runs can share identical flip spans while the
+  *drivers* of the flip differ (e.g. a template tweak moves the flip
+  from one fixture to another), and the diff no longer calls that
+  identical. Each side is normalized (malformed entries skipped,
+  crossings sorted, so crossing order never counts), a side without the
+  field compares as unknown, and differences feed the `changed` flag
+  and the `identical` verdict. The stderr summary prints per-span
+  old/new crossing lines with terminal-control characters stripped.
+- New `tests/test_cycle128_attribution_diff_audit.py` (16 tests):
+  normalization, identical/same-span/different-crossings, one-sided and
+  two-sided missing fields, malformed entries, order-insensitivity,
+  `identical` wiring, summary wording and sanitization, determinism;
+  4/4 targeted mutants killed.
+
 ### Added (cycle 127 — flip-span attribution, 2026-10-17)
 
 - The `budget_frontier` payload now records `flip_attribution`: for each
