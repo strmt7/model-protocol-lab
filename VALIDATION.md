@@ -7,12 +7,13 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **4913 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **4854 tests collected**
   (cycle 106, 2026-10-17; collection only — full green
   executions are the coordinator's gate). Subtests numbered in the 68k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **3873 tests** (cycle 106,
-  2026-10-17). Cycle 106 closed the pytest-only gap: 9 test files that
+- `python -m unittest discover -s tests -t .` — **3953 tests** (cycle 108,
+  2026-10-17; cycle-107 conversions redone one file at a time after the
+  cycle-107 CI red). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
   now execute the full suite. Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,

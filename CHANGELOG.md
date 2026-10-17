@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
+
+- Converted test_cycle29_fixtures_verify.py to `unittest.TestCase`
+  (first of the cycle-107 conversions, redone individually with CI
+  verification per file after the cycle-107 CI red). `@pytest.mark.parametrize`
+  became `subTest` loops (cases preserved). Pytest collection 4913 → 4854;
+  unittest discovery 3873 → 3953. README/VALIDATION.md counts updated.
+- Hardened test_readme_test_count_matches_discovered_suite
+  (test_cycle4.py): the pytest-subprocess collection now retries up to 3
+  times with a 300s timeout (was single attempt, 180s) and reports both
+  counts plus collection diagnostics on failure, instead of failing
+  opaquely under load.
+
 ### Fixed (CI red revert — cycle 107 conversions rolled back, 2026-10-17)
 
 - Reverted cycle 107's pytest-to-TestCase conversions (test_cycle29,
