@@ -101,7 +101,7 @@ URL_ATTRS = {
 }
 
 SVG_ATTR_ALLOW = {"class", "width", "height", "viewbox", "role", "aria-label"}
-RECT_ATTR_ALLOW = {"x", "y", "width", "height"}
+RECT_ATTR_ALLOW = {"x", "y", "width", "height", "fill"}
 
 
 class _MarkupAudit(HTMLParser):
@@ -131,9 +131,13 @@ class _MarkupAudit(HTMLParser):
                 if name.lower() not in SVG_ATTR_ALLOW:
                     self.problems.append(f"unexpected <svg> attribute {name!r}")
         if tag == "rect":
-            for name, _ in attrs:
+            for name, value in attrs:
                 if name.lower() not in RECT_ATTR_ALLOW:
                     self.problems.append(f"unexpected <rect> attribute {name!r}")
+                # fill is a non-executable presentation attribute, but a
+                # url() payload could reference an external resource.
+                if name.lower() == "fill" and value and value.strip().lower().startswith("url("):
+                    self.problems.append("external paint reference in <rect> fill")
         if tag == "meta":
             attr = {n.lower(): (v or "") for n, v in attrs}
             if "http-equiv" in attr and attr["http-equiv"].lower() != "content-security-policy":
@@ -524,6 +528,22 @@ class HtmlEscapingAuditTests(unittest.TestCase):
             rendered = (Path(tmp) / "sample" / "report.html").read_text(encoding="utf-8")
             _audit_markup(self, rendered, "sample report.html")
             self.assertEqual(rendered.count("<script"), 1)
+
+    def test_rect_fill_url_payload_flagged(self):
+        # fill is allowlisted on <rect> (presentation attribute), but a
+        # url() paint server could pull an external resource.
+        audit = _MarkupAudit()
+        audit.feed('<svg><rect x="0" y="0" width="4" height="4" fill="url(http://evil/x)"/></svg>')
+        audit.close()
+        self.assertTrue(
+            any("external paint reference" in p for p in audit.problems),
+            audit.problems,
+        )
+        # Plain hex fills (what the report builders emit) stay clean.
+        audit2 = _MarkupAudit()
+        audit2.feed('<svg><rect x="0" y="0" width="4" height="4" fill="#16a34a"/></svg>')
+        audit2.close()
+        self.assertEqual(audit2.problems, [])
 
     def test_diffreports_has_no_html_entry_point(self):
         self.assertFalse(hasattr(diffreports, "render_html"))

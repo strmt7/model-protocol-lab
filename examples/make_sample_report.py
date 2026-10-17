@@ -81,6 +81,25 @@ def build_sample_report(output_dir: Path) -> dict:
         max_new_tokens=MAX_NEW_TOKENS,
         seed=20261012,
     )
+    # Token-budget frontier: attached exactly as `mpl run` does, so the
+    # committed sample report exercises the frontier section (chart and
+    # decision ribbon). Degrades to an "unavailable" marker instead of
+    # failing the build.
+    try:
+        from model_protocol_lab.experiments import budget_frontier
+
+        result["budget_frontier"] = budget_frontier(
+            result.get("search") or [],
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            native_decision=result["decision"],
+            native_winner=result.get("selected_candidate"),
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["budget_frontier"] = {
+            "available": False,
+            "detail": "frontier_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

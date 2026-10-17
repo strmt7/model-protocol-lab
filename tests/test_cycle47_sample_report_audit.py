@@ -62,6 +62,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "selected_candidate",
     "selected_boundary_token_ids",
     "failure_taxonomy",
+    "budget_frontier",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",
