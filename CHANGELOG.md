@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 119 — pickle-deserialization loading invariant, 2026-10-17)
+
+- Extended the cycle-117 local-loading AST invariant to the
+  pickle-deserialization attack class (CVE-2025-32434, CVE-2026-24747):
+  `tests/test_cycle119_pickle_deserialization_invariant_audit.py` asserts no
+  `torch.load`/`pickle.load(s)` in the package and that every model-weight
+  `from_pretrained` call passes `use_safetensors=True` (transformers never
+  touches the pickle unpickler) and `weights_only=True` (defense in depth).
+  The installed torch 2.14.1+cpu is not affected by either CVE, but the
+  lab's defense no longer depends on the installed version.
+  `docs/SECURITY.md` supply-chain posture updated. (4 new tests.)
+
 ### Fixed (cycle 118 — render watchdog hardening, 2026-10-17)
 
 - Red-team audit of the cycle-116 SIGALRM render watchdog found two
