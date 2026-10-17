@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 107 — continued pytest-to-TestCase conversions, 2026-10-17)
+
+- Converted 4 more pytest-style files to `unittest.TestCase`
+  (test_cycle29, test_cycle30, test_cycle66, test_cycle69):
+  `@pytest.mark.parametrize` cases became `subTest` loops (cases
+  preserved; pytest's per-param count consolidated). Removed a leftover
+  `import pytest` / `pytest.approx` from test_cycle69 (now
+  `assertAlmostEqual`). Both runners now agree at 4120 tests. README and
+  VALIDATION.md counts updated (4913/3873 → 4120/4120).
+
 ### Fixed (cycle 106 — CI unittest gate coverage, 2026-10-17)
 
 - Closed a major test-runner gap: CI's `coverage run -m unittest discover`

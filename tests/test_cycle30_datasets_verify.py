@@ -77,11 +77,11 @@ import json
 import os
 import random
 import stat
+import tempfile
 import threading
 import unicodedata
+import unittest
 from pathlib import Path
-
-import pytest
 
 from model_protocol_lab import datasets as datasets_mod
 from model_protocol_lab.core import Fixture, Message, Split
@@ -740,22 +740,32 @@ INVALID_CASES = _build_invalid_cases()
 # ---------------------------------------------------------------------------
 
 
-class TestOracleDifferentialValid:
-    @pytest.mark.parametrize(
-        "doc", VALID_CASES, ids=[f"valid-{i}" for i in range(len(VALID_CASES))]
-    )
-    def test_valid_documents_agree(self, doc):
-        _assert_agree("valid", doc, expect_valid=True)
+class TestOracleDifferentialValid(unittest.TestCase):
+    def test_valid_documents_agree(self):
+        for doc in VALID_CASES:
+            with self.subTest(doc=doc):
+                _assert_agree("valid", doc, expect_valid=True)
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
-class TestOracleDifferentialInvalid:
-    @pytest.mark.parametrize(
-        "payload",
-        [payload for _name, payload in INVALID_CASES],
-        ids=[f"invalid-{i}-{name}" for i, (name, _payload) in enumerate(INVALID_CASES)],
-    )
-    def test_invalid_documents_agree(self, payload):
-        _assert_agree("invalid", payload, expect_valid=False)
+class TestOracleDifferentialInvalid(unittest.TestCase):
+    def test_invalid_documents_agree(self):
+        for payload in [payload for _name, payload in INVALID_CASES]:
+            with self.subTest(payload=payload):
+                _assert_agree("invalid", payload, expect_valid=False)
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -843,7 +853,7 @@ def _set_field(doc, field, value):
     return _dump(doc)
 
 
-class TestBoundaries:
+class TestBoundaries(unittest.TestCase):
     def test_byte_limit_exact(self):
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES)
         _assert_agree("bytes-exact", doc, expect_valid=True)
@@ -852,16 +862,18 @@ class TestBoundaries:
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES + 1)
         _assert_agree("bytes-plus-one", doc, expect_valid=False)
 
-    @pytest.mark.parametrize("count", [1, 2, 99, 100])
-    def test_case_count_ok(self, count):
-        _assert_agree(f"cases-{count}", _doc_with_case_count(count), expect_valid=True)
+    def test_case_count_ok(self):
+        for count in [1, 2, 99, 100]:
+            with self.subTest(count=count):
+                _assert_agree(f"cases-{count}", _doc_with_case_count(count), expect_valid=True)
 
     def test_case_count_101_rejected(self):
         _assert_agree("cases-101", _doc_with_case_count(101), expect_valid=False)
 
-    @pytest.mark.parametrize("count", [1, 3, 19, 21])
-    def test_message_count_ok(self, count):
-        _assert_agree(f"msgs-{count}", _doc_with_message_count(count), expect_valid=True)
+    def test_message_count_ok(self):
+        for count in [1, 3, 19, 21]:
+            with self.subTest(count=count):
+                _assert_agree(f"msgs-{count}", _doc_with_message_count(count), expect_valid=True)
 
     def test_message_count_22_rejected(self):
         _assert_agree("msgs-22", _doc_with_message_count(22), expect_valid=False)
@@ -869,23 +881,29 @@ class TestBoundaries:
     def test_message_count_20_rejected_ends_with_assistant(self):
         _assert_agree("msgs-20", _doc_with_message_count(20), expect_valid=False)
 
-    @pytest.mark.parametrize("field", ["id", "group", "content", "expected"])
-    def test_text_limit_exact_ok(self, field):
-        doc = _set_field(_base_doc(), field, "x" * datasets_mod.MAX_TEXT)
-        _assert_agree(f"text-exact-{field}", doc, expect_valid=True)
+    def test_text_limit_exact_ok(self):
+        for field in ["id", "group", "content", "expected"]:
+            with self.subTest(field=field):
+                doc = _set_field(_base_doc(), field, "x" * datasets_mod.MAX_TEXT)
+                _assert_agree(f"text-exact-{field}", doc, expect_valid=True)
 
-    @pytest.mark.parametrize("field", ["id", "group", "content", "expected"])
-    def test_text_limit_plus_one_rejected(self, field):
-        doc = _set_field(_base_doc(), field, "x" * (datasets_mod.MAX_TEXT + 1))
-        _assert_agree(f"text-plus-one-{field}", doc, expect_valid=False)
+    def test_text_limit_plus_one_rejected(self):
+        for field in ["id", "group", "content", "expected"]:
+            with self.subTest(field=field):
+                doc = _set_field(_base_doc(), field, "x" * (datasets_mod.MAX_TEXT + 1))
+                _assert_agree(f"text-plus-one-{field}", doc, expect_valid=False)
 
     def test_text_limit_counts_characters_not_bytes(self):
-        # MAX_TEXT is a character count: 16384 multibyte chars are fine even
-        # though they far exceed MAX_TEXT bytes. (Sensitivity: M14 switches
-        # this to a byte count.)
         doc = _set_field(_base_doc(), "content", "\u00e9" * datasets_mod.MAX_TEXT)
         assert len(doc.encode("utf-8")) > datasets_mod.MAX_TEXT
         _assert_agree("text-multibyte", doc, expect_valid=True)
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -893,38 +911,33 @@ class TestBoundaries:
 # ---------------------------------------------------------------------------
 
 
-class TestPinnedBehavior:
+class TestPinnedBehavior(unittest.TestCase):
     def test_non_str_input_rejected(self):
-        # D1: a str subclass is rejected, but with the misleading size-limit
-        # message (the type check shares the size error branch).
         class Sub(str):
             pass
 
         payload = Sub(_dump(_base_doc()))
-        with pytest.raises(ValueError, match="Dataset exceeds size limit"):
+        with self.assertRaisesRegex(ValueError, "Dataset exceeds size limit"):
             datasets_mod.parse_dataset(payload)
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             reference_parse_dataset(payload)
 
     def test_lone_surrogate_raises_valueerror(self):
-        # D2: lone surrogates fail the UTF-8 size probe with a raw codec
-        # message; UnicodeEncodeError IS a ValueError, so `except ValueError`
-        # callers are unaffected.
         doc = _dump(_base_doc()).replace("fs1", "a\ud800", 1)
-        with pytest.raises(ValueError) as info:
+        with self.assertRaises(ValueError) as info:
             datasets_mod.parse_dataset(doc)
-        assert isinstance(info.value, UnicodeEncodeError)
+        assert isinstance(info.exception, UnicodeEncodeError)
 
     def test_duplicate_id_across_splits_rejected(self):
         doc = _base_doc()
         doc["held_out"][0]["id"] = "fs1"
-        with pytest.raises(ValueError, match="globally unique"):
+        with self.assertRaisesRegex(ValueError, "globally unique"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_group_cannot_cross_split(self):
         doc = _base_doc()
         doc["held_out"][0]["group"] = "gs"
-        with pytest.raises(ValueError, match="Related fixtures cannot cross the split"):
+        with self.assertRaisesRegex(ValueError, "Related fixtures cannot cross the split"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_conversation_must_end_with_user(self):
@@ -933,25 +946,25 @@ class TestPinnedBehavior:
             {"role": "user", "content": "a"},
             {"role": "assistant", "content": "b"},
         ]
-        with pytest.raises(ValueError, match="must end with user"):
+        with self.assertRaisesRegex(ValueError, "must end with user"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_alternation_must_start_with_user(self):
         doc = _base_doc()
         doc["search"][0]["messages"][0]["role"] = "assistant"
-        with pytest.raises(ValueError, match="must alternate"):
+        with self.assertRaisesRegex(ValueError, "must alternate"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_blank_id_rejected(self):
         doc = _base_doc()
         doc["search"][0]["id"] = "  \t "
-        with pytest.raises(ValueError, match="Blank identifier"):
+        with self.assertRaisesRegex(ValueError, "Blank identifier"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_blank_group_rejected(self):
         doc = _base_doc()
         doc["search"][0]["group"] = ""
-        with pytest.raises(ValueError, match="Blank identifier"):
+        with self.assertRaisesRegex(ValueError, "Blank identifier"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_whitespace_padded_id_accepted(self):
@@ -973,9 +986,6 @@ class TestPinnedBehavior:
         assert split == reference_parse_dataset(text)
 
     def test_nfd_data_preserved_byte_exact(self):
-        # Exact-token-sequence discipline: stored data stays byte-exact (NFD
-        # is NOT normalized on the way in); only the split-discipline
-        # comparisons use NFC.
         doc = _base_doc()
         doc["search"][0]["id"] = "cafe\u0301"
         doc["search"][0]["messages"][0]["content"] = "nai\u0308ve"
@@ -988,44 +998,43 @@ class TestPinnedBehavior:
         doc = _base_doc()
         doc["search"][0]["id"] = "caf\u00e9"  # NFC
         doc["held_out"][0]["id"] = "cafe\u0301"  # NFD, NFC-equal
-        with pytest.raises(ValueError, match="globally unique"):
+        with self.assertRaisesRegex(ValueError, "globally unique"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_nan_and_infinity_rejected(self):
         base = _dump(_base_doc())
         for token in ("NaN", "Infinity", "-Infinity"):
             text = base.replace('"expected": "e"', f'"expected": {token}', 1)
-            with pytest.raises(ValueError, match="Nonfinite"):
+            with self.assertRaisesRegex(ValueError, "Nonfinite"):
                 datasets_mod.parse_dataset(text)
 
     def test_deep_nesting_converted_to_valueerror(self):
         text = '{"search": ' + "[" * 20_000 + "]" * 20_000 + ', "held_out": []}'
-        with pytest.raises(ValueError, match="nesting too deep"):
+        with self.assertRaisesRegex(ValueError, "nesting too deep"):
             datasets_mod.parse_dataset(text)
 
     def test_overflow_float_rejected(self):
         text = _dump(_base_doc()).replace('"id": "fs1"', '"id": 1e400', 1)
-        with pytest.raises(ValueError, match="Invalid or oversized text field"):
+        with self.assertRaisesRegex(ValueError, "Invalid or oversized text field"):
             datasets_mod.parse_dataset(text)
 
     def test_empty_splits_rejected(self):
         doc = _base_doc()
         doc["search"] = []
-        with pytest.raises(ValueError, match="Invalid fixture count"):
+        with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_zero_messages_rejected(self):
         doc = _base_doc()
         doc["search"][0]["messages"] = []
-        with pytest.raises(ValueError, match="conversation must have 1-21 messages"):
+        with self.assertRaisesRegex(ValueError, "conversation must have 1-21 messages"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_bom_rejected(self):
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             datasets_mod.parse_dataset("\ufeff" + _dump(_base_doc()))
 
     def test_dunder_keys_are_inert_data(self):
-        # "Without executable configuration": exotic keys are plain data.
         doc = _base_doc()
         doc["search"][0]["id"] = "__proto__"
         doc["search"][0]["messages"][0]["content"] = "${jndi:ldap://x}"
@@ -1036,14 +1045,22 @@ class TestPinnedBehavior:
         text = VALID_CASES[7]
         assert datasets_mod.parse_dataset(text) == datasets_mod.parse_dataset(text)
 
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
 
 # ---------------------------------------------------------------------------
 # load_dataset
 # ---------------------------------------------------------------------------
 
 
-class TestLoadDataset:
-    def test_roundtrip_file(self, tmp_path):
+class TestLoadDataset(unittest.TestCase):
+    def test_roundtrip_file(self):
+        tmp_path = self.tmp_path
         text = VALID_CASES[3]
         target = tmp_path / "ds.json"
         target.write_text(text, encoding="utf-8")
@@ -1051,58 +1068,66 @@ class TestLoadDataset:
         assert loaded == datasets_mod.parse_dataset(text)
         assert loaded == reference_load_dataset(target)
 
-    @pytest.mark.parametrize("index", [0, 11, 42, 101, 250])
-    def test_fuzz_files_agree(self, tmp_path, index):
-        text = VALID_CASES[index]
-        target = tmp_path / "ds.json"
-        target.write_text(text, encoding="utf-8")
-        assert datasets_mod.load_dataset(target) == reference_load_dataset(target)
+    def test_fuzz_files_agree(self):
+        tmp_path = self.tmp_path
+        for index in [0, 11, 42, 101, 250]:
+            with self.subTest(index=index):
+                text = VALID_CASES[index]
+                target = tmp_path / "ds.json"
+                target.write_text(text, encoding="utf-8")
+                assert datasets_mod.load_dataset(target) == reference_load_dataset(target)
 
-    def test_missing_file(self, tmp_path):
-        with pytest.raises(ValueError, match="Unreadable fixture file"):
+    def test_missing_file(self):
+        tmp_path = self.tmp_path
+        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset(tmp_path / "nope.json")
 
-    def test_directory_refused(self, tmp_path):
-        with pytest.raises(ValueError, match="not a regular file"):
+    def test_directory_refused(self):
+        tmp_path = self.tmp_path
+        with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(tmp_path)
 
     def test_dev_null_refused(self):
-        with pytest.raises(ValueError, match="not a regular file"):
+        with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset("/dev/null")
 
-    def test_fifo_without_writer_refused(self, tmp_path):
+    def test_fifo_without_writer_refused(self):
+        tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
-        with pytest.raises(ValueError, match="not a regular file"):
+        with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(fifo)
 
-    def test_symlink_to_fifo_refused(self, tmp_path):
+    def test_symlink_to_fifo_refused(self):
+        tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
         link = tmp_path / "link"
         os.symlink(fifo, link)
-        with pytest.raises(ValueError, match="not a regular file"):
+        with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(link)
 
-    def test_invalid_utf8(self, tmp_path):
-        # M18 pins the exact message: the raw UnicodeDecodeError must not leak.
+    def test_invalid_utf8(self):
+        tmp_path = self.tmp_path
         target = tmp_path / "bad.json"
         target.write_bytes(b'{"search": "\xed\xa0\x80"}')
-        with pytest.raises(ValueError, match="not valid UTF-8"):
+        with self.assertRaisesRegex(ValueError, "not valid UTF-8"):
             datasets_mod.load_dataset(target)
 
-    def test_bytes_path_rejected(self, tmp_path):
+    def test_bytes_path_rejected(self):
+        tmp_path = self.tmp_path
         target = tmp_path / "ds.json"
         target.write_text(_dump(_base_doc()), encoding="utf-8")
-        with pytest.raises(ValueError, match="Invalid fixture path"):
+        with self.assertRaisesRegex(ValueError, "Invalid fixture path"):
             datasets_mod.load_dataset(os.fsencode(target))
 
-    @pytest.mark.parametrize("bad", [None, 123, 4.5, ["x"], b"x"])
-    def test_non_path_types_rejected(self, bad):
-        with pytest.raises(ValueError, match="Invalid fixture path"):
-            datasets_mod.load_dataset(bad)
+    def test_non_path_types_rejected(self):
+        for bad in [None, 123, 4.5, ["x"], b"x"]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "Invalid fixture path"):
+                datasets_mod.load_dataset(bad)
 
-    def test_symlink_to_regular_file_accepted(self, tmp_path):
+    def test_symlink_to_regular_file_accepted(self):
+        tmp_path = self.tmp_path
         text = _dump(_base_doc())
         target = tmp_path / "ds.json"
         target.write_text(text, encoding="utf-8")
@@ -1110,67 +1135,79 @@ class TestLoadDataset:
         os.symlink(target, link)
         assert datasets_mod.load_dataset(link) == datasets_mod.parse_dataset(text)
 
-    def test_dangling_symlink(self, tmp_path):
+    def test_dangling_symlink(self):
+        tmp_path = self.tmp_path
         link = tmp_path / "dangling"
         os.symlink(tmp_path / "missing", link)
-        with pytest.raises(ValueError, match="Unreadable fixture file"):
+        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset(link)
 
-    def test_symlink_loop(self, tmp_path):
+    def test_symlink_loop(self):
+        tmp_path = self.tmp_path
         link = tmp_path / "loop"
         os.symlink(link, link)
-        with pytest.raises(ValueError, match="Unreadable fixture file"):
+        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset(link)
 
-    def test_trailing_slash_normalized_by_pathlib(self, tmp_path):
-        # Path("file/") normalizes to Path("file"), so a trailing slash on an
-        # existing file loads fine; on a missing file it is unreadable.
+    def test_trailing_slash_normalized_by_pathlib(self):
+        tmp_path = self.tmp_path
         text = _dump(_base_doc())
         target = tmp_path / "ds.json"
         target.write_text(text, encoding="utf-8")
         assert datasets_mod.load_dataset(str(target) + "/") == datasets_mod.parse_dataset(text)
-        with pytest.raises(ValueError, match="Unreadable fixture file"):
+        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset(str(tmp_path / "missing.json") + "/")
 
-    def test_exact_max_bytes_file_accepted(self, tmp_path):
+    def test_exact_max_bytes_file_accepted(self):
+        tmp_path = self.tmp_path
         text = _doc_with_byte_length(datasets_mod.MAX_BYTES)
         target = tmp_path / "ds.json"
         target.write_bytes(text.encode("utf-8"))
         assert target.stat().st_size == datasets_mod.MAX_BYTES
         assert datasets_mod.load_dataset(target) == reference_load_dataset(target)
 
-    def test_max_bytes_plus_one_file_rejected(self, tmp_path):
+    def test_max_bytes_plus_one_file_rejected(self):
+        tmp_path = self.tmp_path
         text = _doc_with_byte_length(datasets_mod.MAX_BYTES + 1)
         target = tmp_path / "ds.json"
         target.write_bytes(text.encode("utf-8"))
-        with pytest.raises(ValueError, match="Dataset exceeds size limit"):
+        with self.assertRaisesRegex(ValueError, "Dataset exceeds size limit"):
             datasets_mod.load_dataset(target)
 
-    def test_unreadable_file(self, tmp_path):
+    def test_unreadable_file(self):
+        tmp_path = self.tmp_path
         target = tmp_path / "noperm.json"
         target.write_text(_dump(_base_doc()), encoding="utf-8")
         target.chmod(0o000)
         try:
             if os.access(target, os.R_OK):
-                pytest.skip("process can still read the file (e.g. running as root)")
-            with pytest.raises(ValueError, match="Unreadable fixture file"):
+                self.skipTest("process can still read the file (e.g. running as root)")
+            with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
                 datasets_mod.load_dataset(target)
         finally:
             target.chmod(0o600)
 
-    def test_empty_file(self, tmp_path):
+    def test_empty_file(self):
+        tmp_path = self.tmp_path
         target = tmp_path / "empty.json"
         target.write_bytes(b"")
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             datasets_mod.load_dataset(target)
 
     def test_path_with_null_byte(self):
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             datasets_mod.load_dataset("a\0b")
 
     def test_absurdly_long_path(self):
-        with pytest.raises(ValueError, match="Unreadable fixture file"):
+        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset("/" + "x" * 6000)
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -1178,11 +1215,9 @@ class TestLoadDataset:
 # ---------------------------------------------------------------------------
 
 
-class TestRedTeam:
-    def test_fifo_with_writer_still_refused(self, tmp_path):
-        # Even with a writer streaming a *valid* dataset into the pipe, the
-        # loader must refuse it (fd-based regular-file check) rather than
-        # read unbounded input.
+class TestRedTeam(unittest.TestCase):
+    def test_fifo_with_writer_still_refused(self):
+        tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
         stop = threading.Event()
@@ -1198,27 +1233,26 @@ class TestRedTeam:
         thread = threading.Thread(target=writer, daemon=True)
         thread.start()
         try:
-            with pytest.raises(ValueError, match="not a regular file"):
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
                 datasets_mod.load_dataset(fifo)
         finally:
             stop.set()
             thread.join(timeout=15)
         assert not thread.is_alive()
 
-    def test_oversize_file_never_fully_read(self, tmp_path):
-        # A 3x-MAX_BYTES file must be rejected from the bounded prefix read,
-        # not by loading it all into memory first.
+    def test_oversize_file_never_fully_read(self):
+        tmp_path = self.tmp_path
         target = tmp_path / "big.json"
         with open(target, "wb") as handle:
             handle.write(b'{"search": [{"id": "')
             handle.write(b"x" * (3 * datasets_mod.MAX_BYTES))
             handle.write(b'"}]}')
-        with pytest.raises(ValueError, match="Dataset exceeds size limit"):
+        with self.assertRaisesRegex(ValueError, "Dataset exceeds size limit"):
             datasets_mod.load_dataset(target)
 
     def test_deeply_nested_object_converted(self):
         text = '{"a":' * 30_000 + "null" + "}" * 30_000
-        with pytest.raises(ValueError, match="nesting too deep"):
+        with self.assertRaisesRegex(ValueError, "nesting too deep"):
             datasets_mod.parse_dataset(text)
 
     def test_many_extra_keys_rejected(self):
@@ -1240,11 +1274,11 @@ class TestRedTeam:
             + held_fixture
             + "]}"
         )
-        with pytest.raises(ValueError, match="Unexpected or missing JSON fields"):
+        with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             datasets_mod.parse_dataset(text)
 
     def test_whitespace_only_splits_rejected(self):
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             datasets_mod.parse_dataset('{"search": [], "held_out": []}')
 
     def test_groups_may_repeat_within_one_split(self):
@@ -1263,7 +1297,7 @@ class TestRedTeam:
     def test_ids_unique_within_split_enforced(self):
         doc = _base_doc()
         doc["search"].append(dict(doc["search"][0]))
-        with pytest.raises(ValueError, match="globally unique"):
+        with self.assertRaisesRegex(ValueError, "globally unique"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_single_message_conversation_valid(self):
@@ -1276,3 +1310,14 @@ class TestRedTeam:
         text = _doc_with_message_count(21)
         split = datasets_mod.parse_dataset(text)
         assert [m.role for m in split.search[0].messages] == ["user", "assistant"] * 10 + ["user"]
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+
+if __name__ == "__main__":
+    unittest.main()

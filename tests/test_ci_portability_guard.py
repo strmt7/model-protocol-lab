@@ -207,5 +207,77 @@ class TestMypyStrictPinned(unittest.TestCase):
         )
 
 
+class TestDualRunnerContribution(unittest.TestCase):
+    """Every test file must contribute tests under BOTH runners.
+
+    Cycle 106 found 9 pytest-style files (2533 test executions) that CI's
+    `unittest discover` silently skipped; cycle 107 found 4 more (1040
+    executions). VALIDATION.md documents both runners, so a file that
+    collects zero tests under either runner is a coverage lie. This guard
+    fails if any tests/test_*.py file yields zero tests from unittest's
+    TestLoader or from pytest's collector.
+    """
+
+    def test_every_test_file_collected_by_unittest(self) -> None:
+        import unittest
+
+        loader = unittest.TestLoader()
+        zero: list[str] = []
+        for path in sorted(TESTS_DIR.glob("test_*.py")):
+            if path.name == "test_ci_portability_guard.py":
+                continue  # self-reference; this file is TestCase by construction
+            module = f"tests.{path.stem}"
+            try:
+                count = loader.loadTestsFromName(module).countTestCases()
+            except Exception as exc:  # noqa: BLE001 -- report as zero, don't crash guard
+                zero.append(f"{path.name} (load error: {exc})")
+                continue
+            if count == 0:
+                zero.append(path.name)
+        self.assertEqual(
+            zero,
+            [],
+            "test files contributing zero tests under unittest (CI gate skips them):\n"
+            + "\n".join(zero),
+        )
+
+    def test_every_test_file_collected_by_pytest(self) -> None:
+        import subprocess
+        import sys
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/",
+                "--collect-only",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+            ],
+            cwd=TESTS_DIR.parent,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        self.assertEqual(
+            proc.returncode, 0, f"pytest --collect-only failed:\n{proc.stderr[-2000:]}"
+        )
+        counts: dict[str, int] = {}
+        for line in proc.stdout.splitlines():
+            # lines look like: tests/test_x.py::TestY::test_z
+            if "::" not in line:
+                continue
+            fname = line.split("::")[0].split("/")[-1]
+            counts[fname] = counts.get(fname, 0) + 1
+        zero = [p.name for p in sorted(TESTS_DIR.glob("test_*.py")) if counts.get(p.name, 0) == 0]
+        self.assertEqual(
+            zero,
+            [],
+            "test files contributing zero tests under pytest:\n" + "\n".join(zero),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

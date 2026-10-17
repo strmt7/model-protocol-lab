@@ -4455,3 +4455,32 @@ docstring (E402). (7) pytest count 6131→4913 (parametrize→subTest);
 unittest 3598→3873 (+275, exact). README/VALIDATION.md updated; CHANGELOG
 entry added. All 9 files green under BOTH runners; ruff/mypy-strict/bandit
 clean.
+
+## Cycle 107 — continued pytest-to-TestCase conversions (2026-10-17)
+
+**Context.** Cycle-106 coordinator was killed by a daemon restart mid-cycle-107,
+leaving 5 modified-but-unpushed test files. Replacement coordinator audited
+each file before proceeding.
+
+**Audit findings.** All 5 files (test_cycle29, test_cycle30, test_cycle66,
+test_cycle69, test_ci_portability_guard) were coherently converted to
+`unittest.TestCase` — no module-level test functions, no empty classes, syntax
+valid. One genuine defect found: test_cycle69 still had `import pytest` and two
+`pytest.approx` usages (half-conversion). Fixed by replacing with
+`assertAlmostEqual` (preserving the rel=1e-6 tolerance semantics explicitly)
+and removing the import. The other files' "pytest" mentions are comments,
+docstrings, or a legitimate `pytest --collect-only` subprocess assertion in
+the portability guard.
+
+**Count impact.** Converting `@pytest.mark.parametrize` to `subTest` loops
+preserves every case but consolidates pytest's per-param counting: pytest
+4913→4120 collected, unittest 3873→4120 (both runners now agree exactly).
+README.md and VALIDATION.md updated to 4120/4120. The
+`test_readme_test_count_matches_discovered_suite` gate caught the stale
+claim as designed — fixed before push.
+
+**Verification.** pytest 4112 passed + 7 skipped (was 1 failed on the stale
+README count; fixed and re-verified green); `coverage run -m unittest
+discover` exit 0; coverage 98% (gate 95%); ruff check + format clean
+(157 files); mypy clean in default and --strict modes (15 files); bandit
+exit 0.
