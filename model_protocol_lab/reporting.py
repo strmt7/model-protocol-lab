@@ -1386,6 +1386,63 @@ def _count_at_budget(steps: list[tuple[int, int]], budget: int) -> int:
     return steps[index][1] if index >= 0 else 0
 
 
+_SAFE_FLOOR_ABSENT: Any = object()
+"""Sentinel distinguishing a missing ``safe_budget_floor`` field from None."""
+
+
+def safe_budget_floor(frontier: Any) -> int | None:
+    """First token budget from which the native decision never flips.
+
+    Derived exactly from the recorded ``flip_ranges``: the merged spans
+    over 1..max_new_tokens where the post-hoc selection decision differs
+    from native. A recorded ``safe_budget_floor`` field wins when present
+    and well-typed (an int >= 1, or None meaning "no floor in sweep");
+    otherwise the floor is derived here, so payloads recorded before the
+    field existed still get an exact answer.
+
+    Returns 1 when nothing flips, the budget just past the last flip
+    span when that span ends before the sweep maximum, and None when a
+    flip span reaches the maximum (the decision still differs from
+    native at the top of the sweep) or the payload is unusable.
+    Defensive: spans are re-validated, clipped to the sweep, re-sorted
+    and re-merged, so hand-built payloads cannot produce a wrong floor.
+    Never raises.
+    """
+    if type(frontier) is not dict:
+        return None
+    recorded = frontier.get("safe_budget_floor", _SAFE_FLOOR_ABSENT)
+    if recorded is not _SAFE_FLOOR_ABSENT and (
+        recorded is None or (type(recorded) is int and recorded >= 1)
+    ):
+        return recorded
+    max_tokens = frontier.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return None
+    spans: list[list[int]] = []
+    for span in frontier.get("flip_ranges") or []:
+        if type(span) is not list or len(span) != 2:
+            continue
+        lo, hi = span
+        if type(lo) is not int or type(hi) is not int:
+            continue
+        lo = max(1, lo)
+        hi = min(max_tokens, hi)
+        if lo > hi:
+            continue
+        spans.append([lo, hi])
+    spans.sort()
+    merged: list[list[int]] = []
+    for lo, hi in spans:
+        if merged and merged[-1][1] >= lo - 1:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    if not merged:
+        return 1
+    last_hi = merged[-1][1]
+    return last_hi + 1 if last_hi < max_tokens else None
+
+
 def token_overhead(result: dict[str, Any]) -> dict[str, Any]:
     """Per-candidate token counts from the recorded observations.
 
@@ -2137,6 +2194,27 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
             + (", full pass at budget " + str(full) if full is not None else ", never fully passes")
         )
 
+    # Safe-floor marker: a dashed vertical line at the first budget from
+    # which the native decision never flips, spanning the plot and the
+    # decision ribbon. Drawn on top of the curves. Skipped when the floor
+    # is 1 (it would sit on the y-axis) or absent.
+    floor = safe_budget_floor(frontier)
+    floor_marker: int | None = None
+    if floor is not None and 1 < floor <= max_tokens:
+        floor_marker = floor
+        fx = x_of(floor)
+        ribbon_bottom = ribbon_top + ribbon_h
+        elems.append(
+            '<line x1="'
+            + str(fx)
+            + '" y1="0" x2="'
+            + str(fx)
+            + '" y2="'
+            + str(ribbon_bottom)
+            + '" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5 4"/>'
+        )
+        label_bits.append("safe budget floor at budget " + str(floor))
+
     # Legend: decision swatches first (they key the ribbon above), then
     # candidates. Wrapped rows below the plot; item widths use a fixed
     # per-character estimate so layout is byte-deterministic.
@@ -2170,6 +2248,34 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
             + str(ly + 5)
             + '" dominant-baseline="central" font-size="11" fill="#f8fafc">'
             + escape(name)
+            + "</text>"
+        )
+        lx += item_w
+    if floor_marker is not None:
+        # The floor marker gets a dashed-line swatch so the vertical line
+        # in the plot is keyed, reusing the same deterministic wrapping.
+        floor_name = "safe floor \u2265 " + str(floor_marker)
+        item_w = 14 + 7 * len(floor_name) + 12
+        if lx > 0 and lx + item_w > width:
+            lx, ly = 0, ly + row_h
+        legend_elems.append(
+            '<line x1="'
+            + str(lx)
+            + '" y1="'
+            + str(ly + 5)
+            + '" x2="'
+            + str(lx + 10)
+            + '" y2="'
+            + str(ly + 5)
+            + '" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4 3"/>'
+        )
+        legend_elems.append(
+            '<text x="'
+            + str(lx + 14)
+            + '" y="'
+            + str(ly + 5)
+            + '" dominant-baseline="central" font-size="11" fill="#f8fafc">'
+            + escape(floor_name)
             + "</text>"
         )
         lx += item_w
@@ -2234,7 +2340,8 @@ def _margin_chart_svg_block(frontier: dict[str, Any]) -> str:
         "candidate\u2019s; a tied lead has margin 0. Each step segment is "
         "colored by the leading candidate, using the same palette as the "
         "frontier chart above (gray: tied lead). Derived post-hoc from the "
-        "recorded pass steps; no extra model calls.</p>"
+        "recorded pass steps; no extra model calls. The dashed amber line "
+        "marks the safe budget floor, as in the frontier chart.</p>"
     )
 
 
@@ -2383,6 +2490,21 @@ def _margin_chart_svg(frontier: dict[str, Any]) -> str:
             + ", margin "
             + str(m0)
         )
+    # Safe-floor marker, same x-scale and style as the frontier chart:
+    # the first budget from which the native decision never flips.
+    floor = safe_budget_floor(frontier)
+    if floor is not None and 1 < floor <= max_tokens:
+        fx = x_of(floor)
+        elems.append(
+            '<line x1="'
+            + str(fx)
+            + '" y1="0" x2="'
+            + str(fx)
+            + '" y2="'
+            + str(height)
+            + '" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5 4"/>'
+        )
+        seg_bits.append("safe budget floor at budget " + str(floor))
     aria = (
         "Selection margin trajectory chart: "
         + str(len(color_of))
@@ -2429,7 +2551,9 @@ def _frontier_chart_svg_block(frontier: dict[str, Any]) -> str:
         "minimal passing budgets (no extra model calls). The native "
         "winner, when one exists, is drawn last with a heavier stroke. "
         "The decision ribbon below the axis colors every budget span by "
-        "the post-hoc selection outcome.</p>"
+        "the post-hoc selection outcome. A dashed amber line marks the "
+        "safe budget floor (first budget from which the native decision "
+        "never flips) when one exists inside the sweep.</p>"
     )
 
 
@@ -2537,6 +2661,27 @@ def _frontier_section(result: dict[str, Any]) -> str:
             "decision would have differed at these token budgets:</p><ul>"
             + "".join(items)
             + "</ul>"
+        )
+    floor = safe_budget_floor(frontier)
+    if floor is None:
+        parts.append(
+            '<p><span class="badge fail">no safe floor</span> No safe budget '
+            "floor within the sweep: the decision still differs from native "
+            "at the maximum budget " + escape(str(max_tokens)) + ".</p>"
+        )
+    elif floor <= 1:
+        parts.append(
+            '<p><span class="badge pass">safe floor</span> Safe budget floor: '
+            "<strong>1 token</strong> &mdash; the native decision holds "
+            "unchanged at every budget 1&ndash;" + escape(str(max_tokens)) + ".</p>"
+        )
+    else:
+        parts.append(
+            '<p><span class="badge pass">safe floor</span> Safe budget floor: '
+            "<strong>&ge; "
+            + escape(str(floor))
+            + " tokens</strong> &mdash; the native decision holds unchanged "
+            "from budget " + escape(str(floor)) + " through " + escape(str(max_tokens)) + ".</p>"
         )
     winner: Any = frontier.get("native_winner")
     candidates: Any = frontier.get("candidates")

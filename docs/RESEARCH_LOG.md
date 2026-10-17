@@ -4956,6 +4956,35 @@ margin; inverted leader test; inverted y-axis).
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
 
+## Cycle 126 (2026-10-17) — safe budget floor readout
+
+**Research:** the frontier triptych (cycles 121-125) shows *where* the
+selection decision flips across token budgets, but never answers the
+operator's natural next question: "from which budget on is the native
+verdict safe?" The recorded `flip_ranges` are merged exact spans over
+1..max_new_tokens where the decision differs from native, so the answer
+is exact: the budget after the last flip span (1 when nothing flips;
+none when a flip reaches the sweep maximum).
+
+**Plan:** record `safe_budget_floor` on the payload at build time
+(exact by construction), add defensive derivation
+`reporting.safe_budget_floor` for older payloads (recorded field wins
+when well-typed), a first-class callout in the HTML frontier section,
+a dashed amber marker on both charts (legend swatch + aria-label,
+integer geometry), and floor comparison in `diff_frontiers`
+(old/new/changed, feeds `identical`, stderr line).
+
+**Built:** `safe_budget_floor` in reporting.py, recorded field in
+`experiments.budget_frontier`, section callout, chart markers on the
+frontier + margin charts, diff-reports wiring, and
+`tests/test_cycle126_safe_budget_floor_audit.py` (30 tests, 4/4
+targeted mutants killed).
+
+**Differentiation review:** no other eval harness reports a
+budget-robustness floor; the lab's post-hoc exactness (no extra model
+calls) makes this a one-line question elsewhere unanswerable without
+re-running the sweep.
+
 ## Cycle 125 (2026-10-17) — frontier comparison in diff-reports
 
 **Research:** `mpl diff-reports` compares outcomes, verdicts, evidence

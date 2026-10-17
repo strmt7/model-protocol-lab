@@ -337,7 +337,8 @@
         5
       ]
     ],
-    "budget_robust": false
+    "budget_robust": false,
+    "safe_budget_floor": 6
   },
   "selection_margin": {
     "value": 2,

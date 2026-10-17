@@ -664,7 +664,7 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     # no parent package), where a module-level relative import fails. The
     # installed package is always importable there, so the absolute import
     # keeps a single source of truth for the trajectory logic.
-    from model_protocol_lab.reporting import margin_trajectory
+    from model_protocol_lab.reporting import margin_trajectory, safe_budget_floor
 
     old_traj = margin_trajectory(old)
     new_traj = margin_trajectory(new)
@@ -679,12 +679,21 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
             hi,
         )
     result["leader_flips"] = leader_flips
+    old_floor = safe_budget_floor(old)
+    new_floor = safe_budget_floor(new)
+    floor_changed = old_floor != new_floor
+    result["safe_budget_floor"] = {
+        "old": old_floor,
+        "new": new_floor,
+        "changed": floor_changed,
+    }
     result["changed"] = bool(
         result["max_new_tokens"]["changed"]
         or result["budget_robust"]["changed"]
         or decision_flips
         or winner_flips
         or leader_flips
+        or floor_changed
     )
     return result
 
@@ -715,6 +724,14 @@ def _render_frontier_summary(frontier: dict[str, Any]) -> list[str]:
         "Budget-robust: "
         f"{yes_no.get(robust['old'], robust['old'])} -> "
         f"{yes_no.get(robust['new'], robust['new'])}"
+    )
+    floor = frontier.get("safe_budget_floor") or {}
+
+    def _fmt_floor(value: Any) -> str:
+        return str(value) if type(value) is int else "(none)"
+
+    lines.append(
+        f"Safe budget floor: {_fmt_floor(floor.get('old'))} -> {_fmt_floor(floor.get('new'))}"
     )
     for key, label in (
         ("decision_flips", "Post-hoc decision differs"),

@@ -346,6 +346,10 @@ Each candidate is summarized by its per-fixture minimal passing budgets, the
 pass-count step curve, and the budget ranges where the decision or winner
 would have differed from native (`flip_ranges`); `budget_robust` is true
 when the decision is identical at every budget from 1 to `--max-new-tokens`.
+`safe_budget_floor` is the first budget from which the native decision never
+flips again (1 when nothing flips; absent when a flip reaches the sweep
+maximum) -- the HTML report calls it out and marks it on the frontier and
+margin charts, and `mpl diff-reports` compares it between runs.
 Like the stop matrix, this is a post-hoc diagnostic: it never changes the
 selection rule, and it degrades to an "unavailable" marker (never a run
 failure) when the search did not complete.
