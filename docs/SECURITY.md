@@ -163,6 +163,18 @@ duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
   `tests/test_cycle117_local_loading_invariant_audit.py` (AST guards:
   no `trust_remote_code=True`, every `from_pretrained` passes
   `local_files_only=True`, no download helpers, no truthy `token=`).
+  **Deserialization:** the model-weight `from_pretrained` additionally passes
+  `use_safetensors=True` (transformers never touches the pickle unpickler)
+  and `weights_only=True` (defense in depth if a fallback ever engaged),
+  and no `torch.load` / `pickle.load(s)` appears in the package. This is the
+  structural defense against the CVE-2025-32434 (torch <2.6.0) and
+  CVE-2026-24747 (torch <=2.9.1, fixed 2.10.0; CVSS 8.8 — the
+  `weights_only=True` unpickler itself was bypassable) classes. The
+  installed torch 2.14.1+cpu is not affected by either, but the lab's
+  defense does not depend on that: pinned by
+  `tests/test_cycle119_pickle_deserialization_invariant_audit.py`
+  (AST guards: no `torch.load`/`pickle.load(s)`; every model-weight
+  `from_pretrained` passes `use_safetensors=True` and `weights_only=True`).
 - **TOCTOU:** `_manifest` hashes every asset before and after HF loading and
   compares size/mtime/ino + sha256; swaps fail closed.
 - **Cancellation:** the generate `Event` is checked before lock acquisition, in

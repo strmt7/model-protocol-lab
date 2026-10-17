@@ -4781,3 +4781,35 @@ nanosecond-mtime-forgery trade-off remains documented and accepted.
 **Verification:** 4 new tests in
 `tests/test_cycle118_render_watchdog_hardening_audit.py` (inf/nan
 budgets, mask restoration, stale mid-render alarm); full battery green.
+
+## Cycle 119 (2026-10-17) — pickle-deserialization loading invariant
+
+**Research:** torch CVE posture re-verification (SECURITY.md residual #1:
+torch `+cpu` tag invisible to pip-audit → manual re-verification). Two
+relevant CVEs: CVE-2025-32434 (torch <2.6.0, RCE via TorchScript
+deserialization) and CVE-2026-24747 (torch <=2.9.1, fixed in 2.10.0, CVSS
+8.8 — the `weights_only=True` unpickler itself failed to validate pickle
+opcodes and storage metadata, breaking the "safe loading" guarantee).
+Sources: NVD/GitHub advisory text via securityonline.info (2026-01-29),
+Wiz and SentinelOne vulnerability databases, Feedly CVE entries.
+Installed torch 2.14.1+cpu is not affected by either (both fixed well
+before 2.14).
+
+**Plan:** the lab's defense must not depend on the installed version. The
+package calls `AutoModelForCausalLM.from_pretrained` with
+`use_safetensors=True` (pickle unpickler never engaged) and
+`weights_only=True` (defense in depth), and contains no `torch.load` /
+`pickle.load(s)` — but nothing pinned those keywords. A future
+"simplification" dropping them would silently re-engage the pickle path for
+`.bin` checkpoints with CI staying green. Extend the cycle-117 AST
+invariant pattern to the deserialization class.
+
+**Built:** `tests/test_cycle119_pickle_deserialization_invariant_audit.py`
+(4 tests, both runners): no `torch.load` calls, no `pickle` imports or
+`pickle.load(s)` calls, every model-weight `from_pretrained` passes
+`use_safetensors=True` and `weights_only=True` as literal `True`
+(`AutoConfig.from_pretrained` loads config.json — no weights — and is out
+of scope). Mutation-tested: dropping either keyword or adding a
+`torch.load` call is caught at the exact call site. `docs/SECURITY.md`
+supply-chain section documents the CVE-2025-32434 / CVE-2026-24747
+posture; CHANGELOG entry added.
