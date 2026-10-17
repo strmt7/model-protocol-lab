@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security (cycle 114 — bidi-control sanitization, 2026-10-17)
+
+- Closed a terminal-spoofing gap in all four operator-visible sanitizers
+  (`cli._display_id`, `debug._sanitize_display`, `diffreports._display_id`,
+  `fixtures._safe`): they stripped C0/C1 controls and lone surrogates but
+  left Unicode bidi controls (U+200E/U+200F, U+2028/U+2029, U+202A–U+202E,
+  U+2066–U+2069) intact, so a hostile fixture ID like `"safe-\u202e-evil"`
+  rendered right-to-left in the operator's terminal (Trojan Source spoofing,
+  CVE-2021-42574). All four now strip the bidi-control set. Other invisible
+  format characters (BOM, zero-width space, soft hyphen, ...) are deliberately
+  preserved: they cannot reorder displayed text, and the BOM is
+  diagnostically valuable (a BOM-prefixed CSV header rejection shows the
+  operator exactly why it failed — asserted by
+  `test_bom_prefixed_header_rejected`; stripping it would display a
+  seemingly-valid header). New
+  `tests/test_cycle114_bidi_sanitization_audit.py` (14 tests) covers the bidi
+  battery, parity across all four sanitizers, preservation guarantees, and an
+  end-to-end REPL listing check. Test counts: pytest 4132 → 4146 collected,
+  unittest 4132 → 4146; README/VALIDATION.md updated.
+
 ### Changed (cycle 113 — test_cycle66 conversion diagnostic re-attempt, 2026-10-17)
 
 - Re-attempted the `tests/test_cycle66_fixture_loading_audit.py` pytest-to-

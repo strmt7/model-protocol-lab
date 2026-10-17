@@ -60,10 +60,17 @@ _ROLE_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.*)$", re.DOTALL)
 # CR are kept so multi-line renders stay readable. Lone surrogates
 # (\ud800-\udfff) are stripped too: they are never valid text on their own
 # (astral characters are single codepoints in Python) and they crash strict
-# stream writes with UnicodeEncodeError. Mirrors cli._display_id's
+# stream writes with UnicodeEncodeError. Unicode bidi controls
+# (\u200e-\u2069) are stripped as well: an ID like "safe-\u202e-evil" renders
+# right-to-left (Trojan Source spoofing, CVE-2021-42574), and U+2028/U+2029
+# break line discipline. Other invisible format characters (BOM, zero-width
+# space, ...) are deliberately preserved for diagnostic fidelity and cannot
+# reorder displayed text. Mirrors cli._display_id's
 # rationale (which strips all controls from short IDs); kept local so
 # debug.py stays importable without cli.
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]")
+_CONTROL_CHARS = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+)
 
 
 def _sanitize_display(value: str) -> str:

@@ -17,9 +17,18 @@ from .datasets import load_dataset
 from .experiments import run_experiment
 from .reporting import save_report
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+_CONTROL_CHARS = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+)
 # Lone surrogates are stripped too: they crash strict stream writes with
-# UnicodeEncodeError and are never valid text on their own.
+# UnicodeEncodeError and are never valid text on their own. The \u200e-\u2069
+# ranges strip Unicode bidi controls: a hostile fixture ID like
+# "safe-\u202e-evil" renders right-to-left in the operator's terminal
+# (Trojan Source spoofing, CVE-2021-42574), and U+2028/U+2029 break line
+# discipline. Other invisible format characters (BOM, zero-width space, soft
+# hyphen, ...) are deliberately preserved: they are diagnostically valuable
+# in error messages (e.g. a BOM-prefixed CSV header shows the operator exactly
+# why it was rejected) and cannot reorder displayed text.
 
 
 def _display_id(value: str) -> str:
