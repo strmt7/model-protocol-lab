@@ -968,6 +968,23 @@ def _resolve_boundaries(
     return resolved
 
 
+def _select_winner(winners: list[Format], cancelled: bool) -> tuple[str, Format | None]:
+    """Pure search-phase selection decision.
+
+    The conservative rule: exactly one candidate passing every search
+    fixture wins; ties and failures abstain; a cancelled run reports
+    "cancelled". Kept pure (no backend, no I/O) so the decision table is
+    exhaustively testable -- see
+    tests/test_cycle120_selection_rule_properties.py. Returns the
+    decision string and the selected candidate (None on abstention).
+    """
+    if cancelled:
+        return "cancelled", None
+    if len(winners) == 1:
+        return "selected", winners[0]
+    return ("ambiguous" if winners else "no_candidate"), None
+
+
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -1066,13 +1083,10 @@ def run_experiment(
             return finish()
         if summary["exact_and_boundary_passes"] == report.planned_count:
             winners.append(fmt)
-    if event.is_set():
-        output["decision"] = "cancelled"
+    decision, selected = _select_winner(winners, event.is_set())
+    if selected is None:
+        output["decision"] = decision
         return finish()
-    if len(winners) != 1:
-        output["decision"] = "ambiguous" if winners else "no_candidate"
-        return finish()
-    selected = winners[0]
     output["selected_candidate"] = selected.name
     selected_boundary = boundaries[selected.name]
     output["selected_boundary_token_ids"] = list(selected_boundary)

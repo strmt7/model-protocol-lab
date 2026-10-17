@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 120 — selection-rule extraction + property tests, 2026-10-17)
+
+- Extracted the pure search-phase selection decision from
+  `run_experiment` into `model_protocol_lab.experiments._select_winner`
+  (returns the decision string plus the selected candidate or `None` on
+  abstention). The rule is unchanged -- exactly one candidate passing
+  every search fixture wins; ties and failures abstain; a cancelled run
+  reports "cancelled" -- but it is now reachable without a backend, so
+  `tests/test_cycle120_selection_rule_properties.py` exhaustively pins
+  the decision table with Hypothesis: decision vocabulary, cancel
+  dominance, unique-winner selection (with object identity), all-fail and
+  tie abstention, order invariance, and a count-parameterized decision
+  table. Mutation testing: 4/4 mutants killed (tie-selects, swapped
+  abstention labels, dropped cancel branch, always-select). (7 new
+  tests.)
+
 ### Added (cycle 119 — pickle-deserialization loading invariant, 2026-10-17)
 
 - Extended the cycle-117 local-loading AST invariant to the
