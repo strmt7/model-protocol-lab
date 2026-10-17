@@ -139,11 +139,16 @@ each candidate's own boundary as well. A mistyped candidate name fails fast
 (the valid names are listed); `--mutate` variants are named
 `<family>/toggle-bos`, `<family>/no-bos`, `<family>/prefix-newline`,
 `<family>/prefix-trim` (some collapse when the family has no BOS marker --
-see `catalog` output via `local_repairs` dedup), plus
+see `catalog`), plus
 `kolibri/thinking-off` (the Kolibri-1 thinking-disabled generation-prompt
 branch), `nemotron35/thinking-off` (the Nemotron 3.5 Lightning
-thinking-disabled generation-prompt branch), and `laguna/thinking-on` (the
-Laguna S-2.1 thinking-enabled generation-prompt branch).
+thinking-disabled generation-prompt branch), `ling/thinking-off` (the
+Ling-3.1-flash thinking-disabled branch), `laguna/thinking-on` (the
+Laguna S-2.1 thinking-enabled generation-prompt branch),
+`qwen38/thinking-off`, `nanbeige42/thinking-off`,
+`k2horizon/effort-medium` and `k2horizon/effort-low` (the K2 Horizon
+reasoning-effort branches), `hy4/no-think`, and
+`minimax3/thinking-disabled` / `minimax3/thinking-enabled`.
 
 Discipline: use each format's genuine end-of-turn marker, verified against
 the checkpoint tokenizer with `doctor --boundary-ids` (or `doctor
@@ -806,3 +811,35 @@ fixture matching and no verdict inference from missing summaries (a
 malformed summary degrades to the verdict `unknown`, shown as such). HTML
 reports are not compared; the structured `results.json` is the source of
 truth.
+
+## 13. Re-deriving a result (`verify`)
+
+Before trusting a `results.json` -- after a hand-edit, a copy across
+machines, or a long-lived archive -- `verify` independently re-derives
+what the pipeline recorded, through code paths separate from the ones
+that produced it (N-version cross-check). No model is loaded and no
+network is used:
+
+```sh
+python -m model_protocol_lab verify run-baseline
+```
+
+Each check is reported `passed`, `failed`, or `unavailable` (with the
+reason stated). The selection decision is replayed from the stored
+per-candidate summaries with an independently re-implemented selection
+rule; the token-budget frontier and the held-out budget floor are
+recomputed from the recorded observations and compared for exact
+equality; the search/held-out split is checked for fixture overlap, and
+every candidate is checked to have run the same search fixtures.
+Candidate-name uniqueness, summary self-consistency, and the
+selected candidate's boundary are checked too.
+
+What it cannot prove is stated, not hidden: a stored `"cancelled"`
+decision is reported `unavailable` because the cancel signal is not
+recorded in the artifact, and runs written without `--include-evidence`
+strip the observations, so observation-dependent checks report
+`unavailable` instead of pretending.
+
+The JSON report goes to stdout; a human-readable summary goes to
+stderr. Exit 0 when every applicable check passes, 2 when any check
+fails, 1 for unreadable or invalid input.

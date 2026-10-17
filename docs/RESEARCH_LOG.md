@@ -5166,3 +5166,59 @@ for the full pipeline. Professional: single-number story where a
 single number suffices, no chart for a step function.
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 131 (2026-10-17) — independent results-integrity replay (`mpl verify`) + hostile-payload robustness
+
+**Research:** the lab's artifacts (`results.json`) are the evidence its
+compatibility claims rest on, but nothing checks the artifact itself:
+a hand-edit, a corrupted copy, or a pipeline bug that writes an
+inconsistent decision would all go unnoticed. `diff-reports` compares two
+artifacts; it never validates one. Separately, the perf specialist
+measured two genuine robustness bugs in the frontier/diff surface that
+`verify` also touches: (1A) `margin_trajectory`/`_diff_spans` superlinear
+in foreign `pass_steps` point counts (n=10000 unfinished in 162s --
+CPU DoS via a ~17MB foreign payload); (1B) `diff_frontiers` crashed with
+an uncaught TypeError on duplicate `decision_steps` budgets with mixed
+None/str winners. Both reproduced locally before fixing.
+
+**Plan:** `mpl verify`: pure, local, deterministic re-derivation of the
+recorded decision, winner, and post-hoc diagnostics through independent
+code paths (N-version cross-check). The selection rule is
+re-implemented as `verify.oracle_select_winner` rather than re-calling
+`experiments._select_winner`; the frontier and held-out floor are
+recomputed from the recorded observations and compared for exact
+equality; the search/held-out split is checked for fixture overlap.
+Every check reports passed/failed/unavailable, and what cannot be proven
+(cancelled runs: the cancel signal is not recorded; stripped
+observations without `--include-evidence`) is reported unavailable,
+never faked. Exit 0/2/1 (verified / failed / bad input). For the perf
+findings: a shared `MAX_FRONTIER_STEP_POINTS` (100k) cap in
+`_frontier_series`/`_valid_frontier` (oversized frontiers degrade to
+unchartable/one-sided, the pre-existing malformed-input path), O(log n)
+step lookups (`_count_at_budget` key hoisting, `_step_function` bisect),
+budget-only sort, and first-occurrence dedup of duplicate decision
+budgets. `verify`'s own replay path was measured too: worst case ~5-10s
+on a maximally adversarial 32MB file (bounded by the load cap), so no
+cap was added there.
+
+**Built:** `model_protocol_lab/verify.py` (pure `verify_results` + CLI
+`run_verify`), `verify` subcommand wired at both cli.py anchors,
+`tests/test_cycle131_verify_audit.py` (38 tests incl. 6 hostile-payload
+regressions). Genuine finds during design: the successful
+frontier/floor payloads carry no `"available"` key (only the CLI's
+degrade markers do), so the replay branches on `available is False`
+exactly; `_step_function`'s duplicate-budget "last wins" semantic
+preserved. Also folded in the docs audit's 5 WRONG items (stale residual
+risks #3/#4 in RELEASE_READINESS, RELEASE_NOTES counts, `local_repairs`
+reference and the incomplete thinking-variant list in USAGE.md §4 and
+the `--boundary-map` help) and removed the stale `build/` dir.
+Mutation results: 4/4 killed (weakened oracle; inverted replay
+equality; inverted overlap detection; `>=` winner derivation).
+
+**Differentiation review:** an artifact-integrity oracle is unusual for
+an experiment harness: most labs trust their JSON. Professional: honest
+about its limits (cancelled, stripped observations), exact where it can
+be, fail-closed everywhere else; the DoS hardening follows the
+established `_config_snapshot` precedent.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

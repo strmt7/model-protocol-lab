@@ -1256,14 +1256,32 @@ def selection_margin(result: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+MAX_FRONTIER_STEP_POINTS = 100_000
+"""Cap on validated frontier step points (hostile-payload guard).
+
+Native ``budget_frontier`` payloads carry at most a few change points per
+candidate (pass counts change only where a fixture's minimal budget
+falls), so legitimate data never approaches this bound. A foreign
+payload can stuff millions of ``pass_steps`` points inside the 32 MiB
+``results.json`` cap and hang the chart, trajectory, and span
+derivations -- which are superlinear in the point count -- for hours.
+Beyond the bound the frontier is treated as unchartable: the same
+graceful degradation as malformed input. The cap also bounds the SVG
+chart's per-point circles. Public so ``diffreports`` can share the bound
+(lazy import there, mirroring the existing reporting import).
+"""
+
+
 def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
     """Validated frontier series: (sorted candidate names, max_new_tokens).
 
     Shared validation for the frontier chart and the margin trajectory:
     candidates must be a nonempty dict, ``max_new_tokens`` a positive int,
     and each candidate must carry at least one well-typed ``pass_steps``
-    point inside the budget range with a nonzero fixture total. Malformed
-    entries are skipped; returns None when nothing chartable remains.
+    point inside the budget range with a nonzero fixture total. The total
+    validated point count is capped at :data:`MAX_FRONTIER_STEP_POINTS`
+    (hostile-payload guard -- see the constant). Malformed entries are
+    skipped; returns None when nothing chartable remains.
     """
     if type(frontier) is not dict:
         return None
@@ -1274,13 +1292,14 @@ def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
     if type(max_tokens) is not int or max_tokens <= 0:
         return None
     names: list[str] = []
+    total_points = 0
     for name in sorted(candidates):
         data = candidates[name]
         if type(name) is not str or type(data) is not dict:
             continue
         if len(data.get("fixture_ids") or []) <= 0:
             continue
-        ok = False
+        points = 0
         for point in data.get("pass_steps") or []:
             if (
                 type(point) is list
@@ -1289,10 +1308,13 @@ def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
                 and type(point[1]) is int
                 and 1 <= point[0] <= max_tokens
             ):
-                ok = True
-                break
-        if ok:
-            names.append(name)
+                points += 1
+        if not points:
+            continue
+        total_points += points
+        if total_points > MAX_FRONTIER_STEP_POINTS:
+            return None
+        names.append(name)
     if not names:
         return None
     return (names, max_tokens)
@@ -1350,6 +1372,7 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
     names, max_tokens = validated
     candidates = frontier["candidates"]
     steps_of: dict[str, list[tuple[int, int]]] = {}
+    keys_of: dict[str, list[int]] = {}
     for name in names:
         data = candidates[name]
         by_budget: dict[int, int] = {}
@@ -1364,10 +1387,14 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
             ):
                 by_budget[point[0]] = point[1]
         steps_of[name] = sorted(by_budget.items())
+        # Hoisted out of the per-budget loop: rebuilding the key list on
+        # every _count_at_budget call made this derivation quadratic in the
+        # point count (perf finding 1A).
+        keys_of[name] = [b for b, _ in steps_of[name]]
     change_budgets = sorted({b for ordered in steps_of.values() for b, _ in ordered})
     points: list[tuple[int, str | None, int]] = []
     for budget in change_budgets:
-        counts = {name: _count_at_budget(steps_of[name], budget) for name in names}
+        counts = {name: _count_at_budget(steps_of[name], keys_of[name], budget) for name in names}
         top = max(counts.values())
         leaders = [name for name in names if counts[name] == top]
         if len(leaders) == 1:
@@ -1383,9 +1410,14 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
     return points
 
 
-def _count_at_budget(steps: list[tuple[int, int]], budget: int) -> int:
-    """Pass count at ``budget`` from sorted (budget, count) step points."""
-    index = bisect_right([b for b, _ in steps], budget) - 1
+def _count_at_budget(steps: list[tuple[int, int]], keys: list[int], budget: int) -> int:
+    """Pass count at ``budget`` from sorted (budget, count) step points.
+
+    ``keys`` is the precomputed ``[b for b, _ in steps]`` list, hoisted by
+    the caller: building it per call made the margin trajectory quadratic
+    in the point count on foreign payloads (perf finding 1A).
+    """
+    index = bisect_right(keys, budget) - 1
     return steps[index][1] if index >= 0 else 0
 
 
