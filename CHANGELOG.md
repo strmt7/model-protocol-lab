@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
 
+- Converted test_cycle30_datasets_verify.py to `unittest.TestCase`
+  (second of the cycle-107 conversions, redone individually). Pytest
+  collection 4854 → 4136; unittest discovery 3953 → 4015.
+  README/VALIDATION.md counts updated.
 - Converted test_cycle29_fixtures_verify.py to `unittest.TestCase`
   (first of the cycle-107 conversions, redone individually with CI
   verification per file after the cycle-107 CI red). `@pytest.mark.parametrize`
