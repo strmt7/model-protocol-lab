@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
 
+- Added the TestDualRunnerContribution meta-tests to
+  test_ci_portability_guard.py (5th of the cycle-107 conversions, with
+  hardening): test_every_test_file_collected_by_unittest now documents a
+  _UNITTEST_EXEMPT set (test_cycle66 excluded pending its conversion
+  root-cause investigation); test_every_test_file_collected_by_pytest
+  retries the subprocess collection up to 3 times with 300s timeout and
+  reports diagnostics instead of failing opaquely. Pytest 4127 → 4129;
+  unittest 4053 → 4055. README/VALIDATION.md counts updated.
 - Converted test_cycle69_diagnostics_audit.py to `unittest.TestCase`
   (fourth of the cycle-107 conversions, redone individually). Pytest
   collection 4136 → 4127; unittest discovery 4015 → 4053.

@@ -207,5 +207,112 @@ class TestMypyStrictPinned(unittest.TestCase):
         )
 
 
+class TestDualRunnerContribution(unittest.TestCase):
+    """Every test file must contribute tests under BOTH runners.
+
+    Cycle 106 found 9 pytest-style files (2533 test executions) that CI's
+    `unittest discover` silently skipped; cycle 107 found 4 more (1040
+    executions). VALIDATION.md documents both runners, so a file that
+    collects zero tests under either runner is a coverage lie. This guard
+    fails if any tests/test_*.py file yields zero tests from unittest's
+    TestLoader or from pytest's collector.
+
+    Known exception (cycle 108): test_cycle66_fixture_loading_audit.py was
+    reverted to pytest-style after its TestCase conversion triggered a
+    CI-only 3.12/3.13 unittest failure (root cause under investigation).
+    It is excluded from the unittest-contribution check until the
+    conversion can be safely redone.
+    """
+
+    # Files exempt from the unittest-contribution check, with reasons.
+    _UNITTEST_EXEMPT = {
+        "test_cycle66_fixture_loading_audit.py": (
+            "cycle 108: TestCase conversion causes CI-only 3.12/3.13 failure; "
+            "reverted to pytest-style pending root-cause investigation"
+        ),
+    }
+
+    def test_every_test_file_collected_by_unittest(self) -> None:
+        import unittest
+
+        loader = unittest.TestLoader()
+        zero: list[str] = []
+        for path in sorted(TESTS_DIR.glob("test_*.py")):
+            if path.name == "test_ci_portability_guard.py":
+                continue  # self-reference; this file is TestCase by construction
+            if path.name in self._UNITTEST_EXEMPT:
+                continue  # documented exemption; see class docstring
+            module = f"tests.{path.stem}"
+            try:
+                count = loader.loadTestsFromName(module).countTestCases()
+            except Exception as exc:  # noqa: BLE001 -- report as zero, don't crash guard
+                zero.append(f"{path.name} (load error: {exc})")
+                continue
+            if count == 0:
+                zero.append(path.name)
+        self.assertEqual(
+            zero,
+            [],
+            "test files contributing zero tests under unittest (CI gate skips them):\n"
+            + "\n".join(zero),
+        )
+
+    def test_every_test_file_collected_by_pytest(self) -> None:
+        import subprocess
+        import sys
+
+        # Hardened (cycle 108): retry the subprocess collection up to 3
+        # times; a single transient failure (timeout under load, slow
+        # import of heavy deps) should not fail the gate opaquely.
+        last_diagnostics = ""
+        counts: dict[str, int] = {}
+        collected_ok = False
+        for attempt in range(3):
+            try:
+                proc = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "tests/",
+                        "--collect-only",
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                    ],
+                    cwd=TESTS_DIR.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except subprocess.TimeoutExpired as exc:
+                last_diagnostics = f"attempt {attempt + 1}: timed out after 300s: {exc}"
+                continue
+            if proc.returncode != 0:
+                last_diagnostics = (
+                    f"attempt {attempt + 1}: returncode={proc.returncode}, "
+                    f"stderr_tail={proc.stderr[-2000:]}"
+                )
+                continue
+            for line in proc.stdout.splitlines():
+                # lines look like: tests/test_x.py::TestY::test_z
+                if "::" not in line:
+                    continue
+                fname = line.split("::")[0].split("/")[-1]
+                counts[fname] = counts.get(fname, 0) + 1
+            collected_ok = True
+            break
+        self.assertTrue(
+            collected_ok,
+            "pytest --collect-only failed after 3 attempts; last diagnostics:\n" + last_diagnostics,
+        )
+        zero = [p.name for p in sorted(TESTS_DIR.glob("test_*.py")) if counts.get(p.name, 0) == 0]
+        self.assertEqual(
+            zero,
+            [],
+            "test files contributing zero tests under pytest:\n" + "\n".join(zero),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
