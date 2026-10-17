@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 129 — selection-rule consistency audit, 2026-10-17)
+
+- Proved and pinned: the frontier's post-hoc `decision_at` is exactly the
+  pipeline's selection rule (`_select_winner` over full-pass candidates)
+  within the completed-decision contract. The `budget_frontier`
+  docstring now documents the consistency theorem and its three
+  load-bearing invariants (the `exact_match` construction gate, the
+  `aggregate_eligible` full-coverage invariant, and min-budget range).
+- New `tests/test_cycle129_selection_consistency_audit.py` (10 tests):
+  end-to-end agreement of the post-hoc decision at max budget with the
+  recorded native decision across winner / no-candidate / ambiguous /
+  held-out-failed real runs; the construction invariant; min-budget
+  range; the foreign-payload status gate (fail-closed); decision-step
+  coverage of the sweep maximum; and the sharp empty-expected edge case
+  where the status gate is the only thing keeping a failed observation
+  from counting as a pass. 2/2 targeted mutants killed.
+
 ### Added (cycle 128 — flip-attribution comparison in diff-reports, 2026-10-17)
 
 - `mpl diff-reports` now compares `flip_attribution` per side via
