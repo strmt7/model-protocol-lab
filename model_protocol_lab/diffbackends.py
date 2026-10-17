@@ -862,7 +862,7 @@ class _TokenizerBackend:
 
 
 def run_diff_backends(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    """Implement ``mpl diff-backends``; returns the process exit code.
+    """Implement ``model-protocol-lab diff-backends``; returns the process exit code.
 
     Loads the checkpoint's tokenizer only (never weights) via doctor's
     tokenizer-without-weights path, encodes the prompt/output texts with

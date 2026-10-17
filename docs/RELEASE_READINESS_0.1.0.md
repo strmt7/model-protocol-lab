@@ -1,6 +1,14 @@
 # Release-readiness report — model-protocol-lab 0.1.0
 
 **Date:** 2026-10-16
+
+> **Addendum 2026-10-17:** historical report — the residual risks § carries
+> its original 2026-10-16 numbers and wording (e.g. 6083 tests); see
+> `docs/SECURITY.md`, `VALIDATION.md`, and `CHANGELOG.md` `[Unreleased]` for
+> the current state (4481 tests, both runners agree; SECURITY.md residuals
+> updated through cycle 132). Residual items marked **Retired** below stay
+> retired; the remaining risks are still accepted.
+
 **Scope:** every item of the release-readiness definition of done, with
 evidence (commands, dates, counts). Prepared by the autonomous
 development coordinator across cycles 84–96. **No git tag has been

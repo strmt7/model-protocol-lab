@@ -170,15 +170,16 @@ The local adapter emits the full requested number of tokens unless cancelled or 
 
 `--seed` accepts an unsigned 64-bit integer (default 0). It is validated up front and recorded in `results.json` for provenance, but it does not change greedy selection: the local adapter decodes greedily, so the seed has no effect on outputs. It exists so future sampling backends can share the flag.
 
-With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; `kolibri` and `nemotron35` additionally yield a `thinking-off` variant (the same template's generation prompt with an empty `<think>` block prefilled, for thinking-disabled requests), and `laguna` additionally yields a `thinking-on` variant (the S-2.1 thinking-enabled generation prompt). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
+With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; several families additionally yield generation-prompt variants for thinking-mode control (the empty-`<think>`-block prefill convention, and reasoning-effort branches): `kolibri/thinking-off`, `nemotron35/thinking-off`, `ling/thinking-off`, `qwen38/thinking-off` (enable_thinking=false), `nanbeige42/thinking-off`, `laguna/thinking-on` (S-2.1 thinking-enabled generation prompt), `k2horizon/effort-medium` / `k2horizon/effort-low` (reasoning_effort branches), `hy4/no-think` (reasoning_effort='no_think'), `minimax3/thinking-disabled` / `minimax3/thinking-enabled` (thinking_mode branches). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
 
 Ctrl+C requests cooperative cancellation after model loading. Interrupted evaluation can retain a partial report. Model loading and individual backend operations are not guaranteed to be promptly interruptible.
 
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, stop matrix, token-budget frontier with per-candidate pass curves, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic
-(see §8.9) and held-out cards. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+
+A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -354,9 +355,9 @@ pass-count step curve, and the budget ranges where the decision or winner
 would have differed from native (`flip_ranges`); `budget_robust` is true
 when the decision is identical at every budget from 1 to `--max-new-tokens`.
 `safe_budget_floor` is the first budget from which the native decision never
-flips again (1 when nothing flips; absent when a flip reaches the sweep
+flips again (1 when nothing flips; `null` when a flip reaches the sweep
 maximum) -- the HTML report calls it out and marks it on the frontier and
-margin charts, and `mpl diff-reports` compares it between runs.
+margin charts, and `model-protocol-lab diff-reports` compares it between runs.
 `flip_attribution` lists, for each flip span, the (candidate, fixture)
 observations whose minimal passing budget falls inside the span -- exactly
 the pass-status changes the span brackets, i.e. the observations to
@@ -373,12 +374,12 @@ The held-out stage gets the same treatment on a smaller scale:
 `held_out_budget_floor` in `results.json` records the per-fixture minimal
 passing budgets for the winner's held-out observations and
 `safe_budget_floor` -- the first token budget from which the verification
-verdict holds unchanged (the maximum of those budgets; absent when the
+verdict holds unchanged (the maximum of those budgets; `null` when the
 held-out failed natively, since no budget achieves a passing
 verification). The held-out verdict is monotone in the budget, so this
 single number is the whole story. The HTML held-out section calls it out
 ("verification floor ≥ K tokens", or a robustness/failure notice), and
-`mpl diff-reports` compares it between runs.
+`model-protocol-lab diff-reports` compares it between runs.
 
 ### 8.7 Selection margin (decision fragility)
 
@@ -395,6 +396,12 @@ changes the decision. A margin of 1 on a unique winner means the verdict
 hinges on a single borderline fixture -- treat it as barely more
 informative than a tie and consider authoring more discriminating fixtures
 (see §9).
+
+The HTML report's margin-trajectory chart (under the frontier chart) shows
+the per-budget leader and its lead margin across the whole budget sweep,
+answering "how decisive was the race at each budget?" -- the visual
+complement of the scalar `selection_margin` above (gray spans mark tied
+leads; the dashed line marks the safe budget floor from §8.6).
 
 ### 8.8 Protocol token-overhead accounting
 
@@ -702,7 +709,7 @@ The output cap is the load-bearing one: the emulations do one
 `backend.decode(prefix)` per output step, so cost is quadratic in output
 length -- at the cap a single stop completes in ~2-3 s on the repo's
 linear reference stub, versus tens of minutes at the old 131072 cap
-(measured 2026-10-15). It also matches `mpl run --max-new-tokens`' own
+(measured 2026-10-15). It also matches `model-protocol-lab run --max-new-tokens`' own
 4096 cap, so the lab can never record a longer generated output. Each
 stop text is capped at 1024 characters (`stop_text_too_long`) and a run
 accepts at most 16 stop texts (`too_many_stop_texts`): a stop is a needle,
@@ -760,12 +767,17 @@ and `winner` (old/new/changed), `frontier` (the token-budget frontier
 comparison: sweep-range drift, budget-robustness flip, the exact
 budget spans where the post-hoc decision, winner, or per-budget leader
 differ, the safe budget floor, and per-flip-span attribution of the
-driving (candidate, fixture) pass-status changes), `config_drift` (the comparability warnings), `candidate_verdicts`
+driving (candidate, fixture) pass-status changes), `held_out_floor` (the
+held-out verification-floor comparison: floor drift, floor mismatch,
+one-sided/missing floors), `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
-(per-fixture old/new outcomes per candidate), `evidence` (whether each
+(per-fixture old/new outcomes per candidate),
+`fixture_diffs_include_unchanged` (whether `--all` included unchanged
+fixtures), `evidence` (whether each
 side carried `--include-evidence` observations), and a `summary` with
 counts (`fixtures_flipped`, `candidates_changed_status`,
-`config_drift_warnings`, `frontier_changed`, `identical`).
+`config_drift_warnings`, `frontier_changed`, `frontier_asymmetric`,
+`held_out_floor_changed`, `held_out_floor_asymmetric`, `identical`).
 
 What it compares, exactly:
 
