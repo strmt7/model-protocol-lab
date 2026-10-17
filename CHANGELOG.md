@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 121 — token-budget frontier chart, 2026-10-17)
+
+- New multi-series token-budget frontier chart in the HTML report
+  (`model_protocol_lab.reporting._frontier_chart_svg`): one exact step
+  curve per candidate (pass count over token budgets 1..max), with axes,
+  integer tick labels, gridlines, a wrapped legend, and the native winner
+  drawn last with a heavier stroke. Built from the already-recorded
+  `pass_steps` data (post-hoc, no extra model calls). Deterministic
+  inline SVG: integer-only geometry, fixed palette assigned in sorted
+  candidate-name order, all dynamic text HTML-escaped, no scripts or
+  external assets — the report's self-contained constraint holds. The
+  chart renders between the winner's pass-curve table and the per-candidate
+  sparkline table in the "Token-budget frontier" section.
+- New `tests/test_cycle121_frontier_chart_audit.py` (20 tests): hand-derived
+  SVG geometry literals, byte-determinism across processes/hash seeds and
+  insertion orders, degenerate-input robustness, input non-mutation,
+  hostile-name escaping, and a 5-mutant mutation gate (control passes).
+
 ### Added (cycle 120 — selection-rule extraction + property tests, 2026-10-17)
 
 - Extracted the pure search-phase selection decision from

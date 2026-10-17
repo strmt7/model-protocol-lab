@@ -147,6 +147,10 @@ _CSS = (
     "section:target{outline:2px solid #38bdf8;outline-offset:.4rem;border-radius:.25rem}"
     ".spark-svg{display:block;max-width:100%;height:auto}"
     ".spark-svg rect{fill:#38bdf8}"
+    ".frontier-svg{display:block;max-width:100%;height:auto}"
+    ".chart-wrap{overflow-x:auto;border:1px solid #334155;border-radius:.75rem;"
+    "padding:1rem;background:#0f172a;margin:0 0 1rem}"
+    ".chart-note{color:#a9bcd2;font-size:.9rem;max-width:75ch}"
     "@media print{:root{color-scheme:light}"
     "body{background:#fff;color:#111;max-width:none}"
     "nav.toc{position:static}"
@@ -1725,6 +1729,292 @@ def _spark_svg(counts: list[int], total: int, label: str) -> str:
     )
 
 
+_FRONTIER_CHART_COLORS = (
+    "#38bdf8",
+    "#22c55e",
+    "#f59e0b",
+    "#ef4444",
+    "#a78bfa",
+    "#f472b6",
+    "#2dd4bf",
+    "#facc15",
+)
+"""Deterministic per-candidate palette for the frontier chart.
+
+Assigned in sorted candidate-name order (cycled when there are more
+candidates than colors), so the same frontier always renders the same
+colors regardless of dict insertion order or hash seed.
+"""
+
+_FRONTIER_CHART_W = 560
+_FRONTIER_CHART_H = 240
+
+
+def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
+    """Multi-series token-budget frontier chart as deterministic inline SVG.
+
+    One exact step curve per candidate: pass count (0..n fixtures) over
+    token budget (1..max_new_tokens), drawn from each candidate's recorded
+    ``pass_steps``. Axes with integer tick labels, gridlines, a wrapped
+    legend, and the native winner drawn last with a heavier stroke.
+
+    All geometry is integer arithmetic over recorded observation counts,
+    the palette is assigned in sorted name order, and all dynamic text is
+    HTML-escaped, so the output is byte-deterministic across processes and
+    hash seeds. The SVG carries no scripts or external references, so the
+    report's self-contained/no-external-asset constraint holds.
+    Returns "" when there is nothing chartable.
+    """
+    candidates = frontier.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return ""
+    max_tokens = frontier.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return ""
+    # Validate each series: strictly-typed step points inside the budget
+    # range; malformed entries are skipped, never crash the report.
+    series: list[tuple[str, int, list[tuple[int, int]], int | None]] = []
+    for name in sorted(candidates):
+        data = candidates[name]
+        if type(name) is not str or type(data) is not dict:
+            continue
+        total = len(data.get("fixture_ids") or [])
+        if total <= 0:
+            continue
+        by_budget: dict[int, int] = {}
+        for point in data.get("pass_steps") or []:
+            if (
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+                and 0 <= point[1] <= total
+            ):
+                by_budget[point[0]] = point[1]
+        steps = sorted(by_budget.items())
+        if not steps:
+            continue
+        full = data.get("full_pass_budget")
+        series.append((name, total, steps, full if type(full) is int else None))
+    if not series:
+        return ""
+
+    width, height = _FRONTIER_CHART_W, _FRONTIER_CHART_H
+    denom_x = max(max_tokens - 1, 1)
+
+    def x_of(budget: int) -> int:
+        return (budget - 1) * width // denom_x
+
+    # One shared Y axis over the largest fixture total.
+    y_total = max(total for _, total, _, _ in series)
+
+    def y_of(count: int) -> int:
+        return (y_total - count) * height // y_total
+
+    # X ticks: up to 5 integer budgets spanning 1..max_tokens.
+    tick_k = min(5, max_tokens)
+    x_ticks = (
+        sorted({1 + i * (max_tokens - 1) // (tick_k - 1) for i in range(tick_k)})
+        if tick_k > 1
+        else [1]
+    )
+    # Y ticks: every integer when few fixtures, quartiles otherwise.
+    y_ticks = (
+        list(range(y_total + 1)) if y_total <= 6 else sorted({i * y_total // 4 for i in range(5)})
+    )
+
+    elems: list[str] = []
+    for tick in x_ticks:
+        x = x_of(tick)
+        elems.append(
+            '<line x1="'
+            + str(x)
+            + '" y1="0" x2="'
+            + str(x)
+            + '" y2="'
+            + str(height)
+            + '" stroke="#1e293b" stroke-width="1"/>'
+        )
+        elems.append(
+            '<text x="'
+            + str(x)
+            + '" y="'
+            + str(height + 16)
+            + '" text-anchor="middle" font-size="10" fill="#a9bcd2">'
+            + str(tick)
+            + "</text>"
+        )
+    for tick in y_ticks:
+        y = y_of(tick)
+        elems.append(
+            '<line x1="0" y1="'
+            + str(y)
+            + '" x2="'
+            + str(width)
+            + '" y2="'
+            + str(y)
+            + '" stroke="#1e293b" stroke-width="1"/>'
+        )
+        elems.append(
+            '<text x="-6" y="'
+            + str(y + 3)
+            + '" text-anchor="end" font-size="10" fill="#a9bcd2">'
+            + str(tick)
+            + "</text>"
+        )
+    # Axes.
+    elems.append(
+        '<line x1="0" y1="0" x2="0" y2="' + str(height) + '" stroke="#475569" stroke-width="1"/>'
+    )
+    elems.append(
+        '<line x1="0" y1="'
+        + str(height)
+        + '" x2="'
+        + str(width)
+        + '" y2="'
+        + str(height)
+        + '" stroke="#475569" stroke-width="1"/>'
+    )
+    elems.append(
+        '<text x="'
+        + str(width // 2)
+        + '" y="'
+        + str(height + 28)
+        + '" text-anchor="middle" font-size="10" fill="#a9bcd2">'
+        "token budget</text>"
+    )
+
+    # The native winner draws last (on top) with a heavier stroke.
+    # Colors identify candidates: assigned in sorted name order (``series``
+    # is built in that order), so a candidate keeps its color regardless of
+    # which candidate won.
+    winner = frontier.get("native_winner")
+    color_of = {
+        name: _FRONTIER_CHART_COLORS[i % len(_FRONTIER_CHART_COLORS)]
+        for i, (name, _, _, _) in enumerate(series)
+    }
+    ordered = sorted(series, key=lambda item: (item[0] == winner, item[0]))
+    label_bits: list[str] = []
+    drawn: list[tuple[str, str]] = []
+    for name, _total, steps, full in ordered:
+        color = color_of[name]
+        first_budget, first_count = steps[0]
+        path = "M " + str(x_of(first_budget)) + " " + str(y_of(first_count))
+        for budget, count in steps[1:]:
+            path += " H " + str(x_of(budget)) + " V " + str(y_of(count))
+        path += " H " + str(x_of(max_tokens))
+        stroke_w = "3" if name == winner else "2"
+        elems.append(
+            '<path d="'
+            + path
+            + '" fill="none" stroke="'
+            + color
+            + '" stroke-width="'
+            + stroke_w
+            + '"/>'
+        )
+        for budget, count in steps:
+            elems.append(
+                '<circle cx="'
+                + str(x_of(budget))
+                + '" cy="'
+                + str(y_of(count))
+                + '" r="2.5" fill="'
+                + color
+                + '"/>'
+            )
+        drawn.append((name, color))
+        label_bits.append(
+            name
+            + ": "
+            + str(steps[0][1])
+            + " passing at budget 1"
+            + (", full pass at budget " + str(full) if full is not None else ", never fully passes")
+        )
+
+    # Legend: wrapped rows below the plot; item widths use a fixed
+    # per-character estimate so layout is byte-deterministic.
+    legend_top = height + 38
+    lx, ly = 0, legend_top
+    row_h = 18
+    legend_elems: list[str] = []
+    for name, color in drawn:
+        item_w = 14 + 7 * len(name) + 12
+        if lx > 0 and lx + item_w > width:
+            lx, ly = 0, ly + row_h
+        legend_elems.append(
+            '<rect x="'
+            + str(lx)
+            + '" y="'
+            + str(ly)
+            + '" width="10" height="10" fill="'
+            + color
+            + '"/>'
+        )
+        legend_elems.append(
+            '<text x="'
+            + str(lx + 14)
+            + '" y="'
+            + str(ly + 5)
+            + '" dominant-baseline="central" font-size="11" fill="#f8fafc">'
+            + escape(name)
+            + "</text>"
+        )
+        lx += item_w
+    legend_h = ly - legend_top + row_h
+
+    margin_left, margin_top, margin_right = 40, 8, 8
+    outer_w = margin_left + width + margin_right
+    outer_h = margin_top + height + 38 + legend_h
+    aria = (
+        "Token-budget frontier chart: "
+        + str(len(ordered))
+        + " candidates, "
+        + str(y_total)
+        + " fixtures, budgets 1 to "
+        + str(max_tokens)
+        + ". "
+        + "; ".join(label_bits)
+    )
+    return (
+        '<svg class="frontier-svg" width="'
+        + str(outer_w)
+        + '" height="'
+        + str(outer_h)
+        + '" viewBox="0 0 '
+        + str(outer_w)
+        + " "
+        + str(outer_h)
+        + '" role="img" aria-label="'
+        + escape(aria)
+        + '">'
+        + '<g transform="translate('
+        + str(margin_left)
+        + ","
+        + str(margin_top)
+        + ')">'
+        + "".join(elems)
+        + "".join(legend_elems)
+        + "</g></svg>"
+    )
+
+
+def _frontier_chart_svg_block(frontier: dict[str, Any]) -> str:
+    """The frontier chart wrapped with its heading and explanatory note."""
+    chart_svg = _frontier_chart_svg(frontier)
+    if not chart_svg:
+        return ""
+    return (
+        "<h3>Frontier chart: all candidates</h3>"
+        '<div class="chart-wrap">' + chart_svg + "</div>"
+        '<p class="chart-note">Exact step curves: each candidate\u2019s pass '
+        "count at every token budget, derived post-hoc from the recorded "
+        "minimal passing budgets (no extra model calls). The native "
+        "winner, when one exists, is drawn last with a heavier stroke.</p>"
+    )
+
+
 def _frontier_spark_table(frontier: dict[str, Any]) -> str:
     """One sparkline per candidate: pass count over token budgets 1..max."""
     candidates = frontier.get("candidates")
@@ -1866,6 +2156,7 @@ def _frontier_section(result: dict[str, Any]) -> str:
             + "".join(rows)
             + "</tbody></table></div>"
         )
+    parts.append(_frontier_chart_svg_block(frontier))
     parts.append(_frontier_spark_table(frontier))
     parts.append("</section>")
     return "".join(parts)
