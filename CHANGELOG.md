@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
 
+- Converted test_cycle66_fixture_loading_audit.py to `unittest.TestCase`
+  (third of the cycle-107 conversions, redone individually). Pytest
+  collection 4136 → 4127; unittest discovery 4015 → 4080.
+  README/VALIDATION.md counts updated.
 - Converted test_cycle30_datasets_verify.py to `unittest.TestCase`
   (second of the cycle-107 conversions, redone individually). Pytest
   collection 4854 → 4136; unittest discovery 3953 → 4015.
