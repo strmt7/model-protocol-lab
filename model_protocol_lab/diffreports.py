@@ -538,6 +538,51 @@ def _valid_frontier(value: Any) -> bool:
     return False
 
 
+def _normalize_attribution(value: Any) -> list[dict[str, Any]] | None:
+    """Canonicalize a ``flip_attribution`` field for comparison.
+
+    Returns ``[{"span": [lo, hi], "crossings": [...]}]`` with crossings
+    sorted by (min_budget, candidate, fixture), or None when the field is
+    absent or not a list. Malformed entries are skipped; a present-but-
+    empty field normalizes to ``[]``, which is distinct from None (an
+    older payload that never recorded attribution).
+    """
+    if type(value) is not list:
+        return None
+    normalized: list[dict[str, Any]] = []
+    for entry in value:
+        if type(entry) is not dict:
+            continue
+        span = entry.get("span")
+        if (
+            type(span) is not list
+            or len(span) != 2
+            or type(span[0]) is not int
+            or type(span[1]) is not int
+        ):
+            continue
+        crossings: list[dict[str, Any]] = []
+        raw_crossings = entry.get("crossings")
+        if type(raw_crossings) is list:
+            for crossing in raw_crossings:
+                if (
+                    type(crossing) is dict
+                    and type(crossing.get("candidate")) is str
+                    and type(crossing.get("fixture")) is str
+                    and type(crossing.get("min_budget")) is int
+                ):
+                    crossings.append(
+                        {
+                            "candidate": crossing["candidate"],
+                            "fixture": crossing["fixture"],
+                            "min_budget": crossing["min_budget"],
+                        }
+                    )
+        crossings.sort(key=lambda c: (c["min_budget"], c["candidate"], c["fixture"]))
+        normalized.append({"span": [span[0], span[1]], "crossings": crossings})
+    return normalized
+
+
 def _step_function(points: list[tuple[int, Any]]) -> Callable[[int], Any]:
     """Step function over sorted (budget, value) change points.
 
@@ -597,10 +642,11 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     Answers "did the token-budget robustness story change between runs?":
     sweep-range drift, budget-robustness flips, and the exact budget spans
     where the post-hoc decision, post-hoc winner, or per-budget leader
-    (from :func:`reporting.margin_trajectory`) differ. A side without a
-    recorded frontier is reported plainly instead of compared; malformed
-    decision steps skip the decision/winner axes rather than inventing
-    differences. No model, no network.
+    (from :func:`reporting.margin_trajectory`) differ -- plus, per flip
+    span, whether the attributed (candidate, fixture) pass-status changes
+    differ. A side without a recorded frontier is reported plainly
+    instead of compared; malformed decision steps skip the decision/winner
+    axes rather than inventing differences. No model, no network.
     """
     old_ok = _valid_frontier(old)
     new_ok = _valid_frontier(new)
@@ -687,6 +733,14 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
         "new": new_floor,
         "changed": floor_changed,
     }
+    old_attr = _normalize_attribution(old.get("flip_attribution"))
+    new_attr = _normalize_attribution(new.get("flip_attribution"))
+    attr_changed = old_attr != new_attr
+    result["flip_attribution"] = {
+        "old": old_attr,
+        "new": new_attr,
+        "changed": attr_changed,
+    }
     result["changed"] = bool(
         result["max_new_tokens"]["changed"]
         or result["budget_robust"]["changed"]
@@ -694,6 +748,7 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
         or winner_flips
         or leader_flips
         or floor_changed
+        or attr_changed
     )
     return result
 
@@ -748,6 +803,27 @@ def _render_frontier_summary(frontier: dict[str, Any]) -> list[str]:
             lines.append(
                 f"  budgets {lo}\u2013{hi}: {_display_id(old_text)} -> {_display_id(new_text)}"
             )
+    attr = frontier.get("flip_attribution") or {}
+    if attr.get("changed"):
+        old_attr = attr.get("old")
+        new_attr = attr.get("new")
+        if old_attr is None or new_attr is None:
+            missing = "old" if old_attr is None else "new"
+            lines.append(f"Flip attribution: not recorded by {missing} run.")
+        else:
+            lines.append("Flip attribution differs:")
+            for side_label, side_attr in (("old", old_attr), ("new", new_attr)):
+                for entry in side_attr:
+                    lo, hi = entry["span"]
+                    crossings = (
+                        "; ".join(
+                            f"{_display_id(c['candidate'])}/{_display_id(c['fixture'])}"
+                            f" @ {c['min_budget']}"
+                            for c in entry["crossings"]
+                        )
+                        or "(no pass-status changes in span)"
+                    )
+                    lines.append(f"  budgets {lo}\u2013{hi} ({side_label}): {crossings}")
     if not frontier["changed"]:
         lines.append("Token-budget frontier: no differences.")
     return lines

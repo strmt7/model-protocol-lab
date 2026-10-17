@@ -729,9 +729,10 @@ Summary: decision CHANGED, winner CHANGED, frontier CHANGED, 1 candidate(s) chan
 
 The stdout JSON carries the same information in machine form: `decision`
 and `winner` (old/new/changed), `frontier` (the token-budget frontier
-comparison: sweep-range drift, budget-robustness flip, and the exact
+comparison: sweep-range drift, budget-robustness flip, the exact
 budget spans where the post-hoc decision, winner, or per-budget leader
-differ), `config_drift` (the comparability warnings), `candidate_verdicts`
+differ, the safe budget floor, and per-flip-span attribution of the
+driving (candidate, fixture) pass-status changes), `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate), `evidence` (whether each
 side carried `--include-evidence` observations), and a `summary` with
@@ -759,9 +760,13 @@ What it compares, exactly:
   different fixture sets.
 - **Token-budget frontier**: when both runs recorded one, the tool
   compares the post-hoc robustness story -- sweep-range drift, whether
-  the selection stayed budget-robust, and the exact budget spans where
-  the post-hoc decision, post-hoc winner, or per-budget leader differ
-  (e.g. `budgets 3–4: alpha -> beta`). A run without a recorded frontier
+  the selection stayed budget-robust, the safe budget floor, and the
+  exact budget spans where the post-hoc decision, post-hoc winner, or
+  per-budget leader differ (e.g. `budgets 3–4: alpha -> beta`). It also
+  compares each flip span's attribution: the (candidate, fixture)
+  pass-status changes driving the flip, so a template tweak that moves
+  the flip from one fixture to another is reported even when the spans
+  themselves are unchanged. A run without a recorded frontier
   is reported plainly instead of compared.
 
 Per-fixture comparison needs per-fixture evidence: `results.json` carries
