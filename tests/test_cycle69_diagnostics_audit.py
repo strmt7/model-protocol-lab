@@ -85,11 +85,12 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
+import unittest
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-import pytest
 import torch
 
 from model_protocol_lab import core as real_core
@@ -520,7 +521,7 @@ def _mixed_frontier_search() -> list[dict[str, Any]]:
     return [_synth_entry("cand-X", x_obs, boundary_ids=short), _synth_entry("cand-Y", y_obs)]
 
 
-class TestBudgetFrontierOracle:
+class TestBudgetFrontierOracle(unittest.TestCase):
     """Full-equality checks of budget_frontier against the hand-rolled oracle."""
 
     def test_mixed_scenario_matches_oracle_exactly(self):
@@ -547,8 +548,6 @@ class TestBudgetFrontierOracle:
         assert impl["candidates"]["cand-Y"]["min_budget_per_fixture"] == [None, 14]
 
     def test_per_candidate_boundary_token_ids_honored(self):
-        # The same output text measured under a different per-entry boundary
-        # yields a different minimal budget -- and the oracle agrees exactly.
         bnd = _boundary_ids()
         text = "alpha" + BOUNDARY_TEXT
         search = [
@@ -576,8 +575,6 @@ class TestBudgetFrontierOracle:
         assert impl["candidates"]["c2"]["min_budget_per_fixture"] == [6]
 
     def test_minimal_pair_boundary_shift_deltas(self):
-        # Move one fixture's boundary completion 3 tokens later: exactly +3
-        # on that cell, nothing else moves, and the oracle still agrees.
         search = _mixed_frontier_search()
         before = budget_frontier(
             search,
@@ -699,8 +696,6 @@ class TestBudgetFrontierOracle:
         assert impl["native_winner"] == "cand-X"
 
     def test_budget_zero_and_one(self):
-        # max_new_tokens=1: budget 0 must never appear; a 1-token boundary
-        # completing at token 0 passes at budget 1.
         search = [
             _synth_entry(
                 "c1",
@@ -751,31 +746,29 @@ class TestBudgetFrontierOracle:
         assert impl["candidates"]["c1"]["min_budget_per_fixture"] == [None, None]
         assert impl["candidates"]["c1"]["pass_steps"] == [[1, 0]]
 
-    @pytest.mark.parametrize(
-        "kwargs",
-        [
+    def test_rejects_empty_inputs(self):
+        for kwargs in [
             {"search": [], "why": "empty search"},
             {"search": [_synth_entry("c1", [])], "why": "empty observations"},
-        ],
-    )
-    def test_rejects_empty_inputs(self, kwargs):
-        why = kwargs.pop("why")
-        with pytest.raises(ValueError):
-            budget_frontier(
-                kwargs["search"],
-                boundary=_boundary_ids(),
-                max_new_tokens=MAX_NEW_TOKENS,
-                native_decision="no_candidate",
-                native_winner=None,
-            )
-        assert why  # documents which case ran
+        ]:
+            with self.subTest(kwargs=kwargs):
+                why = kwargs.pop("why")
+                with self.assertRaises(ValueError):
+                    budget_frontier(
+                        kwargs["search"],
+                        boundary=_boundary_ids(),
+                        max_new_tokens=MAX_NEW_TOKENS,
+                        native_decision="no_candidate",
+                        native_winner=None,
+                    )
+                assert why  # documents which case ran
 
     def test_rejects_duplicate_candidate_names(self):
         search = [
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
         ]
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -789,7 +782,7 @@ class TestBudgetFrontierOracle:
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
             _synth_entry("c2", [_synth_obs("S2", "a", exact=True, bfound=True)]),
         ]
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -798,33 +791,35 @@ class TestBudgetFrontierOracle:
                 native_winner=None,
             )
 
-    @pytest.mark.parametrize("bad_boundary", [(), (1, -2), ("x",)])
-    def test_rejects_bad_boundary(self, bad_boundary):
-        search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
-        with pytest.raises(ValueError):
-            budget_frontier(
-                search,
-                boundary=bad_boundary,
-                max_new_tokens=MAX_NEW_TOKENS,
-                native_decision="no_candidate",
-                native_winner=None,
-            )
+    def test_rejects_bad_boundary(self):
+        for bad_boundary in [(), (1, -2), ("x",)]:
+            with self.subTest(bad_boundary=bad_boundary):
+                search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
+                with self.assertRaises(ValueError):
+                    budget_frontier(
+                        search,
+                        boundary=bad_boundary,
+                        max_new_tokens=MAX_NEW_TOKENS,
+                        native_decision="no_candidate",
+                        native_winner=None,
+                    )
 
-    @pytest.mark.parametrize("bad_cap", [0, 4097, "64"])
-    def test_rejects_bad_max_new_tokens(self, bad_cap):
-        search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
-        with pytest.raises(ValueError):
-            budget_frontier(
-                search,
-                boundary=_boundary_ids(),
-                max_new_tokens=bad_cap,
-                native_decision="no_candidate",
-                native_winner=None,
-            )
+    def test_rejects_bad_max_new_tokens(self):
+        for bad_cap in [0, 4097, "64"]:
+            with self.subTest(bad_cap=bad_cap):
+                search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
+                with self.assertRaises(ValueError):
+                    budget_frontier(
+                        search,
+                        boundary=_boundary_ids(),
+                        max_new_tokens=bad_cap,
+                        native_decision="no_candidate",
+                        native_winner=None,
+                    )
 
     def test_rejects_incomplete_native_decision(self):
         search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -835,7 +830,7 @@ class TestBudgetFrontierOracle:
 
     def test_rejects_winner_decision_mismatch(self):
         search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
-        with pytest.raises(ValueError):  # winner must be None for ambiguous
+        with self.assertRaises(ValueError):  # winner must be None for ambiguous
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -843,7 +838,7 @@ class TestBudgetFrontierOracle:
                 native_decision="ambiguous",
                 native_winner="c1",
             )
-        with pytest.raises(ValueError):  # winner required for selected decisions
+        with self.assertRaises(ValueError):  # winner required for selected decisions
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -851,7 +846,7 @@ class TestBudgetFrontierOracle:
                 native_decision="compatible_on_fixture_set",
                 native_winner=None,
             )
-        with pytest.raises(ValueError):  # winner must name a search candidate
+        with self.assertRaises(ValueError):  # winner must name a search candidate
             budget_frontier(
                 search,
                 boundary=_boundary_ids(),
@@ -860,8 +855,15 @@ class TestBudgetFrontierOracle:
                 native_winner="nope",
             )
 
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
 
-class TestBudgetFrontierFromRealRun:
+    def tearDown(self):
+        self._td.cleanup()
+
+
+class TestBudgetFrontierFromRealRun(unittest.TestCase):
     """budget_frontier over a real run_experiment result (end of the CLI path)."""
 
     def test_real_search_result_matches_oracle(self):
@@ -889,6 +891,13 @@ class TestBudgetFrontierFromRealRun:
         assert frontier["candidates"]["cand-A"]["min_budget_per_fixture"] == [15, None]
         assert frontier["candidates"]["cand-B"]["min_budget_per_fixture"] == [None, 14]
         assert frontier["budget_robust"] is True  # no_candidate at every budget
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -1005,7 +1014,7 @@ def _logprob_scenario(
     )
 
 
-class TestLogprobDiagnosticOracle:
+class TestLogprobDiagnosticOracle(unittest.TestCase):
     MEANS = {
         ("cand-A", "S1"): -1.0,
         ("cand-A", "S2"): -1.0,
@@ -1056,8 +1065,6 @@ class TestLogprobDiagnosticOracle:
         assert kinds == {"cand-A": "indeterminate", "cand-B": "indeterminate"}
 
     def test_exact_band_edges(self):
-        # mean == -2.0 is >= the derailed edge -> greedy_derailed;
-        # mean == -5.0 is neither >= -2.0 nor < -5.0 -> indeterminate.
         means = {
             ("cand-A", "S1"): -2.0,
             ("cand-A", "S2"): -1.0,
@@ -1087,9 +1094,6 @@ class TestLogprobDiagnosticOracle:
         assert kinds["cand-B"] == "weights_dont_know"
 
     def test_minimal_pair_mean_shift_exact_delta(self):
-        # Move one cell (cand-A, S2) from -1.0 to -6.0: exactly that fixture's
-        # total/mean change; the aggregate total shifts by precisely the
-        # fixture-total delta; every other fixture dict is byte-identical.
         sc1, result1, diag1 = self._run()
         means2 = dict(self.MEANS)
         means2[("cand-A", "S2")] = -6.0
@@ -1102,11 +1106,10 @@ class TestLogprobDiagnosticOracle:
         fs2 = {s["fixture"]: s for s in cand2["fixture_scores"]}
         assert fs1["S1"] == fs2["S1"]  # untouched cell identical
         assert fs1["S2"]["mean_logprob"] != fs2["S2"]["mean_logprob"]
-        assert fs2["S2"]["mean_logprob"] == pytest.approx(-6.0, abs=1e-6)
+        self.assertAlmostEqual(fs2["S2"]["mean_logprob"], -6.0, delta=1e-6)
         delta = fs2["S2"]["total_logprob"] - fs1["S2"]["total_logprob"]
-        assert cand2["aggregate"]["total_logprob"] - cand1["aggregate"]["total_logprob"] == (
-            pytest.approx(delta)
-        )
+        got_delta = cand2["aggregate"]["total_logprob"] - cand1["aggregate"]["total_logprob"]
+        self.assertLessEqual(abs(got_delta - delta), 1e-6 * max(1.0, abs(delta)))
         assert cand1["interpretation"]["kind"] == "greedy_derailed"
         assert cand2["interpretation"]["kind"] == "weights_dont_know"
         # cand-B untouched end to end.
@@ -1115,8 +1118,6 @@ class TestLogprobDiagnosticOracle:
         assert b1 == b2
 
     def test_diagnostic_runs_on_ambiguous_decision(self):
-        # Both candidates pass: decision ambiguous, no winner -- the
-        # diagnostic must still run and must not touch the missing winner.
         sc = _logprob_scenario(self.MEANS, behavior={})
         result = run_search_experiment(sc)
         assert result["decision"] == "ambiguous"
@@ -1162,14 +1163,12 @@ class TestLogprobDiagnosticOracle:
     def test_rejects_malformed_inputs(self):
         sc = make_scenario(exp_seed=21)
         result = run_search_experiment(sc)
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             logprob_diagnostic(sc.backend, {"no": "search"}, sc.split.search)
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             logprob_diagnostic(sc.backend, result, ("not", "fixtures"))
 
     def test_aggregate_nan_defense(self):
-        # Defense in depth: a non-finite total degrades the aggregate fields
-        # to None instead of poisoning results.json (allow_nan=False).
         from model_protocol_lab.scoring import TargetScore
 
         bad = TargetScore(
@@ -1187,8 +1186,6 @@ class TestLogprobDiagnosticOracle:
         assert agg["mean_logprob"] is None
 
     def test_interpretation_ignores_passing_fixtures(self):
-        # Only natively-failed fixtures classify: a high-likelihood pass must
-        # not flip the reading.
         scores = [
             {
                 "native_pass": True,
@@ -1207,17 +1204,21 @@ class TestLogprobDiagnosticOracle:
         ]
         assert _interpret_logprob_candidate(scores)["kind"] == "weights_dont_know"
 
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
 
 # ---------------------------------------------------------------------------
 # prompt_sensitivity_sweep
 # ---------------------------------------------------------------------------
 
 
-class TestSensitivitySweep:
+class TestSensitivitySweep(unittest.TestCase):
     def test_noop_perturbation_flags_nothing(self):
-        # Adversarial: the backend's output is a pure function of
-        # (candidate, fixture), so truncating the prompt changes nothing.
-        # The sweep must report no false sensitivity.
         sc = make_scenario(exp_seed=31, candidates=("cand-A",))
         result = run_search_experiment(sc)
         assert result["decision"] == "compatible_on_fixture_set"
@@ -1240,8 +1241,6 @@ class TestSensitivitySweep:
         assert sweep["flips_at"] == []
 
     def test_real_prompt_tail_change_is_detected(self):
-        # The backend passes iff the prompt still ends with the native tail:
-        # every truncated depth flips the decision to no_candidate.
         sc = make_scenario(
             exp_seed=32,
             candidates=("cand-A",),
@@ -1265,9 +1264,6 @@ class TestSensitivitySweep:
             assert depth["selected_candidate"] is None
 
     def test_winner_swap_with_same_decision_still_flagged(self):
-        # The OR in winner_changed: truncated prompts swap the winner from
-        # cand-A to cand-B while the decision stays "selected"-family, and
-        # the depth must still be reported as changed.
         sc = make_scenario(
             exp_seed=33,
             candidates=("cand-A", "cand-B"),
@@ -1292,9 +1288,6 @@ class TestSensitivitySweep:
             assert depth["selected_candidate"] == "cand-B"
 
     def test_codepoint_split_depth_records_failed_decision(self):
-        # Adversarial: a prompt ending in a multi-byte char cannot be cut by
-        # an odd byte count; that depth must record the run's failed decision
-        # rather than skipping or crashing the sweep.
         sc = make_scenario(
             exp_seed=34,
             candidates=("cand-A",),
@@ -1324,7 +1317,7 @@ class TestSensitivitySweep:
     def test_rejects_bad_max_drop_bytes(self):
         sc = make_scenario(exp_seed=35, candidates=("cand-A",))
         for bad in (0, 9, -1, "3"):
-            with pytest.raises(ValueError):
+            with self.assertRaises(ValueError):
                 prompt_sensitivity_sweep(
                     sc.backend,
                     sc.formats,
@@ -1336,8 +1329,6 @@ class TestSensitivitySweep:
                 )
 
     def test_sweep_result_is_json_serializable(self):
-        # The CLI writes the sweep into results.json (allow_nan=False): the
-        # payload must be plain JSON types.
         import json
 
         sc = make_scenario(exp_seed=36, candidates=("cand-A",))
@@ -1352,13 +1343,20 @@ class TestSensitivitySweep:
         )
         json.dumps(sweep, allow_nan=False)
 
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
 
 # ---------------------------------------------------------------------------
 # CLI wiring contract
 # ---------------------------------------------------------------------------
 
 
-class TestCliWiring:
+class TestCliWiring(unittest.TestCase):
     """Structural contract: which flags exist and what they default to."""
 
     @staticmethod
@@ -1386,6 +1384,13 @@ class TestCliWiring:
         opts = self._run_options()
         assert "--budget-frontier" not in opts
         assert "--budget_frontier" not in opts
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -1586,26 +1591,39 @@ def _run_check(pkgdir: Path, check: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-class TestMutationGate:
-    @pytest.mark.parametrize("spec", _MUTANTS, ids=[m[0] for m in _MUTANTS])
-    def test_mutant_is_caught(self, spec, tmp_path):
-        name, anchor, replacement, check = spec
-        assert tmp_path.is_absolute()
-        mutant_pkg = _write_package_copy(tmp_path / "mutant", (anchor, replacement))
-        control_pkg = _write_package_copy(tmp_path / "control", None)
-        # Control first: the check must pass on pristine sources, proving it
-        # is not vacuously failing.
-        control = _run_check(control_pkg, check)
-        assert control.returncode == 0, (
-            f"control failed for {name} -- the check itself is broken:\n{control.stderr}"
-        )
-        mutant = _run_check(mutant_pkg, check)
-        assert mutant.returncode != 0, (
-            f"MUTANT SURVIVED: {name} was not caught by its check.\n{mutant.stdout}"
-        )
-        # Non-vacuous: the mutant must die on the check's assertion, not on
-        # an unrelated crash (e.g. an import error in the copied package).
-        assert "AssertionError" in mutant.stderr, (
-            f"{name}: mutant failed for an unexpected reason, not the check:\n"
-            f"{mutant.stderr[-2000:]}"
-        )
+class TestMutationGate(unittest.TestCase):
+    def test_mutant_is_caught(self):
+        tmp_path = self.tmp_path
+        for spec in _MUTANTS:
+            with self.subTest(spec=spec):
+                name, anchor, replacement, check = spec
+                assert tmp_path.is_absolute()
+                mutant_pkg = _write_package_copy(tmp_path / "mutant", (anchor, replacement))
+                control_pkg = _write_package_copy(tmp_path / "control", None)
+                # Control first: the check must pass on pristine sources, proving it
+                # is not vacuously failing.
+                control = _run_check(control_pkg, check)
+                assert control.returncode == 0, (
+                    f"control failed for {name} -- the check itself is broken:\n{control.stderr}"
+                )
+                mutant = _run_check(mutant_pkg, check)
+                assert mutant.returncode != 0, (
+                    f"MUTANT SURVIVED: {name} was not caught by its check.\n{mutant.stdout}"
+                )
+                # Non-vacuous: the mutant must die on the check's assertion, not on
+                # an unrelated crash (e.g. an import error in the copied package).
+                assert "AssertionError" in mutant.stderr, (
+                    f"{name}: mutant failed for an unexpected reason, not the check:\n"
+                    f"{mutant.stderr[-2000:]}"
+                )
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
+        self.tmp_path = Path(self._td.name)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+
+if __name__ == "__main__":
+    unittest.main()
