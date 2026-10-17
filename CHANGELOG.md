@@ -1029,3 +1029,20 @@ All notable changes to this project are documented here. The format follows
 Initial source snapshot: renderer, evaluator, catalog, local HF adapter,
 experiment orchestration, reports, CLI, fixture schema, docs and test source.
 Unexecuted at release of the snapshot.
+
+### Added (cycle 110 — Hypothesis properties for truncate_text_tail, 2026-10-17)
+
+- New `tests/test_cycle110_truncate_properties.py`: 6 Hypothesis property tests
+  verifying the universal invariants of `model_protocol_lab.core.truncate_text_tail`
+  (mid-token truncation for the boundary sensitivity sweep). For arbitrary Unicode
+  text and cut positions: a non-None result is always a strict prefix; it encodes
+  to exactly len(raw)-drop_bytes bytes; None is returned iff the cut splits a
+  UTF-8 codepoint; cutting at a character boundary never returns None; out-of-range
+  drop_bytes and wrong types raise ValueError. Mutation-tested: 3/3 mutants killed
+  (empty-string-on-split, off-by-one, boundary acceptance). Pytest 4134 → 4140;
+  unittest 4060 → 4066. README/VALIDATION.md counts updated.
+- Documented the cycle-107/108 test_cycle66 CI mystery investigation in
+  docs/RESEARCH_LOG.md: the TestCase conversion passes under every local
+  condition tested (local venv, fresh venv, isolation, full suite, coverage)
+  but fails CI on Python 3.12/3.13. Kept as `_UNITTEST_EXEMPT` pending a
+  CI-environment reproduction.
