@@ -4814,6 +4814,44 @@ of scope). Mutation-tested: dropping either keyword or adding a
 supply-chain section documents the CVE-2025-32434 / CVE-2026-24747
 posture; CHANGELOG entry added.
 
+## Cycle 121 (2026-10-17) — token-budget frontier chart
+
+**Research:** the report's token-budget frontier section showed only
+per-candidate sparkline bars plus the winner's pass-curve table. No
+eval harness the author surveyed renders exact post-hoc token-budget
+frontier curves as deterministic, self-contained vector graphics: most
+emit PNGs via matplotlib (non-deterministic bytes, heavy dependency) or
+client-side JS charts (breaks offline/print, needs a script pipeline).
+The lab's hard constraints — byte-deterministic reports, zero external
+report assets, no JS — rule both out, which is exactly the gap: a
+multi-series inline-SVG chart computed with integer arithmetic from the
+already-recorded `pass_steps` data.
+
+**Plan:** new `_frontier_chart_svg(frontier)` in `reporting.py`
+returning a pure-SVG string (axes, integer ticks, gridlines, exact step
+polylines, vertex markers, wrapped legend, winner drawn last with a
+heavier stroke), hooked into `_frontier_section` between the winner
+curve table and the sparkline table. Palette fixed and assigned in
+sorted name order; every dynamic string HTML-escaped; no
+`<style>`/`<script>` inside the SVG (presentation attributes only, so
+CSP `style-src` is untouched).
+
+**Built:** the chart plus `tests/test_cycle121_frontier_chart_audit.py`
+(20 tests): hand-derived path/marker/tick/legend literals, 3x
+in-process + 2x cross-`PYTHONHASHSEED` subprocess byte-identity,
+insertion-order independence, degenerate-input "" rendering, input
+non-mutation, hostile-name escaping, and a 5-mutant mutation gate
+(unsorted legend, shifted x-mapping, rotated palette, unescaped name,
+flipped y-mapping — all caught; unmutated control passes).
+
+**Differentiation review:** the frontier chart is a genuine
+differentiator — exact post-hoc token-budget curves for every candidate
+in one deterministic, dependency-free vector graphic, printable and
+offline-safe. It answers "at which budget does each candidate break?"
+at a glance, which the sparkline bars cannot.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.
+
 ## Cycle 120 (2026-10-17) — selection-rule extraction + property tests
 
 **Research:** the lab's conservative selection rule ("exactly one
