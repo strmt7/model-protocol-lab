@@ -4484,3 +4484,29 @@ README count; fixed and re-verified green); `coverage run -m unittest
 discover` exit 0; coverage 98% (gate 95%); ruff check + format clean
 (157 files); mypy clean in default and --strict modes (15 files); bandit
 exit 0.
+
+## Cycle 109 (2026-10-17) — Hypothesis properties for Split anti-leakage
+
+**Motivation.** The `Split` class is the lab's contamination firewall: NFC-normalized
+uniqueness of fixture IDs, group isolation across the split, and message-leakage
+prevention. Example-based tests (notably test_cycle66's adversarial cases) pin
+specific behaviors, but the *universal* claim — for ALL strings, NFC-evasion
+always fails — needed property-based verification. Followed the cycle-98
+pattern (Hypothesis for `first_boundary`).
+
+**Properties verified** (tests/test_cycle109_split_properties.py, 5 tests):
+1. NFC/NFD ID collision always rejected ("Fixture IDs must be globally unique")
+2. NFC/NFD group overlap always rejected ("Related fixtures cannot cross the split")
+3. NFC/NFD message leakage always rejected ("Identical message inputs cannot cross the split")
+4. Byte-exact storage preserved (NFD input stays NFD in the Split; only comparisons normalize)
+5. Valid fixtures (distinct NFC IDs/groups/messages) always construct
+
+**Mutation testing.** Removed NFC normalization from each of the three checks
+independently; each mutant was caught by exactly the corresponding property
+test (3/3 killed, no false positives on the other properties).
+
+**Test-cycle66 note.** Investigated the cycle-107/108 CI mystery (TestCase
+conversion of test_cycle66 fails CI 3.12/3.13 deterministically, passes locally
+as root and non-root under both runners). The converted file is mechanical and
+correct; the failure does not reproduce locally and CI logs are inaccessible.
+Left as `_UNITTEST_EXEMPT` pending a CI-environment reproduction. Not forced.
