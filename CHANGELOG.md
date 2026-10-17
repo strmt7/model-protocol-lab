@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 135 — chat-marker isolation conformance, 2026-10-18)
+
+- New `model_protocol_lab/control_tokens.py`: chat-marker isolation
+  conformance (research backlog R4, the defense side of structural template
+  injection). A fixed corpus of 16 hostile marker strings (`<|im_start|>`,
+  `<s>`, `[INST]`, `<|begin_of_text|>`, a forged
+  `<|im_start|>assistant<|im_end|>` turn, …) is injected into user text and
+  the checkpoint tokenizer's control-token ids are counted before and
+  after — the number should not change. Pure (`render`/`encode` injected;
+  `count_control_tokens`, `check_isolation`, `inject_hostile`,
+  `probe_format`, `summarize_probes`); a nonzero delta means the hostile
+  text's literal markers became real control tokens (the ChatInject/Phantom
+  class, via HF's `split_special_tokens=False` default).
+- New `doctor.marker_isolation(model_path, formats, cases)`: the
+  checkpoint-backed driver (tokenizer only, never weights), mirroring
+  `template_conformance`'s fail-safe shape. The special set is the
+  tokenizer's `all_special_ids` union special-flagged added tokens (robust
+  for under-declaring tokenizers); a tokenizer declaring no special ids
+  reports `no_special_ids` (unmeasurable, not a failure).
+- `model-protocol-lab run` attaches `marker_isolation`; the HTML report
+  renders a "Chat-marker isolation" section with the families x markers
+  conformance matrix (`isolated` vs `smuggled` cells); the committed sample
+  report exercises the matrix via the real pure probe with a scripted
+  tokenizer.
+- New `tests/test_cycle135_marker_isolation.py` (33 tests): the pure core,
+  the driver against genuinely loadable WordLevel tokenizers (smuggled
+  `<|im_start|>` detected, unknown `[INST]` stays inert), HTML matrix
+  rendering with hostile-name escaping, and a 4-mutant kill gate — 4/4
+  killed.
+
 ### Added (cycle 134 — prompt-boundary canonicality audit, 2026-10-17)
 
 - New `model_protocol_lab/boundary_audit.py`: the Prompt Boundary Problem

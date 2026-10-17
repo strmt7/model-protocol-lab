@@ -466,6 +466,40 @@ def build_kitchen_sink():
                 p(15): {"n_usable": 2, "n_problem": 0, "rate": 0.0},
             },
         },
+        "marker_isolation": {
+            # Hostile family and marker names: the isolation matrix must
+            # escape them.
+            "status": "ok",
+            "special_token_count": 2,
+            "n_probes": 2,
+            "n_isolated": 1,
+            "overall_isolation_rate": 0.5,
+            "family_scores": {
+                p(16): {"n_probes": 2, "n_isolated": 1, "isolation_rate": 0.5},
+            },
+            "probes": [
+                {
+                    "format": p(16),
+                    "fixture": "f1",
+                    "marker": p(17),
+                    "status": "ok",
+                    "baseline": 2,
+                    "probed": 3,
+                    "delta": 1,
+                    "isolated": False,
+                },
+                {
+                    "format": p(16),
+                    "fixture": "f1",
+                    "marker": "[INST]",
+                    "status": "ok",
+                    "baseline": 2,
+                    "probed": 2,
+                    "delta": 0,
+                    "isolated": True,
+                },
+            ],
+        },
         "held_out": {
             "summary": {
                 "status": p(3),

@@ -157,6 +157,58 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "boundary_audit_unavailable",
         }
+    # Chat-marker isolation: attached via the real pure probe with a
+    # scripted tokenizer in which every hostile marker literal is a control
+    # token (mirroring split_special_tokens=False), so the committed sample
+    # report exercises the isolation matrix. Degrades to an "unavailable"
+    # marker instead of failing the build.
+    try:
+        from model_protocol_lab.control_tokens import (
+            HOSTILE_MARKER_STRINGS,
+            probe_format,
+            summarize_probes,
+        )
+
+        _SPEC_IDS = frozenset(1000 + k for k in range(len(HOSTILE_MARKER_STRINGS)))
+
+        def _demo_marker_encode(text: str) -> tuple[int, ...]:
+            ids: list[int] = []
+            i = 0
+            while i < len(text):
+                for k, marker in enumerate(HOSTILE_MARKER_STRINGS):
+                    if text.startswith(marker, i):
+                        ids.append(1000 + k)
+                        i += len(marker)
+                        break
+                else:
+                    ids.append(ord(text[i]) % 1000)
+                    i += 1
+            return tuple(ids)
+
+        _probes: list[dict] = []
+        for _fmt in candidates("llama3", mutate=True):
+            for _case in split.search:
+                _pf = probe_format(_fmt.render, _demo_marker_encode, _SPEC_IDS, _case.messages)
+                for _p in _pf["probes"]:
+                    _probes.append(
+                        {
+                            "format": _fmt.name,
+                            "fixture": _case.id,
+                            "marker": _p["marker"],
+                            "status": "ok",
+                            "baseline": _p["baseline"],
+                            "probed": _p["probed"],
+                            "delta": _p["delta"],
+                            "isolated": _p["isolated"],
+                        }
+                    )
+        result["marker_isolation"] = summarize_probes(_probes, len(_SPEC_IDS))
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["marker_isolation"] = {
+            "status": "unavailable",
+            "detail": "marker_isolation_unavailable",
+            "probes": [],
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

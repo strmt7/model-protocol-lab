@@ -66,6 +66,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "held_out_budget_floor",
     "contamination",
     "boundary_audit",
+    "marker_isolation",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

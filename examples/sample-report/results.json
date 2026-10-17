@@ -420,6 +420,1622 @@
       }
     }
   },
+  "marker_isolation": {
+    "status": "ok",
+    "special_token_count": 16,
+    "n_probes": 160,
+    "n_isolated": 0,
+    "overall_isolation_rate": 0.0,
+    "family_scores": {
+      "llama3": {
+        "n_probes": 160,
+        "n_isolated": 0,
+        "isolation_rate": 0.0
+      }
+    },
+    "probes": [
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 8,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-copy-blue",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 14,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3",
+        "fixture": "search-latest-green",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 9,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 7,
+        "probed": 8,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 17,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/toggle-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 15,
+        "probed": 16,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 7,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-copy-blue",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 5,
+        "probed": 6,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 13,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/no-bos",
+        "fixture": "search-latest-green",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 11,
+        "probed": 12,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 8,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-copy-blue",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 14,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-newline",
+        "fixture": "search-latest-green",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 8,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-copy-blue",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 6,
+        "probed": 7,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|im_start|>assistant<|im_end|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 14,
+        "delta": 2,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "</s>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "[INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "[/INST]",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<<SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<</SYS>>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|begin_of_text|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|start_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|end_header_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|eot_id|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|user|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|assistant|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      },
+      {
+        "format": "llama3/prefix-trim",
+        "fixture": "search-latest-green",
+        "marker": "<|system|>",
+        "status": "ok",
+        "baseline": 12,
+        "probed": 13,
+        "delta": 1,
+        "isolated": false
+      }
+    ]
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

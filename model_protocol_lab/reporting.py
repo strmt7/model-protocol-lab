@@ -2928,7 +2928,7 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
             if type(entry) is not dict:
                 continue
             rate = entry.get("rate")
-            rate_text = "n/a" if rate is None else f"{rate:.1%}"
+            rate_text = "n/a" if type(rate) not in (int, float) else f"{rate:.1%}"
             badge = (
                 '<span class="badge pass">canonical</span>'
                 if rate == 0
@@ -2943,7 +2943,7 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
                 "<td>" + escape(str(entry.get("n_problem", "?"))) + "</td>"
                 "<td>" + escape(str(entry.get("n_usable", "?"))) + "</td></tr>"
             )
-    overall_text = "n/a" if overall is None else f"{overall:.1%}"
+    overall_text = "n/a" if type(overall) not in (int, float) else f"{overall:.1%}"
     parts = [
         '<section id="boundary-canonicality"><h2>Prompt-boundary canonicality</h2>',
         "<p>For every stored rendered prompt &times; greedy completion, the "
@@ -2976,6 +2976,92 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
             + "</tbody></table></div>"
         )
     parts.append("</section>")
+    return "".join(parts)
+
+
+def _marker_isolation_section(result: dict[str, Any]) -> str:
+    """Chat-marker isolation: the families x markers conformance matrix.
+
+    For each template family and each hostile marker string, the lab
+    injected the marker into user text and counted the checkpoint
+    tokenizer's control-token ids before and after. A cell is "isolated"
+    when the count did not change (the marker stayed inert text) and
+    "smuggled" when the count grew (the marker became real control
+    tokens). Renders nothing when the check is unavailable.
+    """
+    check: Any = result.get("marker_isolation")
+    if type(check) is not dict or check.get("status") != "ok":
+        return ""
+    scores: Any = check.get("family_scores")
+    if type(scores) is not dict or not scores:
+        return ""
+    probes: Any = check.get("probes")
+    # family -> marker -> worst (least isolated) probe for the matrix cell.
+    cells: dict[str, dict[str, dict[str, Any]]] = {}
+    if type(probes) is list:
+        for probe in probes:
+            if type(probe) is not dict or probe.get("status") != "ok":
+                continue
+            family = str(probe.get("format", "")).split("/", 1)[0] or "unknown"
+            marker = probe.get("marker")
+            if type(marker) is not str:
+                continue
+            prev = cells.setdefault(family, {}).get(marker)
+            if prev is None or (
+                type(probe.get("delta")) is int
+                and type(prev.get("delta")) is int
+                and probe["delta"] > prev["delta"]
+            ):
+                cells[family][marker] = probe
+    from .control_tokens import HOSTILE_MARKER_STRINGS
+
+    header = "".join('<th scope="col">' + escape(m) + "</th>" for m in HOSTILE_MARKER_STRINGS)
+    rows = []
+    for family in sorted(cells):
+        fam_cells = cells[family]
+        tds = []
+        for marker in HOSTILE_MARKER_STRINGS:
+            probe = fam_cells.get(marker)
+            if probe is None:
+                tds.append('<td><span class="badge">n/a</span></td>')
+            elif probe.get("isolated"):
+                tds.append('<td><span class="badge pass">isolated</span></td>')
+            else:
+                delta = probe.get("delta", "?")
+                tds.append(
+                    '<td><span class="badge fail">smuggled</span> +' + escape(str(delta)) + "</td>"
+                )
+        score = scores.get(family, {})
+        rate = score.get("isolation_rate")
+        rate_text = "n/a" if type(rate) not in (int, float) else f"{rate:.0%}"
+        rows.append(
+            '<tr><th scope="row">'
+            + escape(family)
+            + "</th><td>"
+            + escape(rate_text)
+            + "</td>"
+            + "".join(tds)
+            + "</tr>"
+        )
+    overall = check.get("overall_isolation_rate")
+    overall_text = "n/a" if type(overall) not in (int, float) else f"{overall:.1%}"
+    parts = [
+        '<section id="marker-isolation"><h2>Chat-marker isolation</h2>',
+        "<p>Each hostile marker string was injected into user text and the "
+        "checkpoint tokenizer's control-token ids were counted before and "
+        "after. <em>Isolated</em> means the count did not change (the marker "
+        "stayed inert text); <em>smuggled</em> means the marker became real "
+        "control tokens — the structural-injection class behind ChatInject "
+        "and Phantom. Overall isolation rate " + escape(overall_text) + ".</p>",
+        '<div class="table-wrap"><table class="sortable">'
+        "<caption>Marker isolation by template family.</caption>"
+        '<thead><tr><th scope="col">Family</th><th scope="col">Isolated</th>'
+        + header
+        + "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>",
+        "</section>",
+    ]
     return "".join(parts)
 
 
@@ -3020,6 +3106,7 @@ def render_html(result: dict[str, Any]) -> str:
     divergence_html = _backend_divergence_section(result)
     frontier_html = _frontier_section(result)
     boundary_audit_html = _boundary_audit_section(result)
+    marker_isolation_html = _marker_isolation_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3035,6 +3122,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("backend-divergence", "Backend divergence", divergence_html),
             ("token-budget-frontier", "Token-budget frontier", frontier_html),
             ("boundary-canonicality", "Prompt-boundary canonicality", boundary_audit_html),
+            ("marker-isolation", "Chat-marker isolation", marker_isolation_html),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -3073,6 +3161,7 @@ def render_html(result: dict[str, Any]) -> str:
         + divergence_html
         + frontier_html
         + boundary_audit_html
+        + marker_isolation_html
         + sweep_html
         + logprob_html
         + held_out_html

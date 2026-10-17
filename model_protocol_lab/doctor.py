@@ -1003,6 +1003,126 @@ def template_conformance(
     return {"status": "ok", "diffs": diffs}
 
 
+def marker_isolation(
+    model_path: str | Path,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+) -> dict[str, Any]:
+    """Chat-marker isolation conformance: do hostile marker strings stay inert?
+
+    For each format x fixture, renders the benign prompt and re-renders it
+    with each of :data:`control_tokens.HOSTILE_MARKER_STRINGS` injected into
+    the user text, then encodes both with the checkpoint tokenizer (never
+    model weights) using ``add_special_tokens=False`` — the same call the
+    backend's ``encode`` makes. Counts ids in the tokenizer's special set
+    (``all_special_ids`` union special-flagged added tokens) before and
+    after: the number should not change. A nonzero delta means the hostile
+    text's literal markers became real
+    control tokens (the ChatInject/Phantom structural-injection class, via
+    HF's ``split_special_tokens=False`` default).
+
+    Never raises: missing/unreadable tokenizers degrade like
+    :func:`template_conformance`; a tokenizer declaring no special ids
+    reports ``"no_special_ids"`` (unmeasurable, not a failure); one bad
+    format/fixture/marker triple degrades to ``"unavailable"`` without
+    failing the rest.
+    """
+    from .control_tokens import (
+        HOSTILE_MARKER_STRINGS,
+        check_isolation,
+        count_control_tokens,
+        inject_hostile,
+        summarize_probes,
+    )
+
+    if (
+        type(formats) is not tuple
+        or not formats
+        or any(type(fmt) is not Format for fmt in formats)
+        or type(cases) is not tuple
+        or not cases
+        or any(type(case) is not Fixture for case in cases)
+    ):
+        raise ValueError("marker_isolation needs nonempty tuples of Format and Fixture")
+    try:
+        root = _directory(model_path)
+        try:
+            tokenizer: Any = _build_primary_tokenizer(root)
+        except ImportError:
+            return {"status": "unavailable", "detail": "transformers_not_installed", "probes": []}
+        raw_special = tokenizer.all_special_ids
+        special_ids = (
+            {int(i) for i in raw_special}
+            if isinstance(raw_special, (list, tuple, set, frozenset))
+            else set()
+        )
+        # Some tokenizers under-declare all_special_ids while the
+        # tokenizer.json marks added tokens as special; union both so the
+        # probe measures what the tokenizer actually treats as special.
+        try:
+            decoder = tokenizer.added_tokens_decoder
+            items = decoder.items() if hasattr(decoder, "items") else []
+        except Exception:  # noqa: BLE001 -- best effort, all_special_ids suffices
+            items = []
+        for _id, _tok in items:
+            try:
+                if getattr(_tok, "special", False):
+                    special_ids.add(int(_id))
+            except Exception:  # noqa: BLE001,S112 -- skip malformed entries
+                continue
+    except Exception:  # noqa: BLE001 -- conformance must not fail the run
+        return {"status": "unavailable", "detail": "tokenizer_load_failed", "probes": []}
+    if not special_ids:
+        return {
+            "status": "no_special_ids",
+            "detail": "tokenizer_declares_no_special_ids",
+            "probes": [],
+        }
+
+    def _encode(text: str) -> tuple[int, ...]:
+        # Same call the backend's encode makes: no added specials, so any
+        # control token in the output came from the text itself.
+        return tuple(tokenizer.encode(text, add_special_tokens=False))
+
+    probes: list[dict[str, Any]] = []
+    for fmt in formats:
+        for case in cases:
+            try:
+                benign_ids = _encode(fmt.render(case.messages))
+                baseline = count_control_tokens(benign_ids, special_ids)
+            except Exception:  # noqa: BLE001 -- one bad pair degrades, not the run
+                for marker in HOSTILE_MARKER_STRINGS:
+                    probes.append(
+                        {
+                            "format": fmt.name,
+                            "fixture": case.id,
+                            "marker": marker,
+                            "status": "unavailable",
+                        }
+                    )
+                continue
+            for marker in HOSTILE_MARKER_STRINGS:
+                entry: dict[str, Any] = {
+                    "format": fmt.name,
+                    "fixture": case.id,
+                    "marker": marker,
+                    "status": "ok",
+                    "baseline": baseline,
+                }
+                try:
+                    hostile_ids = _encode(fmt.render(inject_hostile(case.messages, marker)))
+                    probe = check_isolation(benign_ids, hostile_ids, special_ids)
+                    entry["probed"] = probe.probed
+                    entry["delta"] = probe.delta
+                    entry["isolated"] = probe.isolated
+                except Exception:  # noqa: BLE001 -- one bad triple degrades
+                    entry["status"] = "unavailable"
+                probes.append(entry)
+
+    payload = summarize_probes(probes, len(special_ids))
+    return payload
+
+
 def _build_primary_tokenizer(root: Path) -> Any:
     """Load the checkpoint's tokenizer for measurement (never weights).
 
