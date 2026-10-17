@@ -8,7 +8,7 @@ import os
 import re
 import stat
 from bisect import bisect_left
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from importlib.metadata import version
@@ -121,8 +121,16 @@ def _model_assets(root: Path) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
-def _manifest(root: Path, names: tuple[str, ...]) -> list[dict[str, Any]]:
-    records = []
+def _manifest_entries(
+    root: Path, names: tuple[str, ...]
+) -> Iterator[tuple[dict[str, Any], tuple[int, int, int]]]:
+    """Yield ``(record, fingerprint)`` per asset.
+
+    The record is the public manifest entry (name, byte size, sha256). The
+    fingerprint is the cheap ``(st_size, st_mtime_ns, st_ino)`` stat triple
+    captured from the same file that was hashed, for later re-verification
+    without re-reading the file (see :func:`_verify_manifest_fingerprints`).
+    """
     for name in names:
         path = _member(root, name)
         fd = _open_regular_read(path)
@@ -139,14 +147,52 @@ def _manifest(root: Path, names: tuple[str, ...]) -> list[dict[str, Any]]:
             if fd != -1:
                 os.close(fd)
         after = path.stat()
-        if (before.st_size, before.st_mtime_ns, before.st_ino) != (
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ino,
-        ):
+        fingerprint = (after.st_size, after.st_mtime_ns, after.st_ino)
+        if (before.st_size, before.st_mtime_ns, before.st_ino) != fingerprint:
             raise ValueError("assets_changed")
-        records.append({"name": name, "bytes": after.st_size, "sha256": digest.hexdigest()})
-    return records
+        record = {"name": name, "bytes": after.st_size, "sha256": digest.hexdigest()}
+        yield record, fingerprint
+
+
+def _manifest(root: Path, names: tuple[str, ...]) -> list[dict[str, Any]]:
+    return [record for record, _ in _manifest_entries(root, names)]
+
+
+def _manifest_with_fingerprints(
+    root: Path, names: tuple[str, ...]
+) -> tuple[list[dict[str, Any]], dict[str, tuple[int, int, int]]]:
+    """Full sha256 manifest plus cheap stat fingerprints for later re-check."""
+    records: list[dict[str, Any]] = []
+    fingerprints: dict[str, tuple[int, int, int]] = {}
+    for record, fingerprint in _manifest_entries(root, names):
+        records.append(record)
+        fingerprints[record["name"]] = fingerprint
+    return records, fingerprints
+
+
+def _verify_manifest_fingerprints(
+    root: Path, names: tuple[str, ...], fingerprints: dict[str, tuple[int, int, int]]
+) -> None:
+    """Cheap re-check that assets have not changed since they were manifested.
+
+    Compares the current ``(st_size, st_mtime_ns, st_ino)`` stat triple of
+    each asset against the fingerprint captured while it was hashed, raising
+    ``ValueError("assets_changed")`` on any mismatch. This detects file
+    replacement (new inode), in-place modification (new mtime/size), and
+    deletion -- everything the full re-hash detected except a content swap
+    that preserves all three stat fields, which would require nanosecond
+    mtime forgery during the load window. Used by the backend to verify
+    assets are unchanged after transformers reads them, without hashing
+    multi-gigabyte weight files a second time.
+    """
+    for name in names:
+        path = _member(root, name)
+        try:
+            stat = path.stat()
+        except OSError:
+            raise ValueError("assets_changed") from None
+        if (stat.st_size, stat.st_mtime_ns, stat.st_ino) != fingerprints[name]:
+            raise ValueError("assets_changed")
 
 
 def _ids_valid(value: object, vocab_size: int) -> bool:
@@ -800,9 +846,15 @@ class LocalHFBackend:
             effective_device = "cuda:0" if device == "cuda" else "cpu"
             root = _directory(model_path)
             model_names = _model_assets(root)
+            # Hash the weight files once (the sha256 record for the report).
+            # The cheap stat fingerprints below re-verify the assets are
+            # unchanged after transformers reads them, without hashing
+            # multi-gigabyte files a second time.
+            model_records, model_prints = _manifest_with_fingerprints(root, model_names)
+            tok_records, tok_prints = _manifest_with_fingerprints(root, ("tokenizer.json",))
             before = {
-                "model": _manifest(root, model_names),
-                "tokenizer": _manifest(root, ("tokenizer.json",)),
+                "model": model_records,
+                "tokenizer": tok_records,
             }
             raw_config = _read_json(_member(root, "config.json"))
             if raw_config.get("model_type") not in {"gpt2", "llama"}:
@@ -900,15 +952,11 @@ class LocalHFBackend:
                 type(t) is not int or not 0 <= t < vocab_size for t in tokenizer_ids
             ):
                 raise ValueError("tokenizer_model_vocabulary_mismatch")
-            after = {
-                "model": _manifest(root, model_names),
-                "tokenizer": _manifest(root, ("tokenizer.json",)),
-            }
-            if before != after:
-                raise ValueError("assets_changed")
+            _verify_manifest_fingerprints(root, model_names, model_prints)
+            _verify_manifest_fingerprints(root, ("tokenizer.json",), tok_prints)
             identity = {
                 "adapter": "local-hf-greedy-v1",
-                "assets": after,
+                "assets": before,
                 "versions": {
                     p: version(p) for p in ("torch", "transformers", "tokenizers", "safetensors")
                 },

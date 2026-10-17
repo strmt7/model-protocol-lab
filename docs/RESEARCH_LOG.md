@@ -4652,3 +4652,31 @@ HTML-report scope (html.escape path), unaffected.
 (stdlib message wording, deprecated APIs) came back clean -- the cycle-113
 null-byte message was the only one; the package uses no datetime/deprecated
 stdlib APIs and asserts stdlib exceptions by type only.
+
+## Cycle 115 — single-pass weight manifesting (2026-10-17)
+
+**Research question:** can the backend's double full-hash of weight files be
+eliminated without weakening the assets-changed-during-load guarantee
+(residual risk #3 in `docs/RELEASE_READINESS_0.1.0.md`)?
+
+**Method:** traced `LocalHFBackend.__init__`: `_manifest` hashed every weight
+file before load, transformers read them again during
+`AutoModelForCausalLM.from_pretrained`, then `_manifest` hashed them a third
+time for the before/after comparison. Refactored `_manifest` into
+`_manifest_entries` (yields record + stat fingerprint), keeping `_manifest`
+byte-identical for `doctor.py`; added `_manifest_with_fingerprints` and
+`_verify_manifest_fingerprints` (cheap `(st_size, st_mtime_ns, st_ino)`
+re-check). The backend now hashes once and stat-verifies after load.
+
+**Verification:** 9 new tests pin the contract — record equivalence with
+`_manifest`, fingerprint-is-stat-triple, modification/replacement/deletion
+detection, backend-never-calls-`_manifest` (patched to explode), and
+fail-closed init when the post-load check fires. Full battery green:
+pytest 4155 collected, unittest 4155 (both runners agree exactly),
+coverage 98%, ruff/mypy-strict/bandit clean.
+
+**Trade-off (documented in code):** a content swap preserving size, mtime_ns
+*and* inode would evade the stat check; catching it needs the full re-hash.
+Judged acceptable: it requires nanosecond mtime forgery inside the load
+window by a local writer, while the check still catches replacement,
+modification, and deletion — every realistic change.
