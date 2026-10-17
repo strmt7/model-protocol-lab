@@ -70,9 +70,12 @@ Minor observations (not bugs):
   ``split_to_json_text`` (already enshrined by an existing hardening test);
   the module docstring's "16,384 characters per cell" does not mention the
   staging. Minor.
-- A null byte in the path raises bare ``ValueError: embedded null byte``
+- A null byte in the path raises bare ``ValueError`` from the interpreter
   (the ``OSError`` handler does not catch it) in both readers -- still a
   ``ValueError``, matching the existing loose contract for that input.
+  The exact message is CPython-version-dependent ("embedded null byte" on
+  older releases, "embedded null character" on newer ones); the test
+  matches the stable core of both.
 
 Mutation gate: 4 mutants on /tmp copies -- (1) partition assignment ignored,
 (2) partition validation dropped, (3) NFC normalization removed from
@@ -491,7 +494,10 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
 
     def test_null_byte_in_path(self):
         tmp_path = self.tmp_path
-        with self.assertRaisesRegex(ValueError, "embedded null byte"):
+        # CPython changed the message across versions: "embedded null byte"
+        # (<=3.12.3, 3.11) vs "open: embedded null character in path"
+        # (newer 3.12 patches, 3.13+). Match the stable core of both.
+        with self.assertRaisesRegex(ValueError, "embedded null (byte|character)"):
             read_authoring_file(tmp_path / "a\0b.csv")
 
     def test_non_path_types_rejected(self):
