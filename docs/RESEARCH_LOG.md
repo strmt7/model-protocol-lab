@@ -4544,3 +4544,19 @@ unittest ordering interaction specific to CI's environment.
 meta-test). Do not force the conversion. The pytest-style file is fully
 tested under the pytest runner; the unittest gate's coverage of this file
 is the only gap, and it is explicit and documented.
+
+## 2026-10-17 — Cycle 111: end-to-end determinism audit
+
+**Question:** Does the project's determinism contract (deterministic JSON/HTML
+reports) hold end-to-end, across separate processes with different hash seeds?
+
+**Method:** Built the tiny GPT-2 checkpoint once (fixed torch seed 1234), then
+ran `mpl run` twice via subprocess with `PYTHONHASHSEED=1` vs `PYTHONHASHSEED=2`,
+byte-comparing `results.json` and `report.html`. Tested the base path and the
+`--mutate` + `--sensitivity-sweep` path (more candidates = more ordering surface).
+
+**Result:** CLEAN. Both artifacts byte-identical across runs on every path.
+No set-iteration or hash-ordering leaks into serialized output (the one `set`
+in the reporting path, `change_budgets` in experiments.py, is sorted before
+serialization). Locked in as `tests/test_cycle111_determinism_audit.py`, which
+re-runs the pipeline twice with differing hash seeds on every CI run.
