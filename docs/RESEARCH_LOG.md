@@ -4680,3 +4680,32 @@ coverage 98%, ruff/mypy-strict/bandit clean.
 Judged acceptable: it requires nanosecond mtime forgery inside the load
 window by a local writer, while the check still catches replacement,
 modification, and deletion — every realistic change.
+
+## Cycle 116 (2026-10-17) — CPU budget for checkpoint-controlled Jinja renders
+
+**Research question:** the memory-bomb mitigations (1 MB template-source
+cap, RLIMIT_AS around the render, 1 MB output cap) bound *allocation*, but a
+hostile `chat_template` can burn CPU without allocating
+(`{% for i in range(10**12) %}{% set x = i %}{% endfor %}`). Can the render's
+CPU time be bounded without the cost of a per-render subprocess?
+
+**Design:** a SIGALRM wall-clock watchdog (`_render_with_time_budget` in
+`doctor.py`) around `_render_with_memory_cap`. Jinja compiles templates to
+Python bytecode, so the interpreter services SIGALRM promptly even inside a
+hostile loop; the handler raises `_RenderTimeBudgetExceeded` (a `ValueError`,
+deliberately not `KeyboardInterrupt`), which the existing per-pair
+`except Exception` degrades to `"unavailable"`. Budget is 10 s, matching the
+`template_diff` fragmentation budget; legitimate renders take milliseconds.
+The previous SIGALRM handler and timer are saved/restored, so caller-owned
+alarms are never lost. SIGALRM only fires in the main thread and
+`setitimer` is Unix-only, so off-main-thread / non-Unix renders fall back to
+the pre-existing unbounded behavior (documented) -- the same residual as
+HF's own `apply_chat_template`.
+
+**Verification:** 8 new tests pin the contract -- real CPU burn aborts at
+the budget (also verified end-to-end against an actual Jinja
+`range(10**12)` loop: aborted at 2.00 s on a 2 s budget), `ValueError`-not-
+`KeyboardInterrupt` lineage, legitimate render unaffected, alarm disarmed
+after return, previous handler/timer restored, non-main-thread fallback
+returns the result, `MemoryError` from the memory cap still propagates, and
+`budget_s=0` disables the watchdog. Full battery green (see cycle report).

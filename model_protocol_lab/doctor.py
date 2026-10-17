@@ -12,7 +12,9 @@ import contextlib
 import json
 import os
 import shlex
+import signal
 import struct
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -52,12 +54,24 @@ _TOKENIZER_JSON_CAP = 128 * 1024 * 1024
 # are a few KB; a hostile one can render unbounded text (e.g.
 # "{{ 'x' * 10**9 }}"), so the template source and its rendered output are
 # both capped and oversized pairs degrade to "unavailable" instead of
-# feeding a memory bomb to the encoder. (The Jinja render itself still runs
-# inside transformers' sandbox; a hostile template can burn CPU there --
-# the same exposure as HF's own apply_chat_template. Run unfamiliar
-# checkpoints with resource limits.)
+# feeding a memory bomb to the encoder. The render itself runs under a
+# transient address-space cap (memory bombs -> MemoryError) and a SIGALRM
+# wall-clock budget (CPU-burn loops -> _RenderTimeBudgetExceeded); both
+# degrade the pair to "unavailable". (Jinja still executes inside
+# transformers' sandbox; resource exhaustion beyond these bounds -- e.g. on
+# non-Unix platforms or off the main thread, where the OS guards cannot be
+# installed -- is the same exposure as HF's own apply_chat_template. Run
+# unfamiliar checkpoints with resource limits.)
 _CHAT_TEMPLATE_MAX_CHARS = 1_000_000
 _RENDERED_MAX_CHARS = 1_000_000
+# Wall-clock budget for a single checkpoint-controlled Jinja render. The
+# address-space cap in _render_with_memory_cap bounds memory bombs, but a
+# template can also burn CPU without allocating (e.g.
+# "{% for i in range(10**12) %}{% set x = i %}{% endfor %}"); the SIGALRM
+# watchdog in _render_with_time_budget aborts such renders. 10 s matches the
+# template_diff fragmentation budget; legitimate renders complete in
+# milliseconds, so the budget only ever fires on hostile templates.
+_RENDER_CPU_BUDGET_S = 10.0
 
 
 def _tokenizer_file(root: Path) -> Path:
@@ -748,6 +762,76 @@ def _render_with_memory_cap(tokenizer: Any, conversation: list[dict[str, str]]) 
             resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
 
 
+class _RenderTimeBudgetExceeded(ValueError):
+    """A checkpoint's Jinja chat template exceeded the render CPU budget.
+
+    A ``ValueError`` -- not ``KeyboardInterrupt`` -- so the per-pair handler
+    in :func:`template_conformance` degrades the pair to ``"unavailable"``
+    exactly like the memory-bomb path, and a budget expiry is never mistaken
+    for a user interrupt.
+    """
+
+
+def _render_with_time_budget(
+    tokenizer: Any,
+    conversation: list[dict[str, str]],
+    budget_s: float = _RENDER_CPU_BUDGET_S,
+) -> str:
+    """Render with a wall-clock budget around :func:`_render_with_memory_cap`.
+
+    The address-space cap bounds memory bombs, but a hostile ``chat_template``
+    can burn CPU without allocating -- e.g.
+    ``{% for i in range(10**12) %}{% set x = i %}{% endfor %}``. On Unix, in
+    the main thread, a one-shot ``SIGALRM`` (``setitimer(ITIMER_REAL)``)
+    bounds the render: Jinja compiles templates to Python bytecode, so the
+    interpreter services the signal promptly and the render aborts with
+    :class:`_RenderTimeBudgetExceeded`, which the caller's ``except
+    Exception`` degrades to ``"unavailable"``.
+
+    The previous ``SIGALRM`` handler and timer are saved and restored, so a
+    caller-owned alarm is never lost (its remaining time may shift by the
+    render duration -- acceptable for a lab tool). A non-positive
+    ``budget_s`` disables the watchdog (documented escape hatch). Outside
+    the main thread or on platforms without ``setitimer`` (Windows), the
+    render runs unbounded -- the pre-existing behavior -- and only the
+    memory cap and the post-render length check apply.
+    """
+    if budget_s <= 0:
+        return _render_with_memory_cap(tokenizer, conversation)
+    if not hasattr(signal, "setitimer"):
+        return _render_with_memory_cap(tokenizer, conversation)
+    if threading.current_thread() is not threading.main_thread():
+        # SIGALRM is delivered to the main thread only; arming a timer here
+        # would never fire.
+        return _render_with_memory_cap(tokenizer, conversation)
+
+    def _on_alarm(signum: int, frame: Any) -> None:
+        raise _RenderTimeBudgetExceeded(f"chat template render exceeded {budget_s:g}s CPU budget")
+
+    old_handler = signal.getsignal(signal.SIGALRM)
+    old_delay, old_interval = signal.getitimer(signal.ITIMER_REAL)
+    try:
+        signal.signal(signal.SIGALRM, _on_alarm)
+    except (OSError, ValueError, RuntimeError):
+        return _render_with_memory_cap(tokenizer, conversation)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, budget_s)
+    except (OSError, ValueError):
+        with contextlib.suppress(OSError, ValueError, RuntimeError):
+            signal.signal(signal.SIGALRM, old_handler)
+        return _render_with_memory_cap(tokenizer, conversation)
+    try:
+        return _render_with_memory_cap(tokenizer, conversation)
+    finally:
+        with contextlib.suppress(OSError, ValueError):
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        with contextlib.suppress(OSError, ValueError, RuntimeError):
+            signal.signal(signal.SIGALRM, old_handler)
+        if old_delay > 0:
+            with contextlib.suppress(OSError, ValueError):
+                signal.setitimer(signal.ITIMER_REAL, old_delay, old_interval)
+
+
 def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -839,7 +923,7 @@ def template_conformance(
                 hand_ids = tuple(
                     tokenizer.encode(fmt.render(case.messages), add_special_tokens=False)
                 )
-                rendered = _render_with_memory_cap(
+                rendered = _render_with_time_budget(
                     tokenizer,
                     [{"role": m.role, "content": m.content} for m in case.messages],
                 )
