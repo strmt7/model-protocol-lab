@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Performance (cycle 115 — single-pass weight manifesting, 2026-10-17)
+
+- `LocalHFBackend` no longer sha256-hashes every weight file twice per run.
+  It hashes once (the sha256 record kept in `identity["assets"]`) and then
+  re-verifies the assets are unchanged after transformers loads the model
+  with the cheap `(st_size, st_mtime_ns, st_ino)` stat fingerprint captured
+  while hashing (`_manifest_with_fingerprints` /
+  `_verify_manifest_fingerprints` in `backends.py`). This closes residual
+  risk #3 from the release-readiness report (double full read of
+  multi-gigabyte checkpoints). The fail-closed contract is unchanged:
+  replacement (new inode), in-place modification (new mtime/size), and
+  deletion all raise `ValueError("assets_changed")` / fail backend init.
+  Trade-off documented in code: a content swap preserving all three stat
+  fields (nanosecond mtime forgery inside the load window) would need the
+  full re-hash to detect; the stat triple catches every realistic change.
+  New `tests/test_cycle115_manifest_fingerprint_audit.py` (9 tests).
+
 ### Security (cycle 114 — bidi-control sanitization, 2026-10-17)
 
 - Closed a terminal-spoofing gap in all four operator-visible sanitizers
