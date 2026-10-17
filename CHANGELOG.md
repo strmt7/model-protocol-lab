@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 113 — test_cycle66 conversion diagnostic re-attempt, 2026-10-17)
+
+- Re-attempted the `tests/test_cycle66_fixture_loading_audit.py` pytest-to-
+  `unittest.TestCase` conversion (reverted in cycle 108 after a CI-only
+  3.12/3.13 failure with no diagnosable output) as a controlled diagnostic
+  experiment: cycle 112's CI failure-artifact upload now captures the exact
+  failing test output if CI fails again, so the root cause can finally be
+  identified instead of guessed. The `_UNITTEST_EXEMPT` entry for this file
+  was lifted for the experiment. Both runners now agree exactly: pytest
+  4141 → 4132 collected (parametrize cases consolidate into subTests),
+  unittest 4067 → 4132. README/VALIDATION.md counts updated.
+
 ### Added (cycle 112 — CI failure diagnosability, 2026-10-17)
 
 - The CI `test` job now captures the full `unittest discover` output to a file
