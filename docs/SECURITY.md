@@ -180,11 +180,16 @@ duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
    on 1500 random byte-level trials or an exhaustive 256-combination scan
    outside the fragment case). Unfixable through the `Backend` protocol;
    documented in `docs/USAGE.md` §8.2.
-6. A hostile Jinja chat template can still burn CPU inside the render itself
-   (transformers' sandbox restricts code execution, not resource use) — the
-   same exposure as HF's own `apply_chat_template`. Template source and
-   rendered output are capped at 1 MB each (round-3 fix); run unfamiliar
-   checkpoints with resource limits.
+6. A hostile Jinja chat template can burn CPU inside the render itself
+   (transformers' sandbox restricts code execution, not resource use).
+   Template source and rendered output are capped at 1 MB each (round-3
+   fix); on Unix, in the main thread, each render additionally runs under
+   a 10 s SIGALRM wall-clock budget (`_render_with_time_budget`) and
+   aborts with `_RenderTimeBudgetExceeded`, degrading the pair to
+   `"unavailable"` (cycle-116 fix). Residual: off the main thread or on
+   non-Unix platforms the watchdog cannot be installed and the render
+   runs unbounded -- the same exposure as HF's own `apply_chat_template`.
+   Run unfamiliar checkpoints with resource limits.
 7. `template_diff` degrades (not hangs) after a 10 s budget per
    (format, fixture) pair on adversarially fragmented inputs; a fully
    hostile checkpoint can still cost ~10 s per pair before each degrades.

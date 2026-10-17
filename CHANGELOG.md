@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security (cycle 116 — CPU budget for Jinja renders, 2026-10-17)
+
+- Closed the remaining hostile-template CPU-burn residual: a checkpoint's
+  Jinja `chat_template` could burn CPU without allocating (e.g.
+  `{% for i in range(10**12) %}{% set x = i %}{% endfor %}`), which the
+  RLIMIT_AS memory cap cannot see. Each render in `template_conformance`
+  now runs under a 10 s SIGALRM wall-clock budget
+  (`_render_with_time_budget` in `doctor.py`, matching the `template_diff`
+  fragmentation budget); expiry raises `_RenderTimeBudgetExceeded`
+  (a `ValueError`, not `KeyboardInterrupt`) so the per-pair handler degrades
+  the pair to `"unavailable"` exactly like the memory-bomb path. The
+  previous SIGALRM handler/timer are saved and restored; off the main
+  thread or on platforms without `setitimer` the render runs unbounded
+  (documented pre-existing behavior). Verified against a real Jinja
+  CPU-burn loop: aborts at the budget. New
+  `tests/test_cycle116_render_cpu_budget_audit.py` (8 tests).
+
 ### Performance (cycle 115 — single-pass weight manifesting, 2026-10-17)
 
 - `LocalHFBackend` no longer sha256-hashes every weight file twice per run.
