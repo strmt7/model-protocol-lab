@@ -4813,3 +4813,31 @@ of scope). Mutation-tested: dropping either keyword or adding a
 `torch.load` call is caught at the exact call site. `docs/SECURITY.md`
 supply-chain section documents the CVE-2025-32434 / CVE-2026-24747
 posture; CHANGELOG entry added.
+
+## Cycle 120 (2026-10-17) — selection-rule extraction + property tests
+
+**Research:** the lab's conservative selection rule ("exactly one
+candidate passing every search fixture wins; ties and failures abstain")
+is the methodological core, but its decision logic was inlined in
+`run_experiment` and reachable only through backend-backed integration
+tests. A nested `decision_at` helper inside the token-budget frontier
+computation already showed the value of a pure decision function for a
+different (per-budget, name-based) context.
+
+**Plan:** extract the search-phase decision into a pure
+`experiments._select_winner(winners, cancelled) -> (decision, selected |
+None)` with no behavior change, then exhaustively pin the decision
+table with Hypothesis properties (both runners collect the TestCase).
+Mutation-test the helper: 4 mutants, each must be killed.
+
+**Built:** `_select_winner` in `model_protocol_lab/experiments.py`;
+`tests/test_cycle120_selection_rule_properties.py` (7 tests): decision
+vocabulary, cancel dominance, unique-winner selection with object
+identity, all-fail/tie abstention, order invariance, and a
+count-parameterized decision table. Mutation results: 4/4 killed
+(`== 1` -> `>= 1` selects on ties; swapped abstention labels; dropped
+cancel branch; always-select). Methodology note: the first mutation
+attempt silently mutated the nested `decision_at` helper instead (same
+`len(winners) == 1` source pattern) and "survived" — anchor mutation
+patterns with surrounding context (indentation, return shape) to the
+intended function. CHANGELOG entry added.
