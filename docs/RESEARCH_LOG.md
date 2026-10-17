@@ -5015,3 +5015,45 @@ Mutation results: 4/4 killed (dropped winner axis; ignored robustness
 change; broken span merge; misreported availability).
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 127 (2026-10-17) — flip-span attribution
+
+**Research:** cycles 121-126 built the frontier triptych (chart, ribbon,
+margin trajectory, floor readout, diff comparison), but the natural
+operator question stayed unanswered: *why* does the decision flip in
+each span? The recorded minimal passing budgets make that answer exact
+and post-hoc -- no new model calls, no sampling.
+
+**Plan:** record `flip_attribution` on the `budget_frontier` payload: per
+flip span, the (candidate, fixture) observations whose min_budget falls
+inside the span, sorted by (min_budget, candidate, fixture). Rendered in
+the HTML frontier section as an escaped attribution line under each span
+(empty crossings rendered honestly: "the decision already differs at its
+start"). Defensive against foreign/older payloads (missing or malformed
+attribution never raises).
+
+**Key finding (proved):** while writing tests, hand-computed expectations
+for a "two disjoint spans" scenario kept disagreeing with the
+implementation. Investigation proved the implementation right: the
+per-budget full-passer set only grows with the budget, and the decision
+is a pure function of that set, so once the native decision is reached
+it can never be left again. Therefore `flip_ranges` is always `[]` or a
+single prefix span `[[1, K]]` -- verified by a 2000-trial brute-force
+sweep (zero counterexamples) and pinned as a property test. This also
+explains why `safe_budget_floor` is simply K+1. Documented in the
+`budget_frontier` docstring and USAGE.md section 8.6.
+
+**Built:** attribution computation in `experiments.budget_frontier`
+(+ docstring), `.attribution` CSS + per-span rendering in
+`reporting._frontier_section`, `tests/test_cycle127_flip_attribution_audit.py`
+(18 tests). Mutation results: 4/4 killed (unbounded attribution,
+exclusive upper bound, dropped sort -- caught only after adding an
+inverted-order case --, unescaped rendering).
+
+**Differentiation review:** per-span causal attribution of verdict
+fragility, derived exactly from recorded data with a proved structural
+invariant, is analysis no experiment-tracking tool in this space offers;
+it stays professional (no hype, honest "candidate causes" framing, empty
+spans not overclaimed).
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

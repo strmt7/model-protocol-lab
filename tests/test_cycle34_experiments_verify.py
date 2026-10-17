@@ -309,6 +309,25 @@ def oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision,
             if not flip_ranges
             else (flip_ranges[-1][1] + 1 if flip_ranges[-1][1] < max_new_tokens else None)
         ),
+        "flip_attribution": [
+            {
+                "span": [lo, hi],
+                "crossings": [
+                    {"candidate": name, "fixture": fid, "min_budget": mb}
+                    for mb, name, fid in sorted(
+                        (mb, name, fid)
+                        for name in sorted(candidates)
+                        for fid, mb in zip(
+                            candidates[name]["fixture_ids"],
+                            candidates[name]["min_budget_per_fixture"],
+                            strict=True,
+                        )
+                        if mb is not None and lo <= mb <= hi
+                    )
+                ],
+            }
+            for lo, hi in flip_ranges
+        ],
     }
 
 
