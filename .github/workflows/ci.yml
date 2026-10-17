@@ -39,6 +39,11 @@ jobs:
   test:
     name: tests (Python ${{ matrix.python-version }}, with hf extra)
     runs-on: ubuntu-latest
+    # Least privilege: checkout needs contents:read; the pip cache and the
+    # failure-artifact upload need actions read/write.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -52,8 +57,22 @@ jobs:
           cache-dependency-path: "pyproject.toml"
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev,hf]"
-      - run: coverage run -m unittest discover -s tests -t .
+      # Capture the full unittest output to a file so CI-only failures are
+      # diagnosable via the uploaded artifact (job logs are not
+      # API-accessible). pipefail preserves unittest's exit status.
+      - name: run tests (output captured)
+        run: |
+          set -o pipefail
+          coverage run -m unittest discover -s tests -t . 2>&1 | tee "$RUNNER_TEMP/unittest-py${{ matrix.python-version }}.log"
       - run: coverage report --fail-under=95
+      - name: upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unittest-log-py${{ matrix.python-version }}
+          path: ${{ runner.temp }}/unittest-py${{ matrix.python-version }}.log
+          if-no-files-found: warn
+          retention-days: 7
 
   security:
     name: dependency and static security audit
