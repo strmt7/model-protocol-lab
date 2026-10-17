@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 118 — render watchdog hardening, 2026-10-17)
+
+- Red-team audit of the cycle-116 SIGALRM render watchdog found two
+  robustness gaps in `model_protocol_lab/doctor.py::_render_with_time_budget`,
+  both fixed: (1) a non-finite `budget_s` (`float("inf")`) reached
+  `setitimer`, which raises `OverflowError` -- not covered by the
+  `except (OSError, ValueError)` fallback -- violating the defensive
+  "fall back to the unbounded render" contract; non-finite budgets now
+  disable the watchdog like non-positive ones; (2) teardown did not block
+  `SIGALRM` while disarming the timer and restoring the previous handler,
+  so an alarm pending in that window could fire mid-restore and -- because
+  `_RenderTimeBudgetExceeded` is a `ValueError` -- be swallowed by the
+  cleanup guards, leaving the handler inconsistent; teardown now blocks
+  `SIGALRM` via `pthread_sigmask` across the restore. Regression tests in
+  `tests/test_cycle118_render_watchdog_hardening_audit.py` (4 tests).
+
 ### Security (cycle 117 — local-only loading invariant, 2026-10-17)
 
 - Pinned the local-only model loading invariant with AST regression tests
