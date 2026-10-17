@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 109 — Hypothesis properties for Split anti-leakage, 2026-10-17)
+
+- New `tests/test_cycle109_split_properties.py`: 5 Hypothesis property tests
+  verifying the universal anti-leakage guarantees of `model_protocol_lab.core.Split`
+  (the contamination firewall). For arbitrary NFC/NFD string pairs: byte-different
+  but canonically-equal fixture IDs are always rejected as duplicates; NFC-equal
+  groups across the split are always rejected; NFC-equal message content across
+  the split is always rejected; valid Splits preserve byte-exact storage (NFD
+  stays NFD — only comparisons normalize); and distinct IDs/groups/messages
+  always construct successfully. Mutation-tested: removing NFC normalization
+  from any of the three checks is caught by exactly the corresponding property
+  test. Pytest 4129 → 4134; unittest 4055 → 4060. README/VALIDATION.md counts
+  updated.
+
 ### Fixed (cycle 108 — redo TestCase conversions one file at a time, 2026-10-17)
 
 - Added the TestDualRunnerContribution meta-tests to
