@@ -4814,6 +4814,32 @@ of scope). Mutation-tested: dropping either keyword or adding a
 supply-chain section documents the CVE-2025-32434 / CVE-2026-24747
 posture; CHANGELOG entry added.
 
+## Cycle 122 (2026-10-17) — decision ribbon on the frontier chart
+
+**Research:** cycle 121's chart answers "how many fixtures pass at each
+budget" but not the lab's core question: *what would the selection
+decision have been?* The `decision_steps` data already existed (it feeds
+the flip-ranges text list), but only as prose. A visual decision band
+makes budget-sensitivity scannable at a glance.
+
+**Plan:** a ribbon band under the chart's x-axis — one rect per decision
+span, colored by outcome (selected/ambiguous/no candidate), with legend
+swatches and aria-label coverage. Same integer-arithmetic determinism;
+darker shades that never collide with the candidate palette.
+
+**Built:** the ribbon in `_frontier_chart_svg` plus
+`tests/test_cycle122_decision_ribbon_audit.py` (13 tests): hand-derived
+rect geometry, full-width tiling proof, legend/aria checks,
+missing/malformed `decision_steps` robustness, 3-mutant mutation gate.
+
+**Differentiation review:** the chart-plus-ribbon now shows, in one
+deterministic vector graphic, both *how close* each candidate is and
+*what the lab would have decided* at every budget — the exact
+robustness story the conservative selection rule needs, printable and
+offline-safe.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.
+
 ## Cycle 121 (2026-10-17) — token-budget frontier chart
 
 **Research:** the report's token-budget frontier section showed only

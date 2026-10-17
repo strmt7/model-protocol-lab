@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 122 — decision ribbon on the frontier chart, 2026-10-17)
+
+- The token-budget frontier chart now carries a decision ribbon: a
+  horizontal band under the x-axis coloring every budget span by the
+  post-hoc selection outcome (selected / ambiguous / no candidate),
+  drawn from the recorded `decision_steps`. Same integer-arithmetic
+  determinism as the curves, distinct darker shades that never collide
+  with the candidate palette, decision swatches first in the legend in
+  fixed order, and per-span coverage in the SVG `aria-label`.
+- New `tests/test_cycle122_decision_ribbon_audit.py` (13 tests):
+  hand-derived ribbon geometry (including an ambiguous span), tiling
+  proof (spans cover the full width with no gaps/overlaps), legend and
+  aria-label checks, missing/malformed `decision_steps` robustness, and
+  a 3-mutant mutation gate (control passes).
+
 ### Added (cycle 121 — token-budget frontier chart, 2026-10-17)
 
 - New multi-series token-budget frontier chart in the HTML report

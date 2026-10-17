@@ -53,10 +53,13 @@ def _example_frontier() -> dict:
       y(c) = (3-c)*80     -> y(0)=240, y(1)=160, y(2)=80, y(3)=0
     Sorted names: alpha -> #38bdf8, beta -> #22c55e. Winner (alpha)
     draws last with stroke-width 3.
+    Decision: no candidate fully passes at budgets 1..8, alpha alone at
+    9..10 -> ribbon spans [1,8] no_candidate, [9,10] selected.
     """
     return {
         "max_new_tokens": 10,
         "native_winner": "alpha",
+        "decision_steps": [[1, "no_candidate", None], [9, "selected", "alpha"]],
         "candidates": {
             "beta": {
                 "fixture_ids": ["f1", "f2", "f3"],
@@ -144,18 +147,24 @@ class TestHandDerivedGeometry(unittest.TestCase):
 
     def test_legend_order_and_colors(self) -> None:
         svg = _frontier_chart_svg(_example_frontier())
-        legend = re.findall(r"<text[^>]*>([^<]*)</text>", svg)[-2:]
-        self.assertEqual(legend, ["beta", "alpha"])
+        # Decision swatches key the ribbon and come first (fixed order:
+        # selected, ambiguous, no candidate — only those present), then
+        # the candidates in draw order.
+        legend = re.findall(r"<text[^>]*>([^<]*)</text>", svg)[-4:]
+        self.assertEqual(legend, ["selected", "no candidate", "beta", "alpha"])
         # Legend swatch colors match the path stroke colors per candidate.
-        swatches = re.findall(
-            r'<rect x="\d+" y="\d+" width="10" height="10" fill="([^"]+)"/>'
-            r"<text[^>]*>([^<]+)</text>",
-            svg,
-        )
-        self.assertEqual(
-            {name: fill for fill, name in swatches},
-            {"beta": "#22c55e", "alpha": "#38bdf8"},
-        )
+        swatches = {
+            name: fill
+            for fill, name in re.findall(
+                r'<rect x="\d+" y="\d+" width="10" height="10" fill="([^"]+)"/>'
+                r"<text[^>]*>([^<]+)</text>",
+                svg,
+            )
+        }
+        # Candidate swatches keep their palette colors (the legend now
+        # also carries decision swatches for the ribbon; cycle 122).
+        self.assertEqual(swatches["beta"], "#22c55e")
+        self.assertEqual(swatches["alpha"], "#38bdf8")
 
     def test_aria_label_states_exact_data(self) -> None:
         svg = _frontier_chart_svg(_example_frontier())
@@ -181,6 +190,7 @@ class TestDeterminism(unittest.TestCase):
         reversed_frontier = {
             "max_new_tokens": 10,
             "native_winner": "alpha",
+            "decision_steps": [[1, "no_candidate", None], [9, "selected", "alpha"]],
             "candidates": dict(reversed(list(forward["candidates"].items()))),
         }
         self.assertEqual(_frontier_chart_svg(forward), _frontier_chart_svg(reversed_frontier))
@@ -324,6 +334,7 @@ class TestMutationGate(unittest.TestCase):
         reversed_frontier = {
             "max_new_tokens": 10,
             "native_winner": "alpha",
+            "decision_steps": [[1, "no_candidate", None], [9, "selected", "alpha"]],
             "candidates": dict(reversed(list(forward["candidates"].items()))),
         }
         self.assertNotEqual(

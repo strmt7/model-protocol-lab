@@ -7,11 +7,11 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **4203 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **4216 tests collected**
   (cycle 115, 2026-10-17; collection only — full green
   executions are the coordinator's gate). Subtests numbered in the 68k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **4203 tests** (cycle 121,
+- `python -m unittest discover -s tests -t .` — **4216 tests** (cycle 122,
   2026-10-17; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
