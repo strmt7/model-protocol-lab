@@ -5089,3 +5089,44 @@ turns the frontier from a chart into a debugging tool. Professional:
 exact, normalized, sanitized, no overclaim.
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 129 (2026-10-17) — selection-rule consistency audit
+
+**Research:** every frontier artifact (cycles 121-128: decision steps,
+flip spans, safe floor, attribution, and all their diff comparisons)
+rests on the frontier's local `decision_at` matching the real pipeline
+(`run_experiment` collects winners via
+`summary["exact_and_boundary_passes"] == planned_count`, decides via
+`_select_winner`). A divergence would silently corrupt the entire
+robustness story. Audited the full chain instead of assuming it.
+
+**Finding:** exactly consistent within the completed-decision contract.
+`_summary` counts `exact_match and boundary_found` without checking
+status -- but `exact_match` is gated on `status == "completed"` at the
+single `Observation` construction site (core.py), so the predicates are
+equivalent; the frontier's explicit status check is defense-in-depth for
+foreign payloads (fail-closed: can only under-count). `aggregate_eligible`
+implies full planned-count coverage with all-completed observations, so
+`n_fixtures == planned_count`. A passing observation's boundary completes
+inside its recorded output, so `min_budget <= max_new_tokens` always and
+`decision_at(max)` is the recorded native decision by construction.
+
+**Sharp edge found during mutation:** the status gate is load-bearing
+only for empty-expected fixtures (failed observations record answer "",
+so without the gate an empty-expected failure would count as a pass).
+Pinned by a dedicated test; the naive mutant initially survived until
+that edge case was added -- the test now kills it.
+
+**Built:** consistency theorem documented in the `budget_frontier`
+docstring; `tests/test_cycle129_selection_consistency_audit.py`
+(10 tests): end-to-end post-hoc-vs-recorded agreement across four real
+run scenarios, the three invariants, the foreign-payload gate,
+decision-step coverage. Mutation results: 2/2 killed (dropped
+construction gate; dropped frontier status gate).
+
+**Differentiation review:** a proved, regression-pinned equivalence
+between a diagnostic's re-derived decision rule and the production
+selection rule is the kind of correctness evidence that makes the
+frontier trustworthy rather than decorative.
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.

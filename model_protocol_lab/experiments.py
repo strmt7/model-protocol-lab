@@ -328,6 +328,24 @@ def budget_frontier(
     ``[[1, K]]`` with ``K < max_new_tokens``. The merge logic below keeps
     the general form; the invariant is pinned by
     ``test_flip_ranges_is_always_a_single_prefix_span``.
+
+    Consistency: the post-hoc ``decision_at`` used here is exactly the
+    pipeline's selection rule (``experiments._select_winner`` over the
+    candidates with every search fixture passing) within this function's
+    contract of a completed search decision. This rests on three
+    invariants, pinned by
+    ``tests/test_cycle129_selection_consistency_audit.py``: (1)
+    ``exact_match`` is gated on ``status == "completed"`` at the single
+    ``Observation`` construction site, so the pass predicate here is
+    exactly ``_summary``'s; the explicit status check below is
+    defense-in-depth for foreign payloads and can only under-count. (2)
+    ``aggregate_eligible`` reports cover every planned fixture, so the
+    per-candidate fixture count here is the pipeline's ``planned_count``.
+    (3) A passing observation's boundary completes inside its recorded
+    output, so every ``min_budget <= max_new_tokens`` and the post-hoc
+    full-passer set at the sweep maximum is the native one --
+    ``decision_at(max_new_tokens)`` is the recorded native decision by
+    construction.
     When a search entry carries its own
     ``boundary_token_ids`` (per-candidate boundaries, Cycle 2), that entry's
     curve is derived with its own boundary; entries without the field use
