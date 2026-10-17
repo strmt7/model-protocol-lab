@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 126 — safe budget floor readout, 2026-10-17)
+
+- The `budget_frontier` payload now records `safe_budget_floor`: the
+  first token budget from which the native selection decision never
+  flips again (1 when nothing flips; derived exactly from the merged
+  `flip_ranges`, which are exact by construction). The new pure
+  `reporting.safe_budget_floor` re-derives it defensively (re-sorted,
+  re-merged, clipped) for payloads recorded before the field existed; a
+  well-typed recorded field wins.
+- The HTML frontier section shows the floor as a first-class callout
+  ("safe floor ≥ K tokens", or an explicit no-floor warning), and both
+  the frontier chart and the margin trajectory chart draw a dashed amber
+  floor marker (legend swatch + aria-label, deterministic integer
+  geometry, no scripts).
+- `mpl diff-reports` compares the floor per side
+  (`frontier.safe_budget_floor`: old/new/changed), feeds the
+  `identical` verdict, and prints a `Safe budget floor: 6 -> (none)`
+  stderr line.
+- New `tests/test_cycle126_safe_budget_floor_audit.py` (30 tests):
+  exact derivation table, span re-validation, recorded-field
+  precedence, recorded-vs-derived agreement on real
+  `experiments.budget_frontier` payloads, HTML callout wording, chart
+  markers + determinism, and diff-reports wiring; 4/4 targeted mutants
+  killed.
+
 ### Added (cycle 125 — token-budget frontier comparison in diff-reports, 2026-10-17)
 
 - `mpl diff-reports` now compares the runs' `budget_frontier` payloads

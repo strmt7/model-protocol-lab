@@ -477,6 +477,11 @@ def oracle_budget_frontier(
         "decision_steps": decision_steps,
         "flip_ranges": flip_ranges,
         "budget_robust": not flip_ranges,
+        "safe_budget_floor": (
+            1
+            if not flip_ranges
+            else (flip_ranges[-1][1] + 1 if flip_ranges[-1][1] < max_new_tokens else None)
+        ),
     }
 
 

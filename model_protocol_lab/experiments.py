@@ -312,10 +312,13 @@ def budget_frontier(
 
     Returns per-candidate minimal budgets and pass-count step points,
     per-budget decision step points, the budget ranges where the decision
-    or winner differs from native (``flip_ranges``), and ``budget_robust``.
-    When a search entry carries its own ``boundary_token_ids`` (per-candidate
-    boundaries, Cycle 2), that entry's curve is derived with its own
-    boundary; entries without the field use the ``boundary`` argument.
+    or winner differs from native (``flip_ranges``), ``budget_robust``,
+    and ``safe_budget_floor`` -- the first budget from which the native
+    decision never flips again (1 when nothing flips, None when a flip
+    span reaches the sweep maximum). When a search entry carries its own
+    ``boundary_token_ids`` (per-candidate boundaries, Cycle 2), that entry's
+    curve is derived with its own boundary; entries without the field use
+    the ``boundary`` argument.
     Raises ValueError when the search did not complete (there is no native
     decision to compare against) or the inputs are malformed.
     """
@@ -448,6 +451,18 @@ def budget_frontier(
             flip_ranges[-1][1] = end
         else:
             flip_ranges.append([start, end])
+    # The safe budget floor is exact by construction: flip_ranges are
+    # merged, sorted spans over 1..max_new_tokens where the decision
+    # differs from native, so the native decision holds unchanged from
+    # the budget after the last span onward -- or nowhere, when a span
+    # reaches the sweep maximum.
+    safe_floor: int | None
+    if not flip_ranges:
+        safe_floor = 1
+    elif flip_ranges[-1][1] < max_new_tokens:
+        safe_floor = flip_ranges[-1][1] + 1
+    else:
+        safe_floor = None
     return {
         "max_new_tokens": max_new_tokens,
         "native_decision": native_decision,
@@ -457,6 +472,7 @@ def budget_frontier(
         "decision_steps": decision_steps,
         "flip_ranges": flip_ranges,
         "budget_robust": not flip_ranges,
+        "safe_budget_floor": safe_floor,
     }
 
 
