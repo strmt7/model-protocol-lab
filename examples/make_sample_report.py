@@ -100,6 +100,36 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "frontier_unavailable",
         }
+    # Held-out budget floor: attached exactly as `mpl run` does, so the
+    # committed sample report exercises the held-out floor callout.
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import held_out_budget_floor
+
+        held_out = result.get("held_out") or {}
+        held_observations = held_out.get("observations") or []
+        held_boundary = result.get("selected_boundary_token_ids")
+        if (
+            result["decision"] in ("compatible_on_fixture_set", "held_out_failed")
+            and held_observations
+            and held_boundary
+        ):
+            result["held_out_budget_floor"] = held_out_budget_floor(
+                held_observations,
+                boundary=tuple(held_boundary),
+                max_new_tokens=MAX_NEW_TOKENS,
+                native_verdict=result["decision"],
+            )
+        else:
+            result["held_out_budget_floor"] = {
+                "available": False,
+                "detail": "held_out_incomplete",
+            }
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["held_out_budget_floor"] = {
+            "available": False,
+            "detail": "held_out_floor_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

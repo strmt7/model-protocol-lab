@@ -781,6 +781,36 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "frontier_unavailable",
                     }
+                # Held-out budget floor: post-hoc, exact, no model calls.
+                # Only meaningful when the held-out stage completed; it
+                # degrades to an "unavailable" marker instead of failing.
+                try:
+                    from .experiments import held_out_budget_floor
+
+                    held_out = result.get("held_out") or {}
+                    held_observations = held_out.get("observations") or []
+                    held_boundary = result.get("selected_boundary_token_ids")
+                    if (
+                        result["decision"] in ("compatible_on_fixture_set", "held_out_failed")
+                        and held_observations
+                        and held_boundary
+                    ):
+                        result["held_out_budget_floor"] = held_out_budget_floor(
+                            held_observations,
+                            boundary=tuple(held_boundary),
+                            max_new_tokens=args.max_new_tokens,
+                            native_verdict=result["decision"],
+                        )
+                    else:
+                        result["held_out_budget_floor"] = {
+                            "available": False,
+                            "detail": "held_out_incomplete",
+                        }
+                except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                    result["held_out_budget_floor"] = {
+                        "available": False,
+                        "detail": "held_out_floor_unavailable",
+                    }
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each
                 # candidate's expected answer against the recorded search

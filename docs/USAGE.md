@@ -362,6 +362,17 @@ Like the stop matrix, this is a post-hoc diagnostic: it never changes the
 selection rule, and it degrades to an "unavailable" marker (never a run
 failure) when the search did not complete.
 
+The held-out stage gets the same treatment on a smaller scale:
+`held_out_budget_floor` in `results.json` records the per-fixture minimal
+passing budgets for the winner's held-out observations and
+`safe_budget_floor` -- the first token budget from which the verification
+verdict holds unchanged (the maximum of those budgets; absent when the
+held-out failed natively, since no budget achieves a passing
+verification). The held-out verdict is monotone in the budget, so this
+single number is the whole story. The HTML held-out section calls it out
+("verification floor ≥ K tokens", or a robustness/failure notice), and
+`mpl diff-reports` compares it between runs.
+
 ### 8.7 Selection margin (decision fragility)
 
 Every completed `run` reports `selection_margin` in `results.json` and one
@@ -768,6 +779,11 @@ What it compares, exactly:
   the flip from one fixture to another is reported even when the spans
   themselves are unchanged. A run without a recorded frontier
   is reported plainly instead of compared.
+- **Held-out budget floor**: when both runs recorded one, the tool
+  compares the verification's budget story -- the floor from which the
+  held-out verification passes unchanged, and whether it was
+  budget-robust. A run without a recorded floor is reported plainly
+  instead of compared.
 
 Per-fixture comparison needs per-fixture evidence: `results.json` carries
 `observations` only when the run used `--include-evidence`. When either
