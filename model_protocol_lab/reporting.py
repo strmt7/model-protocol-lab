@@ -5,6 +5,7 @@ import contextlib
 import hashlib
 import json
 import os
+from bisect import bisect_right
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -1252,6 +1253,139 @@ def selection_margin(result: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
+    """Validated frontier series: (sorted candidate names, max_new_tokens).
+
+    Shared validation for the frontier chart and the margin trajectory:
+    candidates must be a nonempty dict, ``max_new_tokens`` a positive int,
+    and each candidate must carry at least one well-typed ``pass_steps``
+    point inside the budget range with a nonzero fixture total. Malformed
+    entries are skipped; returns None when nothing chartable remains.
+    """
+    if type(frontier) is not dict:
+        return None
+    candidates = frontier.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    max_tokens = frontier.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return None
+    names: list[str] = []
+    for name in sorted(candidates):
+        data = candidates[name]
+        if type(name) is not str or type(data) is not dict:
+            continue
+        if len(data.get("fixture_ids") or []) <= 0:
+            continue
+        ok = False
+        for point in data.get("pass_steps") or []:
+            if (
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+            ):
+                ok = True
+                break
+        if ok:
+            names.append(name)
+    if not names:
+        return None
+    return (names, max_tokens)
+
+
+def _frontier_candidate_colors(frontier: dict[str, Any]) -> dict[str, str]:
+    """Deterministic per-candidate palette for frontier-derived charts.
+
+    Assigned in sorted candidate-name order (cycled when there are more
+    candidates than colors), so the same frontier always renders the same
+    colors regardless of dict insertion order or hash seed. The frontier
+    chart and the margin trajectory chart share this assignment, so a
+    candidate keeps its color across both charts.
+    """
+    validated = _frontier_series(frontier)
+    if validated is None:
+        return {}
+    names, _ = validated
+    return {
+        name: _FRONTIER_CHART_COLORS[i % len(_FRONTIER_CHART_COLORS)]
+        for i, name in enumerate(names)
+    }
+
+
+_MARGIN_TIE_COLOR = "#94a3b8"
+"""Segment color for tied-lead spans of the margin trajectory.
+
+Slate, deliberately outside the candidate palette and the decision
+ribbon colors: a gray span reads as "no unique leader" at a glance.
+"""
+
+
+def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, int]]:
+    """Per-budget selection margin over the token-budget sweep.
+
+    Pure post-hoc derivation from a recorded ``budget_frontier``: at every
+    token budget where any candidate's pass count changes, the pass counts
+    of all candidates (from their recorded ``pass_steps``), the unique
+    leader (the candidate with the strictly highest pass count), and the
+    margin -- the leader's count minus the highest count among the
+    remaining candidates. When the lead is tied, or a lone candidate has
+    no competition, the margin is 0; the leader is None for a tied lead.
+
+    Returns change points ``[(budget, leader, margin), ...]`` sorted by
+    budget with consecutive duplicates collapsed, so the margin is
+    constant between adjacent change points and on [last, max_new_tokens].
+    The margin answers "how decisive was the field at each budget?",
+    complementing :func:`selection_margin` (a single native-budget scalar)
+    and the decision ribbon (which outcome, not by how much). Malformed
+    input yields [] -- never raises, never guesses.
+    """
+    validated = _frontier_series(frontier)
+    if validated is None:
+        return []
+    names, max_tokens = validated
+    candidates = frontier["candidates"]
+    steps_of: dict[str, list[tuple[int, int]]] = {}
+    for name in names:
+        data = candidates[name]
+        by_budget: dict[int, int] = {}
+        for point in data.get("pass_steps") or []:
+            if (
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+                and 0 <= point[1] <= len(data.get("fixture_ids") or [])
+            ):
+                by_budget[point[0]] = point[1]
+        steps_of[name] = sorted(by_budget.items())
+    change_budgets = sorted({b for ordered in steps_of.values() for b, _ in ordered})
+    points: list[tuple[int, str | None, int]] = []
+    for budget in change_budgets:
+        counts = {name: _count_at_budget(steps_of[name], budget) for name in names}
+        top = max(counts.values())
+        leaders = [name for name in names if counts[name] == top]
+        if len(leaders) == 1:
+            leader: str | None = leaders[0]
+            rest = [c for name, c in counts.items() if name != leader]
+            margin = top - max(rest) if rest else 0
+        else:
+            leader = None
+            margin = 0
+        if points and points[-1][1] == leader and points[-1][2] == margin:
+            continue
+        points.append((budget, leader, margin))
+    return points
+
+
+def _count_at_budget(steps: list[tuple[int, int]], budget: int) -> int:
+    """Pass count at ``budget`` from sorted (budget, count) step points."""
+    index = bisect_right([b for b, _ in steps], budget) - 1
+    return steps[index][1] if index >= 0 else 0
+
+
 def token_overhead(result: dict[str, Any]) -> dict[str, Any]:
     """Per-candidate token counts from the recorded observations.
 
@@ -1958,14 +2092,12 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     )
 
     # The native winner draws last (on top) with a heavier stroke.
-    # Colors identify candidates: assigned in sorted name order (``series``
-    # is built in that order), so a candidate keeps its color regardless of
-    # which candidate won.
+    # Colors identify candidates: assigned in sorted name order via
+    # _frontier_candidate_colors, so a candidate keeps its color
+    # regardless of which candidate won -- and matches the margin
+    # trajectory chart below.
     winner = frontier.get("native_winner")
-    color_of = {
-        name: _FRONTIER_CHART_COLORS[i % len(_FRONTIER_CHART_COLORS)]
-        for i, (name, _, _, _) in enumerate(series)
-    }
+    color_of = _frontier_candidate_colors(frontier)
     ordered = sorted(series, key=lambda item: (item[0] == winner, item[0]))
     label_bits: list[str] = []
     drawn: list[tuple[str, str]] = []
@@ -2085,6 +2217,201 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
         + ')">'
         + "".join(elems)
         + "".join(legend_elems)
+        + "</g></svg>"
+    )
+
+
+def _margin_chart_svg_block(frontier: dict[str, Any]) -> str:
+    """The margin trajectory chart wrapped with heading and note."""
+    chart_svg = _margin_chart_svg(frontier)
+    if not chart_svg:
+        return ""
+    return (
+        "<h3>Margin trajectory: how decisive was the lead</h3>"
+        '<div class="chart-wrap">' + chart_svg + "</div>"
+        '<p class="chart-note">At each token budget, the margin is the '
+        "leading candidate\u2019s pass count minus the best remaining "
+        "candidate\u2019s; a tied lead has margin 0. Each step segment is "
+        "colored by the leading candidate, using the same palette as the "
+        "frontier chart above (gray: tied lead). Derived post-hoc from the "
+        "recorded pass steps; no extra model calls.</p>"
+    )
+
+
+def _margin_chart_svg(frontier: dict[str, Any]) -> str:
+    """Selection-margin trajectory as deterministic inline SVG.
+
+    One exact step curve: at each token budget, the leading candidate's
+    pass count minus the best remaining candidate's (0 on a tied lead),
+    from :func:`margin_trajectory`. Each step segment is stroked in the
+    leading candidate's frontier-chart color (gray for tied leads), so the
+    chart reads as "who was ahead, and by how much, at every budget".
+    Same x-scale as the frontier chart above; integer geometry, integer
+    tick labels, HTML-escaped text, no scripts or external references.
+    Returns "" when there is nothing chartable.
+    """
+    traj = margin_trajectory(frontier)
+    if not traj:
+        return ""
+    validated = _frontier_series(frontier)
+    if validated is None:  # margin_trajectory already validated; defensive
+        return ""
+    _, max_tokens = validated
+    color_of = _frontier_candidate_colors(frontier)
+
+    width, height = _FRONTIER_CHART_W, _FRONTIER_CHART_H
+    denom_x = max(max_tokens - 1, 1)
+
+    def x_of(budget: int) -> int:
+        return (budget - 1) * width // denom_x
+
+    y_max = max(margin for _, _, margin in traj)
+    denom_y = max(y_max, 1)
+
+    def y_of(margin: int) -> int:
+        return (y_max - margin) * height // denom_y
+
+    elems: list[str] = []
+    # X ticks mirror the frontier chart: up to 5 integer budgets.
+    tick_k = min(5, max_tokens)
+    x_ticks = (
+        sorted({1 + i * (max_tokens - 1) // (tick_k - 1) for i in range(tick_k)})
+        if tick_k > 1
+        else [1]
+    )
+    for tick in x_ticks:
+        x = x_of(tick)
+        elems.append(
+            '<line x1="'
+            + str(x)
+            + '" y1="0" x2="'
+            + str(x)
+            + '" y2="'
+            + str(height)
+            + '" stroke="#1e293b" stroke-width="1"/>'
+        )
+        elems.append(
+            '<text x="'
+            + str(x)
+            + '" y="'
+            + str(height + 16)
+            + '" text-anchor="middle" font-size="10" fill="#a9bcd2">'
+            + str(tick)
+            + "</text>"
+        )
+    y_ticks = list(range(y_max + 1)) if y_max <= 6 else sorted({i * y_max // 4 for i in range(5)})
+    for tick in y_ticks:
+        y = y_of(tick)
+        stroke = "#475569" if tick == 0 else "#1e293b"
+        elems.append(
+            '<line x1="0" y1="'
+            + str(y)
+            + '" x2="'
+            + str(width)
+            + '" y2="'
+            + str(y)
+            + '" stroke="'
+            + stroke
+            + '" stroke-width="1"/>'
+        )
+        elems.append(
+            '<text x="-6" y="'
+            + str(y + 3)
+            + '" text-anchor="end" font-size="10" fill="#a9bcd2">'
+            + str(tick)
+            + "</text>"
+        )
+    # Axes and labels.
+    elems.append(
+        '<line x1="0" y1="0" x2="0" y2="' + str(height) + '" stroke="#475569" stroke-width="1"/>'
+    )
+    elems.append(
+        '<line x1="0" y1="'
+        + str(height)
+        + '" x2="'
+        + str(width)
+        + '" y2="'
+        + str(height)
+        + '" stroke="#475569" stroke-width="1"/>'
+    )
+    elems.append(
+        '<text x="'
+        + str(width // 2)
+        + '" y="'
+        + str(height + 28)
+        + '" text-anchor="middle" font-size="10" fill="#a9bcd2">'
+        "token budget</text>"
+    )
+    elems.append(
+        '<text x="-6" y="-8" text-anchor="end" font-size="10" fill="#a9bcd2">'
+        "lead margin (passes)</text>"
+    )
+
+    # Area under the curve, drawn first (behind the segments).
+    area = "M " + str(x_of(traj[0][0])) + " " + str(y_of(traj[0][2]))
+    for budget, _, margin in traj[1:]:
+        area += " H " + str(x_of(budget)) + " V " + str(y_of(margin))
+    area += " H " + str(x_of(max_tokens)) + " V " + str(height)
+    area += " H " + str(x_of(traj[0][0])) + " Z"
+    elems.append('<path d="' + area + '" fill="#38bdf8" fill-opacity="0.10"/>')
+
+    # Step segments, each stroked in its leader's color (gray on ties).
+    seg_bits: list[str] = []
+    extended = traj + [(max_tokens, traj[-1][1], traj[-1][2])]
+    for (b0, leader0, m0), (b1, _leader1, m1) in zip(extended, extended[1:], strict=False):
+        color = color_of.get(leader0, _MARGIN_TIE_COLOR) if leader0 else _MARGIN_TIE_COLOR
+        elems.append(
+            '<path d="M '
+            + str(x_of(b0))
+            + " "
+            + str(y_of(m0))
+            + " H "
+            + str(x_of(b1))
+            + " V "
+            + str(y_of(m1))
+            + '" fill="none" stroke="'
+            + color
+            + '" stroke-width="2.5"/>'
+        )
+        seg_bits.append(
+            "budgets "
+            + str(b0)
+            + "\u2013"
+            + str(b1)
+            + ": leader "
+            + (leader0 if leader0 else "tied")
+            + ", margin "
+            + str(m0)
+        )
+    aria = (
+        "Selection margin trajectory chart: "
+        + str(len(color_of))
+        + " candidates, budgets 1 to "
+        + str(max_tokens)
+        + ". "
+        + "; ".join(seg_bits)
+    )
+    margin_left, margin_top, margin_right = 40, 16, 8
+    outer_w = margin_left + width + margin_right
+    outer_h = margin_top + height + 34
+    return (
+        '<svg class="margin-svg" width="'
+        + str(outer_w)
+        + '" height="'
+        + str(outer_h)
+        + '" viewBox="0 0 '
+        + str(outer_w)
+        + " "
+        + str(outer_h)
+        + '" role="img" aria-label="'
+        + escape(aria)
+        + '">'
+        + '<g transform="translate('
+        + str(margin_left)
+        + ","
+        + str(margin_top)
+        + ')">'
+        + "".join(elems)
         + "</g></svg>"
     )
 
@@ -2248,6 +2575,7 @@ def _frontier_section(result: dict[str, Any]) -> str:
             + "</tbody></table></div>"
         )
     parts.append(_frontier_chart_svg_block(frontier))
+    parts.append(_margin_chart_svg_block(frontier))
     parts.append(_frontier_spark_table(frontier))
     parts.append("</section>")
     return "".join(parts)

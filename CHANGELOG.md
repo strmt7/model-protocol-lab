@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 124 — selection margin trajectory, 2026-10-17)
+
+- New pure `reporting.margin_trajectory(frontier)`: per-budget leader
+  and lead margin (leader pass count minus best runner-up; 0 on a tied
+  lead) derived post-hoc from the recorded `pass_steps`, answering "how
+  decisive was the field at each token budget?" — complementing
+  `selection_margin` (a native-budget scalar) and the decision ribbon
+  (which outcome, not by how much).
+- The HTML report's token-budget frontier section now renders a
+  "Margin trajectory" chart directly under the frontier chart: a
+  deterministic inline-SVG step curve on the same x-scale, each segment
+  stroked in the leading candidate's frontier-chart color (gray for tied
+  leads), with an area wash, emphasized zero baseline, and per-span
+  leader/margin coverage in the `aria-label`. No scripts, no external
+  assets.
+- New `tests/test_cycle124_margin_trajectory_audit.py` (17 tests):
+  hand-derived decision-table semantics, hand-derived segment geometry,
+  shared-palette ordering, escaping, determinism, section wiring, and a
+  committed 4-mutant kill gate.
+
 ### Added (cycle 123 — sample report exercises the frontier, 2026-10-17)
 
 - `examples/make_sample_report.py` now attaches the token-budget

@@ -4925,3 +4925,33 @@ attempt silently mutated the nested `decision_at` helper instead (same
 `len(winners) == 1` source pattern) and "survived" — anchor mutation
 patterns with surrounding context (indentation, return shape) to the
 intended function. CHANGELOG entry added.
+
+## Cycle 124 (2026-10-17) — selection margin trajectory
+
+**Research:** the frontier triptych was incomplete: the frontier chart
+shows per-candidate passes, the decision ribbon shows the post-hoc
+outcome per budget, and `selection_margin` measures native-budget
+fragility in fixture flips — but nothing showed *how decisive the race
+was at each budget*. A margin curve (leader passes minus best
+runner-up) is the natural complement, computed exactly from the already
+recorded `pass_steps` with no extra model calls.
+
+**Plan:** pure `reporting.margin_trajectory(frontier)` returning
+collapsed `[(budget, leader|None, margin)]` change points (0 margin on
+tied leads / lone candidates; never raises); `_margin_chart_svg` with
+the frontier chart's x-scale and shared sorted-name palette, each
+segment stroked in its leader's color (gray for ties), area wash,
+emphasized zero line; wire into `_frontier_section` between the
+frontier chart and the spark table; regenerate the golden sample report
+(the demo shows a real story: tied until budget 5, then llama3 leads by
+1, then by 2); 17 tests incl. a committed 4-mutant kill gate.
+
+**Built:** `_frontier_series` shared validation,
+`_frontier_candidate_colors` shared palette (the frontier chart now uses
+it — identical assignment, verified by unchanged cycle-121/122 tests),
+`margin_trajectory`, `_margin_chart_svg`, `_margin_chart_svg_block`,
+section wiring; `tests/test_cycle124_margin_trajectory_audit.py`.
+Mutation results: 4/4 killed (margin sign flip; tied-lead nonzero
+margin; inverted leader test; inverted y-axis).
+
+**Verification:** full battery green (see cycle footer); CI 6/6 green.
