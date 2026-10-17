@@ -111,14 +111,14 @@ Probed and verified defended (PoC evidence, no change needed):
 #### Red-team round 4 — final pre-release sweep (2026-10-16)
 
 Three parallel adversarial agents probed novel surfaces only (rounds 1–3
-vectors were covered by the regression suite): the `mpl debug` REPL + CLI
+vectors were covered by the regression suite): the `model-protocol-lab debug` REPL + CLI
 input handling, `doctor`/`examine_model` hostile checkpoints, and the
 scoring / report-diff / backend-emulation modules. Eight genuine findings,
 all fixed with regression tests in `tests/test_cycle96_redteam_sweep.py`:
 
 | ID | Severity | Finding | Resolution |
 |----|----------|---------|------------|
-| R4-1 | Medium | Lone surrogates (`\ud800`) in hostile `results.json` / fixture content crashed strict stream writes: `mpl diff-reports` died with uncaught `UnicodeEncodeError` on stderr, and the debug REPL session died (violating its "never die" invariant). The `_CONTROL_CHARS` sanitizers did not cover `\ud800–\udfff`. | All four `_CONTROL_CHARS` regexes (`debug.py`, `cli.py`, `diffreports.py`, `fixtures.py`) now strip lone surrogates; astral characters (single codepoints) are unaffected. |
+| R4-1 | Medium | Lone surrogates (`\ud800`) in hostile `results.json` / fixture content crashed strict stream writes: `model-protocol-lab diff-reports` died with uncaught `UnicodeEncodeError` on stderr, and the debug REPL session died (violating its "never die" invariant). The `_CONTROL_CHARS` sanitizers did not cover `\ud800–\udfff`. | All four `_CONTROL_CHARS` regexes (`debug.py`, `cli.py`, `diffreports.py`, `fixtures.py`) now strip lone surrogates; astral characters (single codepoints) are unaffected. |
 | R4-2 | Medium | `BaseException` from a misbehaving backend escaped the sanitization boundary: `core.evaluate` (`except Exception` around `backend.generate`) and `scoring.score_target_logprobs` (`except Exception` around `forward_logits`) propagated, turning an hours-long run into a total loss instead of one failed observation. | Both sites now catch `BaseException` and map to the fixed codes (`generate_failed` / `forward_failed`), with explicit re-raise of `KeyboardInterrupt`/`SystemExit` so Ctrl+C keeps working. |
 | R4-3 | Medium | Raw `RecursionError` escaped `examine_model` via a deeply-nested safetensors header (`doctor._check_weight_headers`): `json.loads` was wrapped in `except (UnicodeDecodeError, json.JSONDecodeError)` only, unlike `_read_json` which also catches `RecursionError`. | Added `RecursionError` to the except tuple, mirroring `_read_json`. |
 | R4-4 | Medium | FIFO-swap hang: `_read_json`, `_manifest` (backends.py) and `_check_weight_headers` (doctor.py) used plain blocking `open()` after validation, so a FIFO swapped in for an asset hung the opener forever. The race window spans the whole weight-hashing phase. | New shared `_open_regular_read()` helper: `O_NONBLOCK` open + `fstat` `S_ISREG` check on the fd (the `datasets.py` pattern); `_manifest` now fstats the opened fd for its before-snapshot. All three call sites fail closed with fixed vocabulary. |

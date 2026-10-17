@@ -6,6 +6,40 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 133 — docs-coherence audit fixes, 2026-10-17)
+
+- Fixed every factually-wrong and stale claim found by the specialist
+  docs-coherence audit of USAGE.md, README.md, VALIDATION.md, and the
+  release documents (verified claim-by-claim against the cycle-132 tree): thinking/effort-variant lists in
+  `docs/USAGE.md` §4 now name all 10 generation-prompt variants
+  (`kolibri/thinking-off`, `nemotron35/thinking-off`, `ling/thinking-off`,
+  `qwen38/thinking-off`, `nanbeige42/thinking-off`, `laguna/thinking-on`,
+  `k2horizon/effort-medium`, `k2horizon/effort-low`, `hy4/no-think`,
+  `minimax3/thinking-disabled`, `minimax3/thinking-enabled`); `safe_budget_floor`
+  documented as JSON `null` (not "absent") at the sweep limit; the
+  margin-trajectory chart, frontier chart, decision ribbon, sparkline
+  table, run-configuration and backend-divergence sections added to the
+  `report.html` inventory (§6); `held_out_floor` and
+  `fixture_diffs_include_unchanged` added to the §12 stdout-JSON key list;
+  README capabilities cover the held-out verification-budget floor and the
+  frontier chart/ribbon/margin-trajectory visuals; VALIDATION.md header
+  range now reads cycles 10–133.
+- `cli.py` gained an `if __name__ == "__main__"` guard so
+  `python -m model_protocol_lab.cli --help` prints usage (exit 0) instead
+  of nothing; also eliminates the misleading dead entry path.
+- Removed the nonexistent `mpl` command shorthand from all user-facing docs
+  (USAGE.md, SECURITY.md, RELEASE_NOTES_0.1.0.md, diffbackends docstring) —
+  the console script is `model-protocol-lab`; the debug REPL's literal
+  `mpl:<family>` prompt is real and untouched.
+- `docs/RELEASE_NOTES_0.1.0.md`: added a dated post-0.1.0 additions list
+  (cycles 121–132) and marked the 2026-10-16 verification section as a
+  historical snapshot; `docs/RELEASE_READINESS_0.1.0.md`: added a dated
+  addendum noting superseded counts.
+- Also fixed a real drift the audit predated: `RELEASE_NOTES_0.1.0.md`
+  claimed 8 subcommands; the `verify` subcommand (cycle 131) makes 9.
+- New `tests/test_cycle133_docs_coherence_audit.py` (3 tests): the
+  `__main__` guard behavior and a no-`mpl`-shorthand scan of user docs.
+
 ### Added (cycle 132 — security red-team fixes + holdout contamination detector, 2026-10-17)
 
 - New `model_protocol_lab/contamination.py`: pure search/held-out

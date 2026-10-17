@@ -28,14 +28,14 @@ snapshot that was never executed). Since that snapshot:
   Laguna 2.1; Ling-3.1; K2-Horizon; Hy4; MiniMax-M3; Nanbeige 4.2.
   Out-of-scope branches (tool calls, reasoning content, auto-injected
   system blocks) are documented, not modeled.
-- **`mpl debug`**: an interactive, offline protocol-debugger REPL —
+- **`model-protocol-lab debug`**: an interactive, offline protocol-debugger REPL —
   render with per-segment char/token maps, stepped boundary detection,
   fixture auditing; weights never loaded.
-- **`mpl diff-backends`**: differential testing of emulated backend stop
+- **`model-protocol-lab diff-backends`**: differential testing of emulated backend stop
   semantics (HF StopStringCriteria, vLLM detokenizer strip/keep,
   EOS-appended, SGLang) over one recorded token sequence, with a
   classified divergence taxonomy.
-- **`mpl diff-reports`**: deterministic comparison of two experiment
+- **`model-protocol-lab diff-reports`**: deterministic comparison of two experiment
   result directories for the iterate-and-compare operator loop, with a
   config-drift warning section.
 - **`doctor --portability-matrix`**: static template↔tokenizer
@@ -49,11 +49,44 @@ snapshot that was never executed). Since that snapshot:
 See `CHANGELOG.md` (`[0.1.0]`) for the full per-cycle record,
 including every real bug found and fixed during the audit cycles.
 
+## Post-0.1.0 snapshot additions (2026-10-16 → 2026-10-17, on `main`)
+
+Development continued after the 0.1.0 snapshot; these additions are on
+`main` and covered by `CHANGELOG.md`'s `[Unreleased]` entries:
+
+- **Deterministic inline-SVG token-budget frontier chart** in `report.html`,
+  with a **decision ribbon** coloring every budget span by post-hoc outcome
+  (cycles 121–122).
+- **Selection-margin trajectory chart** under the frontier chart, showing the
+  per-budget leader and lead margin with a safe-budget-floor dashed line
+  (cycle 124).
+- **Safe budget floor readout**: the first budget from which the native
+  decision never flips again, as a first-class HTML callout and
+  `diff-reports` comparison (cycle 126).
+- **Per-flip-span attribution**: the exact (candidate, fixture) pass-status
+  changes driving each decision flip, recorded in the payload and compared
+  by `diff-reports` (cycles 127–128).
+- **Selection-rule consistency audit**: proved the frontier's post-hoc
+  `decision_at` is exactly the selection rule the run would have produced
+  (cycle 129).
+- **`model-protocol-lab verify`**: N-version independent results-integrity
+  replay — re-derives decision, winner, frontier, and held-out floor from a
+  stored `results.json` through independent code paths (cycle 131).
+- **Held-out verification-budget floor**: the first budget from which the
+  held-out verdict holds unchanged, as an HTML callout and `diff-reports`
+  comparison (cycle 130).
+- **Holdout contamination detector**: measures search↔held-out fixture
+  similarity (deterministic `difflib` + trigram Jaccard tiers) and warns in
+  `inspect`/`fixtures build`/`doctor --dataset`/`run` (cycle 132).
+- **Security red-team hardening** of the HTML report renderer against
+  hostile payloads (strict type guards, fail-closed restore, symlinked
+  report-dir rejection) (cycle 132).
+
 ## Breaking changes
 
 **None.** `0.1.0a0` was a source snapshot that never executed, so there
 is no prior released behavior to break. This is the first runnable
-release. The CLI surface (8 subcommands), the fixture schema, and the
+release. The CLI surface (9 subcommands), the fixture schema, and the
 report formats have been stable across the development cycles; the exit
 code contract (0/1/2/130) is pinned by tests.
 
@@ -84,6 +117,11 @@ source as above is the supported path. Upgrade from a source checkout:
 `git pull` then re-run `python -m pip install -e ".[dev]"`.
 
 ## Verified for this release (2026-10-16)
+
+The checks below are a historical snapshot, verified on 2026-10-16
+against the 0.1.0 tree. Numbers on current `main` have moved (4481 tests
+on 2026-10-17, both runners agree) — the "Post-0.1.0 snapshot additions"
+section above lists what changed since.
 
 - `ruff check` clean; `ruff format --check` clean (164 files);
   `mypy model_protocol_lab` clean (16 files);
