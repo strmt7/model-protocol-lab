@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 112 — CI failure diagnosability, 2026-10-17)
+
+- The CI `test` job now captures the full `unittest discover` output to a file
+  and uploads it as a build artifact when the test step fails
+  (`actions/upload-artifact@v4`, pinned to SHA, least-privilege `permissions`
+  on the job). CI job logs are not API-accessible, which previously made
+  CI-only failures (e.g. the cycle-107 test_cycle66 3.12/3.13 failure)
+  undiagnosable; the artifact closes that gap permanently for all future
+  failures. `pipefail` preserves unittest's exit status, so the step still
+  fails exactly when tests fail.
+
 ### Added (cycle 111 — end-to-end determinism audit, 2026-10-17)
 
 - New `tests/test_cycle111_determinism_audit.py`: runs the full `run` pipeline

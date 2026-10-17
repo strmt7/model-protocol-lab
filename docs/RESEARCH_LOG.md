@@ -4560,3 +4560,23 @@ No set-iteration or hash-ordering leaks into serialized output (the one `set`
 in the reporting path, `change_budgets` in experiments.py, is sorted before
 serialization). Locked in as `tests/test_cycle111_determinism_audit.py`, which
 re-runs the pipeline twice with differing hash seeds on every CI run.
+
+## 2026-10-17 — Cycle 112: CI failure diagnosability (enabling the cycle66 diagnosis)
+
+**Problem:** The cycle-107/108 test_cycle66 mystery (TestCase conversion fails
+CI on Python 3.12/3.13 deterministically, passes locally everywhere) could not
+be root-caused because CI job logs require interactive sign-in and are not
+retrievable via the API; the annotations API returned nothing. Every future
+CI-only failure hits the same wall.
+
+**Fix:** The CI `test` job now pipes the `unittest discover` output through
+`tee` into `$RUNNER_TEMP/unittest-py<version>.log` (with `set -o pipefail` so
+the step exit status is unchanged) and uploads the log as a build artifact
+(`actions/upload-artifact@v4`, SHA-pinned, `if: failure()`). Artifacts ARE
+API-accessible, so the exact failing test output can now be downloaded and
+inspected after any CI-only failure. Job gets least-privilege `permissions`
+(`contents: read`, `actions: write`).
+
+**Next:** With this in place, the test_cycle66 conversion can be re-attempted
+as a diagnostic experiment: if CI fails, the artifact will name the exact
+failing test for the first time.
