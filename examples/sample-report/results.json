@@ -338,7 +338,22 @@
       ]
     ],
     "budget_robust": false,
-    "safe_budget_floor": 6
+    "safe_budget_floor": 6,
+    "flip_attribution": [
+      {
+        "span": [
+          1,
+          5
+        ],
+        "crossings": [
+          {
+            "candidate": "llama3",
+            "fixture": "search-copy-blue",
+            "min_budget": 5
+          }
+        ]
+      }
+    ]
   },
   "selection_margin": {
     "value": 2,

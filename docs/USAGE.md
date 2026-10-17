@@ -350,6 +350,14 @@ when the decision is identical at every budget from 1 to `--max-new-tokens`.
 flips again (1 when nothing flips; absent when a flip reaches the sweep
 maximum) -- the HTML report calls it out and marks it on the frontier and
 margin charts, and `mpl diff-reports` compares it between runs.
+`flip_attribution` lists, for each flip span, the (candidate, fixture)
+observations whose minimal passing budget falls inside the span -- exactly
+the pass-status changes the span brackets, i.e. the observations to
+inspect when asking why the decision flips there (a span with none
+records an empty list: the decision already differed at its start).
+Structural fact: the per-budget full-passer set only grows with the
+budget, so `flip_ranges` is always empty or a single prefix span
+`[1, K]`; the floor is then simply `K + 1`.
 Like the stop matrix, this is a post-hoc diagnostic: it never changes the
 selection rule, and it degrades to an "unavailable" marker (never a run
 failure) when the search did not complete.

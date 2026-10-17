@@ -106,6 +106,9 @@ _CSS = (
     "font-size:.85rem;font-weight:600;color:#f8fafc;white-space:nowrap}"
     ".badge.pass{background:#166534}.badge.fail{background:#991b1b}"
     ".badge.neutral{background:#475569}"
+    ".attribution{display:block;margin-top:.25rem;font-size:.85rem;color:#a9bcd2}"
+    ".attribution code{font-family:ui-monospace,monospace;font-size:.8rem;"
+    "color:#e2e8f0}"
     ".bar{display:inline-block;width:8rem;height:.6rem;border-radius:999px;"
     "background:#334155;vertical-align:middle;margin-right:.6rem;overflow:hidden}"
     ".bar-fill{display:block;height:100%;border-radius:999px}"
@@ -2636,6 +2639,20 @@ def _frontier_section(result: dict[str, Any]) -> str:
         )
     else:
         steps = frontier.get("decision_steps") or []
+        # Flip-span attribution, keyed defensively by span: foreign or older
+        # payloads may carry no attribution, or one that does not line up
+        # with the rendered spans -- rendering never raises.
+        attribution: dict[tuple[Any, Any], list[Any]] = {}
+        raw_attribution = frontier.get("flip_attribution")
+        if type(raw_attribution) is list:
+            for entry in raw_attribution:
+                if (
+                    type(entry) is dict
+                    and type(entry.get("span")) is list
+                    and len(entry["span"]) == 2
+                    and type(entry.get("crossings")) is list
+                ):
+                    attribution[(entry["span"][0], entry["span"][1])] = entry["crossings"]
         items = []
         for span in frontier.get("flip_ranges") or []:
             if type(span) is not list or len(span) != 2:
@@ -2655,7 +2672,38 @@ def _frontier_section(result: dict[str, Any]) -> str:
             )
             if flip_winner:
                 label += " (winner: " + escape(str(flip_winner)) + ")"
-            items.append("<li>" + label + "</li>")
+            crossings = attribution.get((lo, span[1]))
+            if crossings is None:
+                items.append("<li>" + label + "</li>")
+                continue
+            detail_bits = []
+            for crossing in crossings:
+                if type(crossing) is not dict:
+                    continue
+                detail_bits.append(
+                    "<code>"
+                    + escape(str(crossing.get("candidate")))
+                    + "</code>/<code>"
+                    + escape(str(crossing.get("fixture")))
+                    + "</code> passes at budget "
+                    + escape(str(crossing.get("min_budget")))
+                )
+            if detail_bits:
+                noun = "pass-status change" if len(detail_bits) == 1 else "pass-status changes"
+                detail = (
+                    '<span class="attribution">'
+                    + noun
+                    + " inside this span: "
+                    + "; ".join(detail_bits)
+                    + "</span>"
+                )
+            else:
+                detail = (
+                    '<span class="attribution">no pass-status change inside this '
+                    "span &mdash; the decision already differs from native at "
+                    "its start</span>"
+                )
+            items.append("<li>" + label + detail + "</li>")
         parts.append(
             '<p><span class="badge fail">budget-sensitive</span> The selection '
             "decision would have differed at these token budgets:</p><ul>"

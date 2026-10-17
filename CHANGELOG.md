@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 127 — flip-span attribution, 2026-10-17)
+
+- The `budget_frontier` payload now records `flip_attribution`: for each
+  flip span, the (candidate, fixture) observations whose minimal passing
+  budget falls inside the span, sorted by (min_budget, candidate,
+  fixture). Pass counts can only change at those marks, so these are
+  exactly the pass-status changes the span brackets -- the observations
+  to inspect when asking why the decision flips there. A span with no
+  marks inside it records an empty crossing list (the decision already
+  differed at its start, e.g. a cold-start region).
+- Proved and documented: the per-budget full-passer set only grows with
+  the budget, so once the native decision is reached it can never be left
+  again -- `flip_ranges` is always `[]` or a single prefix span `[[1, K]]`
+  (2000-trial brute-force check, zero counterexamples; pinned by a
+  property test). The HTML frontier section renders each span's
+  crossings as an escaped attribution line under the span.
+- New `tests/test_cycle127_flip_attribution_audit.py` (18 tests):
+  hand-computed derivations, independent-oracle agreement on randomized
+  inputs, the prefix-span theorem as a property test, HTML wording /
+  hostile-name escaping / missing-or-malformed attribution tolerance /
+  determinism; 4/4 targeted mutants killed (unbounded attribution,
+  exclusive upper bound, dropped sort, unescaped rendering).
+
 ### Added (cycle 126 — safe budget floor readout, 2026-10-17)
 
 - The `budget_frontier` payload now records `safe_budget_floor`: the

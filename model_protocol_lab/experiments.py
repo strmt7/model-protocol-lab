@@ -315,7 +315,20 @@ def budget_frontier(
     or winner differs from native (``flip_ranges``), ``budget_robust``,
     and ``safe_budget_floor`` -- the first budget from which the native
     decision never flips again (1 when nothing flips, None when a flip
-    span reaches the sweep maximum). When a search entry carries its own
+    span reaches the sweep maximum) -- and ``flip_attribution``: for each
+    flip span, the (candidate, fixture) observations whose minimal passing
+    budget falls inside the span, sorted by (min_budget, candidate,
+    fixture). Pass counts can only change at those marks, so these are
+    exactly the pass-status changes the span brackets: the observations to
+    inspect when asking why the decision flips there.
+
+    Structural fact: the per-budget full-passer set only grows with the
+    budget, so once the native decision is reached it can never be left
+    again -- ``flip_ranges`` is always ``[]`` or a single prefix span
+    ``[[1, K]]`` with ``K < max_new_tokens``. The merge logic below keeps
+    the general form; the invariant is pinned by
+    ``test_flip_ranges_is_always_a_single_prefix_span``.
+    When a search entry carries its own
     ``boundary_token_ids`` (per-candidate boundaries, Cycle 2), that entry's
     curve is derived with its own boundary; entries without the field use
     the ``boundary`` argument.
@@ -463,6 +476,39 @@ def budget_frontier(
         safe_floor = flip_ranges[-1][1] + 1
     else:
         safe_floor = None
+    # Flip-span attribution is exact by the same construction: pass counts
+    # -- and hence the decision -- can only change at a candidate's
+    # min_budget marks, so every observation whose min_budget falls inside
+    # a flip span is a pass-status change that span brackets. These are
+    # reported as the span's candidate causes: the observations to inspect
+    # when asking why the decision flips there. They are not proven sole
+    # causes -- a span's non-native decision is the joint effect of all
+    # crossings up to that budget -- so the docstring states the weaker,
+    # exact reading.
+    flip_attribution: list[dict[str, Any]] = []
+    for span_lo, span_hi in flip_ranges:
+        crossings: list[dict[str, Any]] = []
+        for name in sorted(candidates):
+            entry = candidates[name]
+            for fixture_id, min_budget in zip(
+                entry["fixture_ids"], entry["min_budget_per_fixture"], strict=True
+            ):
+                if min_budget is not None and span_lo <= min_budget <= span_hi:
+                    crossings.append(
+                        {
+                            "candidate": name,
+                            "fixture": fixture_id,
+                            "min_budget": min_budget,
+                        }
+                    )
+        crossings.sort(
+            key=lambda crossing: (
+                crossing["min_budget"],
+                crossing["candidate"],
+                crossing["fixture"],
+            )
+        )
+        flip_attribution.append({"span": [span_lo, span_hi], "crossings": crossings})
     return {
         "max_new_tokens": max_new_tokens,
         "native_decision": native_decision,
@@ -473,6 +519,7 @@ def budget_frontier(
         "flip_ranges": flip_ranges,
         "budget_robust": not flip_ranges,
         "safe_budget_floor": safe_floor,
+        "flip_attribution": flip_attribution,
     }
 
 
