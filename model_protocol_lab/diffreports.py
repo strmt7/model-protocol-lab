@@ -24,6 +24,7 @@ import os
 import re
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -467,6 +468,8 @@ def diff_reports(
     # now names the axes that were actually compared instead of asserting a
     # totality that may not hold.
     evidence_asymmetric = evidence_present["old"] != evidence_present["new"]
+    frontier_diff = diff_frontiers(old.get("budget_frontier"), new.get("budget_frontier"))
+    frontier_asymmetric = frontier_diff["available"] not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -474,6 +477,8 @@ def diff_reports(
         and not changed_fixture_diffs
         and not config_drift
         and not evidence_asymmetric
+        and not frontier_diff["changed"]
+        and not frontier_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -482,6 +487,8 @@ def diff_reports(
         "fixtures_flipped": len(flips),
         "config_drift_warnings": len(config_drift),
         "evidence_asymmetric": evidence_asymmetric,
+        "frontier_changed": frontier_diff["changed"],
+        "frontier_asymmetric": frontier_asymmetric,
         "identical": identical,
     }
     return {
@@ -490,6 +497,7 @@ def diff_reports(
         "new": {"source": new_label},
         "decision": {"old": old_decision, "new": new_decision, "changed": decision_changed},
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
+        "frontier": frontier_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -503,9 +511,229 @@ def diff_reports(
     }
 
 
+def _valid_frontier(value: Any) -> bool:
+    """Light validation: is this a comparable ``budget_frontier`` payload?"""
+    if type(value) is not dict:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    max_tokens = value.get("max_new_tokens")
+    if type(max_tokens) is not int or max_tokens <= 0:
+        return False
+    for data in candidates.values():
+        if type(data) is not dict:
+            continue
+        if len(data.get("fixture_ids") or []) <= 0:
+            continue
+        for point in data.get("pass_steps") or []:
+            if (
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+            ):
+                return True
+    return False
+
+
+def _step_function(points: list[tuple[int, Any]]) -> Callable[[int], Any]:
+    """Step function over sorted (budget, value) change points.
+
+    The value at ``budget`` is the last change point at or below it; the
+    value before the first point is the ``("unknown", None)`` sentinel --
+    callers only compare budgets inside the compared range, so unknown
+    never silently equals a real value.
+    """
+    ordered = sorted(points)
+
+    def value_at(budget: int) -> Any:
+        value: Any = ("unknown", None)
+        for point_budget, point_value in ordered:
+            if point_budget > budget:
+                break
+            value = point_value
+        return value
+
+    return value_at
+
+
+def _diff_spans(
+    old_at: Callable[[int], Any],
+    new_at: Callable[[int], Any],
+    breakpoints: list[int],
+    hi: int,
+) -> list[list[Any]]:
+    """Merged [lo, hi, old, new] spans where two step functions differ.
+
+    Both functions are stepwise constant with breakpoints drawn from the
+    union of their change budgets, so comparing at the breakpoints is
+    exact; adjacent differing spans with identical values merge.
+    """
+    points = sorted({b for b in breakpoints if 1 <= b <= hi})
+    spans: list[list[Any]] = []
+    for index, budget in enumerate(points):
+        end = points[index + 1] - 1 if index + 1 < len(points) else hi
+        old_value = old_at(budget)
+        new_value = new_at(budget)
+        if old_value == new_value:
+            continue
+        if (
+            spans
+            and spans[-1][2] == old_value
+            and spans[-1][3] == new_value
+            and spans[-1][1] == budget - 1
+        ):
+            spans[-1][1] = end
+        else:
+            spans.append([budget, end, old_value, new_value])
+    return spans
+
+
+def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``budget_frontier`` payloads; deterministic.
+
+    Answers "did the token-budget robustness story change between runs?":
+    sweep-range drift, budget-robustness flips, and the exact budget spans
+    where the post-hoc decision, post-hoc winner, or per-budget leader
+    (from :func:`reporting.margin_trajectory`) differ. A side without a
+    recorded frontier is reported plainly instead of compared; malformed
+    decision steps skip the decision/winner axes rather than inventing
+    differences. No model, no network.
+    """
+    old_ok = _valid_frontier(old)
+    new_ok = _valid_frontier(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_max = old["max_new_tokens"]
+    new_max = new["max_new_tokens"]
+    result["max_new_tokens"] = {
+        "old": old_max,
+        "new": new_max,
+        "changed": old_max != new_max,
+    }
+    old_robust = old.get("budget_robust")
+    new_robust = new.get("budget_robust")
+    result["budget_robust"] = {
+        "old": old_robust,
+        "new": new_robust,
+        "changed": old_robust != new_robust,
+    }
+
+    def decision_points(frontier: dict[str, Any]) -> list[tuple[int, tuple[str, Any]]]:
+        points = []
+        for entry in frontier.get("decision_steps") or []:
+            if (
+                type(entry) is list
+                and len(entry) == 3
+                and type(entry[0]) is int
+                and type(entry[1]) is str
+                and 1 <= entry[0] <= frontier["max_new_tokens"]
+            ):
+                points.append((entry[0], (entry[1], entry[2])))
+        return points
+
+    old_dec = decision_points(old)
+    new_dec = decision_points(new)
+    hi = min(old_max, new_max)
+    breakpoints = [b for b, _ in old_dec] + [b for b, _ in new_dec]
+    decision_flips: list[list[Any]] = []
+    winner_flips: list[list[Any]] = []
+    if old_dec and new_dec:
+        old_dec_at = _step_function([(b, v[0]) for b, v in old_dec])
+        new_dec_at = _step_function([(b, v[0]) for b, v in new_dec])
+        decision_flips = _diff_spans(old_dec_at, new_dec_at, breakpoints, hi)
+        old_win_at = _step_function([(b, v[1]) for b, v in old_dec])
+        new_win_at = _step_function([(b, v[1]) for b, v in new_dec])
+        winner_flips = _diff_spans(old_win_at, new_win_at, breakpoints, hi)
+    result["decision_flips"] = decision_flips
+    result["winner_flips"] = winner_flips
+
+    # Imported lazily and absolutely: this module is also loaded standalone
+    # by the cycle-67 mutation-gate harness (a bare copy in a temp dir with
+    # no parent package), where a module-level relative import fails. The
+    # installed package is always importable there, so the absolute import
+    # keeps a single source of truth for the trajectory logic.
+    from model_protocol_lab.reporting import margin_trajectory
+
+    old_traj = margin_trajectory(old)
+    new_traj = margin_trajectory(new)
+    leader_flips: list[list[Any]] = []
+    if old_traj and new_traj:
+        old_lead_at = _step_function([(b, leader) for b, leader, _ in old_traj])
+        new_lead_at = _step_function([(b, leader) for b, leader, _ in new_traj])
+        leader_flips = _diff_spans(
+            old_lead_at,
+            new_lead_at,
+            [b for b, _, _ in old_traj] + [b for b, _, _ in new_traj],
+            hi,
+        )
+    result["leader_flips"] = leader_flips
+    result["changed"] = bool(
+        result["max_new_tokens"]["changed"]
+        or result["budget_robust"]["changed"]
+        or decision_flips
+        or winner_flips
+        or leader_flips
+    )
+    return result
+
+
 def _compact(value: Any) -> str:
     """One-line JSON for a drift value in the stderr summary."""
     return json.dumps(value, ensure_ascii=True, sort_keys=True)
+
+
+def _render_frontier_summary(frontier: dict[str, Any]) -> list[str]:
+    """Token-budget frontier comparison lines for the stderr summary."""
+    available = frontier.get("available")
+    if available == "neither":
+        return ["Token-budget frontier: not recorded by either run."]
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [f"Token-budget frontier comparison unavailable: {missing} run did not record one."]
+    lines: list[str] = []
+    sweep = frontier["max_new_tokens"]
+    if sweep["changed"]:
+        lines.append(
+            f"Frontier sweep range: {sweep['old']} -> {sweep['new']} token budgets "
+            "(compared over the common prefix)"
+        )
+    robust = frontier["budget_robust"]
+    yes_no = {True: "yes", False: "no"}
+    lines.append(
+        "Budget-robust: "
+        f"{yes_no.get(robust['old'], robust['old'])} -> "
+        f"{yes_no.get(robust['new'], robust['new'])}"
+    )
+    for key, label in (
+        ("decision_flips", "Post-hoc decision differs"),
+        ("winner_flips", "Post-hoc winner differs"),
+        ("leader_flips", "Per-budget leader differs"),
+    ):
+        spans = frontier.get(key) or []
+        if not spans:
+            continue
+        lines.append(f"{label} ({len(spans)} span(s)):")
+        for lo, hi, old_value, new_value in spans:
+            old_text = "(none)" if old_value is None else str(old_value)
+            new_text = "(none)" if new_value is None else str(new_value)
+            lines.append(
+                f"  budgets {lo}\u2013{hi}: {_display_id(old_text)} -> {_display_id(new_text)}"
+            )
+    if not frontier["changed"]:
+        lines.append("Token-budget frontier: no differences.")
+    return lines
 
 
 def render_summary(diff: dict[str, Any]) -> str:
@@ -537,6 +765,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     old_w = winner["old"] if winner["old"] is not None else "(none)"
     new_w = winner["new"] if winner["new"] is not None else "(none)"
     lines.append(f"Winner: {_display_id(old_w)} -> {_display_id(new_w)}")
+    lines.extend(_render_frontier_summary(diff["frontier"]))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
@@ -568,6 +797,8 @@ def render_summary(diff: dict[str, Any]) -> str:
         axes = ["decision", "winner", "candidate verdicts", "configuration"]
         if evidence["old"] and evidence["new"]:
             axes.append("per-fixture evidence")
+        if diff["frontier"]["available"] == "both":
+            axes.append("token-budget frontier")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."
@@ -577,6 +808,7 @@ def render_summary(diff: dict[str, Any]) -> str:
             "Summary: "
             f"decision {'CHANGED' if summary['decision_changed'] else 'unchanged'}, "
             f"winner {'CHANGED' if summary['winner_changed'] else 'unchanged'}, "
+            f"frontier {'CHANGED' if summary['frontier_changed'] else 'unchanged'}, "
             f"{summary['candidates_changed_status']} candidate(s) changed verdict, "
             f"{summary['fixtures_flipped']} fixture(s) flipped, "
             f"{summary['config_drift_warnings']} config drift warning(s)."

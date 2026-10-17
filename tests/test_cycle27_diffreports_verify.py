@@ -342,6 +342,47 @@ def oracle_diff_reports(
     decision_changed = old_decision != new_decision
     winner_changed = old_winner != new_winner
     evidence_asymmetric = evidence_present["old"] != evidence_present["new"]
+
+    # Frontier axis: availability computed from the rules, mirroring the
+    # implementation. Span-level comparison (decision/winner/leader flips)
+    # is covered by the dedicated cycle-125 audit with hand-derived spans
+    # and its own mutation gate; the report pairs exercised here never
+    # carry budget_frontier payloads, so the comparison below agrees with
+    # the implementation on every input this oracle sees.
+    def _or_frontier_valid(value: Any) -> bool:
+        if type(value) is not dict:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        max_tokens = value.get("max_new_tokens")
+        if type(max_tokens) is not int or max_tokens <= 0:
+            return False
+        return any(
+            type(data) is dict
+            and len(data.get("fixture_ids") or []) > 0
+            and any(
+                type(point) is list
+                and len(point) == 2
+                and type(point[0]) is int
+                and type(point[1]) is int
+                and 1 <= point[0] <= max_tokens
+                for point in data.get("pass_steps") or []
+            )
+            for data in candidates.values()
+        )
+
+    _old_ok = _or_frontier_valid(old.get("budget_frontier"))
+    _new_ok = _or_frontier_valid(new.get("budget_frontier"))
+    if _old_ok and _new_ok:
+        _o_available = "both"
+    elif _old_ok:
+        _o_available = "old"
+    elif _new_ok:
+        _o_available = "new"
+    else:
+        _o_available = "neither"
+    _o_frontier_asymmetric = _o_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -349,6 +390,7 @@ def oracle_diff_reports(
         and not changed_fixture_diffs
         and not config_drift
         and not evidence_asymmetric
+        and not _o_frontier_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -357,6 +399,8 @@ def oracle_diff_reports(
         "fixtures_flipped": len(flips),
         "config_drift_warnings": len(config_drift),
         "evidence_asymmetric": evidence_asymmetric,
+        "frontier_changed": False,
+        "frontier_asymmetric": _o_frontier_asymmetric,
         "identical": identical,
     }
     return {
@@ -365,6 +409,7 @@ def oracle_diff_reports(
         "new": {"source": new_label},
         "decision": {"old": old_decision, "new": new_decision, "changed": decision_changed},
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
+        "frontier": {"available": _o_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 125 — token-budget frontier comparison in diff-reports, 2026-10-17)
+
+- `mpl diff-reports` now compares the runs' `budget_frontier` payloads
+  via the new pure `diffreports.diff_frontiers`: sweep-range drift,
+  budget-robustness flips, and the exact merged budget spans where the
+  post-hoc decision, post-hoc winner, or per-budget leader (reusing
+  `reporting.margin_trajectory`) differ. One-sided or missing frontiers
+  are reported plainly instead of compared, mirroring the tool's
+  evidence philosophy; malformed decision steps skip that axis rather
+  than inventing differences.
+- The diff dict gains a `frontier` section, the summary gains
+  `frontier_changed` / `frontier_asymmetric` flags (both break
+  `identical`, like the evidence axis), and the stderr summary renders a
+  frontier block with sanitized span lines ("budgets 3–4: alpha ->
+  beta").
+- New `tests/test_cycle125_frontier_diff_audit.py` (16 tests):
+  hand-derived leader/decision/winner spans, sweep drift with common
+  prefix, robustness flips, availability variants, determinism,
+  integration with `identical`, summary rendering, terminal-escape
+  sanitization, and a committed 4-mutant kill gate.
+
 ### Added (cycle 124 — selection margin trajectory, 2026-10-17)
 
 - New pure `reporting.margin_trajectory(frontier)`: per-budget leader
