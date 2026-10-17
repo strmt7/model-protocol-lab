@@ -4615,3 +4615,40 @@ the version-skewed environment before.
 the stable core of both messages; docstring updated to note the variance.
 A repo-wide grep confirmed this is the only assertion on that message
 (test_cycle88 mentions it in a docstring observation only).
+
+## Cycle 114 (2026-10-17): bidi-control sanitization gap
+
+**Research question:** the four operator-visible sanitizers (`cli._display_id`,
+`debug._sanitize_display`, `diffreports._display_id`, `fixtures._safe`) strip
+C0/C1 controls and lone surrogates so hostile input files cannot inject terminal
+escape sequences. Do they cover the Unicode bidi controls (Trojan Source,
+CVE-2021-42574)?
+
+**Method:** proof-of-concept against all four sanitizers with U+202E
+(RIGHT-TO-LEFT OVERRIDE) and the isolate set; audited every `_CONTROL_CHARS`
+definition in the package (4 instances, intentionally local per module);
+checked existing tests for asserted behavior that an extension could break.
+
+**Finding (genuine):** all four sanitizers passed bidi controls through. A
+hostile fixture ID `"safe-\u202e-evil"` survived every sanitizer and would
+render right-to-left in the operator's terminal -- display order differing
+from logical order, the exact Trojan Source spoofing primitive.
+
+**Design correction during development:** the first fix also stripped BOM,
+zero-width space, soft hyphen, and tag characters -- and broke 3 existing
+tests in `test_cycle66_fixture_loading_audit.py`. Those tests deliberately
+assert a BOM-prefixed CSV header rejection *shows* the BOM (`got
+'\ufeffid,...'`), so the operator sees why it failed; stripping it displayed
+a seemingly-valid header. Lesson: invisible-but-diagnostic characters must be
+preserved. The fix was narrowed to the bidi-control set (U+200E/U+200F,
+U+2028/U+2029, U+202A-U+202E, U+2066-U+2069): the reordering/line-discipline
+vectors. BOM/ZWSP/soft-hyphen cannot reorder displayed text and stay.
+
+**Compatibility verified:** the 3 BOM tests pass unmodified; the cycle96
+astral-preservation test still passes; cycle33's U+202E hostile string is
+HTML-report scope (html.escape path), unaffected.
+
+**Audit note:** a repo-wide sweep for other version-fragile assertions
+(stdlib message wording, deprecated APIs) came back clean -- the cycle-113
+null-byte message was the only one; the package uses no datetime/deprecated
+stdlib APIs and asserts stdlib exceptions by type only.
