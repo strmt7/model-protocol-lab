@@ -4510,3 +4510,37 @@ conversion of test_cycle66 fails CI 3.12/3.13 deterministically, passes locally
 as root and non-root under both runners). The converted file is mechanical and
 correct; the failure does not reproduce locally and CI logs are inaccessible.
 Left as `_UNITTEST_EXEMPT` pending a CI-environment reproduction. Not forced.
+
+## Cycle 110 (2026-10-17) — test_cycle66 CI mystery: deeper investigation
+
+**Motivation.** The TestCase conversion of test_cycle66_fixture_loading_audit.py
+fails CI on Python 3.12/3.13 deterministically (3.11 green) but passes locally
+under all conditions tried. Cycle 109 could not reproduce it. This cycle
+eliminated the remaining environmental variables.
+
+**Experiments performed:**
+1. Retrieved the exact converted file from cycle-107 commit (66b4c27d) via API;
+   verified the conversion is mechanically correct (parametrize→subTest,
+   pytest.raises→assertRaises, tmp_path→setUp/tearDown with TemporaryDirectory).
+2. Ran converted file in isolation (local venv): 65 tests OK, 1 skipped.
+3. Built a FRESH venv (`pip install -e ".[dev]"`, freshly resolved deps:
+   hypothesis 6.170.1 vs local 6.169.0, pytest 9.1.1, coverage 7.16.2) —
+   converted file passes in isolation (65 tests OK).
+4. Ran FULL suite with converted file in fresh venv under
+   `coverage run -m unittest discover` (exact CI command): exit 0, all green.
+5. Verified the tree was restored to the original pytest-style file afterwards.
+
+**Eliminated:** stale-venv dependency drift, fresh-vs-cached installs,
+root-vs-non-root, isolation-vs-full-suite, coverage-vs-plain, and the
+conversion's mechanical correctness. The NFC/NFD test inputs use stable
+characters (café U+00E9); Unicode database version drift is not a factor.
+
+**Remaining hypotheses (unverifiable without CI logs):** CI's specific Python
+patch versions (3.12.x newer than local 3.12.3), kernel/filesystem differences
+in the Ubuntu runners affecting FIFO/symlink/chmod behavior, or a subtle
+unittest ordering interaction specific to CI's environment.
+
+**Decision:** Keep test_cycle66 as `_UNITTEST_EXEMPT` (documented in the
+meta-test). Do not force the conversion. The pytest-style file is fully
+tested under the pytest runner; the unittest gate's coverage of this file
+is the only gap, and it is explicit and documented.
