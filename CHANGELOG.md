@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 134 — prompt-boundary canonicality audit, 2026-10-17)
+
+- New `model_protocol_lab/boundary_audit.py`: the Prompt Boundary Problem
+  (PBP) rate per template family (research backlog R2). For every stored
+  rendered prompt x greedy completion, `encode(prompt_text +
+  completion_text)` must equal `prompt_ids + completion_ids`; the module
+  reports the first divergence index per observation and aggregates to
+  overall, per-candidate, and per-family rates. Pure and deterministic
+  (`encode`/`decode` injected); backend failures degrade a check to
+  "unusable", never a crash.
+- `core.Observation` now stores `input_text` (the exact rendered prompt
+  string that produced `input_ids`) — decoding `input_ids` is not a
+  substitute, since re-decoding is itself canonicalizing. Threaded through
+  every `evaluate()` record path; defaults to "" on pre-render failures.
+- `model-protocol-lab run` attaches `boundary_audit` (post-hoc, one extra
+  encode per observation); the HTML report renders a "Prompt-boundary
+  canonicality" section with a per-family table (a zero rate is presented
+  as a certificate); `model-protocol-lab diff-reports` compares overall
+  and per-family rates (`boundary_audit_changed` /
+  `boundary_audit_asymmetric` summary flags feed `identical`); the
+  committed sample report exercises the section.
+- New `tests/test_cycle134_boundary_audit.py` (33 tests): the pure check
+  (identity, planted seam-merge PBP, divergence index, unusable paths),
+  rate aggregation, family rollup, end-to-end `input_text` recording, the
+  HTML section, the diff-reports comparison, and a committed 4-mutant kill
+  gate (4/4 killed; two mutants additionally verified killed by the real
+  tests during development).
+
 ### Added (cycle 133 — docs-coherence audit fixes, 2026-10-17)
 
 - Fixed every factually-wrong and stale claim found by the specialist

@@ -235,6 +235,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "winner": {"old": "alpha", "new": "alpha", "changed": False},
         "frontier": {"available": "neither", "changed": False},
         "held_out_floor": {"available": "neither", "changed": False},
+        "boundary_audit": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -255,6 +256,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "frontier_asymmetric": False,
             "held_out_floor_changed": False,
             "held_out_floor_asymmetric": False,
+            "boundary_audit_changed": False,
+            "boundary_audit_asymmetric": False,
             "identical": True,
         },
     }
@@ -485,6 +488,56 @@ def _o_held_out_floor(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_boundary_audit_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict or value.get("available", True) is False:
+        return False
+    if type(value.get("per_family")) is not dict:
+        return False
+    rate = value.get("overall_rate")
+    return rate is None or type(rate) in (int, float)
+
+
+def _o_boundary_audit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle boundary-audit section: availability and rate comparison."""
+    old_ok = _o_boundary_audit_valid(old)
+    new_ok = _o_boundary_audit_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_rate = old.get("overall_rate")
+    new_rate = new.get("overall_rate")
+    old_families = old.get("per_family") or {}
+    new_families = new.get("per_family") or {}
+    family_drift = []
+    for family in sorted(set(old_families) | set(new_families)):
+        old_entry = old_families.get(family) or {}
+        new_entry = new_families.get(family) or {}
+        if old_entry.get("rate") != new_entry.get("rate"):
+            family_drift.append(
+                {
+                    "family": family,
+                    "old_rate": old_entry.get("rate"),
+                    "new_rate": new_entry.get("rate"),
+                }
+            )
+    rate_changed = old_rate != new_rate
+    diff["overall_rate"] = {"old": old_rate, "new": new_rate, "changed": rate_changed}
+    diff["family_drift"] = family_drift
+    changed = bool(rate_changed or family_drift)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _oracle_diff(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -584,6 +637,9 @@ def _oracle_diff(
     o_hof, o_hof_changed, o_hof_asymmetric = _o_held_out_floor(
         old.get("held_out_budget_floor"), new.get("held_out_budget_floor")
     )
+    o_ba, o_ba_changed, o_ba_asymmetric = _o_boundary_audit(
+        old.get("boundary_audit"), new.get("boundary_audit")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -595,6 +651,8 @@ def _oracle_diff(
         and not o_frontier_asymmetric
         and not o_hof_changed
         and not o_hof_asymmetric
+        and not o_ba_changed
+        and not o_ba_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -604,6 +662,7 @@ def _oracle_diff(
         "winner": {"old": old_w, "new": new_w, "changed": winner_changed},
         "frontier": o_frontier,
         "held_out_floor": o_hof,
+        "boundary_audit": o_ba,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -620,6 +679,8 @@ def _oracle_diff(
             "frontier_asymmetric": o_frontier_asymmetric,
             "held_out_floor_changed": o_hof_changed,
             "held_out_floor_asymmetric": o_hof_asymmetric,
+            "boundary_audit_changed": o_ba_changed,
+            "boundary_audit_asymmetric": o_ba_asymmetric,
             "identical": identical,
         },
     }
@@ -747,6 +808,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "frontier_asymmetric": False,
                 "held_out_floor_changed": False,
                 "held_out_floor_asymmetric": False,
+                "boundary_audit_changed": False,
+                "boundary_audit_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1748,6 +1811,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not frontier_asymmetric\n"
             '        and not held_out_floor_diff["changed"]\n'
             "        and not held_out_floor_asymmetric\n"
+            '        and not boundary_audit_diff["changed"]\n'
+            "        and not boundary_audit_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -1760,6 +1825,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or frontier_asymmetric\n"
             '        or held_out_floor_diff["changed"]\n'
             "        or held_out_floor_asymmetric\n"
+            '        or boundary_audit_diff["changed"]\n'
+            "        or boundary_audit_asymmetric\n"
             "    )\n",
             scenario,
         )

@@ -283,6 +283,11 @@ class Observation:
     raw_reason: str | None
     error: str | None
     status: RunStatus
+    # The exact rendered prompt string that produced input_ids. Stored so
+    # post-hoc text-level audits (prompt-boundary canonicality) can compare
+    # the string the tokenizer saw against the ids it produced; decode() of
+    # input_ids is NOT a substitute (re-decoding is itself canonicalizing).
+    input_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -764,6 +769,7 @@ def evaluate(
         raw_reason: str | None,
         error: str | None = None,
         boundary_text_match: bool | None = None,
+        input_text: str = "",
     ) -> None:
         # All per-attempt state is passed explicitly: these helpers are defined
         # once outside the loop so they can never capture a stale loop variable.
@@ -780,6 +786,7 @@ def evaluate(
                 raw_reason=raw_reason,
                 error=error,
                 status=status,
+                input_text=input_text,
             )
         )
 
@@ -792,8 +799,19 @@ def evaluate(
         cut: int | None,
         raw_reason: str | None,
         error: str | None = None,
+        input_text: str = "",
     ) -> EvaluationReport:
-        record(status, case, input_ids, output_ids, answer, cut, raw_reason, error)
+        record(
+            status,
+            case,
+            input_ids,
+            output_ids,
+            answer,
+            cut,
+            raw_reason,
+            error,
+            input_text=input_text,
+        )
         return report(status)
 
     def abort(status: RunStatus, case: Fixture, error: str | None = None) -> EvaluationReport:
@@ -808,11 +826,13 @@ def evaluate(
         answer = ""
         raw_reason: str | None = None
         cut: int | None = None
+        prompt_text = ""
 
         try:
             prompt = candidate.render(case.messages)
         except Exception:  # noqa: BLE001 -- sanitization boundary, see pyproject
             return abort("failed", case, "render_failed")
+        prompt_text = prompt
         if event.is_set():
             return abort("cancelled", case)
         try:
@@ -823,7 +843,16 @@ def evaluate(
             return abort("failed", case, "invalid_input_ids")
         input_ids = encoded
         if event.is_set():
-            return terminate("cancelled", case, input_ids, output_ids, answer, cut, raw_reason)
+            return terminate(
+                "cancelled",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                input_text=prompt_text,
+            )
         material = f"{seed}\0{case.id}".encode("utf-8", errors="surrogatepass")
         request_seed = int.from_bytes(sha256(material).digest()[:4], "big")
         try:
@@ -838,11 +867,27 @@ def evaluate(
             # lost run. KeyboardInterrupt/SystemExit still propagate so
             # Ctrl+C keeps working.
             return terminate(
-                "failed", case, input_ids, output_ids, answer, cut, raw_reason, "generate_failed"
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                "generate_failed",
+                input_text=prompt_text,
             )
         if not _valid_generation(result, max_new_tokens):
             return terminate(
-                "failed", case, input_ids, output_ids, answer, cut, raw_reason, "invalid_generation"
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                "invalid_generation",
+                input_text=prompt_text,
             )
         output_ids = result.token_ids
         raw_reason = result.reason
@@ -865,23 +910,58 @@ def evaluate(
                 cut,
                 raw_reason,
                 code,
+                input_text=prompt_text,
             )
         if result.reason == "cancelled" or event.is_set():
-            return terminate("cancelled", case, input_ids, output_ids, answer, cut, raw_reason)
+            return terminate(
+                "cancelled",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                input_text=prompt_text,
+            )
         answer_ids = output_ids if cut is None else output_ids[:cut]
         try:
             decoded = backend.decode(answer_ids)
         except Exception:  # noqa: BLE001 -- sanitization boundary, see pyproject
             return terminate(
-                "failed", case, input_ids, output_ids, answer, cut, raw_reason, "decode_failed"
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                "decode_failed",
+                input_text=prompt_text,
             )
         if type(decoded) is not str:
             return terminate(
-                "failed", case, input_ids, output_ids, answer, cut, raw_reason, "decode_failed"
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                "decode_failed",
+                input_text=prompt_text,
             )
         answer = decoded
         if event.is_set():
-            return terminate("cancelled", case, input_ids, output_ids, answer, cut, raw_reason)
+            return terminate(
+                "cancelled",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                input_text=prompt_text,
+            )
         text_match = _boundary_text_match(backend, output_ids, cut, boundary)
         record(
             "completed",
@@ -892,5 +972,6 @@ def evaluate(
             cut,
             raw_reason,
             boundary_text_match=text_match,
+            input_text=prompt_text,
         )
     return report("cancelled" if event.is_set() else "completed")

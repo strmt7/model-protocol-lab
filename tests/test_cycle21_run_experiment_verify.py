@@ -176,6 +176,7 @@ def _oracle_obs(
     error,
     status,
     boundary_text_match=None,
+    input_text="",
 ):
     return Observation(
         candidate=candidate,
@@ -189,6 +190,7 @@ def _oracle_obs(
         raw_reason=raw_reason,
         error=error,
         status=status,
+        input_text=input_text,
     )
 
 
@@ -231,7 +233,18 @@ def oracle_evaluate(
         input_ids = backend.encode(prompt)
         if event.is_set():
             records.append(
-                _oracle_obs(fmt.name, case, input_ids, (), "", None, None, None, "cancelled")
+                _oracle_obs(
+                    fmt.name,
+                    case,
+                    input_ids,
+                    (),
+                    "",
+                    None,
+                    None,
+                    None,
+                    "cancelled",
+                    input_text=prompt,
+                )
             )
             status = "cancelled"
             break
@@ -251,7 +264,16 @@ def oracle_evaluate(
         if event.is_set():
             records.append(
                 _oracle_obs(
-                    fmt.name, case, input_ids, output_ids, "", cut, raw_reason, None, "cancelled"
+                    fmt.name,
+                    case,
+                    input_ids,
+                    output_ids,
+                    "",
+                    cut,
+                    raw_reason,
+                    None,
+                    "cancelled",
+                    input_text=prompt,
                 )
             )
             status = "cancelled"
@@ -270,6 +292,7 @@ def oracle_evaluate(
                     raw_reason,
                     None,
                     "cancelled",
+                    input_text=prompt,
                 )
             )
             status = "cancelled"
@@ -287,6 +310,7 @@ def oracle_evaluate(
                 None,
                 "completed",
                 text_match,
+                input_text=prompt,
             )
         )
     else:

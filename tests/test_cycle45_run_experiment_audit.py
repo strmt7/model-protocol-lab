@@ -366,7 +366,9 @@ def oracle_text_match(backend, output_ids, cut, boundary):
     return retained_text.endswith(boundary_text)
 
 
-def _oracle_completed_obs(world, backend, fmt, fixture, input_ids, output_ids, cut, boundary):
+def _oracle_completed_obs(
+    world, backend, fmt, fixture, prompt, input_ids, output_ids, cut, boundary
+):
     answer_ids = output_ids if cut is None else output_ids[:cut]
     answer = backend.decode(answer_ids)
     return Observation(
@@ -381,10 +383,11 @@ def _oracle_completed_obs(world, backend, fmt, fixture, input_ids, output_ids, c
         raw_reason="limit",
         error=None,
         status="completed",
+        input_text=prompt,
     )
 
 
-def _oracle_failed_obs(fmt, fixture, input_ids, output_ids, cut, raw_reason, error):
+def _oracle_failed_obs(fmt, fixture, prompt, input_ids, output_ids, cut, raw_reason, error):
     return Observation(
         candidate=fmt.name,
         fixture=fixture.id,
@@ -397,6 +400,7 @@ def _oracle_failed_obs(fmt, fixture, input_ids, output_ids, cut, raw_reason, err
         raw_reason=raw_reason,
         error=error,
         status="failed",
+        input_text=prompt,
     )
 
 
@@ -422,7 +426,7 @@ def oracle_evaluate(world, backend, fmt, cases, cand_boundary, cap, seed):
         fail = world.script[(fmt.name, case.id)]["fail"]
         if fail == "raise":
             records.append(
-                _oracle_failed_obs(fmt, case, input_ids, (), None, None, "generate_failed")
+                _oracle_failed_obs(fmt, case, prompt, input_ids, (), None, None, "generate_failed")
             )
             return records, "failed"
         if isinstance(fail, tuple):
@@ -431,14 +435,14 @@ def oracle_evaluate(world, backend, fmt, cases, cand_boundary, cap, seed):
             cut = _first_occurrence(output_ids, cand_boundary)
             clean = code if code in _ERROR_CODES else "backend_reported_error"
             records.append(
-                _oracle_failed_obs(fmt, case, input_ids, output_ids, cut, "error", clean)
+                _oracle_failed_obs(fmt, case, prompt, input_ids, output_ids, cut, "error", clean)
             )
             return records, "failed"
         output_ids = world.output_for(fmt.name, case, cap, request_seed)
         cut = _first_occurrence(output_ids, cand_boundary)
         records.append(
             _oracle_completed_obs(
-                world, backend, fmt, case, input_ids, output_ids, cut, cand_boundary
+                world, backend, fmt, case, prompt, input_ids, output_ids, cut, cand_boundary
             )
         )
     return records, "completed"
