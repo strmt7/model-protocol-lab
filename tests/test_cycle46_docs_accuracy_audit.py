@@ -503,7 +503,16 @@ class CatalogInspectTest(unittest.TestCase):
         code, out, _ = run_cli(["inspect", str(FIXTURES_JSON)])
         self.assertEqual(code, 0)
         report = json.loads(out)
-        self.assertEqual(report, {"search_cases": 2, "held_out_cases": 2, "valid": True})
+        self.assertEqual(
+            report,
+            {
+                "search_cases": 2,
+                "held_out_cases": 2,
+                "valid": True,
+                # The example fixtures are contamination-clean.
+                "contamination": {"worst_tier": "clean", "pairs": []},
+            },
+        )
 
     def test_inspect_rejects_non_regular_file(self):
         # USAGE sec 1: "The dataset path must be a regular file".
@@ -606,7 +615,14 @@ class FixturesBuildTest(unittest.TestCase):
             code2, out2, _ = run_cli(["inspect", str(out_path)])
             self.assertEqual(code2, 0)
             self.assertEqual(
-                json.loads(out2), {"search_cases": 1, "held_out_cases": 1, "valid": True}
+                json.loads(out2),
+                {
+                    "search_cases": 1,
+                    "held_out_cases": 1,
+                    "valid": True,
+                    # The documented example fixtures are disjoint.
+                    "contamination": {"worst_tier": "clean", "pairs": []},
+                },
             )
 
     def test_build_never_overwrites(self):

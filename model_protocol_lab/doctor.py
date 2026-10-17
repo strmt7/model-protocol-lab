@@ -12,6 +12,7 @@ import contextlib
 import json
 import math
 import os
+import re
 import shlex
 import signal
 import struct
@@ -403,32 +404,53 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
     }
 
 
+# C0/C1 controls (incl. ESC), DEL, lone surrogates, and Unicode bidi
+# controls are stripped from stderr-bound strings: they can inject terminal
+# escape sequences or reorder displayed text (Trojan Source, CVE-2021-42574).
+# Other invisible format characters (BOM, zero-width space, ...) are
+# deliberately preserved for diagnostic fidelity, mirroring debug.py and
+# cli.py (kept local so doctor.py stays importable without cli).
+_CONTROL_CHARS = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+)
+
+
+def _sanitize_stderr(value: str) -> str:
+    """Strip terminal-control characters from an operator-visible string."""
+    return _CONTROL_CHARS.sub("", value)
+
+
 def render_portability_table(section: dict[str, Any]) -> str:
     """Human-readable rendering of a ``portability_matrix`` report section.
 
     The JSON report stays the machine contract (printed on stdout by the
     CLI); this table is the operator-facing summary and goes to stderr so
     stdout remains parseable. The asymmetry warning is always included --
-    it is the load-bearing part of the output.
+    it is the load-bearing part of the output. Every interpolated value
+    is control-stripped at this render boundary: the fields are
+    fixed-vocabulary or operator-supplied today, but stderr is a terminal
+    and a future caller must not be able to inject escape sequences here.
     """
-    second = section.get("second_checkpoint", "?")
+    second = _sanitize_stderr(str(section.get("second_checkpoint", "?")))
     lines = [f"portability matrix vs {second}"]
     if section.get("status") != "ok":
-        lines.append(f"status: {section.get('status')} ({section.get('detail', '')})")
+        status = _sanitize_stderr(str(section.get("status")))
+        detail = _sanitize_stderr(str(section.get("detail", "")))
+        lines.append(f"status: {status} ({detail})")
     else:
         rows = section.get("rows")
         rows = rows if type(rows) is list else []
         lines[0] += f": {len(rows)} candidates (tokenizer-only; no weights loaded)"
-        names = [row.get("format", "") for row in rows if type(row) is dict]
+        names = [_sanitize_stderr(str(row.get("format", ""))) for row in rows if type(row) is dict]
         width = max([len(name) for name in names] + [len("format")])
         lines.append(f"{'format':<{width}}  {'verdict':<12}  {'reason':<14}".rstrip())
         for row in rows:
             if type(row) is not dict:
                 continue
             line = (
-                f"{row.get('format', ''):<{width}}  "
-                f"{row.get('verdict', ''):<12}  "
-                f"{row.get('reason', ''):<14}"
+                f"{_sanitize_stderr(str(row.get('format', ''))):<{width}}  "
+                f"{_sanitize_stderr(str(row.get('verdict', ''))):<12}  "
+                f"{_sanitize_stderr(str(row.get('reason', ''))):<14}"
             ).rstrip()
             if row.get("bos_skipped"):
                 line += "  bos-skipped"
@@ -648,14 +670,15 @@ def examine_model(
 
 
 def examine_dataset(path: str | Path) -> dict[str, Any]:
-    """Validate a fixture file; reports counts plus a special-token audit.
+    """Validate a fixture file; reports counts plus hygiene audits.
 
-    The audit scans fixture message text for special-token literals that
-    collide with the catalog formats' special tokens (advisory
+    The special-token audit scans fixture message text for special-token
+    literals that collide with the catalog formats' special tokens (advisory
     GHSA-g5f9-3xfg-p9mf: such a literal can forge a role boundary when the
-    fixture is composed into a prompt). Findings are reported under the
-    ``special_token_audit`` check with status ``"warning"`` and never fail
-    the verdict -- fixture hygiene is advisory, exactly as in ``fixtures
+    fixture is composed into a prompt). The contamination report measures
+    search/held-out near-duplicate overlap (see contamination.py). Both are
+    reported with status ``"warning"`` / flagged pairs and never fail the
+    verdict -- fixture hygiene is advisory, exactly as in ``fixtures
     build``.
     """
     try:
@@ -688,6 +711,8 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
             for finding in findings
         ],
     }
+    from .contamination import contamination_report
+
     return {
         "verdict": "ok",
         "dataset": {
@@ -695,6 +720,7 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
             "search_cases": len(split.search),
             "held_out_cases": len(split.held_out),
             "special_token_audit": audit,
+            "contamination": contamination_report(split.search, split.held_out),
         },
     }
 
@@ -759,8 +785,21 @@ def _render_with_memory_cap(tokenizer: Any, conversation: list[dict[str, str]]) 
     try:
         return render()
     finally:
-        with contextlib.suppress(OSError, ValueError):
+        try:
             resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
+        except _RenderTimeBudgetExceeded:
+            # The watchdog alarm landed mid-restore. The one-shot alarm is
+            # consumed, so retry the restore, then re-raise: the render's
+            # budget expiry must reach the caller (which degrades the pair
+            # to "unavailable"). Swallowing it here -- the budget exception
+            # is a ValueError subclass, exactly what the cleanup guard
+            # below tolerates -- would leave the address-space cap lowered
+            # process-wide with nothing signaling the corruption.
+            with contextlib.suppress(OSError, ValueError):
+                resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
+            raise
+        except (OSError, ValueError):
+            pass
 
 
 class _RenderTimeBudgetExceeded(ValueError):

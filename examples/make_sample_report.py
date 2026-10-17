@@ -130,6 +130,15 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "held_out_floor_unavailable",
         }
+    # Fixture hygiene: attached exactly as `mpl run` does, so the committed
+    # sample report exercises the contamination callout in the
+    # run-configuration section.
+    try:
+        from model_protocol_lab.contamination import contamination_report
+
+        result["contamination"] = contamination_report(split.search, split.held_out)
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["contamination"] = {"worst_tier": "clean", "pairs": []}
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

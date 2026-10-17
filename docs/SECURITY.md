@@ -218,6 +218,16 @@ duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
 7. `template_diff` degrades (not hangs) after a 10 s budget per
    (format, fixture) pair on adversarially fragmented inputs; a fully
    hostile checkpoint can still cost ~10 s per pair before each degrades.
+8. Invisible format characters (zero-width space, BOM, soft hyphen, word
+   joiner, ...) survive the terminal sanitizers by design: they cannot
+   reorder text or inject controls, so they are preserved for diagnostic
+   fidelity. Residual: lookalike fixture IDs (`admin` vs `admin\u200b`)
+   render identically in listings and diffs -- verify IDs byte-wise before
+   acting on them.
+9. Unicode bidi controls survive into `report.html` text: HTML-escaping
+   keeps them inert (no tag breakout, no script execution; verified
+   byte-level), so at most the operator's own local report could
+   visually spoof ordering. The terminal path strips them. Accepted.
 
 ## Data disclosure
 

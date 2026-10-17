@@ -38,6 +38,34 @@ def _display_id(value: str) -> str:
     return _CONTROL_CHARS.sub("", value)
 
 
+def _warn_contamination(command: str, contamination: dict[str, Any]) -> None:
+    """Print the contamination tier table to stderr as a non-fatal warning.
+
+    Advisory only: the tiers are heuristic, so a flagged pair never fails
+    the command -- it tells the dataset author the held-out split may be
+    contaminated by near-duplicates of search fixtures. At most 10 pairs
+    print; the machine JSON carries the full list.
+    """
+    pairs = contamination.get("pairs")
+    if type(pairs) is not list or not pairs:
+        return
+    lines = [
+        f"{command}: warning: search/held-out contamination: "
+        f"worst tier {contamination.get('worst_tier')} ({len(pairs)} pair(s)):"
+    ]
+    for pair in pairs[:10]:
+        if type(pair) is not dict:
+            continue
+        lines.append(
+            f"  held_out {_display_id(str(pair.get('held_out')))} ~ "
+            f"search {_display_id(str(pair.get('search')))} "
+            f"(ratio {pair.get('ratio')}, jaccard {pair.get('jaccard')}, {pair.get('tier')})"
+        )
+    if len(pairs) > 10:
+        lines.append(f"  ... and {len(pairs) - 10} more (see JSON)")
+    print("\n".join(lines), file=sys.stderr)
+
+
 def parse_boundary(value: str) -> tuple[int, ...]:
     """Argparse type: parse 1-16 comma-separated ASCII token IDs.
 
@@ -361,6 +389,24 @@ def _matrix_stage_rows(
     )
 
 
+_KNOWN_LOCAL_FAILURE_CODES = (
+    "local_context_limit_exceeds_declared_window",
+    "local_hf_extra_not_installed",
+    "local_backend_initialization_failed",
+    "local_backend_not_initialized",
+    "local_encode_failed",
+    "local_decode_failed",
+    "local_forward_failed",
+)
+"""Backend RuntimeError codes the CLI is allowed to echo.
+
+Every ``raise RuntimeError("local_*")`` in ``backends.py`` is a fixed code
+raised ``from None``; the allowlist below is checked against that exact set
+(a test pins the membership). A prefix match would echo any
+``local_``-prefixed text, so unknown codes stay generic.
+"""
+
+
 def _backend_failure_message(message: str) -> str:
     """Render a backend RuntimeError code as a sanitized CLI message.
 
@@ -373,7 +419,7 @@ def _backend_failure_message(message: str) -> str:
             "Operation failed [local_hf_extra_not_installed]: this command needs "
             'the Hugging Face extra. Install it with: pip install "model-protocol-lab[hf]".'
         )
-    if message.startswith("local_"):
+    if message in _KNOWN_LOCAL_FAILURE_CODES:
         return f"Operation failed [{message}]. See docs/USAGE.md."
     return (
         "Operation failed. Check input paths, local model support, "
@@ -430,12 +476,17 @@ def main(argv: list[str] | None = None) -> int:
                     f"{', '.join(_display_id(i) for i in empty_expected)}; these pass vacuously",
                     file=sys.stderr,
                 )
+            from .contamination import contamination_report
+
+            contamination = contamination_report(split.search, split.held_out)
+            _warn_contamination("inspect", contamination)
             print(
                 json.dumps(
                     {
                         "search_cases": len(split.search),
                         "held_out_cases": len(split.held_out),
                         "valid": True,
+                        "contamination": contamination,
                     }
                 )
             )
@@ -523,6 +574,10 @@ def main(argv: list[str] | None = None) -> int:
                 # fixtures exists to diagnose authoring input; show the reason.
                 print(f"fixtures: invalid authoring source: {exc}", file=sys.stderr)
                 return 1
+            from .contamination import contamination_report
+
+            build_contamination = contamination_report(split.search, split.held_out)
+            _warn_contamination("fixtures", build_contamination)
             print(
                 json.dumps(
                     {
@@ -531,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
                         "output": str(written),
                         "audit_findings": len(findings),
                         "audit_path": str(sidecar),
+                        "contamination": build_contamination,
                     }
                 )
             )
@@ -628,6 +684,12 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 signal.signal(signal.SIGINT, previous_int)
                 signal.signal(signal.SIGTERM, previous_term)
+            # Fixture hygiene (pure, advisory): search/held-out
+            # near-duplicate overlap, so the report records whether the
+            # held-out split was contaminated. Never fails the run.
+            from .contamination import contamination_report
+
+            result["contamination"] = contamination_report(split.search, split.held_out)
             # Diagnosis sections; none of these may fail the run.
             try:
                 from .doctor import template_conformance

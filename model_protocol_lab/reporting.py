@@ -4,6 +4,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import math
 import os
 from bisect import bisect_right
 from html import escape
@@ -1272,6 +1273,40 @@ chart's per-point circles. Public so ``diffreports`` can share the bound
 """
 
 
+def _valid_rate(rate: Any) -> float | None:
+    """A pass rate as a finite float, or None when it is not one.
+
+    Hostile result payloads can carry a string, a bool, or NaN/Infinity
+    (the JSON parser accepts the latter two by default); formatting any of
+    those with ``:.0%`` raises or renders ``"nan%"``. ``bool`` is excluded
+    explicitly: ``True == 1`` but a boolean is never a genuine rate.
+    Malformed rates degrade to the "incomplete" badge, never a crash.
+    """
+    if type(rate) is bool or type(rate) not in (int, float):
+        return None
+    value = float(rate)
+    return value if math.isfinite(value) else None
+
+
+def _fixture_total(data: dict[str, Any]) -> int:
+    """Number of fixture ids recorded for a frontier candidate.
+
+    Malformed ``fixture_ids`` (anything but a list) count as zero so a
+    hostile payload can never crash the report through ``len()``.
+    """
+    ids = data.get("fixture_ids")
+    return len(ids) if type(ids) is list else 0
+
+
+def _sorted_str_keys(candidates: dict[str, Any]) -> list[str]:
+    """Sorted string keys of a candidate mapping; non-string keys skipped.
+
+    ``sorted()`` on mixed-type keys raises ``TypeError`` -- a hostile
+    payload must degrade to skipped entries, never a crash.
+    """
+    return sorted(key for key in candidates if type(key) is str)
+
+
 def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
     """Validated frontier series: (sorted candidate names, max_new_tokens).
 
@@ -1293,11 +1328,11 @@ def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
         return None
     names: list[str] = []
     total_points = 0
-    for name in sorted(candidates):
+    for name in _sorted_str_keys(candidates):
         data = candidates[name]
-        if type(name) is not str or type(data) is not dict:
+        if type(data) is not dict:
             continue
-        if len(data.get("fixture_ids") or []) <= 0:
+        if _fixture_total(data) <= 0:
             continue
         points = 0
         for point in data.get("pass_steps") or []:
@@ -1383,7 +1418,7 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
                 and type(point[0]) is int
                 and type(point[1]) is int
                 and 1 <= point[0] <= max_tokens
-                and 0 <= point[1] <= len(data.get("fixture_ids") or [])
+                and 0 <= point[1] <= _fixture_total(data)
             ):
                 by_budget[point[0]] = point[1]
         steps_of[name] = sorted(by_budget.items())
@@ -1742,7 +1777,7 @@ def _search_rows(result: dict[str, Any]) -> str:
         boundary_text = (
             ", ".join(str(token) for token in boundary_ids) if type(boundary_ids) is list else "?"
         )
-        rate = summary.get("rate")
+        rate = _valid_rate(summary.get("rate"))
         if rate is None:
             cell = '<span class="badge neutral">incomplete</span>'
             bar = ""
@@ -1816,6 +1851,28 @@ def _search_rows(result: dict[str, Any]) -> str:
     return "".join(rows)
 
 
+def _contamination_line(contamination: Any) -> str:
+    """One-line fixture-hygiene summary for the run-configuration section.
+
+    Advisory: a flagged worst tier warns that the held-out split may be
+    contaminated by search near-duplicates; it never changes any verdict.
+    Malformed payloads render "not recorded", never crash.
+    """
+    if type(contamination) is not dict:
+        return "not recorded"
+    worst = contamination.get("worst_tier")
+    pairs = contamination.get("pairs")
+    count = len(pairs) if type(pairs) is list else 0
+    if worst == "clean":
+        return "clean: no search/held-out near-duplicate pairs"
+    if type(worst) is str and count:
+        return (
+            f"{worst}: {count} near-duplicate pair(s) flagged -- "
+            "held-out split may be contaminated (advisory)"
+        )
+    return "not recorded"
+
+
 def _config_section(result: dict[str, Any]) -> str:
     fingerprint = _short_fingerprint(result.get("backend_fingerprint"))
     # Per-candidate boundaries (Cycle 2): when every candidate was measured
@@ -1844,6 +1901,7 @@ def _config_section(result: dict[str, Any]) -> str:
         ("Max new tokens", str(result.get("max_new_tokens", ""))),
         *boundary_items,
         ("Candidates", str(len(result.get("search") or []))),
+        ("Fixture hygiene", _contamination_line(result.get("contamination"))),
         ("Backend fingerprint", fingerprint),
         ("Statistical confidence", str(result.get("statistical_confidence", ""))),
         ("Compute comparison", str(result.get("compute_comparison", ""))),
@@ -1877,8 +1935,8 @@ def _held_out_section(result: dict[str, Any]) -> str:
             "</section>"
         )
     summary = held.get("summary") or {}
-    rate = summary.get("rate")
-    rate_text = "incomplete" if rate is None else f"{rate:.0%}"
+    valid_rate = _valid_rate(summary.get("rate"))
+    rate_text = "incomplete" if valid_rate is None else f"{valid_rate:.0%}"
     cards = "".join(
         '<div class="card"><div class="k">'
         + escape(key)
@@ -2059,11 +2117,11 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     # Validate each series: strictly-typed step points inside the budget
     # range; malformed entries are skipped, never crash the report.
     series: list[tuple[str, int, list[tuple[int, int]], int | None]] = []
-    for name in sorted(candidates):
+    for name in _sorted_str_keys(candidates):
         data = candidates[name]
-        if type(name) is not str or type(data) is not dict:
+        if type(data) is not dict:
             continue
-        total = len(data.get("fixture_ids") or [])
+        total = _fixture_total(data)
         if total <= 0:
             continue
         by_budget: dict[int, int] = {}
@@ -2648,9 +2706,9 @@ def _frontier_spark_table(frontier: dict[str, Any]) -> str:
     for name, data in candidates.items():
         if type(name) is not str or type(data) is not dict:
             continue
-        fixture_ids = data.get("fixture_ids") or []
-        total = len(fixture_ids)
-        mins = data.get("min_budget_per_fixture") or []
+        total = _fixture_total(data)
+        mins_raw = data.get("min_budget_per_fixture")
+        mins = mins_raw if type(mins_raw) is list else []
         counts = [sum(1 for mb in mins if type(mb) is int and mb <= budget) for budget in budgets]
         label = f"pass count {counts[0]} to {counts[-1]} of {total} over budgets 1 to {max_tokens}"
         spark = _spark_svg(counts, total, label)
@@ -2805,12 +2863,14 @@ def _frontier_section(result: dict[str, Any]) -> str:
     candidates: Any = frontier.get("candidates")
     data = candidates.get(winner) if type(winner) is str else None
     if type(data) is dict:
-        total = len(data.get("fixture_ids") or [])
+        total = _fixture_total(data)
         rows = []
         for point in data.get("pass_steps") or []:
             if type(point) is not list or len(point) != 2:
                 continue
             budget, count = point
+            if type(budget) is not int or type(count) is not int:
+                continue
             percent = f"{(count / total):.0%}" if total else "?"
             bar = (
                 '<span class="bar" role="img" aria-label="'
@@ -2958,7 +3018,10 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = F
     umask. Raises FileExistsError if the leaf already exists, unless
     ``_allow_empty_existing`` is set and the leaf is an empty directory
     (used by ``cli.run``, which claims the output dir before the expensive
-    experiment). Symlinked path components are never chmodded through: the
+    experiment). A symlinked leaf always raises FileExistsError -- even with
+    ``_allow_empty_existing`` -- so report files are never written through a
+    link into an attacker-chosen directory. Symlinked path components are
+    never chmodded through: the
     permission tightening applies only to real directories created (or
     claimed) for this report. Callers that create the directory ahead of expensive work
     should remove it again if the work fails before ``save_report``
@@ -2976,6 +3039,13 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = F
     try:
         target.mkdir(parents=True, exist_ok=False, mode=0o700)
     except FileExistsError:
+        # A symlinked leaf is never claimed: is_dir() follows links, so a
+        # symlink to an empty directory would otherwise pass the freshness
+        # check below and save_report would write through it into an
+        # attacker-chosen directory. Fail closed regardless of
+        # _allow_empty_existing.
+        if target.is_symlink():
+            raise
         if not (_allow_empty_existing and target.is_dir() and not any(target.iterdir())):
             raise
     for component in missing:
@@ -2999,11 +3069,14 @@ def save_report(
     """Write the report as results.json + report.html into a fresh directory.
 
     The directory is created with owner-only permissions and both files are
-    written atomically (O_EXCL, no overwrite) with 0o600, since reports may
-    contain sensitive evidence. The JSON holds the public view (raw
+    written with O_EXCL (no overwrite) and 0o600, since reports may contain
+    sensitive evidence; a partially written file is unlinked on any
+    Python-level failure. The JSON holds the public view (raw
     observations stripped unless include_evidence is set); the HTML is the
     full enriched rendering. Returns the (json_path, html_path) tuple.
-    Raises ValueError if the directory is not fresh and empty.
+    Raises ValueError if the directory is not fresh and empty, and
+    FileExistsError if the leaf is (or resolves through) a symlink -- report
+    files are never written through a symlinked leaf.
     """
 
     # Automatic diagnostics: pure functions of the recorded search

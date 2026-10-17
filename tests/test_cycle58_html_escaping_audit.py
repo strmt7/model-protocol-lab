@@ -102,6 +102,18 @@ URL_ATTRS = {
 
 SVG_ATTR_ALLOW = {"class", "width", "height", "viewbox", "role", "aria-label"}
 RECT_ATTR_ALLOW = {"x", "y", "width", "height", "fill"}
+# Attribute surface measured from the chart builders' actual output
+# (frontier chart, margin trajectory, sparklines): every dynamic value in
+# these attributes is an integer from validated counts or a fixed palette
+# literal -- hostile strings can only ever appear as escaped <text>
+# content, never in attributes.
+G_ATTR_ALLOW = {"transform"}
+PATH_ATTR_ALLOW = {"d", "fill", "fill-opacity", "stroke", "stroke-width"}
+LINE_ATTR_ALLOW = {"x1", "y1", "x2", "y2", "stroke", "stroke-width", "stroke-dasharray"}
+TEXT_ATTR_ALLOW = {"x", "y", "fill", "font-size", "text-anchor", "dominant-baseline"}
+CIRCLE_ATTR_ALLOW = {"cx", "cy", "r", "fill"}
+# Elements whose fill could reference an external paint server.
+_FILL_URL_CHECK_TAGS = {"rect", "path", "circle"}
 
 
 class _MarkupAudit(HTMLParser):
@@ -131,13 +143,26 @@ class _MarkupAudit(HTMLParser):
                 if name.lower() not in SVG_ATTR_ALLOW:
                     self.problems.append(f"unexpected <svg> attribute {name!r}")
         if tag == "rect":
-            for name, value in attrs:
+            for name, _ in attrs:
                 if name.lower() not in RECT_ATTR_ALLOW:
                     self.problems.append(f"unexpected <rect> attribute {name!r}")
+        for chart_tag, allowed in (
+            ("g", G_ATTR_ALLOW),
+            ("path", PATH_ATTR_ALLOW),
+            ("line", LINE_ATTR_ALLOW),
+            ("text", TEXT_ATTR_ALLOW),
+            ("circle", CIRCLE_ATTR_ALLOW),
+        ):
+            if tag == chart_tag:
+                for name, _ in attrs:
+                    if name.lower() not in allowed:
+                        self.problems.append(f"unexpected <{tag}> attribute {name!r}")
+        if tag in _FILL_URL_CHECK_TAGS:
+            for name, value in attrs:
                 # fill is a non-executable presentation attribute, but a
                 # url() payload could reference an external resource.
                 if name.lower() == "fill" and value and value.strip().lower().startswith("url("):
-                    self.problems.append("external paint reference in <rect> fill")
+                    self.problems.append(f"external paint reference in <{tag}> fill")
         if tag == "meta":
             attr = {n.lower(): (v or "") for n, v in attrs}
             if "http-equiv" in attr and attr["http-equiv"].lower() != "content-security-policy":
@@ -288,9 +313,16 @@ def build_result(payload):
         },
         "budget_frontier": {
             "max_new_tokens": 8,
+            # Hostile pass_steps/decision_steps/native_winner: the frontier
+            # chart SVG, margin SVG, decision ribbon, and winner curve must
+            # all render with hostile data (finding 4: the audit previously
+            # never executed these paths with hostile input).
+            "native_winner": payload,
+            "decision_steps": [[1, payload, payload], [5, "selected", payload]],
             "candidates": {
                 payload: {
                     "fixture_ids": ["f1"],
+                    "pass_steps": [[1, 0], [3, 1], [8, 1]],
                     "min_budget_per_fixture": [3],
                     "full_pass_budget": 3,
                 }
@@ -406,9 +438,15 @@ def build_kitchen_sink():
         },
         "budget_frontier": {
             "max_new_tokens": 8,
+            # Hostile chart inputs (see build_result): the frontier SVG, the
+            # margin SVG, the decision ribbon, and the winner curve render
+            # with hostile candidate names, decisions, and winners.
+            "native_winner": p(2),
+            "decision_steps": [[1, p(7), p(2)], [5, "selected", p(2)]],
             "candidates": {
                 p(2): {
                     "fixture_ids": ["f1"],
+                    "pass_steps": [[1, 0], [3, 1], [8, 1]],
                     "min_budget_per_fixture": [3],
                     "full_pass_budget": 3,
                 }
@@ -529,21 +567,45 @@ class HtmlEscapingAuditTests(unittest.TestCase):
             _audit_markup(self, rendered, "sample report.html")
             self.assertEqual(rendered.count("<script"), 1)
 
-    def test_rect_fill_url_payload_flagged(self):
-        # fill is allowlisted on <rect> (presentation attribute), but a
-        # url() paint server could pull an external resource.
+    def test_real_chart_fills_are_fixed_literals(self):
+        # The old version of this test fed hand-written markup to the
+        # audit's own parser -- it tested the harness, not the code. Now a
+        # real frontier chart renders with a hostile candidate name and the
+        # audit runs over the actual builder output: every fill must be a
+        # fixed literal (no url() paint references), and the chart elements
+        # must carry only allowlisted attributes.
+        from model_protocol_lab.reporting import _frontier_chart_svg
+
+        hostile = "<script>alert(1)</script>"
+        frontier = {
+            "max_new_tokens": 8,
+            "native_winner": hostile,
+            "decision_steps": [[1, hostile, hostile], [5, "selected", hostile]],
+            "candidates": {
+                hostile: {
+                    "fixture_ids": ["f1"],
+                    "pass_steps": [[1, 0], [3, 1], [8, 1]],
+                    "min_budget_per_fixture": [3],
+                    "full_pass_budget": 3,
+                }
+            },
+        }
+        rendered = _frontier_chart_svg(frontier)
+        self.assertIn("<svg", rendered)
+        self.assertNotIn(hostile, rendered)
         audit = _MarkupAudit()
-        audit.feed('<svg><rect x="0" y="0" width="4" height="4" fill="url(http://evil/x)"/></svg>')
+        audit.feed(rendered)
         audit.close()
-        self.assertTrue(
-            any("external paint reference" in p for p in audit.problems),
-            audit.problems,
-        )
-        # Plain hex fills (what the report builders emit) stay clean.
+        self.assertEqual(audit.problems, [], audit.problems)
+        # And the url() check itself is not vacuous: a hostile fill is
+        # still flagged when one is present.
         audit2 = _MarkupAudit()
-        audit2.feed('<svg><rect x="0" y="0" width="4" height="4" fill="#16a34a"/></svg>')
+        audit2.feed('<svg><circle cx="1" cy="1" r="2" fill="url(http://evil/x)"/></svg>')
         audit2.close()
-        self.assertEqual(audit2.problems, [])
+        self.assertTrue(
+            any("external paint reference" in p for p in audit2.problems),
+            audit2.problems,
+        )
 
     def test_diffreports_has_no_html_entry_point(self):
         self.assertFalse(hasattr(diffreports, "render_html"))

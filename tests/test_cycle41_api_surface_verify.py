@@ -275,7 +275,14 @@ class TestInspect(unittest.TestCase):
         proc = run_mpl("inspect", str(EXAMPLE_FIXTURES))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
-            json.loads(proc.stdout), {"search_cases": 2, "held_out_cases": 2, "valid": True}
+            json.loads(proc.stdout),
+            {
+                "search_cases": 2,
+                "held_out_cases": 2,
+                "valid": True,
+                # The example fixtures are contamination-clean.
+                "contamination": {"worst_tier": "clean", "pairs": []},
+            },
         )
 
     def test_empty_expected_warns_on_stderr(self) -> None:

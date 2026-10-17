@@ -305,7 +305,16 @@ class InspectValidationTests(unittest.TestCase):
         proc = run_cli("inspect", str(EXAMPLE_FIXTURES))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         payload = json.loads(proc.stdout)
-        self.assertEqual(payload, {"search_cases": 2, "held_out_cases": 2, "valid": True})
+        self.assertEqual(
+            payload,
+            {
+                "search_cases": 2,
+                "held_out_cases": 2,
+                "valid": True,
+                # The example fixtures are contamination-clean.
+                "contamination": {"worst_tier": "clean", "pairs": []},
+            },
+        )
 
     def test_unicode_nonexistent_path_exits_1_without_crash(self):
         with TemporaryDirectory() as tmp:

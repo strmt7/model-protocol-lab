@@ -324,10 +324,12 @@ class TestMutationGate(unittest.TestCase):
         self.assertEqual(_paths(svg)[1][0], "M 0 160 H 186 V 80 H 497 V 0 H 560")
 
     def test_unsorted_legend_caught(self) -> None:
+        # The sort lives in _sorted_str_keys (hostile-payload hardening):
+        # mutating it to preserve insertion order must change the chart.
         module = _load_mutant(
             self.SOURCE,
-            "    for name in sorted(candidates):",
-            "    for name in candidates:",
+            "    return sorted(key for key in candidates if type(key) is str)",
+            "    return [key for key in candidates if type(key) is str]",
             "unsorted_legend",
         )
         forward = _example_frontier()

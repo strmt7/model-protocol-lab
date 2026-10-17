@@ -6,6 +6,56 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 132 — security red-team fixes + holdout contamination detector, 2026-10-17)
+
+- New `model_protocol_lab/contamination.py`: pure search/held-out
+  contamination detector (IDEAS #2). Every held-out fixture is compared
+  against every search fixture over NFKC-normalized, format-char-stripped,
+  lowercased, whitespace-collapsed user text plus expected answer, using
+  character-level `SequenceMatcher` ratio (autojunk=False) and token-3-gram
+  Jaccard. Tiers are advisory (warnings, never failures): `duplicate`
+  (ratio >= 0.98), `near_duplicate` (>= 0.90), `paraphrase_suspect`
+  (>= 0.80 or Jaccard >= 0.85). Deterministic ordering; fail-closed on
+  empty/hostile inputs. Wired into `mpl inspect` (stderr warning + JSON
+  `contamination` block), `mpl fixtures build` (same), `doctor --dataset`
+  (`examine_dataset`), and `mpl run` (`results.json` + a "Fixture hygiene"
+  line in the report's run-configuration section). New
+  `tests/test_cycle132_contamination.py` (31 tests); 2/2 targeted mutants
+  killed.
+- Security red-team findings fixed (all reproduced against the current
+  tree before fixing; `agents_out/security/REPORT.md`):
+  - `render_html` no longer crashes on hostile frontier/rate payloads:
+    mixed-type candidate keys are skipped before `sorted()`, non-list
+    `fixture_ids` count as zero, non-list `min_budget_per_fixture` as
+    empty, malformed winner-curve points skipped, and non-finite/bool/str
+    pass rates degrade to the "incomplete" badge (also fixes the
+    `width:nan%` cosmetic).
+  - `prepare_report_dir` rejects a symlinked leaf outright
+    (`FileExistsError`), even with `_allow_empty_existing` -- report files
+    are never written through a link.
+  - `_render_with_memory_cap` no longer swallows a watchdog alarm landing
+    mid-`RLIMIT_AS`-restore: the budget exception is caught explicitly,
+    the restore retried (one-shot alarm is consumed), then re-raised so
+    the caller degrades the pair to "unavailable".
+  - `_backend_failure_message` uses an explicit allowlist of the 7 fixed
+    `local_*` codes (pinned against `backends.py` raise sites) instead of
+    a prefix match.
+  - `render_portability_table` control-strips every interpolated field at
+    the stderr render boundary.
+  - Cycle-58 escaping audit hardened: the kitchen-sink fixture now renders
+    the frontier chart SVG, margin SVG, decision ribbon, and winner curve
+    with hostile data; `_MarkupAudit` allowlists the measured
+    g/path/line/text/circle attribute surface (incl. the fixed-literal
+    `stroke-dasharray`); the fill-`url()` test now audits a real chart
+    render instead of hand-written markup.
+- Docs: `docs/USAGE.md` documents the contamination check (§1, §9), the
+  run-report hygiene line (§6), and the debug-REPL forged-status-line
+  caveat (§10); `docs/SECURITY.md` records the accepted trade-offs for
+  invisible format characters in listings and bidi controls in HTML;
+  `save_report`'s docstring no longer claims kill-9 atomicity (O_EXCL +
+  unlink-on-Python-level-failure, precisely).
+- `tests/test_cycle132_security_findings.py` (29 tests) pins every fix.
+
 ### Added (cycle 131 — independent results-integrity replay + hostile-payload robustness, 2026-10-17)
 
 - New `mpl verify` subcommand: independently re-derives an experiment's
