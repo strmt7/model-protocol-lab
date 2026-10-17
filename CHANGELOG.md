@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (CI red revert — cycle 107 conversions rolled back, 2026-10-17)
+
+- Reverted cycle 107's pytest-to-TestCase conversions (test_cycle29,
+  test_cycle30, test_cycle66, test_cycle69) and the new
+  TestDualRunnerContribution meta-tests: the converted tree failed CI's
+  unittest gate on Python 3.12/3.13 (3.11 passed) with an undiagnosed
+  root cause that does not reproduce locally. Main is restored to the
+  cycle-106 green state (4913 pytest / 3873 unittest). The conversions
+  will be redone carefully with CI verification per file.
+
 ### Fixed (cycle 107 — continued pytest-to-TestCase conversions, 2026-10-17)
 
 - Converted 4 more pytest-style files to `unittest.TestCase`

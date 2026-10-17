@@ -80,10 +80,9 @@ Mutation gate: 4 mutants on /tmp copies -- (1) partition assignment ignored,
 """
 
 import os
-import tempfile
 import unicodedata
-import unittest
-from pathlib import Path
+
+import pytest
 
 from model_protocol_lab import fixtures as fixtures_mod
 from model_protocol_lab.datasets import MAX_BYTES, load_dataset, parse_dataset
@@ -99,14 +98,12 @@ def _doc(search_row: str, held_row: str) -> str:
 
 
 def _expect_error(text: str) -> str:
-    try:
+    with pytest.raises(ValueError) as exc:
         parse_fixture_csv(text)
-    except ValueError as exc:
-        return str(exc)
-    raise AssertionError("expected ValueError from parse_fixture_csv")
+    return str(exc.value)
 
 
-class TestParseFixtureCsvAdversarial(unittest.TestCase):
+class TestParseFixtureCsvAdversarial:
     def test_baseline_two_rows(self):
         split, empty = parse_fixture_csv(_doc(GOOD_SEARCH, GOOD_HELD))
         assert [f.id for f in split.search] == ["a"]
@@ -114,13 +111,12 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         assert [(m.role, m.content) for m in split.search[0].messages] == [("user", "hello")]
         assert empty == []
 
-    def test_partition_label_is_case_sensitive(self):
-        for label in ["Search", "SEARCH", "held out", "search ", "held_OUT"]:
-            with self.subTest(label=label):
-                message = _expect_error(_doc(f"a,g1,{label},x,hello,,", GOOD_HELD))
-                assert message == (
-                    f"row 2 (id 'a'): partition must be 'search' or 'held_out', got {label!r}"
-                )
+    @pytest.mark.parametrize("label", ["Search", "SEARCH", "held out", "search ", "held_OUT"])
+    def test_partition_label_is_case_sensitive(self, label):
+        message = _expect_error(_doc(f"a,g1,{label},x,hello,,", GOOD_HELD))
+        assert message == (
+            f"row 2 (id 'a'): partition must be 'search' or 'held_out', got {label!r}"
+        )
 
     def test_empty_string_id_rejected_with_row_number(self):
         assert _expect_error(_doc(",g1,search,x,hello,,", GOOD_HELD)) == (
@@ -133,11 +129,13 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         )
 
     def test_whitespace_padded_ids_are_distinct_and_verbatim(self):
+        # Documented rule: cells are used verbatim, no whitespace stripping.
         split, _ = parse_fixture_csv(_doc("ab,g1,search,x,hello,,", " ab,g2,held_out,y,hi,,"))
         assert split.search[0].id == "ab"
         assert split.held_out[0].id == " ab"
 
     def test_case_differing_ids_are_distinct(self):
+        # NFC normalization is not case folding.
         split, _ = parse_fixture_csv(_doc("Ab,g1,search,x,hello,,", "ab,g2,held_out,y,hi,,"))
         assert [f.id for f in split.search] == ["Ab"]
         assert [f.id for f in split.held_out] == ["ab"]
@@ -184,9 +182,12 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         assert _expect_error(HDR + "\n") == "CSV has no 'search' fixtures"
 
     def test_header_only_held_out_reports_search_first(self):
+        # Both partitions are checked; search is named first.
         assert _expect_error(HDR + "\nb,g2,held_out,y,hi,,\n") == "CSV has no 'search' fixtures"
 
     def test_missing_trailing_columns_pad_with_empty(self):
+        # Short rows are padded with ""; the conversation ends at the first
+        # empty cell, so this is a valid single-message fixture.
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,hello", GOOD_HELD))
         assert [(m.role, m.content) for m in split.search[0].messages] == [("user", "hello")]
 
@@ -250,10 +251,13 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         )
 
     def test_whitespace_only_user_1_kept_verbatim(self):
+        # Verbatim cells: whitespace-only content is truthy, so it is content.
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,   ,,", GOOD_HELD))
         assert split.search[0].messages[0].content == "   "
 
     def test_whitespace_only_line_is_not_a_blank_line(self):
+        # Minor drift: docs say "blank lines between rows carry no fixture",
+        # but a spaces-only line is treated as a data row and fails loudly.
         message = _expect_error(HDR + "\na,g1,search,x,hello,,\n   \n" + GOOD_HELD + "\n")
         assert message == "row 3: fixture id is blank"
 
@@ -334,14 +338,14 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         )
 
     def test_non_string_source_rejected(self):
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             parse_fixture_csv(b"bytes")
-        assert str(exc.exception) == "CSV source must be text"
+        assert str(exc.value) == "CSV source must be text"
 
     def test_source_over_size_limit_rejected(self):
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             parse_fixture_csv("x" * (MAX_BYTES + 1))
-        assert str(exc.exception) == "CSV source exceeds size limit"
+        assert str(exc.value) == "CSV source exceeds size limit"
 
     def test_source_exactly_at_size_limit_accepted(self):
         base = _doc(GOOD_SEARCH, GOOD_HELD)
@@ -354,43 +358,42 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         assert empty == ["a"]
 
     def test_oversize_single_field_raises_valueerror(self):
+        # Former BUG-1 (fixed): a field over the csv module's 131072-char
+        # field limit used to raise _csv.Error (not a ValueError), escaping
+        # the documented contract and the CLI's `except ValueError` handler.
+        # It is now normalized to ValueError. The file is under the 2 MB
+        # cap, so the module's own size checks should own this input.
         text = _doc(f"a,g1,search,x,{'Z' * 200_000},,", GOOD_HELD)
         assert len(text.encode("utf-8")) < MAX_BYTES
-        with self.assertRaisesRegex(ValueError, "exceeds the parser limit"):
+        with pytest.raises(ValueError, match="exceeds the parser limit"):
             parse_fixture_csv(text)
 
-    def setUp(self):
-        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
-        self.tmp_path = Path(self._td.name)
 
-    def tearDown(self):
-        self._td.cleanup()
-
-
-class TestReadAuthoringFileAdversarial(unittest.TestCase):
-    def _write(self, name, data: bytes):
-        tmp_path = self.tmp_path
+class TestReadAuthoringFileAdversarial:
+    def _write(self, tmp_path, name, data: bytes):
         target = tmp_path / name
         target.write_bytes(data)
         return target
 
-    def test_roundtrip_small_file(self):
-        target = self._write("cases.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode())
+    def test_roundtrip_small_file(self, tmp_path):
+        target = self._write(tmp_path, "cases.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode())
         assert read_authoring_file(target) == _doc(GOOD_SEARCH, GOOD_HELD)
 
-    def test_str_and_path_both_accepted(self):
-        target = self._write("cases.csv", b"x")
+    def test_str_and_path_both_accepted(self, tmp_path):
+        target = self._write(tmp_path, "cases.csv", b"x")
         assert read_authoring_file(str(target)) == "x"
         assert read_authoring_file(target) == "x"
 
-    def test_utf16_with_bom_refused(self):
-        target = self._write("u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16"))
-        with self.assertRaises(ValueError) as exc:
+    def test_utf16_with_bom_refused(self, tmp_path):
+        target = self._write(tmp_path, "u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16"))
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(target)
-        assert str(exc.exception) == "Authoring file is not valid UTF-8"
+        assert str(exc.value) == "Authoring file is not valid UTF-8"
 
-    def test_bomless_utf16_decodes_then_fails_header_check(self):
-        target = self._write("u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16-le"))
+    def test_bomless_utf16_decodes_then_fails_header_check(self, tmp_path):
+        # Without a BOM the NUL bytes are valid UTF-8, so the read "succeeds";
+        # the CSV layer must still reject it loudly (never silently accept).
+        target = self._write(tmp_path, "u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16-le"))
         text = read_authoring_file(target)
         assert "\x00" in text
         message = _expect_error(text)
@@ -401,14 +404,16 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
             "got 'id,group,partition,expected'"
         )
 
-    def test_latin1_refused(self):
-        target = self._write("l.csv", "a,g1,search,x,h\xe9llo\n".encode("latin-1"))
-        with self.assertRaises(ValueError) as exc:
+    def test_latin1_refused(self, tmp_path):
+        target = self._write(tmp_path, "l.csv", "a,g1,search,x,h\xe9llo\n".encode("latin-1"))
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(target)
-        assert str(exc.exception) == "Authoring file is not valid UTF-8"
+        assert str(exc.value) == "Authoring file is not valid UTF-8"
 
-    def test_utf8_bom_read_ok_but_header_rejected(self):
-        target = self._write("b.csv", ("\ufeff" + _doc(GOOD_SEARCH, GOOD_HELD)).encode("utf-8"))
+    def test_utf8_bom_read_ok_but_header_rejected(self, tmp_path):
+        target = self._write(
+            tmp_path, "b.csv", ("\ufeff" + _doc(GOOD_SEARCH, GOOD_HELD)).encode("utf-8")
+        )
         text = read_authoring_file(target)
         assert text.startswith("\ufeff")
         assert _expect_error(text) == (
@@ -416,105 +421,93 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
             "got '\\ufeffid,group,partition,expected'"
         )
 
-    def test_over_size_limit_refused(self):
-        target = self._write("big.csv", b"a" * (MAX_BYTES + 1))
-        with self.assertRaises(ValueError) as exc:
+    def test_over_size_limit_refused(self, tmp_path):
+        target = self._write(tmp_path, "big.csv", b"a" * (MAX_BYTES + 1))
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(target)
-        assert str(exc.exception) == "Authoring file exceeds size limit"
+        assert str(exc.value) == "Authoring file exceeds size limit"
 
-    def test_exactly_size_limit_accepted(self):
-        target = self._write("exact.csv", b"a" * MAX_BYTES)
+    def test_exactly_size_limit_accepted(self, tmp_path):
+        target = self._write(tmp_path, "exact.csv", b"a" * MAX_BYTES)
         assert len(read_authoring_file(target)) == MAX_BYTES
 
-    def test_empty_file_reads_empty(self):
-        target = self._write("empty.csv", b"")
+    def test_empty_file_reads_empty(self, tmp_path):
+        target = self._write(tmp_path, "empty.csv", b"")
         assert read_authoring_file(target) == ""
 
-    def test_non_regular_files_refused(self):
-        tmp_path = self.tmp_path
-        for kind in ["fifo", "dir", "devnull", "fifo_symlink"]:
-            with self.subTest(kind=kind):
-                # Unique names per subtest: subTests share one tmp_path (pytest gave
-                # each parametrized case a fresh dir).
-                if kind == "fifo":
-                    target = tmp_path / "p_fifo.csv"
-                    os.mkfifo(target)
-                elif kind == "dir":
-                    target = tmp_path / "sub"
-                    target.mkdir()
-                elif kind == "devnull":
-                    target = "/dev/null"
-                else:
-                    fifo = tmp_path / "p_link.csv"
-                    os.mkfifo(fifo)
-                    target = tmp_path / "link.csv"
-                    target.symlink_to(fifo)
-                with self.assertRaises(ValueError) as exc:
-                    read_authoring_file(target)
-                assert str(exc.exception) == "Authoring path is not a regular file"
+    @pytest.mark.parametrize("kind", ["fifo", "dir", "devnull", "fifo_symlink"])
+    def test_non_regular_files_refused(self, tmp_path, kind):
+        if kind == "fifo":
+            target = tmp_path / "p.csv"
+            os.mkfifo(target)
+        elif kind == "dir":
+            target = tmp_path / "sub"
+            target.mkdir()
+        elif kind == "devnull":
+            target = "/dev/null"
+        else:
+            fifo = tmp_path / "p.csv"
+            os.mkfifo(fifo)
+            target = tmp_path / "link.csv"
+            target.symlink_to(fifo)
+        with pytest.raises(ValueError) as exc:
+            read_authoring_file(target)
+        assert str(exc.value) == "Authoring path is not a regular file"
 
-    def test_missing_file(self):
-        tmp_path = self.tmp_path
-        with self.assertRaises(ValueError) as exc:
+    def test_missing_file(self, tmp_path):
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(tmp_path / "nope.csv")
-        assert str(exc.exception) == "Unreadable authoring file"
+        assert str(exc.value) == "Unreadable authoring file"
 
-    def test_dangling_symlink(self):
-        tmp_path = self.tmp_path
+    def test_dangling_symlink(self, tmp_path):
         target = tmp_path / "dangling.csv"
         target.symlink_to(tmp_path / "nope.csv")
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(target)
-        assert str(exc.exception) == "Unreadable authoring file"
+        assert str(exc.value) == "Unreadable authoring file"
 
-    def test_symlink_loop(self):
-        tmp_path = self.tmp_path
+    def test_symlink_loop(self, tmp_path):
         first = tmp_path / "loop1.csv"
         second = tmp_path / "loop2.csv"
         first.symlink_to(second)
         second.symlink_to(first)
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             read_authoring_file(first)
-        assert str(exc.exception) == "Unreadable authoring file"
+        assert str(exc.value) == "Unreadable authoring file"
 
-    def test_unreadable_file(self):
-        target = self._write("noperm.csv", b"x")
+    def test_unreadable_file(self, tmp_path):
+        target = self._write(tmp_path, "noperm.csv", b"x")
         target.chmod(0o000)
         try:
             if os.access(target, os.R_OK):
-                self.skipTest("process can still read the file (e.g. running as root)")
-            with self.assertRaises(ValueError) as exc:
+                pytest.skip("process can still read the file (e.g. running as root)")
+            with pytest.raises(ValueError) as exc:
                 read_authoring_file(target)
-            assert str(exc.exception) == "Unreadable authoring file"
+            assert str(exc.value) == "Unreadable authoring file"
         finally:
             target.chmod(0o600)
 
-    def test_null_byte_in_path(self):
-        tmp_path = self.tmp_path
-        with self.assertRaisesRegex(ValueError, "embedded null byte"):
+    def test_null_byte_in_path(self, tmp_path):
+        with pytest.raises(ValueError, match="embedded null byte"):
             read_authoring_file(tmp_path / "a\0b.csv")
 
-    def test_non_path_types_rejected(self):
-        for bad in [123, b"bytes", None]:
-            with self.subTest(bad=bad):
-                with self.assertRaises(ValueError) as exc:
-                    read_authoring_file(bad)
-                assert str(exc.exception) == "Invalid authoring path"
+    @pytest.mark.parametrize("bad", [123, b"bytes", None])
+    def test_non_path_types_rejected(self, bad):
+        with pytest.raises(ValueError) as exc:
+            read_authoring_file(bad)
+        assert str(exc.value) == "Invalid authoring path"
 
-    @unittest.skipIf(not os.path.exists("/proc/self/mem"), "Linux /proc only")
+    @pytest.mark.skipif(not os.path.exists("/proc/self/mem"), reason="Linux /proc only")
     def test_read_error_after_open_normalized_to_valueerror(self):
-        with self.assertRaisesRegex(ValueError, "Unreadable authoring file"):
+        # Former BUG-2 (fixed): /proc/self/mem passes the fstat regular-file
+        # check, then read() raises OSError. It is now normalized to
+        # ValueError so the CLI's `except ValueError` handler reports the
+        # fixed "Unreadable authoring file" error instead of a traceback.
+        with pytest.raises(ValueError, match="Unreadable authoring file"):
             read_authoring_file("/proc/self/mem")
 
-    def setUp(self):
-        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
-        self.tmp_path = Path(self._td.name)
 
-    def tearDown(self):
-        self._td.cleanup()
-
-
-class TestDatasetsLoaderAdversarial(unittest.TestCase):
+class TestDatasetsLoaderAdversarial:
     @staticmethod
     def _doc():
         import json
@@ -537,14 +530,14 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
             '[{"role":"user","content":"hi"}],"expected":"y"}]}'
         )
         assert len(text.encode("utf-8")) < MAX_BYTES
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             parse_dataset(text)
-        assert str(exc.exception) == "Dataset nesting too deep"
+        assert str(exc.value) == "Dataset nesting too deep"
 
     def test_text_over_size_limit_rejected(self):
-        with self.assertRaises(ValueError) as exc:
+        with pytest.raises(ValueError) as exc:
             parse_dataset(" " * (MAX_BYTES + 1))
-        assert str(exc.exception) == "Dataset exceeds size limit"
+        assert str(exc.value) == "Dataset exceeds size limit"
 
     def test_text_exactly_at_size_limit_parses(self):
         text = self._doc().ljust(MAX_BYTES)
@@ -553,10 +546,13 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
         assert [f.id for f in split.search] == ["id0"]
 
     def test_csv_and_json_loaders_agree_on_nfc_discipline(self):
+        # The CSV builder and the JSON loader must enforce the same
+        # NFC-normalized ID uniqueness: build the equivalent document both
+        # ways and require the same rejection.
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         csv_text = _doc(f"{nfc},g1,search,x,hello,,", f"{nfd},g2,held_out,y,hi,,")
-        with self.assertRaisesRegex(ValueError, "Fixture IDs must be globally unique"):
+        with pytest.raises(ValueError, match="Fixture IDs must be globally unique"):
             parse_fixture_csv(csv_text)
         import json
 
@@ -578,11 +574,10 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
                 }
             ],
         }
-        with self.assertRaisesRegex(ValueError, "Fixture IDs must be globally unique"):
+        with pytest.raises(ValueError, match="Fixture IDs must be globally unique"):
             parse_dataset(json.dumps(payload))
 
-    def test_file_roundtrip_through_both_readers(self):
-        tmp_path = self.tmp_path
+    def test_file_roundtrip_through_both_readers(self, tmp_path):
         target = tmp_path / "cases.csv"
         target.write_text(_doc(GOOD_SEARCH, GOOD_HELD), encoding="utf-8")
         split, _ = parse_fixture_csv(read_authoring_file(target))
@@ -590,27 +585,18 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
         assert [f.id for f in split.held_out] == ["b"]
         # The built JSON must satisfy the strict runtime loader by construction.
         rebuilt = fixtures_mod.split_to_json_text(split)
-        reloaded = load_dataset(self._write_json(rebuilt))
+        reloaded = load_dataset(self._write_json(tmp_path, rebuilt))
         assert [f.id for f in reloaded.search] == ["a"]
 
-    def _write_json(self, text):
-        tmp_path = self.tmp_path
+    @staticmethod
+    def _write_json(tmp_path, text):
         target = tmp_path / "fixtures.json"
         target.write_text(text, encoding="utf-8")
         return target
 
-    @unittest.skipIf(not os.path.exists("/proc/self/mem"), "Linux /proc only")
+    @pytest.mark.skipif(not os.path.exists("/proc/self/mem"), reason="Linux /proc only")
     def test_load_dataset_read_error_normalized_to_valueerror(self):
-        with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
+        # Former BUG-2 (datasets twin, fixed): read-time OSError is now
+        # normalized to the fixed "Unreadable fixture file" ValueError.
+        with pytest.raises(ValueError, match="Unreadable fixture file"):
             load_dataset("/proc/self/mem")
-
-    def setUp(self):
-        self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
-        self.tmp_path = Path(self._td.name)
-
-    def tearDown(self):
-        self._td.cleanup()
-
-
-if __name__ == "__main__":
-    unittest.main()
