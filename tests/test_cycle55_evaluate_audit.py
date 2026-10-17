@@ -314,6 +314,7 @@ def oracle_evaluate(
         raw_reason: str | None,
         error: str | None,
         boundary_text_match: bool | None = None,
+        input_text: str = "",
     ) -> None:
         records.append(
             Observation(
@@ -328,6 +329,7 @@ def oracle_evaluate(
                 raw_reason=raw_reason,
                 error=error,
                 status=status,  # type: ignore[arg-type]
+                input_text=input_text,
             )
         )
 
@@ -342,12 +344,14 @@ def oracle_evaluate(
         answer = ""
         raw_reason: str | None = None
         cut: int | None = None
+        prompt_text = ""
 
         try:
             prompt = candidate.render(case.messages)
         except Exception:  # noqa: BLE001 -- sanitization boundary
             emit("failed", case, (), (), "", None, None, "render_failed")
             return done("failed")
+        prompt_text = prompt
         if event.is_set():
             emit("cancelled", case, (), (), "", None, None, None)
             return done("cancelled")
@@ -363,7 +367,7 @@ def oracle_evaluate(
         if event.is_set():
             # NOTE: terminate (not abort) here: the encoded input ids are
             # retained in the cancelled observation.
-            emit("cancelled", case, input_ids, (), "", None, None, None)
+            emit("cancelled", case, input_ids, (), "", None, None, None, input_text=prompt_text)
             return done("cancelled")
         request_seed = _o_request_seed(seed, case.id)
         try:
@@ -371,10 +375,30 @@ def oracle_evaluate(
                 input_ids, max_new_tokens=max_new_tokens, seed=request_seed, cancel=event
             )
         except Exception:  # noqa: BLE001 -- sanitization boundary
-            emit("failed", case, input_ids, (), "", None, None, "generate_failed")
+            emit(
+                "failed",
+                case,
+                input_ids,
+                (),
+                "",
+                None,
+                None,
+                "generate_failed",
+                input_text=prompt_text,
+            )
             return done("failed")
         if not _o_valid_generation(result, max_new_tokens):
-            emit("failed", case, input_ids, (), "", None, None, "invalid_generation")
+            emit(
+                "failed",
+                case,
+                input_ids,
+                (),
+                "",
+                None,
+                None,
+                "invalid_generation",
+                input_text=prompt_text,
+            )
             return done("failed")
         output_ids = result.token_ids
         raw_reason = result.reason
@@ -385,23 +409,73 @@ def oracle_evaluate(
                 if type(result.error) is str and result.error in _ALLOWLIST_CODES
                 else "backend_reported_error"
             )
-            emit("failed", case, input_ids, output_ids, "", cut, raw_reason, code)
+            emit(
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                "",
+                cut,
+                raw_reason,
+                code,
+                input_text=prompt_text,
+            )
             return done("failed")
         if result.reason == "cancelled" or event.is_set():
-            emit("cancelled", case, input_ids, output_ids, "", cut, raw_reason, None)
+            emit(
+                "cancelled",
+                case,
+                input_ids,
+                output_ids,
+                "",
+                cut,
+                raw_reason,
+                None,
+                input_text=prompt_text,
+            )
             return done("cancelled")
         answer_ids = output_ids if cut is None else output_ids[:cut]
         try:
             decoded = backend.decode(answer_ids)
         except Exception:  # noqa: BLE001 -- sanitization boundary
-            emit("failed", case, input_ids, output_ids, "", cut, raw_reason, "decode_failed")
+            emit(
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                "",
+                cut,
+                raw_reason,
+                "decode_failed",
+                input_text=prompt_text,
+            )
             return done("failed")
         if type(decoded) is not str:
-            emit("failed", case, input_ids, output_ids, "", cut, raw_reason, "decode_failed")
+            emit(
+                "failed",
+                case,
+                input_ids,
+                output_ids,
+                "",
+                cut,
+                raw_reason,
+                "decode_failed",
+                input_text=prompt_text,
+            )
             return done("failed")
         answer = decoded
         if event.is_set():
-            emit("cancelled", case, input_ids, output_ids, answer, cut, raw_reason, None)
+            emit(
+                "cancelled",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                None,
+                input_text=prompt_text,
+            )
             return done("cancelled")
         text_match = _o_boundary_text_match(backend, output_ids, cut, boundary)
         emit(
@@ -414,6 +488,7 @@ def oracle_evaluate(
             raw_reason,
             None,
             boundary_text_match=text_match,
+            input_text=prompt_text,
         )
     return done("cancelled" if event.is_set() else "completed")
 

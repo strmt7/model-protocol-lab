@@ -452,6 +452,20 @@ def build_kitchen_sink():
                 }
             },
         },
+        "boundary_audit": {
+            # Hostile family names: the canonicality table must escape them.
+            "available": True,
+            "n_observations": 4,
+            "n_usable": 4,
+            "n_unusable": 0,
+            "n_problem": 1,
+            "overall_rate": 0.25,
+            "per_candidate": {},
+            "per_family": {
+                p(14): {"n_usable": 2, "n_problem": 1, "rate": 0.5},
+                p(15): {"n_usable": 2, "n_problem": 0, "rate": 0.0},
+            },
+        },
         "held_out": {
             "summary": {
                 "status": p(3),
@@ -623,6 +637,7 @@ class HtmlEscapingAuditTests(unittest.TestCase):
             "winner": {"old": None, "new": None},
             "frontier": {"available": "neither", "changed": False},
             "held_out_floor": {"available": "neither", "changed": False},
+            "boundary_audit": {"available": "neither", "changed": False},
             "candidate_verdicts": [],
             "evidence": {"old": False, "new": False},
             "summary": {

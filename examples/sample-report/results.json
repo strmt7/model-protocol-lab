@@ -373,6 +373,53 @@
     "worst_tier": "clean",
     "pairs": []
   },
+  "boundary_audit": {
+    "available": true,
+    "n_observations": 10,
+    "n_usable": 10,
+    "n_unusable": 0,
+    "n_problem": 0,
+    "overall_rate": 0.0,
+    "per_candidate": {
+      "llama3": {
+        "n_observations": 2,
+        "n_usable": 2,
+        "n_problem": 0,
+        "rate": 0.0
+      },
+      "llama3/toggle-bos": {
+        "n_observations": 2,
+        "n_usable": 2,
+        "n_problem": 0,
+        "rate": 0.0
+      },
+      "llama3/no-bos": {
+        "n_observations": 2,
+        "n_usable": 2,
+        "n_problem": 0,
+        "rate": 0.0
+      },
+      "llama3/prefix-newline": {
+        "n_observations": 2,
+        "n_usable": 2,
+        "n_problem": 0,
+        "rate": 0.0
+      },
+      "llama3/prefix-trim": {
+        "n_observations": 2,
+        "n_usable": 2,
+        "n_problem": 0,
+        "rate": 0.0
+      }
+    },
+    "per_family": {
+      "llama3": {
+        "n_usable": 10,
+        "n_problem": 0,
+        "rate": 0.0
+      }
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

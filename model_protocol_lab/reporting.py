@@ -2904,6 +2904,81 @@ def _frontier_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _boundary_audit_section(result: dict[str, Any]) -> str:
+    """Prompt-boundary canonicality: the Prompt Boundary Problem rate.
+
+    For every stored rendered prompt x greedy completion, re-encoding the
+    concatenated text must reproduce prompt_ids + completion_ids. The table
+    reports the fraction of observations where it does not, per template
+    family. A zero rate is a certificate of boundary-canonicality for the
+    run's templates; a nonzero rate names the families whose prompts the
+    tokenizer re-segments. Renders nothing when the audit is unavailable.
+    """
+    audit: Any = result.get("boundary_audit")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    n_usable = audit.get("n_usable", 0)
+    n_problem = audit.get("n_problem", 0)
+    overall = audit.get("overall_rate")
+    rows = []
+    per_family = audit.get("per_family")
+    if type(per_family) is dict:
+        for family in sorted(per_family):
+            entry = per_family[family]
+            if type(entry) is not dict:
+                continue
+            rate = entry.get("rate")
+            rate_text = "n/a" if rate is None else f"{rate:.1%}"
+            badge = (
+                '<span class="badge pass">canonical</span>'
+                if rate == 0
+                else '<span class="badge fail">non-canonical</span>'
+                if rate is not None
+                else '<span class="badge">n/a</span>'
+            )
+            rows.append(
+                '<tr><th scope="row">' + escape(str(family)) + "</th>"
+                '<td data-sort="' + escape(rate_text) + '">' + badge + "</td>"
+                "<td>" + escape(rate_text) + "</td>"
+                "<td>" + escape(str(entry.get("n_problem", "?"))) + "</td>"
+                "<td>" + escape(str(entry.get("n_usable", "?"))) + "</td></tr>"
+            )
+    overall_text = "n/a" if overall is None else f"{overall:.1%}"
+    parts = [
+        '<section id="boundary-canonicality"><h2>Prompt-boundary canonicality</h2>',
+        "<p>For every stored rendered prompt &times; greedy completion, the "
+        "lab re-encodes the concatenated text and requires the joint encoding "
+        "to equal the recorded <i>prompt_ids + completion_ids</i>. A "
+        "mismatch is the Prompt Boundary Problem: the tokenizer re-segments "
+        "the text at the prompt/completion seam, so the ids the model saw "
+        "are not what the stored text would reproduce. "
+        + escape(str(n_problem))
+        + " of "
+        + escape(str(n_usable))
+        + " usable observations diverge (overall rate "
+        + escape(overall_text)
+        + ").</p>",
+    ]
+    if overall == 0:
+        parts.append(
+            '<p><span class="badge pass">certificate</span> Every usable '
+            "observation re-encodes exactly: the run's templates are "
+            "boundary-canonical on this tokenizer.</p>"
+        )
+    if rows:
+        parts.append(
+            '<div class="table-wrap"><table class="sortable">'
+            "<caption>Prompt Boundary Problem rate by template family.</caption>"
+            '<thead><tr><th scope="col">Family</th><th scope="col">Status</th>'
+            '<th scope="col">PBP rate</th><th scope="col">Divergent</th>'
+            '<th scope="col">Usable</th></tr></thead><tbody>'
+            + "".join(rows)
+            + "</tbody></table></div>"
+        )
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def render_html(result: dict[str, Any]) -> str:
     """Render an experiment result dict as a self-contained HTML report string.
 
@@ -2944,6 +3019,7 @@ def render_html(result: dict[str, Any]) -> str:
     stop_matrix_html = _stop_matrix_section(result)
     divergence_html = _backend_divergence_section(result)
     frontier_html = _frontier_section(result)
+    boundary_audit_html = _boundary_audit_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -2958,6 +3034,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("stop-behavior-matrix", "Stop-behavior isolation matrix", stop_matrix_html),
             ("backend-divergence", "Backend divergence", divergence_html),
             ("token-budget-frontier", "Token-budget frontier", frontier_html),
+            ("boundary-canonicality", "Prompt-boundary canonicality", boundary_audit_html),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -2995,6 +3072,7 @@ def render_html(result: dict[str, Any]) -> str:
         + stop_matrix_html
         + divergence_html
         + frontier_html
+        + boundary_audit_html
         + sweep_html
         + logprob_html
         + held_out_html

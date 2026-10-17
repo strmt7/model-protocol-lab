@@ -883,6 +883,24 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "held_out_floor_unavailable",
                     }
+                # Prompt-boundary canonicality audit (research R2): re-encode
+                # each stored prompt+completion and require the joint encoding
+                # to equal prompt_ids + completion_ids. Pure post-hoc check
+                # over stored artifacts; per-observation encode/decode
+                # failures degrade to "unusable", never a run failure.
+                try:
+                    from .boundary_audit import audit_search_observations
+
+                    result["boundary_audit"] = audit_search_observations(
+                        result.get("search") or [],
+                        backend.encode,
+                        backend.decode,
+                    )
+                except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                    result["boundary_audit"] = {
+                        "available": False,
+                        "detail": "boundary_audit_unavailable",
+                    }
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each
                 # candidate's expected answer against the recorded search

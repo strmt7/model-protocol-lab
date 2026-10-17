@@ -478,6 +478,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    boundary_audit_diff = diff_boundary_audit(old.get("boundary_audit"), new.get("boundary_audit"))
+    boundary_audit_asymmetric = boundary_audit_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -489,6 +494,8 @@ def diff_reports(
         and not frontier_asymmetric
         and not held_out_floor_diff["changed"]
         and not held_out_floor_asymmetric
+        and not boundary_audit_diff["changed"]
+        and not boundary_audit_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -501,6 +508,8 @@ def diff_reports(
         "frontier_asymmetric": frontier_asymmetric,
         "held_out_floor_changed": held_out_floor_diff["changed"],
         "held_out_floor_asymmetric": held_out_floor_asymmetric,
+        "boundary_audit_changed": boundary_audit_diff["changed"],
+        "boundary_audit_asymmetric": boundary_audit_asymmetric,
         "identical": identical,
     }
     return {
@@ -511,6 +520,7 @@ def diff_reports(
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": frontier_diff,
         "held_out_floor": held_out_floor_diff,
+        "boundary_audit": boundary_audit_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -806,6 +816,92 @@ def _valid_held_out_floor(value: Any) -> bool:
     return not (floor is not None and type(floor) is not int)
 
 
+def _valid_boundary_audit(value: Any) -> bool:
+    """Light validation: is this a comparable ``boundary_audit`` payload?"""
+    if type(value) is not dict or value.get("available", True) is False:
+        return False
+    if type(value.get("per_family")) is not dict:
+        return False
+    rate = value.get("overall_rate")
+    return rate is None or type(rate) in (int, float)
+
+
+def diff_boundary_audit(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``boundary_audit`` payloads; deterministic.
+
+    Answers "did the prompt-boundary canonicality story change between
+    runs?": the overall PBP rate and the per-family rates. A side without
+    a recorded audit is reported plainly instead of compared. No model,
+    no network.
+    """
+    old_ok = _valid_boundary_audit(old)
+    new_ok = _valid_boundary_audit(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_rate = old.get("overall_rate")
+    new_rate = new.get("overall_rate")
+    old_families = old.get("per_family") or {}
+    new_families = new.get("per_family") or {}
+    family_drift: list[dict[str, Any]] = []
+    for family in sorted(set(old_families) | set(new_families)):
+        old_entry = old_families.get(family) or {}
+        new_entry = new_families.get(family) or {}
+        if old_entry.get("rate") != new_entry.get("rate"):
+            family_drift.append(
+                {
+                    "family": family,
+                    "old_rate": old_entry.get("rate"),
+                    "new_rate": new_entry.get("rate"),
+                }
+            )
+    result["overall_rate"] = {
+        "old": old_rate,
+        "new": new_rate,
+        "changed": old_rate != new_rate,
+    }
+    result["family_drift"] = family_drift
+    result["changed"] = bool(old_rate != new_rate or family_drift)
+    return result
+
+
+def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
+    """Prompt-boundary canonicality comparison lines for the stderr summary."""
+    available = audit_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Prompt-boundary canonicality comparison unavailable: "
+            f"{missing} run did not record an audit."
+        ]
+    lines: list[str] = []
+
+    def _fmt(rate: Any) -> str:
+        return f"{rate:.1%}" if type(rate) in (int, float) else "(none)"
+
+    overall = audit_diff["overall_rate"]
+    lines.append(f"Prompt Boundary Problem rate: {_fmt(overall['old'])} -> {_fmt(overall['new'])}")
+    drift = audit_diff.get("family_drift") or []
+    if drift:
+        lines.append(f"Family PBP-rate drift ({len(drift)}):")
+        for entry in drift:
+            lines.append(
+                f"  {_display_id(entry['family'])}: "
+                f"{_fmt(entry['old_rate'])} -> {_fmt(entry['new_rate'])}"
+            )
+    return lines
+
+
 def diff_held_out_floor(old: Any, new: Any) -> dict[str, Any]:
     """Compare two ``held_out_budget_floor`` payloads; deterministic.
 
@@ -980,6 +1076,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.append(f"Winner: {_display_id(old_w)} -> {_display_id(new_w)}")
     lines.extend(_render_frontier_summary(diff["frontier"]))
     lines.extend(_render_held_out_floor_summary(diff["held_out_floor"]))
+    lines.extend(_render_boundary_audit_summary(diff["boundary_audit"]))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

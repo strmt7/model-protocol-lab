@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -450,6 +450,29 @@ Related work: this is the lab's own DEVELOPMENT_PLAN.md §9.3-§9.5 design,
 corroborated by lm-eval's `loglikelihood` request type and the HELM
 adapter's token-probability measurements, which likewise score a fixed
 target string by teacher forcing rather than by sampling.
+
+### 8.10 Prompt-boundary canonicality (`boundary_audit`)
+
+Every `run` re-encodes each stored rendered prompt x greedy completion
+and requires the joint encoding to equal the recorded
+`prompt_ids + completion_ids`. A mismatch is the Prompt Boundary Problem:
+the tokenizer re-segments the text at the prompt/completion seam, so the
+ids the model saw are not what the stored text would reproduce. The
+check is post-hoc and exact (one extra encode per observation, no model
+calls); encode/decode failures degrade an observation to "unusable",
+never a run failure.
+
+`results.json` carries `boundary_audit` with the overall rate, per-candidate
+rates, and per-family rates (`chatml/x` and `chatml/y` roll up into
+`chatml`). The HTML report renders a "Prompt-boundary canonicality"
+section with the family table; a zero rate is presented as a certificate
+of boundary-canonicality for the run's templates. `model-protocol-lab
+diff-reports` compares the overall and per-family rates between runs
+(`boundary_audit_changed` / `boundary_audit_asymmetric` summary flags
+feed the `identical` verdict). The metric is descriptive: it measures
+text->ids reproducibility of the stored artifacts, not model quality,
+and a nonzero rate names the families whose prompts the tokenizer
+re-segments rather than condemning them.
 
 ## 9. Authoring fixtures (`fixtures build`)
 
@@ -769,7 +792,9 @@ budget spans where the post-hoc decision, winner, or per-budget leader
 differ, the safe budget floor, and per-flip-span attribution of the
 driving (candidate, fixture) pass-status changes), `held_out_floor` (the
 held-out verification-floor comparison: floor drift, floor mismatch,
-one-sided/missing floors), `config_drift` (the comparability warnings), `candidate_verdicts`
+one-sided/missing floors), `boundary_audit` (the prompt-boundary
+canonicality comparison: overall and per-family PBP-rate drift),
+`config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate),
 `fixture_diffs_include_unchanged` (whether `--all` included unchanged
@@ -777,7 +802,8 @@ fixtures), `evidence` (whether each
 side carried `--include-evidence` observations), and a `summary` with
 counts (`fixtures_flipped`, `candidates_changed_status`,
 `config_drift_warnings`, `frontier_changed`, `frontier_asymmetric`,
-`held_out_floor_changed`, `held_out_floor_asymmetric`, `identical`).
+`held_out_floor_changed`, `held_out_floor_asymmetric`,
+`boundary_audit_changed`, `boundary_audit_asymmetric`, `identical`).
 
 What it compares, exactly:
 

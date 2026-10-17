@@ -264,7 +264,18 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
     encode_texts = []
     gen_calls = []
 
-    def make(status, case, input_ids, output_ids, answer, cut, raw_reason, error=None, btm=None):
+    def make(
+        status,
+        case,
+        input_ids,
+        output_ids,
+        answer,
+        cut,
+        raw_reason,
+        error=None,
+        btm=None,
+        input_text="",
+    ):
         return Observation(
             candidate=candidate.name,
             fixture=case.id,
@@ -277,6 +288,7 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
             raw_reason=raw_reason,
             error=error,
             status=status,
+            input_text=input_text,
         )
 
     def abort(status, case, error=None):
@@ -317,7 +329,9 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
             break
         input_ids = encoded
         if vset:
-            records.append(make("cancelled", case, input_ids, (), "", None, None))
+            records.append(
+                make("cancelled", case, input_ids, (), "", None, None, input_text=prompt)
+            )
             report_status = "cancelled"
             break
         request_seed = oracle_request_seed(seed, case.id)
@@ -325,7 +339,17 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
         behavior = plan.behaviors.get(input_ids)
         if behavior is None:
             records.append(
-                make("failed", case, input_ids, (), "", None, None, error="generate_failed")
+                make(
+                    "failed",
+                    case,
+                    input_ids,
+                    (),
+                    "",
+                    None,
+                    None,
+                    error="generate_failed",
+                    input_text=prompt,
+                )
             )
             report_status = "failed"
             break
@@ -333,7 +357,17 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
             vset = True
         if behavior.kind == "raise":
             records.append(
-                make("failed", case, input_ids, (), "", None, None, error="generate_failed")
+                make(
+                    "failed",
+                    case,
+                    input_ids,
+                    (),
+                    "",
+                    None,
+                    None,
+                    error="generate_failed",
+                    input_text=prompt,
+                )
             )
             report_status = "failed"
             break
@@ -345,7 +379,17 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
             )
         if not oracle_valid_generation(result, max_new_tokens):
             records.append(
-                make("failed", case, input_ids, (), "", None, None, error="invalid_generation")
+                make(
+                    "failed",
+                    case,
+                    input_ids,
+                    (),
+                    "",
+                    None,
+                    None,
+                    error="invalid_generation",
+                    input_text=prompt,
+                )
             )
             report_status = "failed"
             break
@@ -359,12 +403,26 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
                 else "backend_reported_error"
             )
             records.append(
-                make("failed", case, input_ids, output_ids, "", cut, raw_reason, error=code)
+                make(
+                    "failed",
+                    case,
+                    input_ids,
+                    output_ids,
+                    "",
+                    cut,
+                    raw_reason,
+                    error=code,
+                    input_text=prompt,
+                )
             )
             report_status = "failed"
             break
         if result.reason == "cancelled" or vset:
-            records.append(make("cancelled", case, input_ids, output_ids, "", cut, raw_reason))
+            records.append(
+                make(
+                    "cancelled", case, input_ids, output_ids, "", cut, raw_reason, input_text=prompt
+                )
+            )
             report_status = "cancelled"
             break
         answer_ids = output_ids if cut is None else output_ids[:cut]
@@ -381,6 +439,7 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
                     cut,
                     raw_reason,
                     error="decode_failed",
+                    input_text=prompt,
                 )
             )
             report_status = "failed"
@@ -398,12 +457,24 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
                     cut,
                     raw_reason,
                     error="decode_failed",
+                    input_text=prompt,
                 )
             )
             report_status = "failed"
             break
         if vset:
-            records.append(make("cancelled", case, input_ids, output_ids, answer, cut, raw_reason))
+            records.append(
+                make(
+                    "cancelled",
+                    case,
+                    input_ids,
+                    output_ids,
+                    answer,
+                    cut,
+                    raw_reason,
+                    input_text=prompt,
+                )
+            )
             report_status = "cancelled"
             break
         # Diagnostic boundary-text cross-check (never part of any pass rule).
@@ -425,7 +496,17 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
             if type(retained_text) is str:
                 btm = retained_text.endswith(boundary_text)
         records.append(
-            make("completed", case, input_ids, output_ids, answer, cut, raw_reason, btm=btm)
+            make(
+                "completed",
+                case,
+                input_ids,
+                output_ids,
+                answer,
+                cut,
+                raw_reason,
+                btm=btm,
+                input_text=prompt,
+            )
         )
     if report_status is None:
         report_status = "cancelled" if vset else "completed"

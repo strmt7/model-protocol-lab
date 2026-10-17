@@ -413,6 +413,26 @@ def oracle_diff_reports(
     else:
         _o_hof_available = "neither"
     _o_hof_asymmetric = _o_hof_available not in ("both", "neither")
+
+    def _or_ba_valid(value: Any) -> bool:
+        if type(value) is not dict or value.get("available", True) is False:
+            return False
+        if type(value.get("per_family")) is not dict:
+            return False
+        rate = value.get("overall_rate")
+        return rate is None or type(rate) in (int, float)
+
+    _ba_old_ok = _or_ba_valid(old.get("boundary_audit"))
+    _ba_new_ok = _or_ba_valid(new.get("boundary_audit"))
+    if _ba_old_ok and _ba_new_ok:
+        _o_ba_available = "both"
+    elif _ba_old_ok:
+        _o_ba_available = "old"
+    elif _ba_new_ok:
+        _o_ba_available = "new"
+    else:
+        _o_ba_available = "neither"
+    _o_ba_asymmetric = _o_ba_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -422,6 +442,7 @@ def oracle_diff_reports(
         and not evidence_asymmetric
         and not _o_frontier_asymmetric
         and not _o_hof_asymmetric
+        and not _o_ba_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -434,6 +455,8 @@ def oracle_diff_reports(
         "frontier_asymmetric": _o_frontier_asymmetric,
         "held_out_floor_changed": False,
         "held_out_floor_asymmetric": _o_hof_asymmetric,
+        "boundary_audit_changed": False,
+        "boundary_audit_asymmetric": _o_ba_asymmetric,
         "identical": identical,
     }
     return {
@@ -444,6 +467,7 @@ def oracle_diff_reports(
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": {"available": _o_available, "changed": False},
         "held_out_floor": {"available": _o_hof_available, "changed": False},
+        "boundary_audit": {"available": _o_ba_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

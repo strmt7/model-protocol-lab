@@ -139,6 +139,24 @@ def build_sample_report(output_dir: Path) -> dict:
         result["contamination"] = contamination_report(split.search, split.held_out)
     except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
         result["contamination"] = {"worst_tier": "clean", "pairs": []}
+    # Prompt-boundary canonicality: attached exactly as `model-protocol-lab
+    # run` does, so the committed sample report exercises the canonicality
+    # section. Degrades to an "unavailable" marker instead of failing the
+    # build.
+    try:
+        from model_protocol_lab.boundary_audit import audit_search_observations
+
+        backend = DemoBackend()
+        result["boundary_audit"] = audit_search_observations(
+            result.get("search") or [],
+            backend.encode,
+            backend.decode,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["boundary_audit"] = {
+            "available": False,
+            "detail": "boundary_audit_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")
