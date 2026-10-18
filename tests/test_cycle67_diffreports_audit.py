@@ -242,6 +242,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "perturbation": {"available": "neither", "changed": False},
         "token_healing": {"available": "neither", "changed": False},
         "hierarchy": {"available": "neither", "changed": False},
+        "prefill": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -276,6 +277,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "healing_asymmetric": False,
             "hierarchy_changed": False,
             "hierarchy_asymmetric": False,
+            "prefill_changed": False,
+            "prefill_asymmetric": False,
             "identical": True,
         },
     }
@@ -927,6 +930,186 @@ def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_prefill_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    prefills = value.get("prefills")
+    if type(prefills) is not list or not prefills or not all(type(p) is str for p in prefills):
+        return False
+    per_condition = value.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(prefills):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        winner = condition.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("honor_rate", "restart_rate"):
+                rate = entry.get(key)
+                if rate is not None and type(rate) not in (int, float):
+                    return False
+            think = entry.get("think_channel")
+            if think is not None and type(think) is not bool:
+                return False
+            if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                return False
+    think_effect = value.get("think_effect")
+    if type(think_effect) is not dict:
+        return False
+    for label, group in think_effect.items():
+        if type(label) is not str:
+            return False
+        if label == "delta":
+            if group is not None and type(group) not in (int, float):
+                return False
+            continue
+        if type(group) is not dict:
+            return False
+        mean = group.get("mean_honor_rate")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+        if type(group.get("n_candidates")) is not int:
+            return False
+    return type(value.get("flips")) is list
+
+
+def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle prefill section: condition triplets, flips, rates, think groups."""
+    old_ok = _o_prefill_valid(old)
+    new_ok = _o_prefill_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_prefills = old.get("prefills") or []
+    new_prefills = new.get("prefills") or []
+    prefills_added = [p for p in new_prefills if p not in old_prefills]
+    prefills_removed = [p for p in old_prefills if p not in new_prefills]
+    condition_changed = {}
+    for prefill_id in sorted(set(old_prefills) & set(new_prefills)):
+        old_cond = (old.get("per_condition") or {}).get(prefill_id) or {}
+        new_cond = (new.get("per_condition") or {}).get(prefill_id) or {}
+        old_triplet = (old_cond.get("decision"), old_cond.get("winner"))
+        new_triplet = (new_cond.get("decision"), new_cond.get("winner"))
+        condition_changed[prefill_id] = {
+            "old_decision": old_triplet[0],
+            "old_winner": old_triplet[1],
+            "new_decision": new_triplet[0],
+            "new_winner": new_triplet[1],
+            "changed": old_triplet != new_triplet,
+        }
+
+    def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        if type(flips) is not list:
+            return []
+        keys = []
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("prefill"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
+
+    def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        rates: dict[str, dict[str, tuple[Any, Any]]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for prefill_id in sorted(per_condition):
+            candidates = (per_condition.get(prefill_id) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[prefill_id] = (
+                    entry.get("honor_rate"),
+                    entry.get("restart_rate"),
+                )
+        return rates
+
+    old_rates = _candidate_rates(old)
+    new_rates = _candidate_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    candidate_drift = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for prefill_id in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_pair = old_rates[name][prefill_id]
+            new_pair = new_rates[name][prefill_id]
+            if old_pair != new_pair:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "prefill": prefill_id,
+                        "old_honor_rate": old_pair[0],
+                        "old_restart_rate": old_pair[1],
+                        "new_honor_rate": new_pair[0],
+                        "new_restart_rate": new_pair[1],
+                    }
+                )
+
+    def _think_means(payload: Any) -> dict[str, Any]:
+        effect = payload.get("think_effect") or {}
+        return {
+            label: (group or {}).get("mean_honor_rate")
+            for label, group in effect.items()
+            if type(label) is str and label != "delta"
+        }
+
+    old_think = _think_means(old)
+    new_think = _think_means(new)
+    think_changed = old_think != new_think
+    diff["prefills_added"] = prefills_added
+    diff["prefills_removed"] = prefills_removed
+    diff["condition_changed"] = condition_changed
+    diff["flips_changed"] = flips_changed
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["think_rates"] = {
+        "old": old_think,
+        "new": new_think,
+        "changed": think_changed,
+    }
+    changed = bool(
+        prefills_added
+        or prefills_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or think_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -1268,6 +1451,7 @@ def _oracle_diff(
         old.get("token_healing"), new.get("token_healing")
     )
     o_hy, o_hy_changed, o_hy_asymmetric = _o_hierarchy(old.get("hierarchy"), new.get("hierarchy"))
+    o_pf, o_pf_changed, o_pf_asymmetric = _o_prefill(old.get("prefill"), new.get("prefill"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -1293,6 +1477,8 @@ def _oracle_diff(
         and not o_hl_asymmetric
         and not o_hy_changed
         and not o_hy_asymmetric
+        and not o_pf_changed
+        and not o_pf_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1309,6 +1495,7 @@ def _oracle_diff(
         "perturbation": o_pb,
         "token_healing": o_hl,
         "hierarchy": o_hy,
+        "prefill": o_pf,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1339,6 +1526,8 @@ def _oracle_diff(
             "healing_asymmetric": o_hl_asymmetric,
             "hierarchy_changed": o_hy_changed,
             "hierarchy_asymmetric": o_hy_asymmetric,
+            "prefill_changed": o_pf_changed,
+            "prefill_asymmetric": o_pf_asymmetric,
             "identical": identical,
         },
     }
@@ -1480,6 +1669,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "healing_asymmetric": False,
                 "hierarchy_changed": False,
                 "hierarchy_asymmetric": False,
+                "prefill_changed": False,
+                "prefill_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2486,6 +2677,48 @@ def _fuzz_hierarchy_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_prefill_section(rng: random.Random) -> dict[str, Any]:
+    per_condition = {}
+    for prefill_id in ("answer-colon", "final-answer", "result-colon"):
+        per_candidate = {
+            name: {
+                "honor_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "restart_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "think_channel": rng.choice([True, False, None]),
+                "pass": rng.choice([True, False, None]),
+            }
+            for name in ("alpha", "beta")
+        }
+        if rng.random() < 0.15:
+            per_candidate[rng.choice([7, 8.5])] = {"honor_rate": 1.0}
+        per_condition[prefill_id] = {
+            "decision": rng.choice(["selected", "ambiguous", "no_candidate", 4]),
+            "winner": rng.choice(["alpha", "beta", None]),
+            "n_evaluable": rng.randint(0, 2),
+            "per_candidate": per_candidate,
+        }
+    if rng.random() < 0.15:
+        per_condition["answer-colon"]["per_candidate"] = "junk"
+    think_effect = {
+        label: {
+            "n_candidates": rng.randint(0, 3),
+            "mean_honor_rate": rng.choice([0.0, 0.5, 1.0, None]),
+        }
+        for label in ("think_channel", "plain")
+    }
+    think_effect["delta"] = rng.choice([0.0, -0.5, None])
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "primary_decision": "selected",
+        "n_fixtures": rng.randint(0, 8),
+        "prefills": ["answer-colon", "final-answer", "result-colon"],
+        "per_condition": per_condition,
+        "flips": [],
+        "think_effect": think_effect,
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2516,8 +2749,9 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.30:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
-    # robustness, perturbation, token healing): emitted often enough that
-    # the differential fuzz exercises them, not just the legacy axes.
+    # robustness, perturbation, token healing, hierarchy, prefill):
+    # emitted often enough that the differential fuzz exercises them,
+    # not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -2530,6 +2764,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["token_healing"] = _fuzz_healing_section(rng)
     if rng.random() < 0.45:
         report["hierarchy"] = _fuzz_hierarchy_section(rng)
+    if rng.random() < 0.45:
+        report["prefill"] = _fuzz_prefill_section(rng)
     return report
 
 
@@ -2739,6 +2975,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not healing_asymmetric\n"
             '        and not hierarchy_diff["changed"]\n'
             "        and not hierarchy_asymmetric\n"
+            '        and not prefill_diff["changed"]\n'
+            "        and not prefill_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"

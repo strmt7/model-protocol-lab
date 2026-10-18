@@ -29,6 +29,13 @@ from .core import (
 )
 from .hierarchy import POSITIONS, family_of, system_treatment
 from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
+from .prefill import (
+    PrefillBackend,
+    build_prefill_fixtures,
+    honors_prefill,
+    opens_think_channel,
+    validate_prefill_specs,
+)
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 
 FAILURE_MODES = (
@@ -1508,6 +1515,318 @@ def hierarchy_adherence(
         "flips": flips,
         "position_effect": position_effect,
         "group_adherence": group_adherence,
+    }
+
+
+def prefill_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    prefill: dict[str, str],
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate with an assistant prefill applied.
+
+    For one prefill spec (see :mod:`prefill`), every search candidate is
+    re-evaluated with ``core.evaluate()`` on the search fixtures through
+    a :class:`PrefillBackend` that appends the prefill token ids after
+    the encoded prompt. Greedy, exact.
+
+    Grading needs no fixture transformation: the scored span is
+    ``prefill_text + generated`` and ``prefill_text + generated ==
+    prefill_text + expected`` iff ``generated == expected``, so the
+    pipeline's ``exact_match`` on the plain expected answer already
+    grades the prefill run. ``pass`` is the conservative per-candidate
+    verdict: every fixture exact-matched with its boundary found
+    (mirrors the hierarchy stage's all-pass rule), so the selection
+    rule can be re-applied unchanged by :func:`prefill_adherence`.
+
+    Per observation the stage additionally scores prefill honoring via
+    :func:`honors_prefill` (did the model accept the prefill as its own
+    opening, or restart its turn and duplicate it?).
+
+    Fail-closed: a prefill that cannot be encoded, does not decode back
+    to its text (the scored-span identity would break), or contains a
+    candidate's response boundary (the boundary search would cut inside
+    the prefill) degrades that candidate cell to None -- or raises
+    ``ValueError`` for stage-global setup failures. Never silently
+    wrong.
+
+    Returns ``{"prefill_id": ..., "prefill_text": ..., "n_fixtures":
+    ..., "per_candidate": {name: {"n", "n_completed", "honored",
+    "restarted", "think_channel", "pass"} | None}}``.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases or any(type(case) is not Fixture for case in cases):
+        raise ValueError("cases must be a nonempty tuple of Fixture")
+    (spec,) = validate_prefill_specs((prefill,))
+    prefill_id = spec["id"]
+    prefill_text = spec["text"]
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    try:
+        prefill_ids = backend.encode(prefill_text)
+    except Exception as exc:  # noqa: BLE001 -- stage cannot be constructed
+        raise ValueError("prefill text could not be encoded") from exc
+    if not _valid_token_ids(prefill_ids, nonempty=True):
+        raise ValueError("prefill text did not encode to token ids")
+    try:
+        round_tripped = backend.decode(prefill_ids)
+    except Exception as exc:  # noqa: BLE001 -- scored-span identity check
+        raise ValueError("prefill ids did not decode") from exc
+    if round_tripped != prefill_text:
+        # Token decode is a homomorphism over id-concatenation, so the
+        # scored span decode(prefill_ids + generated) equals
+        # prefill_text + decode(generated) exactly when this holds.
+        raise ValueError("prefill ids did not decode back to the prefill text")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    fixtures = build_prefill_fixtures(cases, prefill=spec)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        candidate_boundary = boundaries[fmt.name]
+        if first_boundary(prefill_ids, candidate_boundary) is not None:
+            # The boundary search would cut inside the prefill itself;
+            # the scored-span semantics would be wrong. Fail closed.
+            per_candidate[fmt.name] = None
+            continue
+        wrapped = PrefillBackend(backend, prefill_ids, prefill_id)
+        try:
+            report = evaluate(
+                wrapped,
+                fmt,
+                fixtures,
+                boundary=candidate_boundary,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        if not report.aggregate_eligible:
+            per_candidate[fmt.name] = None
+            continue
+        n_completed = honored = restarted = 0
+        all_pass = True
+        for obs in report.observations:
+            if obs.status != "completed":
+                all_pass = False
+                continue
+            n_completed += 1
+            if honors_prefill(obs.answer, prefill_text):
+                honored += 1
+            else:
+                restarted += 1
+            if not (obs.exact_match and obs.boundary_found):
+                all_pass = False
+        per_candidate[fmt.name] = {
+            "n": len(cases),
+            "n_completed": n_completed,
+            "honored": honored,
+            "restarted": restarted,
+            "think_channel": opens_think_channel(fmt),
+            "pass": all_pass,
+        }
+    return {
+        "prefill_id": prefill_id,
+        "prefill_text": prefill_text,
+        "n_fixtures": len(cases),
+        "per_candidate": per_candidate,
+    }
+
+
+def _prefill_entry_valid(entry: Any, n_fixtures: int) -> bool:
+    """Structural check for one candidate cell of a prefill stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    if entry.get("n") != n_fixtures:
+        return False
+    completed = entry.get("n_completed")
+    honored = entry.get("honored")
+    restarted = entry.get("restarted")
+    if (
+        type(completed) is not int
+        or completed < 0
+        or type(honored) is not int
+        or honored < 0
+        or type(restarted) is not int
+        or restarted < 0
+    ):
+        return False
+    if honored + restarted != completed:
+        return False
+    if completed > n_fixtures:
+        return False
+    if type(entry.get("think_channel")) is not bool:
+        return False
+    return type(entry.get("pass")) is bool
+
+
+def prefill_adherence(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    stages: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-apply the selection rule per prefill condition (pure post-hoc).
+
+    Answers "does the winner survive assistant prefill?": for each
+    prefill the conservative selection rule is re-applied to that
+    condition's per-candidate pass/fail outcomes, and the primary
+    (decision, winner) is compared against every condition.
+
+    Per candidate per condition the honoring rates (honored /
+    restarted) are reported; ``think_effect`` tests the pre-registered
+    mechanistic hypothesis from :mod:`prefill` -- candidates whose
+    generation prompt opens a reasoning/think channel vs the rest -- as
+    mean honoring rates per group (a correlation readout, not a causal
+    claim). ``flips`` lists the conditions whose (decision, winner)
+    differs from the primary run.
+
+    Returns ``{"available": True, ...}``. Never raises on malformed
+    input: returns ``{"available": False}`` with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(stages) is not dict or not stages or not all(type(k) is str for k in stages):
+        return {"available": False, "detail": "stages_invalid"}
+    n_fixtures = -1  # sentinel: stages is guaranteed nonempty above
+    for prefill_id, stage in stages.items():
+        if type(stage) is not dict:
+            return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+        if stage.get("prefill_id") != prefill_id:
+            return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+        if type(stage.get("prefill_text")) is not str:
+            return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+        count = stage.get("n_fixtures")
+        if type(count) is not int or count < 0:
+            return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+        if n_fixtures < 0:
+            n_fixtures = count
+        elif n_fixtures != count:
+            return {"available": False, "detail": "fixture_count_mismatch"}
+        per_candidate = stage.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+        for _cand, entry in per_candidate.items():
+            if not _prefill_entry_valid(entry, count):
+                return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
+
+    def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if entry is None:
+            return None
+        completed = entry["n_completed"]
+        return {
+            "honor_rate": entry["honored"] / completed if completed else None,
+            "restart_rate": entry["restarted"] / completed if completed else None,
+            "think_channel": entry["think_channel"],
+            "pass": entry["pass"],
+        }
+
+    per_condition: dict[str, dict[str, Any]] = {}
+    for prefill_id in sorted(stages):
+        stage = stages[prefill_id]
+        per_candidate = stage["per_candidate"]
+        entries = [per_candidate.get(c) for c in candidates]
+        evaluable = [e for e in entries if e is not None]
+        winners = [
+            c for c, e in zip(candidates, entries, strict=True) if e is not None and e["pass"]
+        ]
+        # Mirrors _select_winner(winners, cancelled=False): exactly one
+        # passing candidate wins; ties and failures abstain. A condition
+        # where no candidate could be evaluated is "unavailable", never a
+        # phantom "no_candidate".
+        if not evaluable:
+            decision, winner = "unavailable", None
+        elif len(winners) == 1:
+            decision, winner = "selected", winners[0]
+        elif winners:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        per_condition[prefill_id] = {
+            "decision": decision,
+            "winner": winner,
+            "n_evaluable": len(evaluable),
+            "per_candidate": {c: _rates(per_candidate.get(c)) for c in candidates},
+        }
+
+    flips = []
+    for prefill_id in sorted(per_condition):
+        verdict = per_condition[prefill_id]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != (primary_decision, primary_winner):
+            flips.append(
+                {
+                    "prefill": prefill_id,
+                    "decision_from": primary_decision,
+                    "decision_to": verdict["decision"],
+                    "winner_from": primary_winner,
+                    "winner_to": verdict["winner"],
+                }
+            )
+
+    think_effect: dict[str, Any] = {}
+    for label, wanted in (("think_channel", True), ("plain", False)):
+        honor_rates = [
+            rates["honor_rate"]
+            for verdict in per_condition.values()
+            for rates in verdict["per_candidate"].values()
+            if rates is not None
+            and rates["think_channel"] is wanted
+            and rates["honor_rate"] is not None
+        ]
+        think_effect[label] = {
+            "mean_honor_rate": (sum(honor_rates) / len(honor_rates)) if honor_rates else None,
+            "n_candidates": len(
+                {
+                    cand
+                    for verdict in per_condition.values()
+                    for cand, rates in verdict["per_candidate"].items()
+                    if rates is not None and rates["think_channel"] is wanted
+                }
+            ),
+        }
+    think_means = [think_effect[label]["mean_honor_rate"] for label in ("think_channel", "plain")]
+    think_effect["delta"] = (
+        think_means[0] - think_means[1]
+        if all(type(m) in (int, float) for m in think_means)
+        else None
+    )
+
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "n_fixtures": n_fixtures,
+        "prefills": sorted(stages),
+        "per_condition": per_condition,
+        "flips": flips,
+        "think_effect": think_effect,
     }
 
 

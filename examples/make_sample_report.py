@@ -112,6 +112,50 @@ class HierarchyDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class PrefillDemoBackend(DemoBackend):
+    """Scripted prefill policy for the prefill exercise.
+
+    The prefill stage appends the prefill ids after the encoded prompt,
+    so the decoded prompt ends with the prefill text; the tail is
+    stripped before applying the winner logic. The base candidate honors
+    the prefill (emits the plain answer); the no-bos variant restarts
+    its turn and re-emits the prefill, duplicating it -- exactly the
+    honoring vs restarting signal the experiment measures. This gives
+    the committed sample report genuine honoring variation across
+    candidates.
+    """
+
+    def __init__(self, prefill_text: str) -> None:
+        self._prefill_text = prefill_text
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        if prompt.endswith(self._prefill_text):
+            prompt = prompt[: -len(self._prefill_text)]
+        is_winner = (
+            prompt.startswith(WINNER_PREFIX)
+            and prompt.count("<|begin_of_text|>") == 1
+            and prompt.endswith(WINNER_SUFFIX)
+        )
+        if is_winner:
+            if "GREEN" in prompt:
+                answer = "GREEN"
+            elif "BLUE" in prompt:
+                answer = "BLUE"
+            elif "numeral 7" in prompt:
+                answer = "7"
+            elif "SOUTH" in prompt:
+                answer = "SOUTH"
+            else:
+                answer = "WRONG"
+        else:
+            answer = "WRONG"
+        rebel = not prompt.startswith("<|begin_of_text|>")
+        emitted = (self._prefill_text + answer) if rebel else answer
+        text = (emitted + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -409,6 +453,41 @@ def build_sample_report(output_dir: Path) -> dict:
         result["hierarchy"] = {
             "available": False,
             "detail": "hierarchy_unavailable",
+        }
+    # Assistant-prefill sensitivity experiment: run the real prefill
+    # stage (every format-lock prefill) against the scripted
+    # honor/restart policy backend, so the committed sample report
+    # exercises the prefill section with genuine honoring variation
+    # (the no-bos variant restarts its turn and duplicates the
+    # prefill). Degrades to an "unavailable" marker instead of failing
+    # the build.
+    try:
+        from model_protocol_lab.experiments import prefill_adherence, prefill_stage
+        from model_protocol_lab.prefill import PREFILL_SPECS, validate_prefill_specs
+
+        _p_fmts = candidates("llama3", mutate=True)
+        _p_specs = validate_prefill_specs(PREFILL_SPECS)
+        _p_stages = {}
+        for _p_spec in _p_specs:
+            _p_stages[_p_spec["id"]] = prefill_stage(
+                PrefillDemoBackend(_p_spec["text"]),
+                _p_fmts,
+                tuple(split.search),
+                prefill=_p_spec,
+                boundary=BOUNDARY,
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=20261012,
+            )
+        result["prefill"] = prefill_adherence(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _p_fmts),
+            _p_stages,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["prefill"] = {
+            "available": False,
+            "detail": "prefill_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

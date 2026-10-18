@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -716,6 +716,56 @@ drift, and the group rates between runs (`diff_hierarchy`;
 the instruction-following regression signal after a checkpoint or
 fixture update. Roughly triples search compute; the stage never fails
 the run.
+
+### 8.18 Assistant-prefill sensitivity (`prefill`)
+
+Does the winning protocol survive when the caller pre-fills the
+assistant's opening tokens -- and which template families honor vs.
+ignore prefills? Prefill is a documented first-class generation
+control (Anthropic's Messages API and AWS Bedrock document prefilling
+the assistant's response; the attack literature shows prefill
+overrides the initial-token distribution), yet no prompt-format
+harness measures per-template prefill adherence or re-runs
+*protocol selection* under prefill.
+`model-protocol-lab run --prefill` runs the experiment: every search
+candidate is re-evaluated with benign format-lock prefills
+(`Answer: `, `Final answer: `, `Result: `) appended as raw token ids
+after the generation prompt. The model generates the continuation
+and the scored span is `prefill + generated text` -- the deterministic
+contract that the model "said" the prefill.
+
+Grading needs no fixture transformation: `prefill + generated ==
+prefill + expected` iff `generated == expected`, so the pipeline's
+`exact_match` on the plain expected answer already grades the prefill
+run. Honoring is detected exactly and reported separately: a model
+that did not accept the prefill as its own opening restarts its turn
+and re-emits its preferred opener, *duplicating* the prefill text at
+the start of its generation. The selection rule is re-applied per
+prefill, and the report shows per-candidate honoring/restarting
+rates, winner-vs-native flips, and a generation-prompt-structure
+group comparison.
+
+The group comparison tests a pre-registered mechanistic hypothesis:
+candidates whose generation prompt opens a reasoning/think channel
+(10 catalog families, e.g. qwen38's `<|im_start|>assistant\n<think>\n`
+and kimi3's `<|open|>message role="assistant"<|sep|><|open|>think<|sep|>`)
+honor format-lock prefills less, because the think-channel opener puts
+the model in reasoning mode, which conflicts with an answer-format
+lock. The predicate is computed from each candidate's own `Format`
+(the generation-prompt tail), so thinking on/off variants of one
+family are labeled independently; it is pinned per family by tests in
+`tests/test_cycle148_prefill.py`. Reported as a correlation readout,
+not a causal claim.
+
+`results.json` carries `prefill` with the per-prefill
+(decision, winner), per-candidate honoring rates, the flip list, and
+the think-channel group means. `diff-reports` compares the
+per-prefill verdicts, the flip pattern, per-candidate honoring drift,
+and the group rates between runs (`diff_prefill`;
+`prefill_changed` / `prefill_asymmetric` feed `identical`) -- the
+prefill-sensitivity regression signal after a checkpoint or fixture
+update. Roughly quadruples search compute; the stage never fails the
+run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

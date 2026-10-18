@@ -180,18 +180,18 @@ class ValidationToolchainTests(unittest.TestCase):
 
     def test_ruff_format_check_clean(self):
         # Doc: "ruff format --check -- clean (66 files)". Clean, but the
-        # file count is stale: the current tree formats 101 files.
+        # file count is stale: the current tree formats 200 files.
         proc = run_tool("ruff", "format", "--check")
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
         match = re.search(r"(\d+) files already formatted", proc.stdout)
         self.assertIsNotNone(match)
         self.assertGreater(int(match.group(1)), 66)
 
-    def test_mypy_clean_23_source_files(self):
-        # Doc: "mypy model_protocol_lab -- clean (23 source files)".
+    def test_mypy_clean_24_source_files(self):
+        # Doc: "mypy model_protocol_lab -- clean (24 source files)".
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("23 source files", proc.stdout)
+        self.assertIn("24 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:

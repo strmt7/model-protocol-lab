@@ -232,6 +232,19 @@ def build_parser() -> argparse.ArgumentParser:
         "search compute; the stage never fails the run.",
     )
     run.add_argument(
+        "--prefill",
+        action="store_true",
+        help="Assistant-prefill sensitivity experiment: re-run every search "
+        "candidate with benign format-lock prefills appended after the "
+        "generation prompt (the model generates the continuation, scored "
+        "as prefill + generated text) and re-apply the selection rule "
+        "per prefill, reporting per-candidate honoring rates (does the "
+        "model accept the prefill as its own opening or restart its "
+        "turn?), winner-vs-native flips, and the think-channel group "
+        "comparison. Roughly quadruples search compute; the stage never "
+        "fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -529,6 +542,54 @@ def _run_hierarchy_probe(
         result["hierarchy"] = {
             "available": False,
             "detail": "hierarchy_unavailable",
+        }
+
+
+def _run_prefill_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the assistant-prefill sensitivity experiment; never raises.
+
+    Re-runs every search candidate with each benign format-lock prefill
+    appended after the generation prompt and stores the ``prefill``
+    analysis payload on ``result``. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import prefill_adherence, prefill_stage
+        from .prefill import PREFILL_SPECS, validate_prefill_specs
+
+        specs = validate_prefill_specs(PREFILL_SPECS)
+        stages: dict[str, Any] = {}
+        for spec in specs:
+            stages[spec["id"]] = prefill_stage(
+                backend,
+                formats,
+                cases,
+                prefill=spec,
+                boundary=boundary,
+                boundary_map=boundary_map,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        result["prefill"] = prefill_adherence(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(fmt.name for fmt in formats),
+            stages,
+        )
+    except Exception:  # noqa: BLE001 -- prefill must not fail the run
+        result["prefill"] = {
+            "available": False,
+            "detail": "prefill_unavailable",
         }
 
 
@@ -1211,6 +1272,26 @@ def main(argv: list[str] | None = None) -> int:
                         backend,
                         formats,
                         result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Assistant-prefill sensitivity experiment (research
+                # wave-2 idea 2): re-run every search candidate with
+                # benign format-lock prefills appended after the
+                # generation prompt, then re-apply the selection rule
+                # per prefill. Answers "does the winning protocol
+                # survive prefill, and which families honor vs ignore
+                # it?" A failed prefill degrades to "unavailable"
+                # inside the analysis, never a phantom verdict, and
+                # never fails the run.
+                if args.prefill:
+                    _run_prefill_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,

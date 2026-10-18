@@ -523,6 +523,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    prefill_diff = diff_prefill(old.get("prefill"), new.get("prefill"))
+    prefill_asymmetric = prefill_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -548,6 +553,8 @@ def diff_reports(
         and not healing_asymmetric
         and not hierarchy_diff["changed"]
         and not hierarchy_asymmetric
+        and not prefill_diff["changed"]
+        and not prefill_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -574,6 +581,8 @@ def diff_reports(
         "healing_asymmetric": healing_asymmetric,
         "hierarchy_changed": hierarchy_diff["changed"],
         "hierarchy_asymmetric": hierarchy_asymmetric,
+        "prefill_changed": prefill_diff["changed"],
+        "prefill_asymmetric": prefill_asymmetric,
         "identical": identical,
     }
     return {
@@ -591,6 +600,7 @@ def diff_reports(
         "perturbation": perturbation_diff,
         "token_healing": healing_diff,
         "hierarchy": hierarchy_diff,
+        "prefill": prefill_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1517,6 +1527,209 @@ def diff_hierarchy(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_prefill(payload: Any) -> bool:
+    """Structural check for a ``prefill`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never hit
+    a TypeError on a hostile payload, and map keys must be strings.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    prefills = payload.get("prefills")
+    if type(prefills) is not list or not prefills or not all(type(p) is str for p in prefills):
+        return False
+    per_condition = payload.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(prefills):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        winner = condition.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("honor_rate", "restart_rate"):
+                rate = entry.get(key)
+                if rate is not None and type(rate) not in (int, float):
+                    return False
+            think = entry.get("think_channel")
+            if think is not None and type(think) is not bool:
+                return False
+            if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                return False
+    think_effect = payload.get("think_effect")
+    if type(think_effect) is not dict:
+        return False
+    for label, group in think_effect.items():
+        if type(label) is not str:
+            return False
+        if label == "delta":
+            if group is not None and type(group) not in (int, float):
+                return False
+            continue
+        if type(group) is not dict:
+            return False
+        mean = group.get("mean_honor_rate")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+        if type(group.get("n_candidates")) is not int:
+            return False
+    return type(payload.get("flips")) is list
+
+
+def _prefill_condition_triplet(payload: Any, prefill_id: str) -> tuple[Any, Any, Any]:
+    """(decision, winner) for one prefill condition, for drift comparison."""
+    per_condition = payload.get("per_condition") or {}
+    condition = per_condition.get(prefill_id) or {}
+    return (condition.get("decision"), condition.get("winner"), prefill_id)
+
+
+def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``prefill`` payloads; deterministic.
+
+    Answers "did the assistant-prefill sensitivity story change between
+    runs?": the per-prefill (decision, winner) triplets, the winner-flip
+    pattern against the native run, per-candidate honoring-rate drift,
+    and the think-channel vs plain group-rate comparison. A changed
+    flip pattern after a checkpoint or fixture update is the
+    prefill-sensitivity regression signal. Candidates present on only
+    one side are reported as added/removed. A side without a recorded
+    prefill experiment is reported plainly. No model, no network.
+    """
+    old_ok = _valid_prefill(old)
+    new_ok = _valid_prefill(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_prefills = old.get("prefills") or []
+    new_prefills = new.get("prefills") or []
+    prefills_added = [p for p in new_prefills if p not in old_prefills]
+    prefills_removed = [p for p in old_prefills if p not in new_prefills]
+    condition_changed: dict[str, dict[str, Any]] = {}
+    for prefill_id in sorted(set(old_prefills) & set(new_prefills)):
+        old_triplet = _prefill_condition_triplet(old, prefill_id)[:2]
+        new_triplet = _prefill_condition_triplet(new, prefill_id)[:2]
+        changed = old_triplet != new_triplet
+        condition_changed[prefill_id] = {
+            "old_decision": old_triplet[0],
+            "old_winner": old_triplet[1],
+            "new_decision": new_triplet[0],
+            "new_winner": new_triplet[1],
+            "changed": changed,
+        }
+
+    def _flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
+        # ``flips`` is a list here: _valid_prefill rejects anything else
+        # before this point, so no defensive branch is needed.
+        keys = []
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("prefill"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    # NOTE: phrased to stay textually distinct from diff_hierarchy's
+    # flips_changed line (a cycle-147 mutation-gate anchor).
+    old_flip_key = _flip_key(old.get("flips"))
+    new_flip_key = _flip_key(new.get("flips"))
+    flips_changed = old_flip_key != new_flip_key
+
+    def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        rates: dict[str, dict[str, tuple[Any, Any]]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for prefill_id in sorted(per_condition):
+            candidates = (per_condition.get(prefill_id) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[prefill_id] = (
+                    entry.get("honor_rate"),
+                    entry.get("restart_rate"),
+                )
+        return rates
+
+    old_rates = _candidate_rates(old)
+    new_rates = _candidate_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for prefill_id in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_pair = old_rates[name][prefill_id]
+            new_pair = new_rates[name][prefill_id]
+            if old_pair != new_pair:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "prefill": prefill_id,
+                        "old_honor_rate": old_pair[0],
+                        "old_restart_rate": old_pair[1],
+                        "new_honor_rate": new_pair[0],
+                        "new_restart_rate": new_pair[1],
+                    }
+                )
+
+    def _think_means(payload: Any) -> dict[str, Any]:
+        effect = payload.get("think_effect") or {}
+        return {
+            label: (group or {}).get("mean_honor_rate")
+            for label, group in effect.items()
+            if type(label) is str and label != "delta"
+        }
+
+    old_think = _think_means(old)
+    new_think = _think_means(new)
+    think_changed = old_think != new_think
+    result["prefills_added"] = prefills_added
+    result["prefills_removed"] = prefills_removed
+    result["condition_changed"] = condition_changed
+    result["flips_changed"] = flips_changed
+    result["candidate_drift"] = candidate_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    result["think_rates"] = {
+        "old": old_think,
+        "new": new_think,
+        "changed": think_changed,
+    }
+    result["changed"] = bool(
+        prefills_added
+        or prefills_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or think_changed
+    )
+    return result
+
+
 def _healing_verdict_triplet(payload: Any) -> tuple[Any, Any, Any]:
     """(flipped, healed_decision, healed_winner) for drift comparison."""
     if type(payload) is not dict:
@@ -1906,6 +2119,78 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
     return lines
 
 
+def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
+    """Assistant-prefill comparison lines for the stderr summary."""
+    if type(prefill_diff) is not dict:
+        return []
+    available = prefill_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Assistant-prefill comparison unavailable: "
+            f"{missing} run did not record the prefill experiment."
+        ]
+    lines: list[str] = []
+
+    def _verdict(decision: Any, winner: Any) -> str:
+        return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
+
+    conditions = prefill_diff.get("condition_changed") or {}
+    for prefill_id in sorted(conditions):
+        entry = conditions[prefill_id]
+        if entry.get("changed"):
+            lines.append(
+                f"Assistant prefill ({_display_id(prefill_id)}): "
+                f"{_verdict(entry.get('old_decision'), entry.get('old_winner'))} -> "
+                f"{_verdict(entry.get('new_decision'), entry.get('new_winner'))}"
+            )
+    added = prefill_diff.get("prefills_added") or []
+    removed = prefill_diff.get("prefills_removed") or []
+    if added:
+        lines.append(f"Prefill conditions added: {', '.join(_display_id(p) for p in added)}")
+    if removed:
+        lines.append(f"Prefill conditions removed: {', '.join(_display_id(p) for p in removed)}")
+    if prefill_diff.get("flips_changed"):
+        lines.append("Assistant-prefill flip pattern changed between runs.")
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+
+    drift = prefill_diff.get("candidate_drift") or []
+    if drift:
+        lines.append(f"Prefill honoring drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])} "
+                f"({_display_id(entry.get('prefill'))}): honor "
+                f"{_fmt_rate(entry.get('old_honor_rate'))}->"
+                f"{_fmt_rate(entry.get('new_honor_rate'))}, restart "
+                f"{_fmt_rate(entry.get('old_restart_rate'))}->"
+                f"{_fmt_rate(entry.get('new_restart_rate'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    added_c = prefill_diff.get("candidates_added") or []
+    removed_c = prefill_diff.get("candidates_removed") or []
+    if added_c:
+        lines.append(f"Prefill candidates added: {', '.join(_display_id(c) for c in added_c)}")
+    if removed_c:
+        lines.append(f"Prefill candidates removed: {', '.join(_display_id(c) for c in removed_c)}")
+    think = prefill_diff.get("think_rates") or {}
+    if think.get("changed"):
+        old = think.get("old") or {}
+        new = think.get("new") or {}
+        for label in sorted(set(old) | set(new)):
+            if old.get(label) != new.get(label):
+                lines.append(
+                    f"Prefill {label} mean honor rate: "
+                    f"{_fmt_rate(old.get(label))} -> {_fmt_rate(new.get(label))}"
+                )
+    return lines
+
+
 def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     """Prompt-boundary canonicality comparison lines for the stderr summary."""
     available = audit_diff.get("available")
@@ -2144,6 +2429,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_perturbation_summary(diff.get("perturbation")))
     lines.extend(_render_healing_summary(diff.get("token_healing")))
     lines.extend(_render_hierarchy_summary(diff.get("hierarchy")))
+    lines.extend(_render_prefill_summary(diff.get("prefill")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
@@ -2185,6 +2471,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("token-healing sensitivity")
         if diff["hierarchy"]["available"] == "both":
             axes.append("instruction-hierarchy adherence")
+        if diff["prefill"]["available"] == "both":
+            axes.append("assistant-prefill sensitivity")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."

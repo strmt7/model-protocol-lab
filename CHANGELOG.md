@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 148 — assistant-prefill sensitivity experiment, 2026-10-18)
+
+- `mpl run --prefill` (wave-2 research idea #2): re-evaluates every
+  search candidate with benign format-lock prefills (`Answer: `,
+  `Final answer: `, `Result: `) appended as raw token ids after the
+  generation prompt, then re-applies the conservative selection rule
+  per prefill. The scored span is `prefill + generated text` (the
+  deterministic contract that the model "said" the prefill); grading
+  needs no fixture transformation since `prefill + generated ==
+  prefill + expected` iff `generated == expected`. Honoring is
+  detected exactly and separately: a model that did not accept the
+  prefill as its own opening restarts its turn and duplicates the
+  prefill text. New pure module `model_protocol_lab/prefill.py`
+  (spec validation, fixture construction, the honoring predicate, the
+  think-channel predicate computed from each candidate's own
+  generation-prompt tail -- 10 catalog families open a reasoning
+  channel, thinking on/off variants labeled independently -- and the
+  `PrefillBackend` wrapper), `experiments.prefill_stage` /
+  `prefill_adherence` (per-prefill verdicts, flips vs primary,
+  per-candidate honoring rates, think-channel group means reported as
+  correlation, not causation), an HTML "Assistant-prefill sensitivity"
+  section, and `diffreports.diff_prefill` (`prefill_changed` /
+  `prefill_asymmetric` feed `identical`). Fail-closed throughout: a
+  prefill that cannot be encoded, does not decode back to its text, or
+  contains a candidate's response boundary degrades that cell instead
+  of silently mis-scoring. The stage never fails the run; roughly
+  quadruples search compute.
+
 ### Added (cycle 147 — instruction-hierarchy adherence probe, 2026-10-18)
 
 - `mpl run --hierarchy` (wave-2 research idea #1): re-evaluates every
