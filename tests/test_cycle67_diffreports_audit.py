@@ -241,6 +241,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "contamination": {"available": "neither", "changed": False},
         "perturbation": {"available": "neither", "changed": False},
         "token_healing": {"available": "neither", "changed": False},
+        "hierarchy": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -273,6 +274,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "perturbation_asymmetric": False,
             "healing_changed": False,
             "healing_asymmetric": False,
+            "hierarchy_changed": False,
+            "hierarchy_asymmetric": False,
             "identical": True,
         },
     }
@@ -751,6 +754,179 @@ def _o_healing(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_hierarchy_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    positions = value.get("positions")
+    if type(positions) is not list or not positions or not all(type(p) is str for p in positions):
+        return False
+    per_condition = value.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(positions):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        winner = condition.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("system_rate", "user_rate", "neither_rate"):
+                rate = entry.get(key)
+                if rate is not None and type(rate) not in (int, float):
+                    return False
+            if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                return False
+    groups = value.get("group_adherence")
+    if type(groups) is not dict:
+        return False
+    for label, group in groups.items():
+        if type(label) is not str or type(group) is not dict:
+            return False
+        mean = group.get("mean_system_rate")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+        if type(group.get("n_candidates")) is not int:
+            return False
+        if type(group.get("n_families")) is not int:
+            return False
+    return type(value.get("flips")) is list
+
+
+def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle hierarchy section: condition triplets, flips, rates, groups."""
+    old_ok = _o_hierarchy_valid(old)
+    new_ok = _o_hierarchy_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_positions = old.get("positions") or []
+    new_positions = new.get("positions") or []
+    positions_added = [p for p in new_positions if p not in old_positions]
+    positions_removed = [p for p in old_positions if p not in new_positions]
+    condition_changed = {}
+    for position in sorted(set(old_positions) & set(new_positions)):
+        old_cond = (old.get("per_condition") or {}).get(position) or {}
+        new_cond = (new.get("per_condition") or {}).get(position) or {}
+        old_triplet = (old_cond.get("decision"), old_cond.get("winner"))
+        new_triplet = (new_cond.get("decision"), new_cond.get("winner"))
+        condition_changed[position] = {
+            "old_decision": old_triplet[0],
+            "old_winner": old_triplet[1],
+            "new_decision": new_triplet[0],
+            "new_winner": new_triplet[1],
+            "changed": old_triplet != new_triplet,
+        }
+
+    def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        if type(flips) is not list:
+            return []
+        keys = []
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("position"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
+
+    def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        rates: dict[str, dict[str, tuple[Any, Any]]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for position in sorted(per_condition):
+            candidates = (per_condition.get(position) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[position] = (
+                    entry.get("system_rate"),
+                    entry.get("user_rate"),
+                )
+        return rates
+
+    old_rates = _candidate_rates(old)
+    new_rates = _candidate_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    candidate_drift = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for position in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_pair = old_rates[name][position]
+            new_pair = new_rates[name][position]
+            if old_pair != new_pair:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "position": position,
+                        "old_system_rate": old_pair[0],
+                        "old_user_rate": old_pair[1],
+                        "new_system_rate": new_pair[0],
+                        "new_user_rate": new_pair[1],
+                    }
+                )
+
+    def _group_means(payload: Any) -> dict[str, Any]:
+        groups = payload.get("group_adherence") or {}
+        return {
+            label: (group or {}).get("mean_system_rate")
+            for label, group in groups.items()
+            if type(label) is str
+        }
+
+    old_groups = _group_means(old)
+    new_groups = _group_means(new)
+    group_changed = old_groups != new_groups
+    diff["positions_added"] = positions_added
+    diff["positions_removed"] = positions_removed
+    diff["condition_changed"] = condition_changed
+    diff["flips_changed"] = flips_changed
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["group_rates"] = {
+        "old": old_groups,
+        "new": new_groups,
+        "changed": group_changed,
+    }
+    changed = bool(
+        positions_added
+        or positions_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or group_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -1091,6 +1267,7 @@ def _oracle_diff(
     o_hl, o_hl_changed, o_hl_asymmetric = _o_healing(
         old.get("token_healing"), new.get("token_healing")
     )
+    o_hy, o_hy_changed, o_hy_asymmetric = _o_hierarchy(old.get("hierarchy"), new.get("hierarchy"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -1114,6 +1291,8 @@ def _oracle_diff(
         and not o_pb_asymmetric
         and not o_hl_changed
         and not o_hl_asymmetric
+        and not o_hy_changed
+        and not o_hy_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1129,6 +1308,7 @@ def _oracle_diff(
         "contamination": o_ct,
         "perturbation": o_pb,
         "token_healing": o_hl,
+        "hierarchy": o_hy,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1157,6 +1337,8 @@ def _oracle_diff(
             "perturbation_asymmetric": o_pb_asymmetric,
             "healing_changed": o_hl_changed,
             "healing_asymmetric": o_hl_asymmetric,
+            "hierarchy_changed": o_hy_changed,
+            "hierarchy_asymmetric": o_hy_asymmetric,
             "identical": identical,
         },
     }
@@ -1296,6 +1478,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "perturbation_asymmetric": False,
                 "healing_changed": False,
                 "healing_asymmetric": False,
+                "hierarchy_changed": False,
+                "hierarchy_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2259,6 +2443,49 @@ def _fuzz_healing_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_hierarchy_section(rng: random.Random) -> dict[str, Any]:
+    per_condition = {}
+    for position in ("privilege_first", "privilege_last"):
+        per_candidate = {
+            name: {
+                "system_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "user_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "neither_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "pass": rng.choice([True, False, None]),
+            }
+            for name in ("alpha", "beta")
+        }
+        if rng.random() < 0.15:
+            per_candidate[rng.choice([7, 8.5])] = {"system_rate": 1.0}
+        per_condition[position] = {
+            "decision": rng.choice(["selected", "ambiguous", "no_candidate", 4]),
+            "winner": rng.choice(["alpha", "beta", None]),
+            "n_evaluable": rng.randint(0, 2),
+            "per_candidate": per_candidate,
+        }
+    if rng.random() < 0.15:
+        per_condition["privilege_first"]["per_candidate"] = "junk"
+    groups = {
+        label: {
+            "n_candidates": rng.randint(0, 3),
+            "n_families": rng.randint(0, 2),
+            "mean_system_rate": rng.choice([0.0, 0.5, 1.0, None]),
+        }
+        for label in ("dedicated", "folded", "unknown")
+    }
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "primary_decision": "selected",
+        "n_fixtures": rng.randint(0, 8),
+        "positions": ["privilege_first", "privilege_last"],
+        "per_condition": per_condition,
+        "flips": [],
+        "position_effect": None,
+        "group_adherence": groups,
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2301,13 +2528,15 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["perturbation"] = _fuzz_perturbation_section(rng)
     if rng.random() < 0.45:
         report["token_healing"] = _fuzz_healing_section(rng)
+    if rng.random() < 0.45:
+        report["hierarchy"] = _fuzz_hierarchy_section(rng)
     return report
 
 
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(15)
+        op = rng.randrange(16)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -2378,6 +2607,14 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
                 cell = per_cand[key]
                 if isinstance(cell, dict):
                     cell["healed"] = rng.choice([True, False, None, "mutated"])
+        elif op == 15:
+            hier = report.get("hierarchy")
+            per_cond = hier.get("per_condition") if isinstance(hier, dict) else None
+            if isinstance(per_cond, dict) and per_cond:
+                key = rng.choice(sorted(k for k in per_cond if type(k) is str))
+                cell = per_cond[key]
+                if isinstance(cell, dict):
+                    cell["winner"] = rng.choice(["alpha", "zzz", None])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
@@ -2500,6 +2737,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not perturbation_asymmetric\n"
             '        and not healing_diff["changed"]\n'
             "        and not healing_asymmetric\n"
+            '        and not hierarchy_diff["changed"]\n'
+            "        and not hierarchy_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"

@@ -71,6 +71,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "selection_robustness",
     "transfer",
     "perturbation",
+    "hierarchy",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",
