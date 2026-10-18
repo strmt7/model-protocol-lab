@@ -240,6 +240,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "transfer": {"available": "neither", "changed": False},
         "contamination": {"available": "neither", "changed": False},
         "perturbation": {"available": "neither", "changed": False},
+        "token_healing": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -270,6 +271,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "contamination_asymmetric": False,
             "perturbation_changed": False,
             "perturbation_asymmetric": False,
+            "healing_changed": False,
+            "healing_asymmetric": False,
             "identical": True,
         },
     }
@@ -645,6 +648,109 @@ def _o_perturbation_valid(value: Any) -> bool:
     )
 
 
+def _o_healing_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    pc = value.get("per_candidate") if type(value) is dict else None
+    return (
+        type(value) is dict
+        and value.get("available") is True
+        and type(value.get("flipped")) is bool
+        and type(pc) is dict
+        and all(type(k) is str and type(v) is dict for k, v in pc.items())
+        and all(
+            (e.get("native") is None or type(e.get("native")) is bool)
+            and (e.get("healed") is None or type(e.get("healed")) is bool)
+            for e in pc.values()
+        )
+    )
+
+
+def _o_healing(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle token-healing section: flip verdict, candidate, and set drift."""
+    old_ok = _o_healing_valid(old)
+    new_ok = _o_healing_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _triplet(payload: Any) -> tuple[Any, Any, Any]:
+        if type(payload) is not dict:
+            return (None, None, None)
+        return (
+            payload.get("flipped"),
+            payload.get("healed_decision"),
+            payload.get("healed_winner"),
+        )
+
+    old_t, new_t = _triplet(old), _triplet(new)
+    flip_changed = old_t != new_t
+    diff["flip"] = {
+        "old": {
+            "flipped": old_t[0],
+            "healed_decision": old_t[1],
+            "healed_winner": old_t[2],
+        },
+        "new": {
+            "flipped": new_t[0],
+            "healed_decision": new_t[1],
+            "healed_winner": new_t[2],
+        },
+        "changed": flip_changed,
+    }
+    old_pc, new_pc = old.get("per_candidate") or {}, new.get("per_candidate") or {}
+    old_names, new_names = sorted(old_pc), sorted(new_pc)
+    candidates_added = [c for c in new_names if c not in old_pc]
+    candidates_removed = [c for c in old_names if c not in new_pc]
+    candidate_drift = [
+        {
+            "candidate": cand,
+            "old_native": (old_pc.get(cand) or {}).get("native"),
+            "old_healed": (old_pc.get(cand) or {}).get("healed"),
+            "new_native": (new_pc.get(cand) or {}).get("native"),
+            "new_healed": (new_pc.get(cand) or {}).get("healed"),
+        }
+        for cand in sorted(set(old_names) & set(new_names))
+        if (
+            ((old_pc.get(cand) or {}).get("native"), (old_pc.get(cand) or {}).get("healed"))
+            != (
+                (new_pc.get(cand) or {}).get("native"),
+                (new_pc.get(cand) or {}).get("healed"),
+            )
+        )
+    ]
+    old_fals = old.get("falsification") or {}
+    new_fals = new.get("falsification") or {}
+    old_acc = (old_fals.get("n_holds"), old_fals.get("n_comparable"))
+    new_acc = (new_fals.get("n_holds"), new_fals.get("n_comparable"))
+    falsification_changed = old_acc != new_acc
+    diff["falsification"] = {
+        "old": {"n_holds": old_acc[0], "n_comparable": old_acc[1]},
+        "new": {"n_holds": new_acc[0], "n_comparable": new_acc[1]},
+        "changed": falsification_changed,
+    }
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    changed = bool(
+        flip_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or falsification_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -982,6 +1088,9 @@ def _oracle_diff(
     o_pb, o_pb_changed, o_pb_asymmetric = _o_perturbation(
         old.get("perturbation"), new.get("perturbation")
     )
+    o_hl, o_hl_changed, o_hl_asymmetric = _o_healing(
+        old.get("token_healing"), new.get("token_healing")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -1003,6 +1112,8 @@ def _oracle_diff(
         and not o_ct_asymmetric
         and not o_pb_changed
         and not o_pb_asymmetric
+        and not o_hl_changed
+        and not o_hl_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1017,6 +1128,7 @@ def _oracle_diff(
         "transfer": o_tr,
         "contamination": o_ct,
         "perturbation": o_pb,
+        "token_healing": o_hl,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1043,6 +1155,8 @@ def _oracle_diff(
             "contamination_asymmetric": o_ct_asymmetric,
             "perturbation_changed": o_pb_changed,
             "perturbation_asymmetric": o_pb_asymmetric,
+            "healing_changed": o_hl_changed,
+            "healing_asymmetric": o_hl_asymmetric,
             "identical": identical,
         },
     }
@@ -1180,6 +1294,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "contamination_asymmetric": False,
                 "perturbation_changed": False,
                 "perturbation_asymmetric": False,
+                "healing_changed": False,
+                "healing_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2111,6 +2227,38 @@ def _fuzz_perturbation_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_healing_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {
+        name: {
+            "native": rng.choice([True, False, None]),
+            "healed": rng.choice([True, False, None]),
+            "verdict_changed": rng.choice([True, False, None]),
+        }
+        for name in ("alpha", "beta")
+    }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"native": True}
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "primary_decision": "selected",
+        "healed_decision": rng.choice(["selected", "ambiguous", "no_candidate", 4]),
+        "healed_winner": rng.choice(["alpha", "beta", None]),
+        "flipped": rng.choice([True, False]),
+        "per_candidate": per_candidate,
+        "fixture_flips": [],
+        "falsification": {
+            "per_candidate": {},
+            "n_comparable": rng.randint(0, 2),
+            "n_holds": rng.randint(0, 2),
+            "n_violations": 0,
+            "prediction_holds": rng.choice([True, False, None]),
+        },
+        "n_healed": rng.randint(0, 4),
+        "n_fallback": rng.randint(0, 2),
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2141,8 +2289,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.30:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
-    # robustness, perturbation): emitted often enough that the
-    # differential fuzz exercises them, not just the legacy axes.
+    # robustness, perturbation, token healing): emitted often enough that
+    # the differential fuzz exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -2151,13 +2299,15 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["selection_robustness"] = _fuzz_robustness_section(rng)
     if rng.random() < 0.45:
         report["perturbation"] = _fuzz_perturbation_section(rng)
+    if rng.random() < 0.45:
+        report["token_healing"] = _fuzz_healing_section(rng)
     return report
 
 
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(14)
+        op = rng.randrange(15)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -2220,6 +2370,14 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
                 cell = per_var[key]
                 if isinstance(cell, dict):
                     cell["winner"] = rng.choice(["alpha", "zzz", None])
+        elif op == 14:
+            heal = report.get("token_healing")
+            per_cand = heal.get("per_candidate") if isinstance(heal, dict) else None
+            if isinstance(per_cand, dict) and per_cand:
+                key = rng.choice(sorted(k for k in per_cand if type(k) is str))
+                cell = per_cand[key]
+                if isinstance(cell, dict):
+                    cell["healed"] = rng.choice([True, False, None, "mutated"])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
@@ -2340,6 +2498,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not contamination_asymmetric\n"
             '        and not perturbation_diff["changed"]\n'
             "        and not perturbation_asymmetric\n"
+            '        and not healing_diff["changed"]\n'
+            "        and not healing_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -2362,6 +2522,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or contamination_asymmetric\n"
             '        or perturbation_diff["changed"]\n'
             "        or perturbation_asymmetric\n"
+            '        or healing_diff["changed"]\n'
+            "        or healing_asymmetric\n"
             "    )\n",
             scenario,
         )

@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 146 — token-healing selection sensitivity, 2026-10-18)
+
+- `mpl run --token-healing` (wave-2 research idea #3): replays the whole
+  experiment once more with every prompt healed before generation, then
+  re-applies the conservative selection rule to the healed outcomes.
+  The implementation ports HF `GenerationMixin.heal_tokens` faithfully
+  into the lab's manual greedy decoder — decode the prompt, re-encode it
+  (canonical re-tokenization), extend the tail token with every
+  vocabulary token that starts with it (deterministic sorted scan,
+  space→`Ġ` whitespace trick), trim the tail, take a single biased
+  argmax (+10.0 per extension, +1.0 on the original tail). New pure
+  module `model_protocol_lab/healing.py` (injected decode/re-encode/
+  vocab/argmax callables), `LocalHFBackend.heal_input_ids` (single
+  forward pass on the trimmed prompt), and `TokenHealingBackend`
+  (fingerprint `+token-healing`, `n_healed`/`n_fallback` counters,
+  validates the healed `tuple[int, ...]` contract at the boundary and
+  falls back to native ids). Everything fails closed; the stage never
+  fails the run.
+- A `falsification` block testing the cycle-134 prompt-boundary
+  audit's own prediction, one-directional by design: a verdict may
+  change only for a candidate the audit flagged as seam-fragile (a
+  fragile-but-stable candidate need not flip — an iff would have
+  falsely violated). `results.json` carries the healed (decision,
+  winner), the flip flag, per-candidate (native, healed) outcomes,
+  per-fixture flips, and the falsification table; the report renders a
+  "Token-healing selection sensitivity" HTML section.
+- `mpl diff-reports` now compares the `token_healing` section between
+  runs: `diff_token_healing` (healed-verdict drift, per-candidate
+  (native, healed) drift, falsification drift). New `healing_changed` /
+  `healing_asymmetric` summary flags feed `identical`; stderr summary
+  lines. Both oracles updated (cycle-27 availability-level + cycle-67
+  full reimplementation with fuzz + hardcoded expected summary +
+  identical mutation-gate anchor); 51 tests, 5/5 `changed`-disjunct
+  mutants killed.
+
 ### Fixed (cycle 145 — wave-2 adversarial-audit hardening, 2026-10-18)
 
 - `margin_trajectory` was still O(B·C) quadratic: the wave-1 point cap

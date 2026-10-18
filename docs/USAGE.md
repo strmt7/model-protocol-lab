@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -615,6 +615,51 @@ multiplies by (1 + N); the stage never fails the run. Together with
 stop-semantics robustness (§8.13) and cross-checkpoint transfer
 (§8.14) this completes the winner-reliability trilogy: serving stack,
 checkpoint fleet, and fixture phrasing.
+
+### 8.16 Token-healing selection sensitivity (`token_healing`)
+
+Tokenizers like SentencePiece split trailing whitespace into the next
+token, so a prompt ending in `"hello"` encodes differently from the
+same prompt decoded and re-encoded -- the greedy-tokenization bias at
+the prompt boundary. Hugging Face's `token_healing` countermeasure
+replaces the prompt's tail token with the highest-scoring vocabulary
+extension at inference time. `model-protocol-lab run --token-healing` replays the
+whole experiment once more, with every prompt healed before
+generation, and re-applies the conservative selection rule to the
+healed outcomes.
+
+The implementation does not call `generate()` -- this backend decodes
+greedily by hand -- but ports `transformers.GenerationMixin.heal_tokens`
+faithfully into the lab's manual decoder (`model_protocol_lab/healing.py`,
+a pure function with injected decode/re-encode/vocab/argmax callables):
+decode the prompt, re-encode it (canonical re-tokenization), extend the
+tail token with every vocabulary token that starts with it (sorted for
+determinism), trim the tail, then take a single biased argmax that
+adds +10.0 to every extension and +1.0 to the original tail token.
+Two deliberate adaptations: decoding keeps special tokens (the lab's
+prompts are exact id sequences), and an empty trimmed prompt fails
+closed to the native ids instead of HF's BOS substitution (this
+pipeline never injects implicit specials). The wrapper fails closed
+everywhere: healing errors, healers that violate the
+`tuple[int, ...]` contract, and the single healing forward pass all
+degrade to the native prompt, never to a failed run.
+
+`results.json` carries `token_healing` with the healed
+(decision, winner), the `flipped` flag (verdict differs from the
+primary run), the per-candidate (native, healed) outcome table, the
+per-fixture flip list, a `falsification` block, and
+`n_healed`/`n_fallback` counts. The falsification block tests the
+cycle-134 prompt-boundary audit: the prediction is one-directional --
+a verdict may change only for a candidate the boundary audit flagged
+as seam-fragile, but a fragile candidate need not flip (healing is a
+best-effort bias, not a guarantee). The report renders a
+"Token-healing selection sensitivity" section with the healed verdict
+line, the per-candidate table, and the falsification table.
+`diff-reports` compares the healed verdict, the per-candidate
+(native, healed) cells, and the falsification entries between runs
+(`diff_token_healing`; `healing_changed` / `healing_asymmetric` feed
+`identical`) -- the token-boundary regression signal after a
+tokenizer or checkpoint update.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

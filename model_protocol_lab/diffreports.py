@@ -513,6 +513,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    healing_diff = diff_token_healing(old.get("token_healing"), new.get("token_healing"))
+    healing_asymmetric = healing_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -534,6 +539,8 @@ def diff_reports(
         and not contamination_asymmetric
         and not perturbation_diff["changed"]
         and not perturbation_asymmetric
+        and not healing_diff["changed"]
+        and not healing_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -556,6 +563,8 @@ def diff_reports(
         "contamination_asymmetric": contamination_asymmetric,
         "perturbation_changed": perturbation_diff["changed"],
         "perturbation_asymmetric": perturbation_asymmetric,
+        "healing_changed": healing_diff["changed"],
+        "healing_asymmetric": healing_asymmetric,
         "identical": identical,
     }
     return {
@@ -571,6 +580,7 @@ def diff_reports(
         "transfer": transfer_diff,
         "contamination": contamination_diff,
         "perturbation": perturbation_diff,
+        "token_healing": healing_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1281,6 +1291,128 @@ def diff_perturbation(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_token_healing(payload: Any) -> bool:
+    """Structural check for a ``token_healing`` payload.
+
+    Also enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None so the renderers never hit a
+    TypeError on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if type(payload.get("flipped")) is not bool:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(
+        type(k) is str and type(v) is dict for k, v in per_candidate.items()
+    ):
+        return False
+    for entry in per_candidate.values():
+        for key in ("native", "healed"):
+            value = entry.get(key)
+            if value is not None and type(value) is not bool:
+                return False
+    return True
+
+
+def _healing_verdict_triplet(payload: Any) -> tuple[Any, Any, Any]:
+    """(flipped, healed_decision, healed_winner) for drift comparison."""
+    if type(payload) is not dict:
+        return (None, None, None)
+    return (
+        payload.get("flipped"),
+        payload.get("healed_decision"),
+        payload.get("healed_winner"),
+    )
+
+
+def diff_token_healing(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``token_healing`` payloads; deterministic.
+
+    Answers "did the token-healing sensitivity story change between
+    runs?": the flip verdict (did healing change the winner?), the
+    healed (decision, winner), per-candidate (native, healed) verdicts,
+    and the falsification accuracy (how many candidates the
+    boundary-audit prediction held for). A changed flip pattern after a
+    checkpoint or fixture update is the tokenization-fragility
+    regression signal. Candidates present on only one side are reported
+    as added/removed. A side without a recorded healing experiment is
+    reported plainly. No model, no network.
+    """
+    old_ok = _valid_token_healing(old)
+    new_ok = _valid_token_healing(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_flip = _healing_verdict_triplet(old)
+    new_flip = _healing_verdict_triplet(new)
+    flip_changed = old_flip != new_flip
+    result["flip"] = {
+        "old": {
+            "flipped": old_flip[0],
+            "healed_decision": old_flip[1],
+            "healed_winner": old_flip[2],
+        },
+        "new": {
+            "flipped": new_flip[0],
+            "healed_decision": new_flip[1],
+            "healed_winner": new_flip[2],
+        },
+        "changed": flip_changed,
+    }
+    old_pc = old.get("per_candidate") or {}
+    new_pc = new.get("per_candidate") or {}
+    old_names = sorted(old_pc)
+    new_names = sorted(new_pc)
+    candidates_added = [c for c in new_names if c not in old_pc]
+    candidates_removed = [c for c in old_names if c not in new_pc]
+    candidate_drift: list[dict[str, Any]] = []
+    for cand in sorted(set(old_names) & set(new_names)):
+        old_e = old_pc.get(cand) or {}
+        new_e = new_pc.get(cand) or {}
+        old_pair = (old_e.get("native"), old_e.get("healed"))
+        new_pair = (new_e.get("native"), new_e.get("healed"))
+        if old_pair != new_pair:
+            candidate_drift.append(
+                {
+                    "candidate": cand,
+                    "old_native": old_pair[0],
+                    "old_healed": old_pair[1],
+                    "new_native": new_pair[0],
+                    "new_healed": new_pair[1],
+                }
+            )
+    old_fals = old.get("falsification") or {}
+    new_fals = new.get("falsification") or {}
+    old_acc = (old_fals.get("n_holds"), old_fals.get("n_comparable"))
+    new_acc = (new_fals.get("n_holds"), new_fals.get("n_comparable"))
+    falsification_changed = old_acc != new_acc
+    result["falsification"] = {
+        "old": {"n_holds": old_acc[0], "n_comparable": old_acc[1]},
+        "new": {"n_holds": new_acc[0], "n_comparable": new_acc[1]},
+        "changed": falsification_changed,
+    }
+    result["candidate_drift"] = candidate_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    result["changed"] = bool(
+        flip_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or falsification_changed
+    )
+    return result
+
+
 def _render_contamination_summary(
     contamination_diff: dict[str, Any] | None,
 ) -> list[str]:
@@ -1433,6 +1565,68 @@ def _render_perturbation_summary(perturbation_diff: dict[str, Any] | None) -> li
         lines.append(f"Perturbation variants removed: {', '.join(_display_id(v) for v in removed)}")
     if perturbation_diff.get("operators_changed"):
         lines.append("Perturbation operator set changed between runs.")
+    return lines
+
+
+def _render_healing_summary(healing_diff: dict[str, Any] | None) -> list[str]:
+    """Token-healing comparison lines for the stderr summary."""
+    if type(healing_diff) is not dict:
+        return []
+    available = healing_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Token-healing comparison unavailable: "
+            f"{missing} run did not record the token-healing experiment."
+        ]
+    lines: list[str] = []
+    flip = healing_diff.get("flip") or {}
+    if flip.get("changed"):
+        old = flip.get("old") or {}
+        new = flip.get("new") or {}
+
+        def _verdict(side: dict[str, Any]) -> str:
+            winner = side.get("healed_winner")
+            return (
+                f"{_display_id(side.get('healed_decision'))}/"
+                f"{_display_id('(none)' if winner is None else winner)}"
+            )
+
+        lines.append(
+            f"Token-healing flip: {old.get('flipped')} -> {new.get('flipped')} "
+            f"({_verdict(old)} -> {_verdict(new)})"
+        )
+    drift = healing_diff.get("candidate_drift") or []
+    if drift:
+        lines.append(f"Token-healing candidate drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}: "
+                f"native {_display_id(entry['old_native'])}->"
+                f"{_display_id(entry['new_native'])}, healed "
+                f"{_display_id(entry['old_healed'])}->{_display_id(entry['new_healed'])}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    added = healing_diff.get("candidates_added") or []
+    removed = healing_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Token-healing candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(
+            f"Token-healing candidates removed: {', '.join(_display_id(c) for c in removed)}"
+        )
+    fals = healing_diff.get("falsification") or {}
+    if fals.get("changed"):
+        old = fals.get("old") or {}
+        new = fals.get("new") or {}
+        lines.append(
+            "Token-healing falsification accuracy: "
+            f"{old.get('n_holds')}/{old.get('n_comparable')} -> "
+            f"{new.get('n_holds')}/{new.get('n_comparable')} predictions hold"
+        )
     return lines
 
 
@@ -1672,6 +1866,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_transfer_summary(diff.get("transfer")))
     lines.extend(_render_contamination_summary(diff.get("contamination")))
     lines.extend(_render_perturbation_summary(diff.get("perturbation")))
+    lines.extend(_render_healing_summary(diff.get("token_healing")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
@@ -1709,6 +1904,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("held-out budget floor")
         if diff["perturbation"]["available"] == "both":
             axes.append("fixture-perturbation robustness")
+        if diff["token_healing"]["available"] == "both":
+            axes.append("token-healing sensitivity")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."

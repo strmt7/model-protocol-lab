@@ -3451,6 +3451,161 @@ def _perturbation_section(result: dict[str, Any]) -> str:
     )
 
 
+def _token_healing_section(result: dict[str, Any]) -> str:
+    """Token-healing selection sensitivity: does healing flip the winner?
+
+    Every search candidate re-evaluated with HF-style token healing
+    applied to each prompt (search split only); the selection rule
+    re-applied to the healed verdicts. The falsification table tests the
+    lab's own boundary-canonicality audit as a predictor: only
+    seam-fragile candidates should change verdict under healing.
+    Renders nothing when the token-healing experiment did not run.
+    """
+    healing: Any = result.get("token_healing")
+    if type(healing) is not dict or not healing.get("available"):
+        return ""
+    per_candidate = healing.get("per_candidate")
+    falsification = healing.get("falsification")
+    if type(per_candidate) is not dict or type(falsification) is not dict:
+        return ""
+    primary_winner = healing.get("primary_winner")
+    primary_decision = healing.get("primary_decision")
+    healed_winner = healing.get("healed_winner")
+    healed_decision = healing.get("healed_decision")
+    flipped = healing.get("flipped") is True
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    verdict_line = (
+        "Healed verdict: <strong>"
+        + escape(_name(healed_decision))
+        + " / "
+        + escape(_name(healed_winner))
+        + "</strong> vs primary "
+        + escape(_name(primary_decision))
+        + " / "
+        + escape(_name(primary_winner))
+    )
+    if flipped:
+        verdict_line += ' <span class="badge fail">flipped</span>'
+    else:
+        verdict_line += ' <span class="badge pass">stable</span>'
+
+    cand_rows = []
+    for cand in sorted(str(c) for c in per_candidate):
+        entry = per_candidate[cand]
+        if type(entry) is not dict:
+            continue
+        native = entry.get("native")
+        healed_v = entry.get("healed")
+        changed = entry.get("verdict_changed")
+        cell = (
+            '<span class="badge fail">changed</span>'
+            if changed is True
+            else '<span class="badge pass">same</span>'
+            if changed is False
+            else '<span class="badge">n/a</span>'
+        )
+        cand_rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(native))
+            + "</td><td>"
+            + escape(str(healed_v))
+            + "</td><td>"
+            + cell
+            + "</td></tr>"
+        )
+
+    fals_rows = []
+    fals_per_candidate = falsification.get("per_candidate")
+    if type(fals_per_candidate) is dict:
+        for cand in sorted(str(c) for c in fals_per_candidate):
+            entry = fals_per_candidate[cand]
+            if type(entry) is not dict:
+                continue
+            fragile = entry.get("seam_fragile")
+            changed = entry.get("verdict_changed")
+            holds = entry.get("prediction_holds")
+            badge = (
+                '<span class="badge pass">holds</span>'
+                if holds is True
+                else '<span class="badge fail">violated</span>'
+                if holds is False
+                else '<span class="badge">n/a</span>'
+            )
+            fals_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + "</span></td><td>"
+                + escape(str(fragile))
+                + "</td><td>"
+                + escape(str(changed))
+                + "</td><td>"
+                + badge
+                + "</td></tr>"
+            )
+    n_comparable = falsification.get("n_comparable")
+    n_holds = falsification.get("n_holds")
+    if type(n_comparable) is int and type(n_holds) is int and n_comparable:
+        fals_line = (
+            f"Boundary-audit prediction holds for {n_holds}/{n_comparable} comparable candidates."
+        )
+    else:
+        fals_line = "Boundary-audit prediction not comparable on this run."
+
+    n_healed = healing.get("n_healed")
+    n_fallback = healing.get("n_fallback")
+    heal_line = ""
+    if type(n_healed) is int and type(n_fallback) is int:
+        heal_line = (
+            "<p>"
+            + escape(str(n_healed))
+            + " prompts healed, "
+            + escape(str(n_fallback))
+            + " fell back to native ids.</p>"
+        )
+
+    flips = healing.get("fixture_flips")
+    n_flips = len(flips) if type(flips) is list else 0
+    return (
+        '<section class="card"><h2>Token-healing selection sensitivity</h2>'
+        "<p>Every search candidate re-evaluated with HF-style token healing "
+        "applied to each prompt (the tail token is re-chosen among "
+        "vocabulary extensions of its decoded text; search split only); the "
+        "selection rule re-applied to the healed verdicts. A flipped "
+        "(decision, winner) means the winner depended on greedy "
+        "tokenization of the prompt tail.</p>"
+        "<p>"
+        + verdict_line
+        + "</p>"
+        + heal_line
+        + "<p>"
+        + escape(fals_line)
+        + (f" {n_flips} per-fixture verdict flip(s)." if n_flips else "")
+        + "</p>"
+        + (
+            '<div class="table-wrap"><table><thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Native pass</th><th scope="col">Healed pass</th>'
+            '<th scope="col">Verdict</th>'
+            "</tr></thead><tbody>" + "".join(cand_rows) + "</tbody></table></div>"
+            if cand_rows
+            else ""
+        )
+        + (
+            '<div class="table-wrap"><table><thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Seam-fragile (boundary audit)</th>'
+            '<th scope="col">Verdict changed</th><th scope="col">Prediction</th>'
+            "</tr></thead><tbody>" + "".join(fals_rows) + "</tbody></table></div>"
+            if fals_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3562,6 +3717,7 @@ def render_html(result: dict[str, Any]) -> str:
     template_firewall_html = _template_firewall_section(result)
     transfer_html = _transfer_section(result)
     perturbation_html = _perturbation_section(result)
+    healing_html = _token_healing_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3589,6 +3745,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "perturbation-robustness",
                 "Fixture-perturbation robustness",
                 perturbation_html,
+            ),
+            (
+                "token-healing",
+                "Token-healing selection sensitivity",
+                healing_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
@@ -3633,6 +3794,7 @@ def render_html(result: dict[str, Any]) -> str:
         + template_firewall_html
         + transfer_html
         + perturbation_html
+        + healing_html
         + sweep_html
         + logprob_html
         + held_out_html
