@@ -298,6 +298,62 @@ class ValidationConfigFileTests(unittest.TestCase):
             text,
         )
 
+    def test_ci_codecov_upload_shape(self):
+        # Owner-mandated Codecov wiring (cycle 149 add-on): the test job
+        # emits coverage.xml and uploads it with the pinned
+        # codecov-action via OIDC, failing the job when the upload
+        # itself errors. The job needs id-token:write for OIDC.
+        import yaml
+
+        ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        doc = yaml.safe_load(ci_path.read_text(encoding="utf-8"))
+        job = doc["jobs"]["test"]
+        self.assertEqual(job["permissions"].get("id-token"), "write")
+        steps = job["steps"]
+        xml_steps = [s for s in steps if s.get("run") == "coverage xml -o coverage.xml"]
+        self.assertEqual(len(xml_steps), 1)
+        self.assertEqual(xml_steps[0].get("if"), "always()")
+        uploads = [
+            s
+            for s in steps
+            if type(s.get("uses")) is str and s["uses"].startswith("codecov/codecov-action@")
+        ]
+        self.assertEqual(len(uploads), 1)
+        upload = uploads[0]
+        self.assertEqual(
+            upload["uses"],
+            "codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5",
+        )
+        self.assertEqual(upload.get("if"), "always()")
+        with_block = upload.get("with") or {}
+        self.assertEqual(with_block.get("files"), "./coverage.xml")
+        self.assertTrue(with_block.get("use_oidc"))
+        self.assertEqual(with_block.get("name"), "model-protocol-lab")
+        self.assertTrue(with_block.get("fail_ci_if_error"))
+        # The repo-side config mirrors the owner's other repos: patch
+        # target holds the CI gate, tests/examples are ignored.
+        import yaml as yaml2
+
+        codecov = yaml2.safe_load((REPO_ROOT / ".codecov.yml").read_text(encoding="utf-8"))
+        self.assertEqual(codecov["coverage"]["status"]["patch"]["default"]["target"], "95%")
+        self.assertIn("tests/", codecov["ignore"])
+
+    def test_readme_codecov_badge_exact(self):
+        # The badge URL must be byte-exact: a wrong org/repo slug would
+        # silently point at someone else's coverage.
+        badge = (
+            "[![codecov](https://codecov.io/gh/strmt7/model-protocol-lab/graph/badge.svg)]"
+            "(https://codecov.io/gh/strmt7/model-protocol-lab)"
+        )
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(badge, readme)
+        # It sits directly after the CI badge, not buried elsewhere.
+        ci_badge = (
+            "[![CI](https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml/badge.svg)]"
+            "(https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml)"
+        )
+        self.assertLess(readme.index(ci_badge), readme.index(badge))
+
     def test_pre_commit_ruff_rev(self):
         # Doc: "pre-commit YAML (ruff-pre-commit v0.17.0)".
         text = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
