@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 138 — cross-checkpoint transfer experiment, 2026-10-18)
+
+- New `run --transfer-model` (repeatable, max 4; IDEAS #1): after the
+  primary run, every search candidate is re-evaluated against each
+  additional local checkpoint on the search split only (same boundary,
+  same `--max-new-tokens`; greedy, exact) via
+  `experiments.transfer_stage`, and the conservative selection rule is
+  re-applied per checkpoint via pure
+  `experiments.transfer_portability`. `results.json` carries `transfer`
+  with checkpoint ids/paths/fingerprints, per-checkpoint
+  decision/winner, the candidate x checkpoint verdict matrix
+  (`transfers` / `wins_there` / `ties_there` / `fails_there` /
+  `checkpoint_incompatible`), and the transfer verdict (`full` /
+  `partial` / `none` / `unavailable`). The HTML report gains a
+  "Cross-checkpoint transfer" section. Failed checkpoints degrade to
+  incompatible (fail-closed, never silently skipped); the stage never
+  fails the run.
+
 ### Added (cycle 137 — selection robustness under stop semantics, 2026-10-18)
 
 - New `experiments.selection_robustness` (IDEAS #3): pure post-hoc

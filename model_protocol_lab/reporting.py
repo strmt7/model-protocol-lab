@@ -3207,6 +3207,99 @@ def _selection_robustness_section(result: dict[str, Any]) -> str:
     )
 
 
+def _transfer_section(result: dict[str, Any]) -> str:
+    """Cross-checkpoint transfer: does the winner win elsewhere too?
+
+    Re-applies the conservative selection rule to every search candidate
+    under each transfer checkpoint (search split only) and reports
+    whether the primary winner transfers, ties, or fails there. A
+    checkpoint where a candidate could not be evaluated (e.g. boundary
+    IDs outside its vocabulary) is recorded as incompatible, never
+    silently skipped. Renders nothing when the transfer experiment did
+    not run.
+    """
+    transfer: Any = result.get("transfer")
+    if type(transfer) is not dict or not transfer.get("available"):
+        return ""
+    checkpoints = transfer.get("checkpoints")
+    per_checkpoint = transfer.get("per_checkpoint")
+    matrix = transfer.get("matrix")
+    if (
+        type(checkpoints) is not list
+        or type(per_checkpoint) is not dict
+        or type(matrix) is not dict
+    ):
+        return ""
+    verdict = str(transfer.get("transfer_verdict", "?"))
+    primary = transfer.get("primary_winner")
+    verdict_labels = {
+        "full": "transfers to every checkpoint",
+        "partial": "transfers to some checkpoints",
+        "none": "transfers to no checkpoint",
+        "unavailable": "not evaluable",
+    }
+    cell_labels = {
+        "transfers": ("pass", "transfers"),
+        "wins_there": ("pass", "wins"),
+        "ties_there": ("neutral", "ties"),
+        "fails_there": ("fail", "fails"),
+        "checkpoint_incompatible": ("neutral", "n/a"),
+    }
+    # Checkpoint columns: id + fingerprint.
+    ckpt_ids: list[str] = []
+    header_cells = []
+    for ckpt in checkpoints:
+        if type(ckpt) is not dict:
+            continue
+        cid = str(ckpt.get("id", "?"))
+        ckpt_ids.append(cid)
+        fingerprint = ckpt.get("fingerprint")
+        header_cells.append(
+            '<th scope="col"><span class="mono">'
+            + escape(cid)
+            + "</span>"
+            + (
+                '<br><span class="mono">' + escape(str(fingerprint)[:16]) + "…</span>"
+                if type(fingerprint) is str and fingerprint
+                else ""
+            )
+            + "</th>"
+        )
+    names = sorted(str(n) for n in matrix)
+    body_rows = []
+    for name in names:
+        row = matrix[name]
+        cells = []
+        for cid in ckpt_ids:
+            v = row.get(cid) if type(row) is dict else None
+            badge, label = cell_labels.get(str(v), ("neutral", "?"))
+            cells.append('<td><span class="badge ' + badge + '">' + label + "</span></td>")
+        marker = " ★" if name == primary else ""
+        body_rows.append(
+            '<tr><td><span class="mono">'
+            + escape(name)
+            + escape(marker)
+            + "</span></td>"
+            + "".join(cells)
+            + "</tr>"
+        )
+    return (
+        '<section class="card"><h2>Cross-checkpoint transfer</h2>'
+        "<p>Every search candidate re-evaluated against each transfer "
+        "checkpoint (search split only); the selection rule re-applied per "
+        "checkpoint. ★ marks the primary winner.</p>"
+        "<p>Transfer verdict: <strong>"
+        + escape(verdict_labels.get(verdict, verdict))
+        + "</strong></p>"
+        '<div class="table-wrap"><table><thead><tr><th scope="col">Candidate</th>'
+        + "".join(header_cells)
+        + "</tr></thead><tbody>"
+        + "".join(body_rows)
+        + "</tbody></table></div>"
+        "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3316,6 +3409,7 @@ def render_html(result: dict[str, Any]) -> str:
     boundary_audit_html = _boundary_audit_section(result)
     marker_isolation_html = _marker_isolation_section(result)
     template_firewall_html = _template_firewall_section(result)
+    transfer_html = _transfer_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3338,6 +3432,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("boundary-canonicality", "Prompt-boundary canonicality", boundary_audit_html),
             ("marker-isolation", "Chat-marker isolation", marker_isolation_html),
             ("template-firewall", "Template firewall", template_firewall_html),
+            ("transfer", "Cross-checkpoint transfer", transfer_html),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -3379,6 +3474,7 @@ def render_html(result: dict[str, Any]) -> str:
         + boundary_audit_html
         + marker_isolation_html
         + template_firewall_html
+        + transfer_html
         + sweep_html
         + logprob_html
         + held_out_html

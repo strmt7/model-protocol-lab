@@ -182,6 +182,19 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     run.add_argument("--output", required=True, type=Path, help="New local report directory")
     run.add_argument(
+        "--transfer-model",
+        type=Path,
+        action="append",
+        default=None,
+        help="Additional local checkpoint for the cross-checkpoint transfer "
+        "experiment (repeatable, max 4). After the primary run, every "
+        "search candidate is re-evaluated against each transfer checkpoint "
+        "on the search split, and the selection rule is re-applied per "
+        "checkpoint to report whether the primary winner transfers. "
+        "Multiplies compute; each checkpoint is recorded with its "
+        "fingerprint.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -884,6 +897,77 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "selection_robustness_unavailable",
                     }
+                # Cross-checkpoint transfer experiment (IDEAS #1): re-evaluate
+                # every search candidate against each --transfer-model
+                # checkpoint on the search split, then re-apply the
+                # selection rule per checkpoint. Answers "does the winner
+                # transfer to my other checkpoints?" Capped at 4
+                # checkpoints; a failed checkpoint degrades to
+                # checkpoint_incompatible, never silently skipped, and
+                # never fails the run.
+                if args.transfer_model:
+                    try:
+                        from .experiments import transfer_portability, transfer_stage
+
+                        _transfer_paths = list(args.transfer_model)
+                        if len(_transfer_paths) > 4:
+                            raise ValueError("at most 4 --transfer-model checkpoints")
+                        _transfer_ids = [p.name for p in _transfer_paths]
+                        if len(set(_transfer_ids)) != len(_transfer_ids):
+                            raise ValueError("transfer checkpoint names must be unique")
+                        from .backends import LocalHFBackend
+
+                        _transfer_backends: dict[str, Any] = {}
+                        _transfer_fingerprints: dict[str, str | None] = {}
+                        for _cid, _path in zip(_transfer_ids, _transfer_paths, strict=True):
+                            try:
+                                _be = LocalHFBackend(
+                                    _path,
+                                    device=args.device,
+                                    max_context=args.max_context,
+                                )
+                                _transfer_backends[_cid] = _be
+                                _fp = getattr(_be, "fingerprint", None)
+                                _transfer_fingerprints[_cid] = _fp if type(_fp) is str else None
+                            except Exception:  # noqa: BLE001 -- per-checkpoint fail-closed
+                                _transfer_fingerprints[_cid] = None
+
+                        def _transfer_backend(ckpt_id: str) -> Any:
+                            if ckpt_id not in _transfer_backends:
+                                raise RuntimeError(f"transfer checkpoint unavailable: {ckpt_id}")
+                            return _transfer_backends[ckpt_id]
+
+                        _transfer_outcomes = transfer_stage(
+                            _transfer_backend,
+                            tuple(_transfer_ids),
+                            formats,
+                            tuple(split.search),
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                        )
+                        _candidate_names = tuple(fmt.name for fmt in formats)
+                        _transfer_result = transfer_portability(
+                            result.get("selected_candidate"),
+                            result["decision"],
+                            _candidate_names,
+                            _transfer_outcomes,
+                        )
+                        _transfer_result["checkpoints"] = [
+                            {
+                                "id": cid,
+                                "path": str(p),
+                                "fingerprint": _transfer_fingerprints.get(cid),
+                            }
+                            for cid, p in zip(_transfer_ids, _transfer_paths, strict=True)
+                        ]
+                        result["transfer"] = _transfer_result
+                    except Exception:  # noqa: BLE001 -- transfer must not fail the run
+                        result["transfer"] = {
+                            "available": False,
+                            "detail": "transfer_unavailable",
+                        }
                 # Held-out budget floor: post-hoc, exact, no model calls.
                 # Only meaningful when the held-out stage completed; it
                 # degrades to an "unavailable" marker instead of failing.
