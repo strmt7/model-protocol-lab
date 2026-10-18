@@ -210,14 +210,14 @@ class TestMutationGate(unittest.TestCase):
 
     MUTANTS = [
         # Leader margin computed as runner-up minus leader (sign flip).
-        ("margin = top - max(rest) if rest else 0", "margin = max(rest) - top if rest else 0"),
+        ("margin = top_count - second[0]", "margin = second[0] - top_count"),
         # Tied lead reported with a nonzero margin.
         (
             "            leader = None\n            margin = 0",
-            "            leader = None\n            margin = top",
+            "            leader = None\n            margin = top_count",
         ),
         # Unique-leader test inverted: ties report a leader, leaders report None.
-        ("if len(leaders) == 1:", "if len(leaders) != 1:"),
+        ("elif second[0] == top_count:", "elif second[0] != top_count:"),
         # Margin chart y-axis inverted (margin grows downward).
         ("return (y_max - margin) * height // denom_y", "return margin * height // denom_y"),
     ]

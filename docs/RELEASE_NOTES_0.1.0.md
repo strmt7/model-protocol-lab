@@ -49,7 +49,7 @@ snapshot that was never executed). Since that snapshot:
 See `CHANGELOG.md` (`[0.1.0]`) for the full per-cycle record,
 including every real bug found and fixed during the audit cycles.
 
-## Post-0.1.0 snapshot additions (2026-10-16 → 2026-10-17, on `main`)
+## Post-0.1.0 snapshot additions (2026-10-16 → 2026-10-18, on `main`)
 
 Development continued after the 0.1.0 snapshot; these additions are on
 `main` and covered by `CHANGELOG.md`'s `[Unreleased]` entries:
@@ -81,6 +81,41 @@ Development continued after the 0.1.0 snapshot; these additions are on
 - **Security red-team hardening** of the HTML report renderer against
   hostile payloads (strict type guards, fail-closed restore, symlinked
   report-dir rejection) (cycle 132).
+- **Prompt-boundary canonicality audit** (`doctor --boundary-audit`):
+  flags prompt templates whose tokenization is fragile at the
+  prompt/response seam, as an HTML section and `diff-reports` comparison
+  (cycle 134).
+- **Chat-marker isolation conformance**: verifies that chat markers
+  (e.g. `<|im_start|>`) survive tokenization as single tokens rather
+  than splitting into pieces (cycle 135).
+- **Template conformance firewall**: static AST scan of the checkpoint's
+  Jinja `chat_template` denying RCE primitives (dunder access,
+  `|attr` sandbox escape, dangerous globals) before any render; the
+  render itself stays inside `ImmutableSandboxedEnvironment`
+  (cycle 136).
+- **Selection robustness under stop semantics**: pure post-hoc
+  re-application of the selection rule under each emulated stop semantic
+  (native, HF, vLLM, EOS-appended) — the serving-stack migration signal,
+  as an HTML section and `diff-reports` comparison (cycle 137).
+- **Cross-checkpoint transfer experiment** (`run --transfer-model`):
+  re-evaluates every search candidate against up to 4 local checkpoints
+  with per-checkpoint selection verdicts, as an HTML transfer-matrix
+  section (cycle 138).
+- **Transfer comparison in `diff-reports`** (`diff_transfer`): verdict
+  drift, per-checkpoint and per-cell drift, checkpoints added/removed
+  (cycle 140).
+- **Hostile-input crash hardening**: three `TypeError` crashes on
+  non-string dict keys fixed fail-closed (cycle 141).
+- **Contamination comparison in `diff-reports`**
+  (`diff_contamination`): worst-tier drift, pairs added/removed, tier
+  escalations — the fixture-hygiene regression signal (cycle 143).
+- **Fixture-perturbation robustness experiment** (`run --perturb N`):
+  re-runs the search evaluation on N deterministically perturbed fixture
+  variants (typo, case flip, whitespace, Unicode variant, punctuation
+  strip) and re-applies the selection rule per variant — answering
+  whether the winner survives phrasing perturbations. New HTML section
+  and `diff-reports` comparison (`diff_perturbation`); completes the
+  winner-reliability trilogy with cycles 137 and 138 (cycle 144).
 
 ## Breaking changes
 
@@ -119,14 +154,14 @@ source as above is the supported path. Upgrade from a source checkout:
 ## Verified for this release (2026-10-16)
 
 The checks below are a historical snapshot, verified on 2026-10-16
-against the 0.1.0 tree. Numbers on current `main` have moved (4481 tests
-on 2026-10-17, both runners agree) — the "Post-0.1.0 snapshot additions"
+against the 0.1.0 tree. Numbers on current `main` have moved (4699 tests
+on 2026-10-18, both runners agree) — the "Post-0.1.0 snapshot additions"
 section above lists what changed since.
 
-- `ruff check` clean; `ruff format --check` clean (164 files);
-  `mypy model_protocol_lab` clean (16 files);
+- `ruff check` clean; `ruff format --check` clean (135 files);
+  `mypy model_protocol_lab` clean (15 files);
   `bandit -r model_protocol_lab` — no issues identified.
-- Suite: 4391 tests collected; `coverage report --fail-under=95` passes
+- Suite: 6063 tests collected; `coverage report --fail-under=95` passes
   (98% total line coverage).
 - `python -m build` wheel verified: 21 files, no `__pycache__` /
   `.pytest_cache` / tests shipped; installs in a network-isolated fresh

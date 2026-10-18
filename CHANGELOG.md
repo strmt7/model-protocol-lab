@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 145 — wave-2 adversarial-audit hardening, 2026-10-18)
+
+- `margin_trajectory` was still O(B·C) quadratic: the wave-1 point cap
+  bounds total points, not candidates, so a hostile payload with C
+  candidates × 1 distinct point each meant C² work (~1.4s at C=2000,
+  projecting to hours per `diff-reports` pair — measured ~4.1× per
+  doubling by two independent agents). Restructured to an O((E+B) log
+  (E+C)) event sweep with a lazily-deleted leader heap: 0/1400
+  differential mismatches against the old sweep on seeded frontiers
+  (including count revisits and decreases), C=2000 now in 0.008s.
+- `diff-reports` stderr renderers interpolated raw
+  `old_decision`/`new_decision` (transfer, robustness, perturbation
+  drift summaries), injecting terminal escapes from a hostile
+  results.json and falsifying `render_summary`'s sanitization comment —
+  all three now wrapped in `_display_id`; non-string
+  decision/winner/tier values no longer crash `render_summary` with
+  `TypeError` (`_display_id` is now total: None → "(none)", others via
+  `str()`), keeping the degrade-gracefully contract.
+- `changed`-flag disjunct pinning: single-cause tests for
+  cell-drift-only (`diff_transfer`), tier-escalation-only
+  (`diff_contamination`), and stability-only / variant-drift-only /
+  removed-only (`diff_perturbation`) — all five disjunct mutants re-run
+  and killed.
+- `checkpoint_drift` stderr rendering capped at 10 with "... and N
+  more", like `cell_drift`; the cycle-67 differential fuzz now emits
+  real payloads for the four newest diff sections; the template
+  firewall docstring now describes the static layer's actual scope.
+- Docs: restored the RELEASE_NOTES 0.1.0 historical snapshot against
+  the actual 0.1.0 tree (measured 6063 tests / 135 files / 15 files),
+  fixed the CHANGELOG cycle-135 count (34), refreshed stale lists and
+  filled README/USAGE/RESEARCH_LOG/SECURITY gaps. 16 new tests in
+  `tests/test_cycle145_wave2_hardening.py`.
+
 ### Added (cycle 144 — fixture-perturbation robustness experiment, 2026-10-18)
 
 - New `run --perturb N` (1-8): re-evaluates every search candidate
@@ -158,7 +191,7 @@ All notable changes to this project are documented here. The format follows
   conformance matrix (`isolated` vs `smuggled` cells); the committed sample
   report exercises the matrix via the real pure probe with a scripted
   tokenizer.
-- New `tests/test_cycle135_marker_isolation.py` (33 tests): the pure core,
+- New `tests/test_cycle135_marker_isolation.py` (34 tests): the pure core,
   the driver against genuinely loadable WordLevel tokenizers (smuggled
   `<|im_start|>` detected, unknown `[INST]` stays inert), HTML matrix
   rendering with hostile-name escaping, and a 4-mutant kill gate — 4/4

@@ -13,7 +13,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4683 tests, 96% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4699 tests, 96% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -71,8 +71,11 @@ diagnosis, run configuration, a color-coded candidate heatmap with pass-rate
 bars, a per-fixture outcome grid, decisive fixtures, token-budget robustness
 curves, a deterministic SVG token-budget frontier chart with a decision
 ribbon, a selection-margin trajectory chart, the safe budget floor readout
-with per-flip-span attribution, and the held-out verification-floor
-callout. It is one self-contained file — a single
+with per-flip-span attribution, the held-out verification-floor
+callout, a prompt-boundary canonicality section, a chat-marker isolation
+matrix, a template-firewall verdict block, a selection-robustness matrix
+under stop semantics, a cross-checkpoint transfer matrix, and a
+fixture-perturbation robustness section. It is one self-contained file — a single
 tiny inline table-sorting script (hash-allowlisted in its
 Content-Security-Policy), no fonts or remote assets — and it never embeds
 raw prompts or generations.
@@ -108,7 +111,8 @@ raw prompts or generations.
 - `fixtures build`: CSV fixture authoring that makes search/held-out leakage structurally unbuildable.
 - `debug`: an interactive, offline protocol-debugger REPL over one dataset and one hypothesis — render with a per-segment char-span (and token-ID) map, step response-boundary detection one token at a time, and audit fixtures for special-token literals; `--model` attaches a checkpoint tokenizer only, weights never loaded. Try `python -m model_protocol_lab debug --dataset examples/fixtures.json`, then `.render`.
 - `diff-backends`: differential testing of emulated backend stop semantics (HF StopStringCriteria, vLLM detokenizer strip/keep, EOS-appended) on one recorded token sequence — prints a JSON verdict (`agree`/`diverge`) with the per-semantic cells and any divergence findings, so a surprising run verdict can be checked against backend stop behavior. Try `python -m model_protocol_lab diff-backends --model path/to/checkpoint --prompt-text "the answer is" --output-text "42 STOP" --stops "STOP"`.
-- `diff-reports`: deterministic comparison of two experiment result directories for the iterate-and-compare operator loop — reports the decision flip, winner change, per-candidate verdict flips on search and held-out, per-fixture outcome diffs (changed-only by default), the token-budget frontier comparison (exact budget spans where the post-hoc decision, winner, or per-budget leader differ, per-flip-span attribution, and the safe budget floor), the held-out verification-floor comparison, and a loud config-drift warning when the runs used different candidates, boundaries, or fixture sets. Try `python -m model_protocol_lab diff-reports OLD_RESULTS NEW_RESULTS`.
+- `verify`: N-version independent results-integrity replay — re-derives the decision, winner, frontier, and held-out floor from a stored `results.json` through independent code paths, so a corrupted or hand-edited result file is caught instead of trusted. Try `python -m model_protocol_lab verify OLD_RESULTS/results.json`.
+- `diff-reports`: deterministic comparison of two experiment result directories for the iterate-and-compare operator loop— reports the decision flip, winner change, per-candidate verdict flips on search and held-out, per-fixture outcome diffs (changed-only by default), the token-budget frontier comparison (exact budget spans where the post-hoc decision, winner, or per-budget leader differ, per-flip-span attribution, and the safe budget floor), the held-out verification-floor comparison, the prompt-boundary audit comparison, the stop-semantics selection-robustness comparison (per-semantic verdict drift and flip pattern), the cross-checkpoint transfer comparison (verdict, per-checkpoint and per-cell drift), the contamination comparison (worst-tier drift, pair changes, tier escalations), the fixture-perturbation comparison (stability drift, per-variant drift), and a loud config-drift warning when the runs used different candidates, boundaries, or fixture sets. Try `python -m model_protocol_lab diff-reports OLD_RESULTS NEW_RESULTS`.
 - Local JSON output and a static, color-coded HTML comparison report with no external assets.
 - A committed synthetic sample report that regenerates byte-identically.
 - An optional local Hugging Face adapter restricted to supported GPT-2 and Llama causal-language-model configurations with standalone safetensors weights.

@@ -541,9 +541,10 @@ as a phantom `no_candidate`: "unknown" must not masquerade as a
 verdict. The report renders a "Selection robustness under stop
 semantics" section with the verdicts, the candidate x semantic matrix,
 and flip callouts. `diff-reports` compares the per-semantic verdicts
-and the flip pattern between runs (`selection_robustness_changed`,
-feeding `identical`) -- the serving-stack migration signal: the same
-stack selecting a different winner than before.
+and the flip pattern between runs (`selection_robustness_changed` and
+`selection_robustness_asymmetric`, both feeding `identical`) -- the
+serving-stack migration signal: the same stack selecting a different
+winner than before.
 
 ### 8.14 Cross-checkpoint transfer (`transfer`)
 
@@ -566,6 +567,12 @@ outside the checkpoint's vocabulary -- fail-closed, never silently
 skipped). The report renders a "Cross-checkpoint transfer" section;
 the decision banner notes the verdict. Compute multiplies by
 (1 + #checkpoints); the transfer stage never fails the run.
+`diff-reports` compares the transfer experiment between runs
+(`diff_transfer`: transfer-verdict drift, per-checkpoint
+(decision, winner) drift, per-cell candidate x checkpoint verdict
+drift, checkpoints added/removed — `transfer_changed` /
+`transfer_asymmetric` feeding `identical`): the fleet-portability
+regression signal after a checkpoint or fixture update.
 
 ### 8.15 Fixture-perturbation robustness (`perturbation`)
 

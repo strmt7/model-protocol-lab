@@ -3,10 +3,10 @@
 import base64
 import contextlib
 import hashlib
+import heapq
 import json
 import math
 import os
-from bisect import bisect_right
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -1400,14 +1400,22 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
     complementing :func:`selection_margin` (a single native-budget scalar)
     and the decision ribbon (which outcome, not by how much). Malformed
     input yields [] -- never raises, never guesses.
+
+    Complexity is O((E + B) log (E + C)) for E recorded step points, B
+    distinct change budgets, and C candidates: the per-budget sweep
+    recomputes every candidate's count at every change budget (O(B*C)),
+    which a hostile foreign payload turns quadratic -- C candidates with
+    one distinct point each pass the total-point cap with B = C (wave-2
+    finding C1). The sweep below merges the per-candidate sorted change
+    lists into one event stream and tracks the leader incrementally with
+    a lazily-deleted heap, applying each recorded step point exactly once.
     """
     validated = _frontier_series(frontier)
     if validated is None:
         return []
     names, max_tokens = validated
     candidates = frontier["candidates"]
-    steps_of: dict[str, list[tuple[int, int]]] = {}
-    keys_of: dict[str, list[int]] = {}
+    events: dict[int, list[tuple[str, int]]] = {}
     for name in names:
         data = candidates[name]
         by_budget: dict[int, int] = {}
@@ -1421,39 +1429,62 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
                 and 0 <= point[1] <= _fixture_total(data)
             ):
                 by_budget[point[0]] = point[1]
-        steps_of[name] = sorted(by_budget.items())
-        # Hoisted out of the per-budget loop: rebuilding the key list on
-        # every _count_at_budget call made this derivation quadratic in the
-        # point count (perf finding 1A).
-        keys_of[name] = [b for b, _ in steps_of[name]]
-    change_budgets = sorted({b for ordered in steps_of.values() for b, _ in ordered})
+        for budget, count in by_budget.items():
+            events.setdefault(budget, []).append((name, count))
+    if not events:
+        return []
+    current = dict.fromkeys(names, 0)
+    # (-count, name): max-heap by count. Entries go stale when a later
+    # event moves the candidate; the sweeper below skips them lazily, so
+    # each recorded step point costs O(log heap) amortized.
+    heap: list[tuple[int, str]] = [(0, name) for name in names]
+    heapq.heapify(heap)
+
+    def _top_valid(exclude: str | None = None) -> tuple[int, str] | None:
+        # Highest-count valid entry, optionally skipping one candidate.
+        # Stale entries (a later event moved the candidate) are discarded
+        # lazily; entries for an excluded candidate are discarded too --
+        # a count revisit (e.g. 4 -> 2 -> 4) leaves duplicate valid entries
+        # for one candidate, which the second-place lookup must not
+        # misread as a tied lead.
+        while heap:
+            neg, name = heap[0]
+            if name != exclude and -neg == current[name]:
+                return (-neg, name)
+            heapq.heappop(heap)
+        return None
+
     points: list[tuple[int, str | None, int]] = []
-    for budget in change_budgets:
-        counts = {name: _count_at_budget(steps_of[name], keys_of[name], budget) for name in names}
-        top = max(counts.values())
-        leaders = [name for name in names if counts[name] == top]
-        if len(leaders) == 1:
-            leader: str | None = leaders[0]
-            rest = [c for name, c in counts.items() if name != leader]
-            margin = top - max(rest) if rest else 0
-        else:
+    for budget in sorted(events):
+        for name, count in events[budget]:
+            if count == current[name]:
+                # No-op event: pushing it would accumulate duplicate valid
+                # heap entries for one candidate.
+                continue
+            current[name] = count
+            heapq.heappush(heap, (-count, name))
+        top = _top_valid()
+        if top is None:
+            # Unreachable: every candidate keeps at least one valid heap
+            # entry, so the leader lookup cannot fail. Fail-closed.
+            continue
+        top_count, top_name = top
+        second = _top_valid(exclude=top_name)
+        # The exclusion scan consumed the leader's heap entries; restore one.
+        heapq.heappush(heap, (-top_count, top_name))
+        if second is None:
+            leader: str | None = top_name
+            margin = 0
+        elif second[0] == top_count:
             leader = None
             margin = 0
+        else:
+            leader = top_name
+            margin = top_count - second[0]
         if points and points[-1][1] == leader and points[-1][2] == margin:
             continue
         points.append((budget, leader, margin))
     return points
-
-
-def _count_at_budget(steps: list[tuple[int, int]], keys: list[int], budget: int) -> int:
-    """Pass count at ``budget`` from sorted (budget, count) step points.
-
-    ``keys`` is the precomputed ``[b for b, _ in steps]`` list, hoisted by
-    the caller: building it per call made the margin trajectory quadratic
-    in the point count on foreign payloads (perf finding 1A).
-    """
-    index = bisect_right(keys, budget) - 1
-    return steps[index][1] if index >= 0 else 0
 
 
 _SAFE_FLOOR_ABSENT: Any = object()

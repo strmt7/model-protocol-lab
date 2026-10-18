@@ -5222,3 +5222,331 @@ be, fail-closed everywhere else; the DoS hardening follows the
 established `_config_snapshot` precedent.
 
 **Verification:** full battery green (see cycle footer); CI 6/6 green.
+
+## Cycle 132 (2026-10-17) — holdout contamination detector + security red-team fixes
+
+**Research:** the search/held-out split is structural (fixtures build
+makes leakage unbuildable), but near-duplicate fixtures can still slip
+through paraphrasing: a held-out set that is a paraphrase of search
+measures memorization, not compatibility. No existing check quantified
+it.
+
+**Plan:** `experiments.contamination`: deterministic `difflib` +
+trigram-Jaccard similarity tiers over search↔held-out pairs, wired as
+warnings into `inspect` / `fixtures build` / `doctor --dataset` / `run`,
+plus an HTML contamination section. In parallel, the first specialist
+security red-team pass produced findings against the HTML renderer;
+every finding was fixed fail-closed (strict type guards, fail-closed
+restore, symlinked report-dir rejection).
+
+**Built:** the detector + warnings + HTML section
+(`tests/test_cycle132_contamination.py`, 31 tests; 2/2 targeted mutants
+killed) and the red-team fixes (`tests/test_cycle132_security_findings.py`,
+29 tests pinning every fix).
+
+**Differentiation review:** fixture-hygiene measurement as a first-class
+experiment output, not a notebook afterthought; the red-team pass set
+the precedent of adversarial review before release claims.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 133 (2026-10-17) — docs-coherence audit fixes
+
+**Research:** a specialist docs-coherence audit found factually-wrong
+and stale claims across USAGE.md, README.md, VALIDATION.md, and the
+release documents (thinking-variant lists, `safe_budget_floor` JSON
+shape, report inventory gaps).
+
+**Plan:** fix every claim against the cycle-132 tree, claim by claim,
+rather than rewriting prose.
+
+**Built:** corrected variant lists, JSON-shape documentation, report
+inventory, and stdout-JSON key lists
+(`tests/test_cycle133_docs_coherence_audit.py`, 3 tests pinning the
+corrected claims).
+
+**Differentiation review:** docs treated as a tested artifact — the
+audit pattern (specialist pass, claim-by-claim verification) became a
+standing practice.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 134 (2026-10-17) — prompt-boundary canonicality audit
+
+**Research:** the Prompt Boundary Problem: a template whose prompt
+does not re-encode to its recorded token ids is measuring tokenizer
+luck, not protocol quality. No per-family measurement existed.
+
+**Plan:** `experiments.boundary_audit`: pure check of stored
+prompt×completion pairs — concatenate, re-encode, compare ids.
+Per-family canonicality rate, HTML section, `diff-reports` comparison.
+
+**Built:** the audit + HTML section + diff comparison
+(`tests/test_cycle134_boundary_audit.py`, 33 tests).
+
+**Differentiation review:** turns a known tokenizer pathology into a
+quantified, comparable experiment axis.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 135 (2026-10-18) — chat-marker isolation conformance
+
+**Research:** hostile marker strings (`<|im_start|>`, `<s>`, `[INST]`)
+injected into user text must not become real control tokens — a
+prompt-injection primitive that tokenizers handle inconsistently.
+
+**Plan:** `experiments.marker_isolation`: per-family conformance matrix
+of hostile marker strings against the checkpoint tokenizer; HTML
+matrix section.
+
+**Built:** the conformance check + HTML matrix
+(`tests/test_cycle135_marker_isolation.py`, 34 tests).
+
+**Differentiation review:** a security-relevant tokenizer property,
+measured per family instead of assumed.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 136 (2026-10-18) — template conformance firewall (research backlog R3)
+
+**Research:** a checkpoint's `chat_template` is attacker-controlled
+Jinja; CVE-2026-5760 (unsandboxed render → RCE) and CVE-2025-27516
+(Jinja2 sandbox `|attr` escape) are the exact class the lab is exposed
+to by rendering templates locally. The existing 10s CPU watchdog
+covers DoS only.
+
+**Plan:** static layer (`template_audit.scan_template_ast`: AST walk
+before any render, denying dunder access, `|attr`, dangerous globals,
+`super()`, unbounded `range()`), then the existing
+`ImmutableSandboxedEnvironment` render (jinja2>=3.1.6 pinned), then
+the watchdog. `doctor.template_firewall` driver;
+`doctor.template_conformance` refuses denied templates.
+
+**Built:** the firewall + driver + HTML verdict block
+(`tests/test_cycle136_template_firewall.py`, 29 tests: benign
+allowlist, 10-payload SSTI corpus, fail-closed paths, hostile-finding
+escaping); 4/4 mutants killed. Cycle-145 softened the "denies the RCE
+primitives" docstring to describe the static layer's actual scope
+(concatenated-dunder spellings are invisible to the static scan and die
+in the sandbox instead — wave-2 finding F5).
+
+**Differentiation review:** defense in depth stated honestly: each
+layer names what it cannot see.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 137 (2026-10-18) — selection robustness under stop semantics (IDEAS #3)
+
+**Research:** the selection rule is only ever applied to native
+generations, but operators deploy on vLLM/HF serving stacks with
+different stop semantics. "Would a different protocol have won under
+my serving stack?" had no answer.
+
+**Plan:** `experiments.selection_robustness`: pure post-hoc
+re-application of the conservative selection rule per candidate under
+each emulated stop semantic (native, HF StopStringCriteria, vLLM
+detokenizer, EOS-appended). Tokenizer-only, no model calls.
+Per-semantic verdicts, pass matrix, `excluded_candidates`, `flips`;
+unavailable semantics reported as `unavailable`, never phantom
+verdicts. HTML section + `diff-reports` comparison
+(`diff_selection_robustness`, flags feeding `identical`).
+
+**Built:** the experiment + HTML section + diff wiring
+(`tests/test_cycle137_selection_robustness.py`, 20 tests).
+
+**Differentiation review:** the serving-stack migration signal — a
+question no other prompt-format lab answers.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 138 (2026-10-18) — cross-checkpoint transfer experiment (IDEAS #1)
+
+**Research:** a winner selected on one checkpoint may not win on the
+operator's other checkpoints. Fleet portability was unmeasured.
+
+**Plan:** `run --transfer-model` (max 4): re-evaluate every search
+candidate against each transfer checkpoint (search split only) and
+re-apply the selection rule per checkpoint
+(`experiments.transfer_stage` + pure `transfer_portability`).
+Per-checkpoint verdicts (`transfers`/`wins_there`/`ties_there`/
+`fails_there`/`checkpoint_incompatible`), HTML transfer-matrix section.
+
+**Built:** the experiment + HTML section
+(`tests/test_cycle138_transfer.py`, 24 tests).
+
+**Differentiation review:** the fleet-portability question, answered
+with the same conservative rule — not a vibes comparison.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 139 (2026-10-18) — test-suite speedup
+
+**Research:** a specialist perf pass found the suite spawning two
+`pytest --collect-only` subprocesses per session for the README
+count cross-check.
+
+**Plan:** shared memoized collection via `tests/_collect_cache.py`:
+one subprocess spawn per session instead of two.
+
+**Built:** the cache; zero coverage change; both runners still agree
+exactly.
+
+**Differentiation review:** internal; the verification was that
+nothing observable changed.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 140 (2026-10-18) — transfer comparison in diff-reports
+
+**Research:** the transfer experiment (cycle 138) answered portability
+for one run; operators iterating on checkpoints/fixtures needed the
+*d drift* between runs.
+
+**Plan:** `diff_transfer`: transfer-verdict drift, per-checkpoint
+(decision, winner) drift, per-cell candidate×checkpoint drift,
+checkpoints added/removed. New `transfer_changed` /
+`transfer_asymmetric` flags feeding `identical`; stderr summary lines.
+Both oracles updated (cycle-27 availability-level, cycle-67 full
+reimplementation + hardcoded summary + `identical` mutation-gate
+anchor).
+
+**Built:** the comparison + oracle updates (6 new tests in
+`tests/test_cycle138_transfer.py`; 2/2 mutants killed).
+
+**Differentiation review:** fleet-portability regression signal after
+a checkpoint or fixture update.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 141 (2026-10-18) — hostile-input crash hardening (red-team)
+
+**Research:** first hostile-input pass over the cycle 138/140 code
+found three genuine `TypeError` crashes on non-string dict keys in
+`sorted()`: `experiments.transfer_portability` (mixed-type checkpoint
+ids, violating its "never raises" contract) and
+`diffreports.diff_transfer` / `diff_selection_robustness` (mixed-type
+keys in a hostile results.json).
+
+**Plan:** fail closed with `invalid_candidates_or_transfer`; the
+structural validators now require string keys so the malformed side
+degrades to asymmetric. Both oracles mirrored.
+
+**Built:** the three fixes + 3 regression tests; 2/2 mutants killed.
+Also corrected the README coverage claim 97%→96% (measured).
+
+**Differentiation review:** the red-team-then-harden loop as a
+standing practice, not a one-off.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 142 (2026-10-18) — contamination HTML safety audit
+
+**Research:** suspected unescaped `worst_tier` interpolation in the
+contamination HTML section (cycle 132 feature).
+
+**Plan:** investigate; found the value IS escaped at the
+`_config_section` boundary — no injection. Pin the guarantee with a
+regression test at the integration point (not the unit, to avoid
+double-escaping). Transfer section likewise verified.
+
+**Built:** 1 regression test.
+
+**Differentiation review:** a clean audit is still a result: the
+escaping-boundary invariant is now pinned.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 143 (2026-10-18) — contamination comparison in diff-reports
+
+**Research:** same drift-between-runs need as cycle 140, for fixture
+hygiene: "did hygiene improve or degrade?" after a dataset update.
+
+**Plan:** `diff_contamination`: worst-tier drift, pairs added/removed
+by ID tuple, tier escalations. New `contamination_changed` /
+`contamination_asymmetric` flags feeding `identical`; stderr summary
+lines. Both oracles updated.
+
+**Built:** the comparison + oracle updates (7 tests in
+`tests/test_cycle132_contamination.py`; 2/2 mutants killed).
+
+**Differentiation review:** closes the loop on the cycle-132
+detector: measured once, comparable forever.
+
+**Verification:** full battery green; CI 6/6 green.
+
+## Cycle 144 (2026-10-18) — fixture-perturbation robustness experiment
+
+**Research:** does the selected winner survive fixture *phrasing*
+perturbations? A winner that only wins on exact fixture wording is
+overfitted to phrasing luck — a gap no other prompt-format lab
+measures.
+
+**Plan:** new pure `model_protocol_lab/perturbation.py`: deterministic
+seeded operators (typo, case flip, whitespace, Unicode NFKC variant,
+punctuation strip) rewriting message content only. `run --perturb N`
+(1–8) re-runs the search evaluation per variant
+(`experiments.perturbation_stage`, fail-closed per cell) and
+re-applies the selection rule; pure
+`experiments.perturbation_robustness` reports per-variant verdicts,
+flips, stability, per-operator breakdown. Wired into `results.json`,
+an HTML section, and `diff-reports` (`diff_perturbation`, flags
+feeding `identical`). Completes the winner-reliability trilogy
+(137 + 138 + 144).
+
+**Built:** the module + stage + analysis + CLI + HTML + diff wiring +
+sample report exercising the real stage (N=4, seed 20261012;
+regenerated byte-identically twice; genuine signal: 2/4 variants
+retain the winner)
+(`tests/test_cycle144_perturbation.py`, 49 tests + 18 subtests; 2/2
+mutants killed). Mid-cycle incident: a SIGTERM-killed suite orphaned a
+cycle-125 in-place mutant in `diffreports.py`; reversed and verified
+against the pushed tree (lesson recorded in AGENTS.md: never kill a
+run containing in-place mutation gates).
+
+**Differentiation review:** the phrasing-luck question, answered with
+seeded, reproducible perturbations and honest zero-change counts.
+
+**Verification:** full battery green (4676 passed + 7 skipped pytest;
+4683 unittest OK); coverage 95%; ruff/mypy(both)/bandit-latest clean;
+CI 6/6 green.
+
+## Cycle 145 (2026-10-18) — wave-2 adversarial-audit hardening
+
+**Research:** Stratos ordered multi-agent adversarial collaboration;
+the main agent's wave-2 orchestrator fanned out 6 read-only
+specialists (security red-team A, adversarial red-team B tasked with
+*disproving* A, cross-verifier, perf, researcher, docs-coherence)
+with a mandatory cross-check protocol. 10 CONFIRMED findings
+survived; every one re-verified against the current tree before
+fixing (brief: `~/workspace/agents_out/wave2/BRIEF.md`).
+
+**Plan:** (1) kill the `margin_trajectory` O(B·C) quadratic (C1, HIGH:
+the wave-1 point cap bounds points, not candidates — restructure to an
+O((E+B) log (E+C)) event sweep with a lazily-deleted leader heap);
+(2) wrap the three raw decision interpolations in `_display_id` and
+make it total over non-string values (C2+C3); (3) pin every `changed`
+disjunct with single-cause tests, including the same gap class in the
+new `diff_perturbation` (C4+C5); (4) cap `checkpoint_drift` rendering
+at 10 like `cell_drift` (C6); (5) extend the cycle-67 differential fuzz
+to emit real payloads for the four newest diff sections (verifier
+note); (6) docs: restore the RELEASE_NOTES 0.1.0 snapshot against the
+actual 0.1.0 tree (measured 6063/135/15, not the corrupted 4391/164/16
+nor the brief's miscounted 148), fix the CHANGELOG cycle-135 count
+(34), refresh stale lists and fill the README/USAGE/RESEARCH_LOG/
+SECURITY gaps (C7–C10); (7) soften the template-firewall docstring to
+the static layer's actual scope (F5).
+
+**Built:** the restructure (0/1400 differential mismatches vs the old
+sweep on seeded frontiers; C=2000 in 0.008s, was ~1.4s), the renderer
+fixes, the cap, the fuzz extension, the docstring softening, and
+`tests/test_cycle145_wave2_hardening.py` (16 tests: perf regression +
+scaling bound, differential oracle, `_display_id` totality, decision
+sanitization ×4, five `changed`-disjunct pins, drift cap). All five
+`changed`-disjunct mutants re-run and killed (M1–M5).
+
+**Differentiation review:** the adversarial loop closed end to end —
+independent red teams, disproof protocol, builder re-verification,
+mutation-proof pinning.
+
+**Verification:** full battery green (see cycle footer); CI pending at
+time of writing — updated on push.
