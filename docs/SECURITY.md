@@ -137,6 +137,40 @@ tokenizer cap on the debug path, argparse edges on all subcommands,
 duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
 `experiments.py` cancellation/corruption handling.
 
+#### Red-team round 5 — wave-2 adversarial audit (2026-10-18)
+
+Six read-only specialists (security red-team A, adversarial red-team B
+tasked with *disproving* A's findings, cross-verifier, perf, researcher,
+docs-coherence) audited the cycles 134–144 feature code with a mandatory
+cross-check protocol. 10 CONFIRMED findings; the builder re-verified
+each against the current tree before fixing (cycle 145):
+
+| ID | Severity | Finding | Resolution |
+|----|----------|---------|------------|
+| C1 | High | `margin_trajectory` still O(B·C) quadratic: the point cap bounds total points, not candidates — C candidates × 1 point each projected to ~1–2h per `diff-reports` pair on a hostile few-MB payload (measured ~4.1× per doubling by two agents). | Restructured to an O((E+B) log (E+C)) event sweep with a lazily-deleted leader heap; 0/1400 differential mismatches vs the old sweep; C=2000 in 0.008s (was ~1.4s). Perf regression test pins subquadratic scaling. |
+| C2 | Low | Raw `old_decision`/`new_decision` interpolation injected terminal escapes into stderr in the transfer/robustness/perturbation drift renderers, falsifying `render_summary`'s sanitization comment. | All three wrapped in `_display_id`; sanitization tests pin escape-stripping. |
+| C3 | Low | Non-string decision/winner/tier values crashed `render_summary` with `TypeError` (`_display_id` regex-sub on non-str), contradicting the degrade-gracefully contract. | `_display_id` is now total (None → "(none)", others via `str()`); non-string payloads render instead of crashing. |
+| C4/C5 | Low | `diff_transfer`/`diff_contamination` `changed` flags had unpinned disjuncts (cell-drift-only, tier-escalation-only mutants survived the suite); same gap class in `diff_perturbation`. | Single-cause pinning tests for every disjunct; all five mutants re-run and killed. |
+| C6 | Cosmetic | `checkpoint_drift` renderer uncapped. | Capped at 10 with "... and N more", like `cell_drift`. |
+
+Disputed as security findings (real patterns, proven unreachable —
+JSON keys are always strings; in-repo callers pass str-keyed data):
+non-string dict keys in HTML sections, missing key-type check in
+`diff_boundary_audit`. Template firewall note (F5): the static AST
+scan misses concatenated-dunder subscripts by construction; six bypass
+payloads were thrown at the stack and all died in
+`ImmutableSandboxedEnvironment` + jinja2 3.1.6 — the "denies the RCE
+primitives" docstring now describes the static layer's actual scope.
+
+New security-relevant features since round 4, all covered above and by
+their own test suites: the **template conformance firewall** (cycle
+136: static Jinja AST scan denying dunder access, `|attr`, dangerous
+globals before any render; `doctor.template_conformance` refuses
+denied templates fail-closed), **chat-marker isolation conformance**
+(cycle 135: hostile marker strings must not become control tokens),
+and the **cycle-141 hostile-input hardening** (three `TypeError`
+crashes on non-string dict keys fixed fail-closed).
+
 ## Proven safe (adversarial PoCs, observed not inferred)
 
 - **XSS:** hostile payloads in every dynamic `render_html` field render fully

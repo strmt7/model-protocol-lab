@@ -48,16 +48,22 @@ _CONTROL_CHARS = re.compile(
 # reorder displayed text. Mirrors cli._CONTROL_CHARS.
 
 
-def _display_id(value: str | None) -> str:
+def _display_id(value: Any) -> str:
     """Operator-visible names/IDs with control characters stripped.
 
     Fixture IDs and candidate names arrive from the compared files; a
     hostile results.json must not inject terminal escape sequences into
     stderr output. (Mirrors ``cli._display_id``; kept local so this module
-    does not import the CLI.) None renders as "(none)".
+    does not import the CLI.) None renders as "(none)". Non-string
+    values (a hand-edited or version-skewed file may carry a dict winner
+    or a list tier) render via str() rather than crashing the summary --
+    the module's degrade-gracefully contract covers malformed values as
+    well as malformed structure (wave-2 finding C3).
     """
     if value is None:
         return "(none)"
+    if type(value) is not str:
+        value = str(value)
     return _CONTROL_CHARS.sub("", value)
 
 
@@ -1351,12 +1357,14 @@ def _render_transfer_summary(transfer_diff: dict[str, Any] | None) -> list[str]:
     drift = transfer_diff.get("checkpoint_drift") or []
     if drift:
         lines.append(f"Transfer checkpoint drift ({len(drift)}):")
-        for entry in drift:
+        for entry in drift[:10]:
             lines.append(
                 f"  {_display_id(entry['checkpoint'])}: "
-                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
-                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+                f"{_display_id(entry['old_decision'])}/{_display_id(entry['old_winner'])} -> "
+                f"{_display_id(entry['new_decision'])}/{_display_id(entry['new_winner'])}"
             )
+        if len(drift) > 10:
+            lines.append(f"  ... and {len(drift) - 10} more")
     cells = transfer_diff.get("cell_drift") or []
     if cells:
         lines.append(f"Transfer cell drift ({len(cells)}):")
@@ -1412,8 +1420,8 @@ def _render_perturbation_summary(perturbation_diff: dict[str, Any] | None) -> li
         for entry in drift[:5]:
             lines.append(
                 f"  {_display_id(entry['variant'])} ({_display_id(entry.get('operator'))}): "
-                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
-                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+                f"{_display_id(entry['old_decision'])}/{_display_id(entry['old_winner'])} -> "
+                f"{_display_id(entry['new_decision'])}/{_display_id(entry['new_winner'])}"
             )
         if len(drift) > 5:
             lines.append(f"  ... and {len(drift) - 5} more")
@@ -1477,8 +1485,8 @@ def _render_robustness_summary(robustness_diff: dict[str, Any] | None) -> list[s
         for entry in drift:
             lines.append(
                 f"  {_display_id(entry['semantic'])}: "
-                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
-                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+                f"{_display_id(entry['old_decision'])}/{_display_id(entry['old_winner'])} -> "
+                f"{_display_id(entry['new_decision'])}/{_display_id(entry['new_winner'])}"
             )
     if robustness_diff.get("flips_changed"):
         lines.append("Selection flip pattern changed between runs.")

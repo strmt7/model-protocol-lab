@@ -2005,6 +2005,112 @@ def _fuzz_entry(rng: random.Random) -> Any:
     return entry
 
 
+def _fuzz_transfer_section(rng: random.Random) -> dict[str, Any]:
+    # Real transfer payloads (cycle 138/140 shape), sometimes malformed,
+    # so the differential fuzz exercises the newest diff sections instead
+    # of only the legacy axes (wave-2 verifier note C).
+    ckpts = [f"ckpt{i}" for i in range(rng.randint(1, 3))]
+    cands = [f"cand{i}" for i in range(rng.randint(1, 3))]
+    verdicts = [
+        "transfers",
+        "wins_there",
+        "ties_there",
+        "fails_there",
+        "checkpoint_incompatible",
+        "unevaluable",
+    ]
+    payload: dict[str, Any] = {
+        "available": True,
+        "primary_winner": rng.choice(cands + [None]),
+        "transfer_verdict": rng.choice(["full", "partial", "none", "mixed"]),
+        "per_checkpoint": {
+            c: {
+                "decision": rng.choice(["selected", "no_candidate", "tie", 7]),
+                "winner": rng.choice(cands + [None]),
+            }
+            for c in ckpts
+        },
+        "matrix": {cand: {c: rng.choice(verdicts) for c in ckpts} for cand in cands},
+    }
+    if rng.random() < 0.15:
+        # Hostile: non-string checkpoint key degrades the side.
+        payload["per_checkpoint"][rng.choice([1, 2.5])] = {"decision": "x"}
+    if rng.random() < 0.10:
+        payload["available"] = False
+    return payload
+
+
+def _fuzz_contamination_section(rng: random.Random) -> dict[str, Any]:
+    tiers = ["clean", "low", "medium", "high", "near_duplicate", "duplicate"]
+    pairs = [
+        {
+            "held_out": f"h{i}",
+            "search": f"s{rng.randint(0, 2)}",
+            "tier": rng.choice(tiers + [None, 5]),
+        }
+        for i in range(rng.randint(0, 3))
+    ]
+    if rng.random() < 0.10:
+        pairs.append(rng.choice(["junk", 9, {"held_out": 1}]))
+    payload: dict[str, Any] = {
+        "worst_tier": rng.choice(tiers + [None, 3]),
+        "pairs": pairs,
+    }
+    return payload
+
+
+def _fuzz_robustness_section(rng: random.Random) -> dict[str, Any]:
+    sems = [f"sem{i}" for i in range(rng.randint(1, 3))]
+    return {
+        "available": True,
+        "semantics": sems,
+        "per_semantic": {
+            s: {
+                "decision": rng.choice(["selected", "ambiguous", "no_candidate", "unavailable", 9]),
+                "winner": rng.choice(["alpha", "beta", None]),
+            }
+            for s in sems
+        },
+        "per_candidate": {},
+        "excluded_candidates": [],
+        "unavailable_semantics": [],
+        "flips": [],
+    }
+
+
+def _fuzz_perturbation_section(rng: random.Random) -> dict[str, Any]:
+    ops = ["typo", "case_flip", "whitespace", "unicode_variant", "punctuation_strip"]
+    n = rng.randint(1, 3)
+    per_variant = {
+        f"v{i:02d}": {
+            "operator": rng.choice(ops),
+            "decision": rng.choice(["selected", "no_candidate", "ambiguous", 4]),
+            "winner": rng.choice(["alpha", "beta", None]),
+            "changed_fixtures": rng.randint(0, 3),
+            "changed_rate": rng.choice([0.0, 0.5, 1.0]),
+        }
+        for i in range(n)
+    }
+    if rng.random() < 0.15:
+        per_variant[rng.choice([7, 8.5])] = {"decision": "selected"}
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "primary_decision": "selected",
+        "n_variants": n,
+        "operators": ops[:n],
+        "per_variant": per_variant,
+        "stability": {
+            "n_variants": n,
+            "n_evaluable": n,
+            "n_unavailable": 0,
+            "winner_retained": rng.randint(0, n),
+            "decision_retained": rng.randint(0, n),
+        },
+        "flips": [],
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2034,13 +2140,24 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     # else: missing held_out
     if rng.random() < 0.30:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
+    # Newest diff sections (transfer, contamination, selection
+    # robustness, perturbation): emitted often enough that the
+    # differential fuzz exercises them, not just the legacy axes.
+    if rng.random() < 0.45:
+        report["transfer"] = _fuzz_transfer_section(rng)
+    if rng.random() < 0.45:
+        report["contamination"] = _fuzz_contamination_section(rng)
+    if rng.random() < 0.45:
+        report["selection_robustness"] = _fuzz_robustness_section(rng)
+    if rng.random() < 0.45:
+        report["perturbation"] = _fuzz_perturbation_section(rng)
     return report
 
 
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(10)
+        op = rng.randrange(14)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -2071,6 +2188,38 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
             held = report.get("held_out")
             if isinstance(held, dict) and isinstance(held.get("observations"), list):
                 held["observations"].append(_fuzz_row(rng))
+        elif op == 10:
+            transfer = report.get("transfer")
+            matrix = transfer.get("matrix") if isinstance(transfer, dict) else None
+            if isinstance(matrix, dict) and matrix:
+                cand = rng.choice(sorted(matrix))
+                row = matrix[cand]
+                if isinstance(row, dict) and row:
+                    ckpt = rng.choice(sorted(row))
+                    row[ckpt] = rng.choice(["transfers", "fails_there", "mutated_cell"])
+        elif op == 11:
+            contam = report.get("contamination")
+            pairs = contam.get("pairs") if isinstance(contam, dict) else None
+            if isinstance(pairs, list) and pairs:
+                victim = rng.choice(pairs)
+                if isinstance(victim, dict):
+                    victim["tier"] = rng.choice(["clean", "duplicate", "mutated_tier"])
+        elif op == 12:
+            robust = report.get("selection_robustness")
+            per_sem = robust.get("per_semantic") if isinstance(robust, dict) else None
+            if isinstance(per_sem, dict) and per_sem:
+                key = rng.choice(sorted(per_sem))
+                cell = per_sem[key]
+                if isinstance(cell, dict):
+                    cell["decision"] = rng.choice(["selected", "tie", "mutated"])
+        elif op == 13:
+            pert = report.get("perturbation")
+            per_var = pert.get("per_variant") if isinstance(pert, dict) else None
+            if isinstance(per_var, dict) and per_var:
+                key = rng.choice(sorted(k for k in per_var if type(k) is str))
+                cell = per_var[key]
+                if isinstance(cell, dict):
+                    cell["winner"] = rng.choice(["alpha", "zzz", None])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):

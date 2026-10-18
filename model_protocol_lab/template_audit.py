@@ -9,8 +9,13 @@ from a hostile template during conformance renders, the exact class the lab
 is exposed to by design (it renders the checkpoint's template locally).
 
 This module is the static layer: :func:`scan_template_ast` walks the parsed
-Jinja AST *before* any render and denies the RCE primitives with
-fixed-vocabulary findings. It is pure (no render, no model) and fully
+Jinja AST *before* any render and flags the statically recognizable RCE
+primitives (dangerous globals, direct dunder/subscript access, ``|attr``
+with a constant argument) with fixed-vocabulary findings. It is a
+pattern-matching pre-filter, not a sandbox: obfuscated spellings such as
+concatenated dunders (``{{ config['__cl' ~ 'ass__'] }}``) are invisible to
+the static scan by construction. Those payloads are neutralized one layer
+down, by the sandboxed render. It is pure (no render, no model) and fully
 testable on a synthetic SSTI corpus. The checkpoint-backed driver is
 :func:`doctor.template_firewall`; :func:`doctor.template_conformance`
 refuses to render a denied template (fail closed).
