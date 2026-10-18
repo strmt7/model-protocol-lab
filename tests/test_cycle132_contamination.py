@@ -407,5 +407,38 @@ class TestMutationGate(unittest.TestCase):
         self.assertEqual(classify_pair(0.98, 0.0), "duplicate")
 
 
+class ContaminationHtmlInjectionTest(unittest.TestCase):
+    """Hostile worst_tier must not inject HTML into the report.
+
+    The _contamination_line output is escaped by the caller
+    (_config_section applies escape() to every value), so the unit
+    returns the raw tier and the integration point is where the
+    escaping guarantee lives.
+    """
+
+    def test_worst_tier_escaped_at_config_section(self):
+        from model_protocol_lab.reporting import _config_section
+
+        html = _config_section(
+            {
+                "contamination": {
+                    "worst_tier": "<script>alert(1)</script>",
+                    "pairs": [{"held_out": "h", "search": "s"}],
+                },
+                "search": [],
+            }
+        )
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_clean_tier_unchanged(self):
+        from model_protocol_lab.reporting import _contamination_line
+
+        self.assertEqual(
+            _contamination_line({"worst_tier": "clean", "pairs": []}),
+            "clean: no search/held-out near-duplicate pairs",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
