@@ -204,6 +204,33 @@ class BatchDemoBackend(DemoBackend):
         return tuple(outputs)
 
 
+class PositionDemoBackend(DemoBackend):
+    """Scripted positional-bias policy for the position exercise.
+
+    Parses the option lines out of the rendered multiple-choice prompt,
+    then emulates a primacy-biased policy for the base candidate (emit
+    the first-listed option's text) and a recency-biased policy for the
+    no-bos variant (emit the last-listed option's text) -- exactly the
+    primacy/recency signal the experiment measures. This gives the
+    committed sample report genuine primacy-index variation (+1.0 vs
+    -1.0) and genuine winner flips under repositioning.
+    """
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        import re
+
+        prompt = self.decode(input_ids)
+        options = [
+            match.group(2) for match in re.finditer(r"^([A-D])\. (.+)$", prompt, re.MULTILINE)
+        ]
+        if not options:
+            return Generation((), "error", "unparseable")
+        rebel = not prompt.startswith("<|begin_of_text|>")
+        answer = options[-1] if rebel else options[0]
+        text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -612,6 +639,49 @@ def build_sample_report(output_dir: Path) -> dict:
         result["batch_invariance"] = {
             "available": False,
             "detail": "batch_unavailable",
+        }
+    # Position-sensitivity experiment: run the real position stage
+    # (every option-position condition) against the scripted
+    # primacy/recency policy backend, so the committed sample report
+    # exercises the position section with genuine primacy-index
+    # variation and winner flips (the base candidate answers the
+    # first-listed option, the no-bos variant the last). Degrades to
+    # an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import position_sensitivity, position_stage
+        from model_protocol_lab.position import (
+            CONDITIONS,
+            POSITION_SPECS,
+            build_position_fixtures,
+            validate_position_specs,
+        )
+
+        _pos_fmts = candidates("llama3", mutate=True)
+        _pos_specs = validate_position_specs(POSITION_SPECS)
+        _pos_stages = {}
+        for _pos_condition in CONDITIONS:
+            _pos_fixtures = build_position_fixtures(
+                _pos_specs, condition=_pos_condition, seed=20261012
+            )
+            _pos_stages[_pos_condition] = position_stage(
+                PositionDemoBackend(),
+                _pos_fmts,
+                _pos_fixtures,
+                condition=_pos_condition,
+                boundary=BOUNDARY,
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=20261012,
+            )
+        result["position"] = position_sensitivity(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _pos_fmts),
+            _pos_stages,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["position"] = {
+            "available": False,
+            "detail": "position_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

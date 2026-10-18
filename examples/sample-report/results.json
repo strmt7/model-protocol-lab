@@ -2693,6 +2693,136 @@
     "max_new_tokens": 16,
     "seed": 20261012
   },
+  "position": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "n_fixtures": 8,
+    "conditions": [
+      "correct_first",
+      "correct_last",
+      "correct_middle"
+    ],
+    "per_condition": {
+      "correct_first": {
+        "decision": "ambiguous",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "correct_rate": 1.0,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "correct_rate": 1.0,
+            "pass": true
+          },
+          "llama3/no-bos": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "correct_rate": 1.0,
+            "pass": true
+          },
+          "llama3/prefix-trim": {
+            "correct_rate": 1.0,
+            "pass": true
+          }
+        }
+      },
+      "correct_last": {
+        "decision": "selected",
+        "winner": "llama3/no-bos",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/toggle-bos": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "correct_rate": 1.0,
+            "pass": true
+          },
+          "llama3/prefix-newline": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "correct_rate": 0.0,
+            "pass": false
+          }
+        }
+      },
+      "correct_middle": {
+        "decision": "no_candidate",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/toggle-bos": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "correct_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "correct_rate": 0.0,
+            "pass": false
+          }
+        }
+      }
+    },
+    "flips": [
+      {
+        "condition": "correct_first",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "ambiguous",
+        "winner_from": "llama3",
+        "winner_to": null
+      },
+      {
+        "condition": "correct_last",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3/no-bos"
+      },
+      {
+        "condition": "correct_middle",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      }
+    ],
+    "primacy_index": {
+      "llama3": 1.0,
+      "llama3/toggle-bos": 1.0,
+      "llama3/no-bos": -1.0,
+      "llama3/prefix-newline": 1.0,
+      "llama3/prefix-trim": 1.0
+    },
+    "condition_effect": {
+      "mean_index": 0.6,
+      "n_candidates": 5,
+      "n_positive": 4,
+      "n_negative": 1
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 154 — position sensitivity, wave-3 research idea #1, 2026-10-18)
+
+- New `mpl run --position` experiment measuring option-position bias as a
+  template-family property (arXiv:2507.13949 primacy effect; corroborated
+  by arXiv:2512.02665): synthetic multiple-choice fixtures whose correct
+  option is permuted between the first, middle, and last positions
+  (seeded distractor order), with the selection rule re-applied per
+  condition. New pure `model_protocol_lab/position.py` (seeded layouts,
+  `primacy_index` = P(correct|first) - P(correct|last) in [-1, 1]);
+  `experiments.position_stage` / `position_sensitivity` (fail-closed
+  per-cell, all-pass verdicts, winner flips vs primary, condition
+  effect); `results.json` `position` section; HTML "Position
+  sensitivity" section; `diffreports.diff_position`
+  (`position_changed` / `position_asymmetric` feed `identical`);
+  sample-report exercise with a scripted primacy/recency policy backend
+  showing a genuine +1.0/-1.0 index split and winner flips. 82 new
+  tests (4/4 mutation gates, 200-case brute-force oracle, Hypothesis
+  properties, 14-test renderer/edge coverage class); both diff oracles
+  extended.
+
 ### Added (cycle 153 — batch-invariance audit, wave-3 research idea #2, 2026-10-18)
 
 - New `mpl run --batch-invariance` experiment auditing the lab's core

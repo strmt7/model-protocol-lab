@@ -246,6 +246,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "portfolio": {"available": "neither", "changed": False},
         "synthhistory": {"available": "neither", "changed": False},
         "batch_invariance": {"available": "neither", "changed": False},
+        "position": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -288,6 +289,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "synthhistory_asymmetric": False,
             "batch_invariance_changed": False,
             "batch_invariance_asymmetric": False,
+            "position_changed": False,
+            "position_asymmetric": False,
             "identical": True,
         },
     }
@@ -934,6 +937,191 @@ def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or candidates_added
         or candidates_removed
         or group_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_position_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    conditions = value.get("conditions")
+    if (
+        type(conditions) is not list
+        or not conditions
+        or not all(type(c) is str for c in conditions)
+    ):
+        return False
+    per_condition = value.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(conditions):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        winner = condition.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            rate = entry.get("correct_rate")
+            if rate is not None and type(rate) not in (int, float):
+                return False
+            if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                return False
+    primacy = value.get("primacy_index")
+    if type(primacy) is not dict or not all(type(k) is str for k in primacy):
+        return False
+    for index_value in primacy.values():
+        if index_value is not None and type(index_value) not in (int, float):
+            return False
+    effect = value.get("condition_effect")
+    if effect is not None:
+        if type(effect) is not dict:
+            return False
+        mean = effect.get("mean_index")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+        for key in ("n_candidates", "n_positive", "n_negative"):
+            if type(effect.get(key)) is not int:
+                return False
+    return type(value.get("flips")) is list
+
+
+def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle position section: condition pairs, flips, rates, index drift."""
+    old_ok = _o_position_valid(old)
+    new_ok = _o_position_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_conditions = old.get("conditions") or []
+    new_conditions = new.get("conditions") or []
+    conditions_added = [c for c in new_conditions if c not in old_conditions]
+    conditions_removed = [c for c in old_conditions if c not in new_conditions]
+    condition_changed = {}
+    for condition in sorted(set(old_conditions) & set(new_conditions)):
+        old_cond = (old.get("per_condition") or {}).get(condition) or {}
+        new_cond = (new.get("per_condition") or {}).get(condition) or {}
+        old_pair = (old_cond.get("decision"), old_cond.get("winner"))
+        new_pair = (new_cond.get("decision"), new_cond.get("winner"))
+        condition_changed[condition] = {
+            "old_decision": old_pair[0],
+            "old_winner": old_pair[1],
+            "new_decision": new_pair[0],
+            "new_winner": new_pair[1],
+            "changed": old_pair != new_pair,
+        }
+
+    def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        if type(flips) is not list:
+            return []
+        keys = []
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("condition"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
+
+    def _candidate_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        rates: dict[str, dict[str, Any]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for condition in sorted(per_condition):
+            candidates = (per_condition.get(condition) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[condition] = entry.get("correct_rate")
+        return rates
+
+    old_rates = _candidate_rates(old)
+    new_rates = _candidate_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    candidate_drift = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for condition in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_rate = old_rates[name][condition]
+            new_rate = new_rates[name][condition]
+            if old_rate != new_rate:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "condition": condition,
+                        "old_correct_rate": old_rate,
+                        "new_correct_rate": new_rate,
+                    }
+                )
+
+    def _index_map(payload: Any) -> dict[str, Any]:
+        primacy = payload.get("primacy_index") or {}
+        return {k: v for k, v in primacy.items() if type(k) is str}
+
+    old_indexes = _index_map(old)
+    new_indexes = _index_map(new)
+    index_drift = []
+    for name in sorted(set(old_indexes) & set(new_indexes)):
+        if old_indexes[name] != new_indexes[name]:
+            index_drift.append(
+                {
+                    "candidate": name,
+                    "old_primacy_index": old_indexes[name],
+                    "new_primacy_index": new_indexes[name],
+                }
+            )
+
+    def _mean_index(payload: Any) -> Any:
+        effect = payload.get("condition_effect") or {}
+        return effect.get("mean_index")
+
+    old_mean = _mean_index(old)
+    new_mean = _mean_index(new)
+    mean_index_changed = old_mean != new_mean
+    diff["conditions_added"] = conditions_added
+    diff["conditions_removed"] = conditions_removed
+    diff["condition_changed"] = condition_changed
+    diff["flips_changed"] = flips_changed
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["index_drift"] = index_drift
+    diff["mean_index"] = {"old": old_mean, "new": new_mean, "changed": mean_index_changed}
+    changed = bool(
+        conditions_added
+        or conditions_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or index_drift
+        or mean_index_changed
     )
     diff["changed"] = changed
     return diff, changed, asymmetric
@@ -1879,6 +2067,7 @@ def _oracle_diff(
     o_bi, o_bi_changed, o_bi_asymmetric = _o_batchinv(
         old.get("batch_invariance"), new.get("batch_invariance")
     )
+    o_pos, o_pos_changed, o_pos_asymmetric = _o_position(old.get("position"), new.get("position"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -1912,6 +2101,8 @@ def _oracle_diff(
         and not o_sh_asymmetric
         and not o_bi_changed
         and not o_bi_asymmetric
+        and not o_pos_changed
+        and not o_pos_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1932,6 +2123,7 @@ def _oracle_diff(
         "portfolio": o_po,
         "synthhistory": o_sh,
         "batch_invariance": o_bi,
+        "position": o_pos,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1970,6 +2162,8 @@ def _oracle_diff(
             "synthhistory_asymmetric": o_sh_asymmetric,
             "batch_invariance_changed": o_bi_changed,
             "batch_invariance_asymmetric": o_bi_asymmetric,
+            "position_changed": o_pos_changed,
+            "position_asymmetric": o_pos_asymmetric,
             "identical": identical,
         },
     }
@@ -2119,6 +2313,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "synthhistory_asymmetric": False,
                 "batch_invariance_changed": False,
                 "batch_invariance_asymmetric": False,
+                "position_changed": False,
+                "position_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3343,8 +3539,9 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
-    # portfolio, synthhistory): emitted often enough that the
-    # differential fuzz exercises them, not just the legacy axes.
+    # portfolio, synthhistory, batch_invariance, position): emitted often
+    # enough that the differential fuzz exercises them, not just the
+    # legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -3365,13 +3562,56 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["synthhistory"] = _fuzz_synthhistory_section(rng)
     if rng.random() < 0.45:
         report["batch_invariance"] = _fuzz_batchinv_section(rng)
+    if rng.random() < 0.45:
+        report["position"] = _fuzz_position_section(rng)
     return report
+
+
+def _fuzz_position_section(rng: random.Random) -> dict[str, Any]:
+    per_condition = {}
+    for condition in ("correct_first", "correct_middle", "correct_last"):
+        per_candidate = {
+            name: {
+                "correct_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "pass": rng.choice([True, False, None]),
+            }
+            for name in ("alpha", "beta")
+        }
+        if rng.random() < 0.15:
+            per_candidate[rng.choice([7, 8.5])] = {"correct_rate": 1.0}
+        per_condition[condition] = {
+            "decision": rng.choice(["selected", "ambiguous", "no_candidate", 4]),
+            "winner": rng.choice(["alpha", "beta", None]),
+            "n_evaluable": rng.randint(0, 2),
+            "per_candidate": per_candidate,
+        }
+    if rng.random() < 0.15:
+        per_condition["correct_first"]["per_candidate"] = "junk"
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "primary_decision": "selected",
+        "n_fixtures": rng.randint(0, 8),
+        "conditions": ["correct_first", "correct_middle", "correct_last"],
+        "per_condition": per_condition,
+        "flips": [],
+        "primacy_index": {
+            "alpha": rng.choice([1.0, -0.5, 0.0, None]),
+            "beta": rng.choice([0.25, None]),
+        },
+        "condition_effect": {
+            "mean_index": rng.choice([0.5, -0.25, None]),
+            "n_candidates": rng.randint(0, 2),
+            "n_positive": rng.randint(0, 2),
+            "n_negative": rng.randint(0, 2),
+        },
+    }
 
 
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(17)
+        op = rng.randrange(18)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -3455,6 +3695,12 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
             oracle = port.get("oracle") if isinstance(port, dict) else None
             if isinstance(oracle, dict):
                 oracle["gap"] = rng.choice([0.0, 0.99, "mutated"])
+        elif op == 17:
+            pos = report.get("position")
+            primacy = pos.get("primacy_index") if isinstance(pos, dict) else None
+            if isinstance(primacy, dict) and primacy:
+                key = rng.choice(sorted(k for k in primacy if type(k) is str))
+                primacy[key] = rng.choice([1.0, -1.0, 0.0, None, "mutated"])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
@@ -3587,6 +3833,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not synthhistory_asymmetric\n"
             '        and not batchinv_diff["changed"]\n'
             "        and not batchinv_asymmetric\n"
+            '        and not position_diff["changed"]\n'
+            "        and not position_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -3617,6 +3865,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or synthhistory_asymmetric\n"
             '        or batchinv_diff["changed"]\n'
             "        or batchinv_asymmetric\n"
+            '        or position_diff["changed"]\n'
+            "        or position_asymmetric\n"
             "    )\n",
             scenario,
         )
