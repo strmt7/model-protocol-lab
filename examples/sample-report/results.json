@@ -2644,15 +2644,8 @@
     },
     "flips": [
       {
-        "condition": "history_2",
-        "decision_from": "compatible_on_fixture_set",
-        "decision_to": "selected",
-        "winner_from": "llama3",
-        "winner_to": "llama3"
-      },
-      {
         "condition": "history_6",
-        "decision_from": "compatible_on_fixture_set",
+        "decision_from": "selected",
         "decision_to": "no_candidate",
         "winner_from": "llama3",
         "winner_to": null

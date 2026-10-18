@@ -1645,7 +1645,7 @@ def synthhistory_stability(
     if (
         not isinstance(candidates, tuple)
         or not candidates
-        or not all(type(c) is str and c for c in candidates)
+        or not all(type(c) is str and c.strip() for c in candidates)
         or len(set(candidates)) != len(candidates)
     ):
         return {"available": False, "detail": "invalid_candidates"}
@@ -1664,7 +1664,7 @@ def synthhistory_stability(
         if stage.get("condition") != condition:
             return {"available": False, "detail": f"stage_{condition}_invalid"}
         count = stage.get("n_fixtures")
-        if type(count) is not int or count < 0:
+        if type(count) is not int or count <= 0:
             return {"available": False, "detail": f"stage_{condition}_invalid"}
         if n_fixtures < 0:
             n_fixtures = count
@@ -1714,18 +1714,30 @@ def synthhistory_stability(
             "per_candidate": {c: _rates(per_candidate.get(c)) for c in candidates},
         }
 
+    # The primary decision is the run-level verdict ("compatible_on_fixture_set",
+    # "held_out_failed", ...); per-condition verdicts use the selection
+    # vocabulary ("selected", "ambiguous", "no_candidate"). A run that reached
+    # held-out evaluation necessarily selected its winner, so map the two
+    # success decisions onto the selection vocabulary for an apples-to-apples
+    # flip comparison -- otherwise every successful run would report a phantom
+    # flip wherever history re-selects the identical winner. Other run
+    # outcomes (ambiguous / no_candidate / failed / cancelled) compare verbatim.
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        primary_verdict = ("selected", primary_winner)
+    else:
+        primary_verdict = (primary_decision, primary_winner)
     flips = []
     for condition in sorted(per_condition):
         verdict = per_condition[condition]
         if verdict["decision"] == "unavailable":
             continue
-        if (verdict["decision"], verdict["winner"]) != (primary_decision, primary_winner):
+        if (verdict["decision"], verdict["winner"]) != primary_verdict:
             flips.append(
                 {
                     "condition": condition,
-                    "decision_from": primary_decision,
+                    "decision_from": primary_verdict[0],
                     "decision_to": verdict["decision"],
-                    "winner_from": primary_winner,
+                    "winner_from": primary_verdict[1],
                     "winner_to": verdict["winner"],
                 }
             )

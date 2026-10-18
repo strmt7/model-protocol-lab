@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 151 — wave-3 red-team fixes for synthhistory, 2026-10-18)
+
+- `synthhistory_stability` flip detection compared the selection
+  vocabulary ("selected"/...) against the raw run-level primary
+  decision ("compatible_on_fixture_set"), recording a phantom "flip"
+  wherever history re-selected the identical winner. The two run-level
+  success decisions now map onto ("selected", winner) for the flip
+  comparison (other outcomes compare verbatim); the stored
+  `primary_decision` stays raw. Plus: whitespace-only candidate names
+  degrade to `invalid_candidates` instead of raising (the "never
+  raises" contract), and zero-fixture stages degrade to invalid
+  (aligning with the diff validator). 4 new regression tests; sample
+  report regenerated (genuine flip only).
+
 ### Added (cycle 150 — synthetic-history selection stability, 2026-10-18)
 
 - Synthetic-history selection stability experiment (wave-2 research

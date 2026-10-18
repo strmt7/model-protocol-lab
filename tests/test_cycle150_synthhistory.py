@@ -512,10 +512,14 @@ class SynthhistoryStabilityTests(unittest.TestCase):
                 else:
                     decision, winner = ("ambiguous", None) if winners else ("no_candidate", None)
                 per_condition[condition] = (decision, winner)
+            if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+                primary_verdict = ("selected", primary_winner)
+            else:
+                primary_verdict = (primary_decision, primary_winner)
             flips = [
                 c
                 for c, (d, w) in per_condition.items()
-                if d != "unavailable" and (d, w) != (primary_decision, primary_winner)
+                if d != "unavailable" and (d, w) != primary_verdict
             ]
             return per_condition, flips
 
@@ -534,7 +538,15 @@ class SynthhistoryStabilityTests(unittest.TestCase):
                         passed = rng.randint(0, 3)
                         cells[cand] = {"n": 3, "passed": passed, "pass": passed == 3}
                 stages[condition] = _stage_payload(condition, cells, n_fixtures=3)
-            primary_decision = rng.choice(["selected", "ambiguous", "no_candidate"])
+            primary_decision = rng.choice(
+                [
+                    "selected",
+                    "ambiguous",
+                    "no_candidate",
+                    "compatible_on_fixture_set",
+                    "held_out_failed",
+                ]
+            )
             primary_winner = (
                 rng.choice(candidates)
                 if primary_decision == "selected" and rng.random() < 0.7
@@ -1315,3 +1327,80 @@ class SynthhistorySummaryRenderTests(unittest.TestCase):
 
         self.assertEqual(_render_synthhistory_summary(None), [])
         self.assertEqual(_render_synthhistory_summary("nope"), [])
+
+
+class SynthhistoryRedteamRegressionTests(unittest.TestCase):
+    """Regression tests for wave-3 red-team B findings."""
+
+    def test_no_phantom_flip_when_winner_reselected(self):
+        # B1: the primary decision is the run-level verdict
+        # ("compatible_on_fixture_set"); per-condition verdicts use the
+        # selection vocabulary ("selected"). A condition that re-selects
+        # the identical winner must NOT be recorded as a flip.
+        stages = {
+            "history_2": {
+                "condition": "history_2",
+                "n_fixtures": 2,
+                "per_candidate": {
+                    "llama3": {"n": 2, "passed": 2, "pass": True},
+                    "mistral": {"n": 2, "passed": 1, "pass": False},
+                },
+            }
+        }
+        out = synthhistory_stability(
+            "llama3", "compatible_on_fixture_set", ("llama3", "mistral"), stages
+        )
+        self.assertTrue(out["available"])
+        self.assertEqual(out["per_condition"]["history_2"]["decision"], "selected")
+        self.assertEqual(out["per_condition"]["history_2"]["winner"], "llama3")
+        self.assertEqual(out["flips"], [])
+
+    def test_genuine_flip_still_recorded(self):
+        stages = {
+            "history_6": {
+                "condition": "history_6",
+                "n_fixtures": 2,
+                "per_candidate": {
+                    "llama3": {"n": 2, "passed": 1, "pass": False},
+                    "mistral": {"n": 2, "passed": 1, "pass": False},
+                },
+            }
+        }
+        out = synthhistory_stability(
+            "llama3", "compatible_on_fixture_set", ("llama3", "mistral"), stages
+        )
+        self.assertEqual(len(out["flips"]), 1)
+        flip = out["flips"][0]
+        self.assertEqual(flip["condition"], "history_6")
+        self.assertEqual(flip["decision_from"], "selected")
+        self.assertEqual(flip["winner_from"], "llama3")
+        self.assertEqual(flip["decision_to"], "no_candidate")
+        self.assertIsNone(flip["winner_to"])
+
+    def test_whitespace_candidates_rejected_not_raised(self):
+        # B2: "never raises" contract -- blank names degrade to
+        # invalid_candidates instead of raising via family_of.
+        stages = {
+            "history_2": {
+                "condition": "history_2",
+                "n_fixtures": 1,
+                "per_candidate": {" ": {"n": 1, "passed": 1, "pass": True}},
+            }
+        }
+        out = synthhistory_stability(" ", "selected", (" ",), stages)
+        self.assertFalse(out["available"])
+        self.assertEqual(out["detail"], "invalid_candidates")
+
+    def test_zero_fixture_stage_rejected(self):
+        # B3: a stage with n_fixtures=0 cannot yield "selected" from zero
+        # evidence; it degrades to invalid like the diff validator requires.
+        stages = {
+            "history_2": {
+                "condition": "history_2",
+                "n_fixtures": 0,
+                "per_candidate": {"llama3": {"n": 0, "passed": 0, "pass": True}},
+            }
+        }
+        out = synthhistory_stability("llama3", "compatible_on_fixture_set", ("llama3",), stages)
+        self.assertFalse(out["available"])
+        self.assertEqual(out["detail"], "stage_history_2_invalid")
