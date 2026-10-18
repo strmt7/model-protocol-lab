@@ -892,6 +892,9 @@ per-semantic (decision, winner) drift and flip-pattern changes),
 `transfer` (the cross-checkpoint transfer comparison: transfer-verdict
 drift, per-checkpoint (decision, winner) drift, per-cell verdict drift,
 checkpoints added/removed),
+`contamination` (the fixture-hygiene comparison: worst-tier drift,
+pairs added/removed, tier escalations -- did the held-out set get
+cleaner or more contaminated?),
 `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate),
@@ -903,7 +906,8 @@ counts (`fixtures_flipped`, `candidates_changed_status`,
 `held_out_floor_changed`, `held_out_floor_asymmetric`,
 `boundary_audit_changed`, `boundary_audit_asymmetric`,
 `selection_robustness_changed`, `selection_robustness_asymmetric`,
-`transfer_changed`, `transfer_asymmetric`, `identical`).
+`transfer_changed`, `transfer_asymmetric`,
+`contamination_changed`, `contamination_asymmetric`, `identical`).
 
 What it compares, exactly:
 

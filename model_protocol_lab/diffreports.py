@@ -497,6 +497,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    contamination_diff = diff_contamination(old.get("contamination"), new.get("contamination"))
+    contamination_asymmetric = contamination_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -514,6 +519,8 @@ def diff_reports(
         and not robustness_asymmetric
         and not transfer_diff["changed"]
         and not transfer_asymmetric
+        and not contamination_diff["changed"]
+        and not contamination_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -532,6 +539,8 @@ def diff_reports(
         "selection_robustness_asymmetric": robustness_asymmetric,
         "transfer_changed": transfer_diff["changed"],
         "transfer_asymmetric": transfer_asymmetric,
+        "contamination_changed": contamination_diff["changed"],
+        "contamination_asymmetric": contamination_asymmetric,
         "identical": identical,
     }
     return {
@@ -545,6 +554,7 @@ def diff_reports(
         "boundary_audit": boundary_audit_diff,
         "selection_robustness": robustness_diff,
         "transfer": transfer_diff,
+        "contamination": contamination_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -909,6 +919,93 @@ def _valid_selection_robustness(payload: Any) -> bool:
     )
 
 
+def _valid_contamination(payload: Any) -> bool:
+    """Structural check for a ``contamination`` payload."""
+    pairs = payload.get("pairs") if type(payload) is dict else None
+    return (
+        type(payload) is dict
+        and type(payload.get("worst_tier")) is str
+        and type(pairs) is list
+        and all(type(p) is dict for p in pairs)
+    )
+
+
+def _contamination_pair_key(pair: dict[str, Any]) -> tuple[str, str] | None:
+    """Identity key for a contamination pair, or None if malformed."""
+    held = pair.get("held_out")
+    search = pair.get("search")
+    if type(held) is str and type(search) is str:
+        return (held, search)
+    return None
+
+
+def diff_contamination(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``contamination`` payloads; deterministic.
+
+    Answers "did fixture hygiene improve or degrade between runs?":
+    the worst tier, and the set of flagged (held_out, search) pairs.
+    Pairs are matched by ID tuple; added/removed pairs and tier
+    escalations are reported. A side without a recorded contamination
+    report is reported plainly. Malformed pairs are ignored (the
+    report is advisory). No model, no network.
+    """
+    old_ok = _valid_contamination(old)
+    new_ok = _valid_contamination(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_worst = old.get("worst_tier")
+    new_worst = new.get("worst_tier")
+    old_pairs = {}
+    for p in old.get("pairs") or []:
+        key = _contamination_pair_key(p)
+        if key is not None:
+            old_pairs[key] = p.get("tier")
+    new_pairs = {}
+    for p in new.get("pairs") or []:
+        key = _contamination_pair_key(p)
+        if key is not None:
+            new_pairs[key] = p.get("tier")
+    old_keys = set(old_pairs)
+    new_keys = set(new_pairs)
+    pairs_added = sorted(new_keys - old_keys)
+    pairs_removed = sorted(old_keys - new_keys)
+    tier_changes = []
+    for key in sorted(old_keys & new_keys):
+        if old_pairs[key] != new_pairs[key]:
+            tier_changes.append(
+                {
+                    "held_out": key[0],
+                    "search": key[1],
+                    "old_tier": old_pairs[key],
+                    "new_tier": new_pairs[key],
+                }
+            )
+    worst_changed = old_worst != new_worst
+    result["worst_tier"] = {
+        "old": old_worst,
+        "new": new_worst,
+        "changed": worst_changed,
+    }
+    result["pairs_added"] = [
+        {"held_out": k[0], "search": k[1], "tier": new_pairs[k]} for k in pairs_added
+    ]
+    result["pairs_removed"] = [
+        {"held_out": k[0], "search": k[1], "tier": old_pairs[k]} for k in pairs_removed
+    ]
+    result["tier_changes"] = tier_changes
+    result["changed"] = bool(worst_changed or pairs_added or pairs_removed or tier_changes)
+    return result
+
+
 def diff_selection_robustness(old: Any, new: Any) -> dict[str, Any]:
     """Compare two ``selection_robustness`` payloads; deterministic.
 
@@ -1058,6 +1155,59 @@ def diff_transfer(old: Any, new: Any) -> dict[str, Any]:
         or checkpoints_removed
     )
     return result
+
+
+def _render_contamination_summary(
+    contamination_diff: dict[str, Any] | None,
+) -> list[str]:
+    """Contamination comparison lines for the stderr summary."""
+    if type(contamination_diff) is not dict:
+        return []
+    available = contamination_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Contamination comparison unavailable: "
+            f"{missing} run did not record the contamination report."
+        ]
+    lines: list[str] = []
+    worst = contamination_diff.get("worst_tier") or {}
+    if worst.get("changed"):
+        lines.append(
+            f"Contamination worst tier: {_display_id(worst.get('old'))} -> "
+            f"{_display_id(worst.get('new'))}"
+        )
+    added = contamination_diff.get("pairs_added") or []
+    removed = contamination_diff.get("pairs_removed") or []
+    if added:
+        lines.append(f"Contamination pairs added ({len(added)}):")
+        for pair in added[:5]:
+            lines.append(
+                f"  {_display_id(pair['held_out'])} ~ {_display_id(pair['search'])} "
+                f"({_display_id(pair.get('tier'))})"
+            )
+        if len(added) > 5:
+            lines.append(f"  ... and {len(added) - 5} more")
+    if removed:
+        lines.append(f"Contamination pairs removed ({len(removed)}):")
+        for pair in removed[:5]:
+            lines.append(
+                f"  {_display_id(pair['held_out'])} ~ {_display_id(pair['search'])} "
+                f"({_display_id(pair.get('tier'))})"
+            )
+        if len(removed) > 5:
+            lines.append(f"  ... and {len(removed) - 5} more")
+    changes = contamination_diff.get("tier_changes") or []
+    if changes:
+        lines.append(f"Contamination tier changes ({len(changes)}):")
+        for change in changes[:5]:
+            lines.append(
+                f"  {_display_id(change['held_out'])} ~ {_display_id(change['search'])}: "
+                f"{_display_id(change.get('old_tier'))} -> {_display_id(change.get('new_tier'))}"
+            )
+    return lines
 
 
 def _render_transfer_summary(transfer_diff: dict[str, Any] | None) -> list[str]:
@@ -1342,6 +1492,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_boundary_audit_summary(diff["boundary_audit"]))
     lines.extend(_render_robustness_summary(diff.get("selection_robustness")))
     lines.extend(_render_transfer_summary(diff.get("transfer")))
+    lines.extend(_render_contamination_summary(diff.get("contamination")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

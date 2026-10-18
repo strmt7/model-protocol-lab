@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 143 — contamination comparison in diff-reports, 2026-10-18)
+
+- `diff-reports` now compares the `contamination` report between runs
+  (`diff_contamination`): worst-tier drift, pairs added/removed, tier
+  escalations -- answering "did fixture hygiene improve or degrade?"
+  after a dataset update. New `contamination_changed` /
+  `contamination_asymmetric` summary flags feed `identical`.
+
 ### Verified (cycle 142 — contamination HTML safety audit, 2026-10-18)
 
 - Security audit of the contamination detector's HTML integration

@@ -238,6 +238,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "boundary_audit": {"available": "neither", "changed": False},
         "selection_robustness": {"available": "neither", "changed": False},
         "transfer": {"available": "neither", "changed": False},
+        "contamination": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -264,6 +265,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "selection_robustness_asymmetric": False,
             "transfer_changed": False,
             "transfer_asymmetric": False,
+            "contamination_changed": False,
+            "contamination_asymmetric": False,
             "identical": True,
         },
     }
@@ -614,6 +617,86 @@ def _o_transfer_valid(value: Any) -> bool:
     )
 
 
+def _o_contamination_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    pairs = value.get("pairs") if type(value) is dict else None
+    return (
+        type(value) is dict
+        and type(value.get("worst_tier")) is str
+        and type(pairs) is list
+        and all(type(p) is dict for p in pairs)
+    )
+
+
+def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle contamination section: worst tier and pair-set drift."""
+    old_ok = _o_contamination_valid(old)
+    new_ok = _o_contamination_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _key(pair: dict[str, Any]) -> tuple[str, str] | None:
+        held = pair.get("held_out")
+        search = pair.get("search")
+        if type(held) is str and type(search) is str:
+            return (held, search)
+        return None
+
+    old_worst = old.get("worst_tier")
+    new_worst = new.get("worst_tier")
+    old_pairs: dict[tuple[str, str], Any] = {}
+    for p in old.get("pairs") or []:
+        k = _key(p)
+        if k is not None:
+            old_pairs[k] = p.get("tier")
+    new_pairs: dict[tuple[str, str], Any] = {}
+    for p in new.get("pairs") or []:
+        k = _key(p)
+        if k is not None:
+            new_pairs[k] = p.get("tier")
+    old_keys = set(old_pairs)
+    new_keys = set(new_pairs)
+    pairs_added = sorted(new_keys - old_keys)
+    pairs_removed = sorted(old_keys - new_keys)
+    tier_changes = []
+    for key in sorted(old_keys & new_keys):
+        if old_pairs[key] != new_pairs[key]:
+            tier_changes.append(
+                {
+                    "held_out": key[0],
+                    "search": key[1],
+                    "old_tier": old_pairs[key],
+                    "new_tier": new_pairs[key],
+                }
+            )
+    worst_changed = old_worst != new_worst
+    diff["worst_tier"] = {
+        "old": old_worst,
+        "new": new_worst,
+        "changed": worst_changed,
+    }
+    diff["pairs_added"] = [
+        {"held_out": k[0], "search": k[1], "tier": new_pairs[k]} for k in pairs_added
+    ]
+    diff["pairs_removed"] = [
+        {"held_out": k[0], "search": k[1], "tier": old_pairs[k]} for k in pairs_removed
+    ]
+    diff["tier_changes"] = tier_changes
+    changed = bool(worst_changed or pairs_added or pairs_removed or tier_changes)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_transfer(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle transfer section: verdict, checkpoint, and cell drift."""
     old_ok = _o_transfer_valid(old)
@@ -796,6 +879,9 @@ def _oracle_diff(
         old.get("selection_robustness"), new.get("selection_robustness")
     )
     o_tr, o_tr_changed, o_tr_asymmetric = _o_transfer(old.get("transfer"), new.get("transfer"))
+    o_ct, o_ct_changed, o_ct_asymmetric = _o_contamination(
+        old.get("contamination"), new.get("contamination")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -813,6 +899,8 @@ def _oracle_diff(
         and not o_sr_asymmetric
         and not o_tr_changed
         and not o_tr_asymmetric
+        and not o_ct_changed
+        and not o_ct_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -825,6 +913,7 @@ def _oracle_diff(
         "boundary_audit": o_ba,
         "selection_robustness": o_sr,
         "transfer": o_tr,
+        "contamination": o_ct,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -847,6 +936,8 @@ def _oracle_diff(
             "selection_robustness_asymmetric": o_sr_asymmetric,
             "transfer_changed": o_tr_changed,
             "transfer_asymmetric": o_tr_asymmetric,
+            "contamination_changed": o_ct_changed,
+            "contamination_asymmetric": o_ct_asymmetric,
             "identical": identical,
         },
     }
@@ -980,6 +1071,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "selection_robustness_asymmetric": False,
                 "transfer_changed": False,
                 "transfer_asymmetric": False,
+                "contamination_changed": False,
+                "contamination_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1987,6 +2080,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not robustness_asymmetric\n"
             '        and not transfer_diff["changed"]\n'
             "        and not transfer_asymmetric\n"
+            '        and not contamination_diff["changed"]\n'
+            "        and not contamination_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -2005,6 +2100,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or robustness_asymmetric\n"
             '        or transfer_diff["changed"]\n'
             "        or transfer_asymmetric\n"
+            '        or contamination_diff["changed"]\n'
+            "        or contamination_asymmetric\n"
             "    )\n",
             scenario,
         )
