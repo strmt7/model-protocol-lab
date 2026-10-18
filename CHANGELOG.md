@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 141 — hostile-input crash hardening, 2026-10-18)
+
+- Fixed three `TypeError` crashes on hostile/malformed input with
+  non-string dict keys: `experiments.transfer_portability` (mixed-type
+  checkpoint IDs crashed `sorted()`, violating its "never raises"
+  contract — now fails closed with `invalid_candidates_or_transfer`),
+  `diffreports.diff_transfer` and
+  `diffreports.diff_selection_robustness` (mixed-type
+  per-checkpoint/per-semantic/matrix keys crashed `sorted()` on a
+  hostile results.json — the structural validators now require string
+  keys, so the malformed side degrades to asymmetric instead of
+  crashing `mpl diff-reports`).
+
 ### Added (cycle 140 — transfer comparison in diff-reports, 2026-10-18)
 
 - `diff-reports` now compares the `transfer` experiment between runs

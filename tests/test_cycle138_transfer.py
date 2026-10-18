@@ -345,6 +345,31 @@ class DiffTransferTest(unittest.TestCase):
         self.assertTrue(diff2["summary"]["transfer_changed"])
         self.assertFalse(diff2["summary"]["identical"])
 
+    def test_mixed_key_types_fail_closed(self):
+        # Hostile results.json with non-string checkpoint keys must not
+        # crash the comparator; the malformed side degrades to asymmetric.
+        good = _transfer_payload()
+        hostile = _transfer_payload()
+        hostile["per_checkpoint"][1] = {"decision": "selected", "winner": "alpha"}
+        diff = diffreports.diff_transfer(good, hostile)
+        self.assertEqual(diff["available"], "old")
+        self.assertFalse(diff["changed"])
+        hostile2 = _transfer_payload()
+        hostile2["matrix"]["alpha"][2] = "transfers"
+        diff2 = diffreports.diff_transfer(good, hostile2)
+        self.assertEqual(diff2["available"], "old")
+
+    def test_transfer_portability_mixed_keys_fail_closed(self):
+        # Never raises on malformed input, per the docstring contract.
+        result = experiments.transfer_portability(
+            "alpha",
+            "selected",
+            ("alpha", "beta"),
+            {1: {"alpha": True, "beta": False}, "b": {"alpha": True, "beta": False}},
+        )
+        self.assertFalse(result["available"])
+        self.assertEqual(result["detail"], "invalid_candidates_or_transfer")
+
 
 if __name__ == "__main__":
     unittest.main()

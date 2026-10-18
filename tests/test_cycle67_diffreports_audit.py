@@ -546,10 +546,12 @@ def _o_boundary_audit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
 
 def _o_selection_robustness_valid(value: Any) -> bool:
     """Oracle-side availability check, mirroring the implementation's rule."""
+    ps = value.get("per_semantic") if type(value) is dict else None
     return (
         type(value) is dict
         and value.get("available") is True
-        and type(value.get("per_semantic")) is dict
+        and type(ps) is dict
+        and all(type(k) is str for k in ps)
         and type(value.get("flips")) is list
     )
 
@@ -599,11 +601,16 @@ def _o_selection_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, b
 
 def _o_transfer_valid(value: Any) -> bool:
     """Oracle-side availability check, mirroring the implementation's rule."""
+    pc = value.get("per_checkpoint") if type(value) is dict else None
+    mx = value.get("matrix") if type(value) is dict else None
     return (
         type(value) is dict
         and value.get("available") is True
-        and type(value.get("per_checkpoint")) is dict
-        and type(value.get("matrix")) is dict
+        and type(pc) is dict
+        and all(type(k) is str for k in pc)
+        and type(mx) is dict
+        and all(type(k) is str for k in mx)
+        and all(type(v) is dict and all(type(k) is str for k in v) for v in mx.values())
     )
 
 
