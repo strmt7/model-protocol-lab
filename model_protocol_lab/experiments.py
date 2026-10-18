@@ -27,6 +27,7 @@ from .core import (
     evaluate,
     first_boundary,
 )
+from .hierarchy import POSITIONS, family_of, system_treatment
 from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 
@@ -1199,6 +1200,314 @@ def healing_delta(
         "falsification": falsification,
         "n_healed": n_healed if type(n_healed) is int else None,
         "n_fallback": n_fallback if type(n_fallback) is int else None,
+    }
+
+
+def hierarchy_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    conflict_fixtures: tuple[Fixture, ...],
+    expectations: dict[str, dict[str, str]],
+    *,
+    position: str,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate on instruction-conflict fixtures.
+
+    For one privilege-block ``position`` (see :mod:`hierarchy`), every
+    search candidate is re-evaluated with ``core.evaluate()`` on the
+    given conflict fixtures, with the same boundary and max_new_tokens.
+    Greedy, exact. Each fixture's ``expected`` is the *system* answer, so
+    the pipeline's ``exact_match`` already means "followed the privileged
+    instruction"; the stage additionally scores the *user*-side match per
+    observation from ``expectations`` (exact string equality, the same
+    semantics as ``Observation.exact_match``).
+
+    Any backend construction or evaluation failure records None for that
+    candidate cell -- fail-closed, never silently skipped. ``pass`` is
+    the conservative per-candidate verdict: every conflict fixture
+    system-followed with its boundary found (mirrors the perturbation
+    stage's all-pass rule), so the selection rule can be re-applied
+    unchanged by :func:`hierarchy_adherence`.
+
+    Returns ``{"position": ..., "n_fixtures": ..., "per_candidate":
+    {name: {"n", "system", "user", "neither", "pass"} | None}}``.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(conflict_fixtures) is not tuple or not conflict_fixtures:
+        raise ValueError("conflict_fixtures must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in conflict_fixtures):
+        raise ValueError("conflict_fixtures must contain Fixture values")
+    if type(expectations) is not dict:
+        raise ValueError("expectations must be a dict")
+    for case in conflict_fixtures:
+        exp = expectations.get(case.id)
+        if (
+            type(exp) is not dict
+            or type(exp.get("expected_system")) is not str
+            or type(exp.get("expected_user")) is not str
+        ):
+            raise ValueError(f"expectations missing valid entry for fixture {case.id!r}")
+    if position not in POSITIONS:
+        raise ValueError(f"position must be one of {POSITIONS}")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        try:
+            report = evaluate(
+                backend,
+                fmt,
+                conflict_fixtures,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        if not report.aggregate_eligible:
+            per_candidate[fmt.name] = None
+            continue
+        system = user = neither = 0
+        all_pass = True
+        for obs in report.observations:
+            exp = expectations[obs.fixture]
+            follows_system = obs.answer == exp["expected_system"]
+            follows_user = obs.answer == exp["expected_user"]
+            if follows_system:
+                system += 1
+            elif follows_user:
+                user += 1
+            else:
+                neither += 1
+            if not (follows_system and obs.boundary_found):
+                all_pass = False
+        per_candidate[fmt.name] = {
+            "n": len(conflict_fixtures),
+            "system": system,
+            "user": user,
+            "neither": neither,
+            "pass": all_pass,
+        }
+    return {
+        "position": position,
+        "n_fixtures": len(conflict_fixtures),
+        "per_candidate": per_candidate,
+    }
+
+
+def _hierarchy_entry_valid(entry: Any, n_fixtures: int) -> bool:
+    """Structural check for one candidate cell of a hierarchy stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    if entry.get("n") != n_fixtures:
+        return False
+    system = entry.get("system")
+    user = entry.get("user")
+    neither = entry.get("neither")
+    if (
+        type(system) is not int
+        or system < 0
+        or type(user) is not int
+        or user < 0
+        or type(neither) is not int
+        or neither < 0
+    ):
+        return False
+    if system + user + neither != n_fixtures:
+        return False
+    return type(entry.get("pass")) is bool
+
+
+def hierarchy_adherence(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    stages: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-apply the selection rule per conflict position (pure post-hoc).
+
+    Answers "does the winner survive instruction conflict?": for each
+    privilege-block position the conservative selection rule is
+    re-applied to that condition's per-candidate pass/fail outcomes, and
+    the primary (decision, winner) is compared against every condition.
+
+    Per candidate per condition the adherence rates (system / user /
+    neither) are reported; ``position_effect`` compares the two
+    positions (primacy vs recency); ``group_adherence`` tests the
+    pre-registered structural hypothesis from :mod:`hierarchy` --
+    families whose real templates give system content a dedicated frame
+    vs families that fold it -- as mean system-adherence per
+    documentation-derived label group (a correlation readout, not a
+    causal claim). ``flips`` lists the conditions whose (decision,
+    winner) differs from the primary run.
+
+    Returns ``{"available": True, ...}``. Never raises on malformed
+    input: returns ``{"available": False}`` with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(stages) is not dict or not stages or not all(type(k) is str for k in stages):
+        return {"available": False, "detail": "stages_invalid"}
+    n_fixtures = -1  # sentinel: stages is guaranteed nonempty above
+    for position, stage in stages.items():
+        if type(stage) is not dict:
+            return {"available": False, "detail": f"stage_{position}_invalid"}
+        if type(stage.get("position")) is not str:
+            return {"available": False, "detail": f"stage_{position}_invalid"}
+        count = stage.get("n_fixtures")
+        if type(count) is not int or count < 0:
+            return {"available": False, "detail": f"stage_{position}_invalid"}
+        if n_fixtures < 0:
+            n_fixtures = count
+        elif n_fixtures != count:
+            return {"available": False, "detail": "fixture_count_mismatch"}
+        per_candidate = stage.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return {"available": False, "detail": f"stage_{position}_invalid"}
+        for _cand, entry in per_candidate.items():
+            if not _hierarchy_entry_valid(entry, count):
+                return {"available": False, "detail": f"stage_{position}_invalid"}
+
+    def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if entry is None:
+            return None
+        n = entry["n"]
+        return {
+            "system_rate": entry["system"] / n if n else None,
+            "user_rate": entry["user"] / n if n else None,
+            "neither_rate": entry["neither"] / n if n else None,
+            "pass": entry["pass"],
+        }
+
+    per_condition: dict[str, dict[str, Any]] = {}
+    for position in sorted(stages):
+        stage = stages[position]
+        per_candidate = stage["per_candidate"]
+        entries = [per_candidate.get(c) for c in candidates]
+        evaluable = [e for e in entries if e is not None]
+        winners = [
+            c for c, e in zip(candidates, entries, strict=True) if e is not None and e["pass"]
+        ]
+        # Mirrors _select_winner(winners, cancelled=False): exactly one
+        # passing candidate wins; ties and failures abstain. A condition
+        # where no candidate could be evaluated is "unavailable", never a
+        # phantom "no_candidate".
+        if not evaluable:
+            decision, winner = "unavailable", None
+        elif len(winners) == 1:
+            decision, winner = "selected", winners[0]
+        elif winners:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        per_condition[position] = {
+            "decision": decision,
+            "winner": winner,
+            "n_evaluable": len(evaluable),
+            "per_candidate": {c: _rates(per_candidate.get(c)) for c in candidates},
+        }
+
+    flips = []
+    for position in sorted(per_condition):
+        verdict = per_condition[position]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != (primary_decision, primary_winner):
+            flips.append(
+                {
+                    "position": position,
+                    "decision_from": primary_decision,
+                    "decision_to": verdict["decision"],
+                    "winner_from": primary_winner,
+                    "winner_to": verdict["winner"],
+                }
+            )
+
+    position_effect: dict[str, Any] | None = None
+    first = per_condition.get("privilege_first")
+    last = per_condition.get("privilege_last")
+    if (
+        first is not None
+        and last is not None
+        and first["decision"] != "unavailable"
+        and last["decision"] != "unavailable"
+    ):
+        first_rates = [
+            rates["system_rate"]
+            for rates in first["per_candidate"].values()
+            if rates is not None and rates["system_rate"] is not None
+        ]
+        last_rates = [
+            rates["system_rate"]
+            for rates in last["per_candidate"].values()
+            if rates is not None and rates["system_rate"] is not None
+        ]
+        position_effect = {
+            "winner_changed": (first["decision"], first["winner"])
+            != (last["decision"], last["winner"]),
+            "mean_system_rate_delta": (
+                (sum(first_rates) / len(first_rates)) - (sum(last_rates) / len(last_rates))
+                if first_rates and last_rates
+                else None
+            ),
+        }
+
+    group_adherence: dict[str, dict[str, Any]] = {}
+    for label in ("dedicated", "folded", "unknown"):
+        pairs: list[float] = []
+        families: set[str] = set()
+        n_label_candidates = 0
+        for cand in candidates:
+            if system_treatment(family_of(cand)) != label:
+                continue
+            n_label_candidates += 1
+            families.add(family_of(cand))
+            for verdict in per_condition.values():
+                rates = verdict["per_candidate"][cand]
+                if rates is not None and rates["system_rate"] is not None:
+                    pairs.append(rates["system_rate"])
+        group_adherence[label] = {
+            "n_candidates": n_label_candidates,
+            "n_families": len(families),
+            "mean_system_rate": (sum(pairs) / len(pairs)) if pairs else None,
+        }
+
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "n_fixtures": n_fixtures,
+        "positions": sorted(stages),
+        "per_condition": per_condition,
+        "flips": flips,
+        "position_effect": position_effect,
+        "group_adherence": group_adherence,
     }
 
 

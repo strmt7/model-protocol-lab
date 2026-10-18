@@ -219,6 +219,19 @@ def build_parser() -> argparse.ArgumentParser:
         "compute; the stage never fails the run.",
     )
     run.add_argument(
+        "--hierarchy",
+        action="store_true",
+        help="Instruction-hierarchy adherence probe: re-run every search "
+        "candidate on synthetic system-vs-user conflict fixtures (the "
+        "system instruction is delivered as a privilege-marked block "
+        "folded into the user turn, before and after the user "
+        "instruction) and re-apply the selection rule per position, "
+        "reporting per-candidate system/user adherence rates, "
+        "winner-vs-clean flips, and the documentation-derived "
+        "dedicated-frame vs folded family comparison. Roughly triples "
+        "search compute; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -463,6 +476,60 @@ def _backend_failure_message(message: str) -> str:
         "Operation failed. Check input paths, local model support, "
         "dependencies and output permissions."
     )
+
+
+def _run_hierarchy_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the instruction-hierarchy probe; never raises.
+
+    Re-runs every search candidate on the synthetic system-vs-user
+    conflict fixtures (both privilege-block positions) and stores the
+    ``hierarchy`` analysis payload on ``result``. Any failure degrades
+    to an "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import hierarchy_adherence, hierarchy_stage
+        from .hierarchy import (
+            CONFLICT_SPECS,
+            POSITIONS,
+            build_conflict_fixtures,
+            validate_conflict_specs,
+        )
+
+        specs = validate_conflict_specs(CONFLICT_SPECS)
+        stages: dict[str, Any] = {}
+        for position in POSITIONS:
+            fixtures, expectations = build_conflict_fixtures(specs, position=position)
+            stages[position] = hierarchy_stage(
+                backend,
+                formats,
+                fixtures,
+                expectations,
+                position=position,
+                boundary=boundary,
+                boundary_map=boundary_map,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        result["hierarchy"] = hierarchy_adherence(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(fmt.name for fmt in formats),
+            stages,
+        )
+    except Exception:  # noqa: BLE001 -- hierarchy must not fail the run
+        result["hierarchy"] = {
+            "available": False,
+            "detail": "hierarchy_unavailable",
+        }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1126,6 +1193,29 @@ def main(argv: list[str] | None = None) -> int:
                             "available": False,
                             "detail": "token_healing_unavailable",
                         }
+                # Instruction-hierarchy adherence probe (research wave-2
+                # idea 1): re-run every search candidate on synthetic
+                # system-vs-user conflict fixtures. The lab never sends
+                # system messages (core.Message is user/assistant only),
+                # so the system instruction is delivered as a
+                # privilege-marked block folded into the user turn, in
+                # two positions (before/after the user instruction);
+                # the selection rule is re-applied per position.
+                # Answers "which instruction does each template lead the
+                # model to follow, and does the winner change under
+                # conflict?" A failed position degrades to "unavailable"
+                # inside the analysis, never a phantom verdict, and never
+                # fails the run.
+                if args.hierarchy:
+                    _run_hierarchy_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each
                 # candidate's expected answer against the recorded search

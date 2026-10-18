@@ -71,6 +71,47 @@ class DemoBackend:
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class HierarchyDemoBackend(DemoBackend):
+    """Scripted instruction-following policy for the hierarchy exercise.
+
+    Parses the conflict prompt for the privileged-block answer and the
+    user-instruction answer, then: follows the privileged system
+    instruction when the block precedes the user instruction (primacy),
+    follows the user instruction when the block comes last (recency) --
+    except the no-bos variant, which always follows the user. This gives
+    the committed sample report genuine adherence variation across both
+    positions and candidates, exactly the signal the probe measures.
+    """
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        import re
+
+        from model_protocol_lab.hierarchy import PRIVILEGE_CLOSE, PRIVILEGE_OPEN
+
+        prompt = self.decode(input_ids)
+        block_start = prompt.find(PRIVILEGE_OPEN)
+        block_end = prompt.find(PRIVILEGE_CLOSE)
+        system_answer = user_answer = None
+        user_at = None
+        for match in re.finditer(r"[Rr]eply with exactly:\s*(\S+)", prompt):
+            if 0 <= block_start <= match.start() <= block_end:
+                system_answer = match.group(1)
+            else:
+                user_answer = match.group(1)
+                user_at = match.start()
+        if system_answer is None or user_answer is None or user_at is None:
+            return Generation((), "error", "unparseable")
+        rebel = not prompt.startswith("<|begin_of_text|>")
+        if rebel:
+            answer = user_answer
+        elif block_start < user_at:
+            answer = system_answer
+        else:
+            answer = user_answer
+        text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -328,6 +369,46 @@ def build_sample_report(output_dir: Path) -> dict:
         result["perturbation"] = {
             "available": False,
             "detail": "perturbation_unavailable",
+        }
+    # Instruction-hierarchy adherence probe: run the real hierarchy
+    # stage (both privilege-block positions) against the scripted policy
+    # backend, so the committed sample report exercises the hierarchy
+    # section with genuine adherence variation and position flips.
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import hierarchy_adherence, hierarchy_stage
+        from model_protocol_lab.hierarchy import (
+            CONFLICT_SPECS,
+            POSITIONS,
+            build_conflict_fixtures,
+            validate_conflict_specs,
+        )
+
+        _h_fmts = candidates("llama3", mutate=True)
+        _h_specs = validate_conflict_specs(CONFLICT_SPECS)
+        _h_stages = {}
+        for _position in POSITIONS:
+            _h_fixtures, _h_expectations = build_conflict_fixtures(_h_specs, position=_position)
+            _h_stages[_position] = hierarchy_stage(
+                HierarchyDemoBackend(),
+                _h_fmts,
+                _h_fixtures,
+                _h_expectations,
+                position=_position,
+                boundary=BOUNDARY,
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=20261012,
+            )
+        result["hierarchy"] = hierarchy_adherence(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _h_fmts),
+            _h_stages,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["hierarchy"] = {
+            "available": False,
+            "detail": "hierarchy_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

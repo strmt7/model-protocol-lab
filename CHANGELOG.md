@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 147 — instruction-hierarchy adherence probe, 2026-10-18)
+
+- `mpl run --hierarchy` (wave-2 research idea #1): re-evaluates every
+  search candidate on 8 synthetic system-vs-user conflict fixtures and
+  re-applies the conservative selection rule per privilege-block
+  position. The lab never sends system messages, so the system
+  instruction is delivered as a privilege-marked block folded into the
+  user turn, before (primacy) or after (recency) the conflicting user
+  instruction; adherence is exact string equality against the two
+  expected answers. New pure module `model_protocol_lab/hierarchy.py`
+  (fixture construction, `FAMILY_SYSTEM_TREATMENT` label map derived
+  only from the catalog's own documentation: 14 dedicated-frame / 3
+  folded / 12 unknown families), `experiments.hierarchy_stage` /
+  `hierarchy_adherence` (per-position verdicts, flips vs primary,
+  primacy-vs-recency position effect, documentation-derived group
+  means reported as correlation, not causation), an HTML
+  "Instruction-hierarchy adherence" section, and
+  `diffreports.diff_hierarchy` (`hierarchy_changed` /
+  `hierarchy_asymmetric` feed `identical`). The stage never fails the
+  run; roughly triples search compute.
+
 ### Added (cycle 146 — token-healing selection sensitivity, 2026-10-18)
 
 - `mpl run --token-healing` (wave-2 research idea #3): replays the whole

@@ -2251,6 +2251,129 @@
       }
     }
   },
+  "hierarchy": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "n_fixtures": 8,
+    "positions": [
+      "privilege_first",
+      "privilege_last"
+    ],
+    "per_condition": {
+      "privilege_first": {
+        "decision": "ambiguous",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "system_rate": 1.0,
+            "user_rate": 0.0,
+            "neither_rate": 0.0,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "system_rate": 1.0,
+            "user_rate": 0.0,
+            "neither_rate": 0.0,
+            "pass": true
+          },
+          "llama3/no-bos": {
+            "system_rate": 0.0,
+            "user_rate": 0.0,
+            "neither_rate": 1.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "system_rate": 1.0,
+            "user_rate": 0.0,
+            "neither_rate": 0.0,
+            "pass": true
+          },
+          "llama3/prefix-trim": {
+            "system_rate": 1.0,
+            "user_rate": 0.0,
+            "neither_rate": 0.0,
+            "pass": true
+          }
+        }
+      },
+      "privilege_last": {
+        "decision": "no_candidate",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "system_rate": 0.0,
+            "user_rate": 1.0,
+            "neither_rate": 0.0,
+            "pass": false
+          },
+          "llama3/toggle-bos": {
+            "system_rate": 0.0,
+            "user_rate": 1.0,
+            "neither_rate": 0.0,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "system_rate": 0.0,
+            "user_rate": 1.0,
+            "neither_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "system_rate": 0.0,
+            "user_rate": 1.0,
+            "neither_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "system_rate": 0.0,
+            "user_rate": 1.0,
+            "neither_rate": 0.0,
+            "pass": false
+          }
+        }
+      }
+    },
+    "flips": [
+      {
+        "position": "privilege_first",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "ambiguous",
+        "winner_from": "llama3",
+        "winner_to": null
+      },
+      {
+        "position": "privilege_last",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      }
+    ],
+    "position_effect": {
+      "winner_changed": true,
+      "mean_system_rate_delta": 0.8
+    },
+    "group_adherence": {
+      "dedicated": {
+        "n_candidates": 0,
+        "n_families": 0,
+        "mean_system_rate": null
+      },
+      "folded": {
+        "n_candidates": 0,
+        "n_families": 0,
+        "mean_system_rate": null
+      },
+      "unknown": {
+        "n_candidates": 5,
+        "n_families": 1,
+        "mean_system_rate": 0.4
+      }
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

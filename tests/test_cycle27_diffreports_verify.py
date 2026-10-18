@@ -556,6 +556,71 @@ def oracle_diff_reports(
     else:
         _o_hl_available = "neither"
     _o_hl_asymmetric = _o_hl_available not in ("both", "neither")
+
+    def _or_hy_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_hierarchy exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        positions = value.get("positions")
+        if (
+            type(positions) is not list
+            or not positions
+            or not all(type(p) is str for p in positions)
+        ):
+            return False
+        per_condition = value.get("per_condition")
+        if type(per_condition) is not dict or set(per_condition) != set(positions):
+            return False
+        for condition in per_condition.values():
+            if type(condition) is not dict:
+                return False
+            if type(condition.get("decision")) is not str:
+                return False
+            winner = condition.get("winner")
+            if winner is not None and type(winner) is not str:
+                return False
+            candidates = condition.get("per_candidate")
+            if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+                return False
+            for entry in candidates.values():
+                if entry is None:
+                    continue
+                if type(entry) is not dict:
+                    return False
+                for key in ("system_rate", "user_rate", "neither_rate"):
+                    rate = entry.get(key)
+                    if rate is not None and type(rate) not in (int, float):
+                        return False
+                if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                    return False
+        groups = value.get("group_adherence")
+        if type(groups) is not dict:
+            return False
+        for label, group in groups.items():
+            if type(label) is not str or type(group) is not dict:
+                return False
+            mean = group.get("mean_system_rate")
+            if mean is not None and type(mean) not in (int, float):
+                return False
+            if type(group.get("n_candidates")) is not int:
+                return False
+            if type(group.get("n_families")) is not int:
+                return False
+        return type(value.get("flips")) is list
+
+    _hy_old_ok = _or_hy_valid(old.get("hierarchy"))
+    _hy_new_ok = _or_hy_valid(new.get("hierarchy"))
+    if _hy_old_ok and _hy_new_ok:
+        _o_hy_available = "both"
+    elif _hy_old_ok:
+        _o_hy_available = "old"
+    elif _hy_new_ok:
+        _o_hy_available = "new"
+    else:
+        _o_hy_available = "neither"
+    _o_hy_asymmetric = _o_hy_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -571,6 +636,7 @@ def oracle_diff_reports(
         and not _o_ct_asymmetric
         and not _o_pb_asymmetric
         and not _o_hl_asymmetric
+        and not _o_hy_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -595,6 +661,8 @@ def oracle_diff_reports(
         "perturbation_asymmetric": _o_pb_asymmetric,
         "healing_changed": False,
         "healing_asymmetric": _o_hl_asymmetric,
+        "hierarchy_changed": False,
+        "hierarchy_asymmetric": _o_hy_asymmetric,
         "identical": identical,
     }
     return {
@@ -611,6 +679,7 @@ def oracle_diff_reports(
         "contamination": {"available": _o_ct_available, "changed": False},
         "perturbation": {"available": _o_pb_available, "changed": False},
         "token_healing": {"available": _o_hl_available, "changed": False},
+        "hierarchy": {"available": _o_hy_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

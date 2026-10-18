@@ -3606,6 +3606,228 @@ def _token_healing_section(result: dict[str, Any]) -> str:
     )
 
 
+def _hierarchy_section(result: dict[str, Any]) -> str:
+    """Instruction-hierarchy adherence: which instruction wins conflicts?
+
+    Every search candidate re-evaluated on synthetic system-vs-user
+    conflict fixtures (the system instruction is delivered as a
+    privilege-marked block folded into the user turn, before and after
+    the user instruction); the selection rule re-applied per position.
+    Reports per-candidate system/user/neither adherence rates, the
+    winner-vs-clean flips, the primacy-vs-recency position effect, and
+    the documentation-derived dedicated-frame vs folded family
+    comparison. Renders nothing when the hierarchy probe did not run.
+    """
+    hierarchy: Any = result.get("hierarchy")
+    if type(hierarchy) is not dict or not hierarchy.get("available"):
+        return ""
+    per_condition = hierarchy.get("per_condition")
+    if type(per_condition) is not dict:
+        return ""
+    primary_winner = hierarchy.get("primary_winner")
+    primary_decision = hierarchy.get("primary_decision")
+    n_fixtures = hierarchy.get("n_fixtures")
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    verdict_lines = []
+    for key in sorted(per_condition, key=str):
+        position = str(key)
+        condition = per_condition[key]
+        if type(condition) is not dict:
+            continue
+        decision = condition.get("decision")
+        winner = condition.get("winner")
+        line = (
+            escape(str(position))
+            + ": <strong>"
+            + escape(_name(decision))
+            + " / "
+            + escape(_name(winner))
+            + "</strong> vs primary "
+            + escape(_name(primary_decision))
+            + " / "
+            + escape(_name(primary_winner))
+        )
+        if (decision, winner) != (primary_decision, primary_winner):
+            line += ' <span class="badge fail">differs</span>'
+        else:
+            line += ' <span class="badge pass">same</span>'
+        verdict_lines.append("<p>" + line + "</p>")
+
+    cand_rows = []
+    for key in sorted(per_condition, key=str):
+        position = str(key)
+        condition = per_condition[key]
+        if type(condition) is not dict:
+            continue
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict:
+            continue
+        for ckey in sorted(candidates, key=str):
+            cand = str(ckey)
+            entry = candidates[ckey]
+            if type(entry) is not dict:
+                continue
+            passed = entry.get("pass")
+            badge = (
+                '<span class="badge pass">pass</span>'
+                if passed is True
+                else '<span class="badge fail">fail</span>'
+                if passed is False
+                else '<span class="badge">n/a</span>'
+            )
+            cand_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td><span class="mono">'
+                + escape(str(position))
+                + "</span></td><td>"
+                + escape(_rate(entry.get("system_rate")))
+                + "</td><td>"
+                + escape(_rate(entry.get("user_rate")))
+                + "</td><td>"
+                + escape(_rate(entry.get("neither_rate")))
+                + "</td><td>"
+                + badge
+                + "</td></tr>"
+            )
+
+    flips = hierarchy.get("flips")
+    flip_lines = []
+    if type(flips) is list:
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            flip_lines.append(
+                '<li><span class="mono">'
+                + escape(str(entry.get("position")))
+                + "</span>: "
+                + escape(_name(entry.get("decision_from")))
+                + " / "
+                + escape(_name(entry.get("winner_from")))
+                + " &rarr; "
+                + escape(_name(entry.get("decision_to")))
+                + " / "
+                + escape(_name(entry.get("winner_to")))
+                + "</li>"
+            )
+
+    position_effect = hierarchy.get("position_effect")
+    effect_line = ""
+    if type(position_effect) is dict:
+        delta = position_effect.get("mean_system_rate_delta")
+        delta_text = _rate(delta) if delta is not None else "n/a"
+        changed = position_effect.get("winner_changed") is True
+        effect_line = (
+            "<p>Primacy vs recency: mean system-adherence delta "
+            "(privilege-first minus privilege-last) <strong>"
+            + escape(delta_text)
+            + "</strong>; the per-position winner "
+            + ("<strong>differs</strong>." if changed else "is the same.")
+            + "</p>"
+        )
+
+    group_adherence = hierarchy.get("group_adherence")
+    group_rows = []
+
+    def _as_rate(value: Any) -> float | None:
+        # Strict: bools are excluded (type() check, not isinstance()).
+        return float(value) if type(value) in (int, float) else None
+
+    ded_rate: float | None = None
+    fold_rate: float | None = None
+    if type(group_adherence) is dict:
+        for label in ("dedicated", "folded", "unknown"):
+            group = group_adherence.get(label)
+            if type(group) is not dict:
+                continue
+            rate = _as_rate(group.get("mean_system_rate"))
+            if label == "dedicated":
+                ded_rate = rate
+            elif label == "folded":
+                fold_rate = rate
+            group_rows.append(
+                "<tr><td>"
+                + escape(str(label))
+                + "</td><td>"
+                + escape(str(group.get("n_candidates")))
+                + "</td><td>"
+                + escape(str(group.get("n_families")))
+                + "</td><td>"
+                + escape(_rate(group.get("mean_system_rate")))
+                + "</td></tr>"
+            )
+    group_note = ""
+    if ded_rate is not None and fold_rate is not None:
+        relation = (
+            "higher than"
+            if ded_rate > fold_rate
+            else "lower than"
+            if ded_rate < fold_rate
+            else "equal to"
+        )
+        group_note = (
+            "<p>Dedicated-frame families average "
+            + escape(_rate(ded_rate))
+            + " system adherence vs "
+            + escape(_rate(fold_rate))
+            + " for folded families ("
+            + relation
+            + " -- a correlation readout over "
+            "catalog-documented labels, not a causal claim).</p>"
+        )
+
+    n_text = f" ({n_fixtures} conflict fixtures per position)" if type(n_fixtures) is int else ""
+    return (
+        '<section class="card"><h2>Instruction-hierarchy adherence</h2>'
+        "<p>Every search candidate re-evaluated on synthetic system-vs-user "
+        "conflict fixtures: the system instruction is delivered as a "
+        "privilege-marked block folded into the user turn, either before "
+        "(primacy) or after (recency) the conflicting user instruction; the "
+        "selection rule is re-applied per position. System adherence is the "
+        "fraction of fixtures answered with the system instruction's exact "
+        "reply; user adherence the fraction answered with the user's."
+        + escape(n_text)
+        + "</p>"
+        + "".join(verdict_lines)
+        + effect_line
+        + (
+            "<ul>" + "".join(flip_lines) + "</ul>"
+            if flip_lines
+            else "<p>No winner flips against the primary run.</p>"
+        )
+        + (
+            '<div class="table-wrap"><table><caption>Per-candidate adherence '
+            "by position.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Position</th><th scope="col">System</th>'
+            '<th scope="col">User</th><th scope="col">Neither</th>'
+            '<th scope="col">Pass</th>'
+            "</tr></thead><tbody>" + "".join(cand_rows) + "</tbody></table></div>"
+            if cand_rows
+            else ""
+        )
+        + (
+            '<div class="table-wrap"><table><caption>System adherence by '
+            "catalog-documented system treatment (correlation only).</caption>"
+            '<thead><tr><th scope="col">Treatment</th>'
+            '<th scope="col">Candidates</th><th scope="col">Families</th>'
+            '<th scope="col">Mean system rate</th>'
+            "</tr></thead><tbody>" + "".join(group_rows) + "</tbody></table></div>" + group_note
+            if group_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3718,6 +3940,7 @@ def render_html(result: dict[str, Any]) -> str:
     transfer_html = _transfer_section(result)
     perturbation_html = _perturbation_section(result)
     healing_html = _token_healing_section(result)
+    hierarchy_html = _hierarchy_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3750,6 +3973,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "token-healing",
                 "Token-healing selection sensitivity",
                 healing_html,
+            ),
+            (
+                "instruction-hierarchy",
+                "Instruction-hierarchy adherence",
+                hierarchy_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
@@ -3795,6 +4023,7 @@ def render_html(result: dict[str, Any]) -> str:
         + transfer_html
         + perturbation_html
         + healing_html
+        + hierarchy_html
         + sweep_html
         + logprob_html
         + held_out_html
