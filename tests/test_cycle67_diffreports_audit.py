@@ -239,6 +239,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "selection_robustness": {"available": "neither", "changed": False},
         "transfer": {"available": "neither", "changed": False},
         "contamination": {"available": "neither", "changed": False},
+        "perturbation": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -267,6 +268,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "transfer_asymmetric": False,
             "contamination_changed": False,
             "contamination_asymmetric": False,
+            "perturbation_changed": False,
+            "perturbation_asymmetric": False,
             "identical": True,
         },
     }
@@ -628,6 +631,20 @@ def _o_contamination_valid(value: Any) -> bool:
     )
 
 
+def _o_perturbation_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    pv = value.get("per_variant") if type(value) is dict else None
+    st = value.get("stability") if type(value) is dict else None
+    return (
+        type(value) is dict
+        and value.get("available") is True
+        and type(pv) is dict
+        and all(type(k) is str for k in pv)
+        and all(type(v) is dict for v in pv.values())
+        and type(st) is dict
+    )
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -693,6 +710,86 @@ def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     ]
     diff["tier_changes"] = tier_changes
     changed = bool(worst_changed or pairs_added or pairs_removed or tier_changes)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_perturbation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle perturbation section: stability, variant, and set drift."""
+    old_ok = _o_perturbation_valid(old)
+    new_ok = _o_perturbation_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _triplet(stability: Any) -> tuple[Any, Any, Any]:
+        if type(stability) is not dict:
+            return (None, None, None)
+        return (
+            stability.get("winner_retained"),
+            stability.get("decision_retained"),
+            stability.get("n_evaluable"),
+        )
+
+    old_t, new_t = _triplet(old.get("stability")), _triplet(new.get("stability"))
+    stability_changed = old_t != new_t
+    diff["stability"] = {
+        "old": {
+            "winner_retained": old_t[0],
+            "decision_retained": old_t[1],
+            "n_evaluable": old_t[2],
+        },
+        "new": {
+            "winner_retained": new_t[0],
+            "decision_retained": new_t[1],
+            "n_evaluable": new_t[2],
+        },
+        "changed": stability_changed,
+    }
+    old_pv = old.get("per_variant") or {}
+    new_pv = new.get("per_variant") or {}
+    old_ids, new_ids = sorted(old_pv), sorted(new_pv)
+    variants_added = [v for v in new_ids if v not in old_pv]
+    variants_removed = [v for v in old_ids if v not in new_pv]
+    variant_drift = [
+        {
+            "variant": vid,
+            "operator": (new_pv.get(vid) or {}).get("operator"),
+            "old_decision": (old_pv.get(vid) or {}).get("decision"),
+            "old_winner": (old_pv.get(vid) or {}).get("winner"),
+            "new_decision": (new_pv.get(vid) or {}).get("decision"),
+            "new_winner": (new_pv.get(vid) or {}).get("winner"),
+        }
+        for vid in sorted(set(old_ids) & set(new_ids))
+        if (
+            ((old_pv.get(vid) or {}).get("decision"), (old_pv.get(vid) or {}).get("winner"))
+            != (
+                (new_pv.get(vid) or {}).get("decision"),
+                (new_pv.get(vid) or {}).get("winner"),
+            )
+        )
+    ]
+    operators_changed = old.get("operators") != new.get("operators")
+    diff["variant_drift"] = variant_drift
+    diff["variants_added"] = variants_added
+    diff["variants_removed"] = variants_removed
+    diff["operators_changed"] = operators_changed
+    changed = bool(
+        stability_changed
+        or variant_drift
+        or variants_added
+        or variants_removed
+        or operators_changed
+    )
     diff["changed"] = changed
     return diff, changed, asymmetric
 
@@ -882,6 +979,9 @@ def _oracle_diff(
     o_ct, o_ct_changed, o_ct_asymmetric = _o_contamination(
         old.get("contamination"), new.get("contamination")
     )
+    o_pb, o_pb_changed, o_pb_asymmetric = _o_perturbation(
+        old.get("perturbation"), new.get("perturbation")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -901,6 +1001,8 @@ def _oracle_diff(
         and not o_tr_asymmetric
         and not o_ct_changed
         and not o_ct_asymmetric
+        and not o_pb_changed
+        and not o_pb_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -914,6 +1016,7 @@ def _oracle_diff(
         "selection_robustness": o_sr,
         "transfer": o_tr,
         "contamination": o_ct,
+        "perturbation": o_pb,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -938,6 +1041,8 @@ def _oracle_diff(
             "transfer_asymmetric": o_tr_asymmetric,
             "contamination_changed": o_ct_changed,
             "contamination_asymmetric": o_ct_asymmetric,
+            "perturbation_changed": o_pb_changed,
+            "perturbation_asymmetric": o_pb_asymmetric,
             "identical": identical,
         },
     }
@@ -1073,6 +1178,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "transfer_asymmetric": False,
                 "contamination_changed": False,
                 "contamination_asymmetric": False,
+                "perturbation_changed": False,
+                "perturbation_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2082,6 +2189,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not transfer_asymmetric\n"
             '        and not contamination_diff["changed"]\n'
             "        and not contamination_asymmetric\n"
+            '        and not perturbation_diff["changed"]\n'
+            "        and not perturbation_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -2102,6 +2211,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or transfer_asymmetric\n"
             '        or contamination_diff["changed"]\n'
             "        or contamination_asymmetric\n"
+            '        or perturbation_diff["changed"]\n'
+            "        or perturbation_asymmetric\n"
             "    )\n",
             scenario,
         )

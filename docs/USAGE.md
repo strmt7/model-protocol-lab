@@ -567,6 +567,48 @@ skipped). The report renders a "Cross-checkpoint transfer" section;
 the decision banner notes the verdict. Compute multiplies by
 (1 + #checkpoints); the transfer stage never fails the run.
 
+### 8.15 Fixture-perturbation robustness (`perturbation`)
+
+`run --perturb N` (1-8) answers "does the winner survive fixture
+phrasing perturbations, or did it win on phrasing luck?" After the
+primary run, every search candidate is re-evaluated against the
+primary checkpoint on N deterministically perturbed fixture variants
+(search split only; same boundary, same `--max-new-tokens`; greedy,
+exact), and the conservative selection rule is re-applied per variant
+(`experiments.perturbation_stage` + pure
+`experiments.perturbation_robustness`).
+
+The perturbation operators (`model_protocol_lab.perturbation`, pure
+and seeded -- no model needed for the transforms themselves) rewrite
+fixture *message content* only: `typo` (seeded character
+substitutions), `case_flip`, `whitespace` (collapse / double /
+newline-split), `unicode_variant` (ASCII alphanumerics to their
+NFKC-foldable fullwidth forms -- nearly identical to a human reader,
+different tokens to most tokenizers), and `punctuation_strip`. Fixture
+ids, groups, and expected answers are never touched, so per-variant
+verdicts stay comparable to the primary run; operators are assigned
+round-robin from the run seed, so the whole experiment reproduces
+exactly.
+
+`results.json` carries `perturbation` with the per-variant
+(decision, winner), the `flips` (variants whose verdict differs from
+the primary run), the `stability` summary (how many evaluable
+variants retain the primary winner/decision), and a per-operator
+breakdown with the mean fixture-change rate -- so you can see *which*
+phrasing noise the winner is fragile to. A variant where no candidate
+could be evaluated is reported as `unavailable`, never as a phantom
+verdict. The report renders a "Fixture-perturbation robustness"
+section with the stability line, the per-operator table, and the
+per-variant verdict table. `diff-reports` compares the stability
+triplet, the per-variant verdicts, and the variant set between runs
+(`diff_perturbation`; `perturbation_changed` /
+`perturbation_asymmetric` feed `identical`) -- the phrasing-fragility
+regression signal after a fixture or checkpoint update. Compute
+multiplies by (1 + N); the stage never fails the run. Together with
+stop-semantics robustness (§8.13) and cross-checkpoint transfer
+(§8.14) this completes the winner-reliability trilogy: serving stack,
+checkpoint fleet, and fixture phrasing.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

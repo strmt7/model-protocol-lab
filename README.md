@@ -13,7 +13,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4634 tests, 96% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4683 tests, 96% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -98,6 +98,7 @@ raw prompts or generations.
 - Template firewall: the checkpoint's Jinja `chat_template` is statically scanned for RCE primitives (dunder access, `|attr`, dangerous globals, unbounded `range()`) before any render; denied templates are never rendered (fail closed).
 - Selection robustness under stop semantics: the conservative selection rule re-applied to every search candidate under each emulated stop semantic (HF, vLLM, EOS) — does the winner survive your serving stack? — with flip callouts and `diff-reports` migration analysis.
 - Cross-checkpoint transfer (`run --transfer-model`): every search candidate re-evaluated against up to 4 additional local checkpoints (search split only); the selection rule re-applied per checkpoint to report whether the primary winner transfers — the fleet-portability question.
+- Fixture-perturbation robustness (`run --perturb N`): every search candidate re-evaluated on N deterministically perturbed fixture variants (typos, case flips, whitespace, Unicode variants, punctuation stripping; search split only); the selection rule re-applied per variant to report whether the primary winner survives phrasing noise — the phrasing-luck question. With stop-semantics robustness and cross-checkpoint transfer this completes the winner-reliability trilogy.
 - Token-budget robustness frontier: the search decision recomputed at every smaller token budget, post-hoc and exact — plus a deterministic inline-SVG frontier chart with a decision ribbon and a per-budget selection-margin trajectory chart.
 - Cross-tokenizer boundary portability check (`doctor --reference-model`).
 - Prompt-boundary sensitivity sweep (`run --sensitivity-sweep`): measures whether truncating the prompt mid-token flips the selection.

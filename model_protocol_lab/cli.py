@@ -195,6 +195,18 @@ def build_parser() -> argparse.ArgumentParser:
         "fingerprint.",
     )
     run.add_argument(
+        "--perturb",
+        type=int,
+        default=0,
+        help="Fixture-perturbation robustness experiment: re-run every "
+        "search candidate on N deterministically perturbed fixture "
+        "variants (1-8; typos, case flips, whitespace, Unicode variants, "
+        "punctuation stripping) and re-apply the selection rule per "
+        "variant, reporting whether the primary winner survives "
+        "phrasing noise. Multiplies compute by (1 + N); the stage never "
+        "fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -968,6 +980,45 @@ def main(argv: list[str] | None = None) -> int:
                             "available": False,
                             "detail": "transfer_unavailable",
                         }
+                    # Fixture-perturbation robustness experiment (cycle 144):
+                    # re-evaluate every search candidate against the primary
+                    # checkpoint on N deterministically perturbed fixture
+                    # variants (search split only), then re-apply the
+                    # selection rule per variant. Answers "does the winner
+                    # survive fixture phrasing perturbations, or did it win
+                    # on phrasing luck?" A failed variant degrades to
+                    # "unavailable", never a phantom verdict, and never
+                    # fails the run.
+                    if args.perturb:
+                        try:
+                            from .experiments import perturbation_robustness, perturbation_stage
+                            from .perturbation import PERTURBATION_OPERATORS
+
+                            _perturb_n = args.perturb
+                            if type(_perturb_n) is not int or not 1 <= _perturb_n <= 8:
+                                raise ValueError("--perturb must be an integer between 1 and 8")
+                            _perturb_stage = perturbation_stage(
+                                backend,
+                                formats,
+                                tuple(split.search),
+                                n_variants=_perturb_n,
+                                operators=PERTURBATION_OPERATORS,
+                                seed=args.seed,
+                                boundary=args.boundary_ids,
+                                boundary_map=boundary_map,
+                                max_new_tokens=args.max_new_tokens,
+                            )
+                            result["perturbation"] = perturbation_robustness(
+                                result.get("selected_candidate"),
+                                result["decision"],
+                                tuple(fmt.name for fmt in formats),
+                                _perturb_stage,
+                            )
+                        except Exception:  # noqa: BLE001 -- perturbation must not fail the run
+                            result["perturbation"] = {
+                                "available": False,
+                                "detail": "perturbation_unavailable",
+                            }
                 # Held-out budget floor: post-hoc, exact, no model calls.
                 # Only meaningful when the held-out stage completed; it
                 # degrades to an "unavailable" marker instead of failing.

@@ -502,6 +502,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    perturbation_diff = diff_perturbation(old.get("perturbation"), new.get("perturbation"))
+    perturbation_asymmetric = perturbation_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -521,6 +526,8 @@ def diff_reports(
         and not transfer_asymmetric
         and not contamination_diff["changed"]
         and not contamination_asymmetric
+        and not perturbation_diff["changed"]
+        and not perturbation_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -541,6 +548,8 @@ def diff_reports(
         "transfer_asymmetric": transfer_asymmetric,
         "contamination_changed": contamination_diff["changed"],
         "contamination_asymmetric": contamination_asymmetric,
+        "perturbation_changed": perturbation_diff["changed"],
+        "perturbation_asymmetric": perturbation_asymmetric,
         "identical": identical,
     }
     return {
@@ -555,6 +564,7 @@ def diff_reports(
         "selection_robustness": robustness_diff,
         "transfer": transfer_diff,
         "contamination": contamination_diff,
+        "perturbation": perturbation_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1157,6 +1167,114 @@ def diff_transfer(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_perturbation(payload: Any) -> bool:
+    """Structural check for a ``perturbation`` payload."""
+    per_variant = payload.get("per_variant") if type(payload) is dict else None
+    stability = payload.get("stability") if type(payload) is dict else None
+    return (
+        type(payload) is dict
+        and payload.get("available") is True
+        and type(per_variant) is dict
+        and all(type(k) is str for k in per_variant)
+        and all(type(v) is dict for v in per_variant.values())
+        and type(stability) is dict
+    )
+
+
+def _stability_triplet(stability: Any) -> tuple[Any, Any, Any]:
+    """(winner_retained, decision_retained, n_evaluable) for drift comparison."""
+    if type(stability) is not dict:
+        return (None, None, None)
+    return (
+        stability.get("winner_retained"),
+        stability.get("decision_retained"),
+        stability.get("n_evaluable"),
+    )
+
+
+def diff_perturbation(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``perturbation`` payloads; deterministic.
+
+    Answers "did the fixture-perturbation robustness story change
+    between runs?": the stability triplet (variants retaining the
+    primary winner / decision), the per-variant (decision, winner)
+    verdicts, and the variant set. A changed stability pattern after
+    a fixture or checkpoint update is the phrasing-fragility
+    regression signal. Variants present on only one side are reported
+    as added/removed; differing operator sets are flagged. A side
+    without a recorded perturbation experiment is reported plainly.
+    No model, no network.
+    """
+    old_ok = _valid_perturbation(old)
+    new_ok = _valid_perturbation(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_stability = _stability_triplet(old.get("stability"))
+    new_stability = _stability_triplet(new.get("stability"))
+    stability_changed = old_stability != new_stability
+    result["stability"] = {
+        "old": {
+            "winner_retained": old_stability[0],
+            "decision_retained": old_stability[1],
+            "n_evaluable": old_stability[2],
+        },
+        "new": {
+            "winner_retained": new_stability[0],
+            "decision_retained": new_stability[1],
+            "n_evaluable": new_stability[2],
+        },
+        "changed": stability_changed,
+    }
+    old_pv = old.get("per_variant") or {}
+    new_pv = new.get("per_variant") or {}
+    old_ids = sorted(old_pv)
+    new_ids = sorted(new_pv)
+    variants_added = [v for v in new_ids if v not in old_pv]
+    variants_removed = [v for v in old_ids if v not in new_pv]
+    variant_drift: list[dict[str, Any]] = []
+    for vid in sorted(set(old_ids) & set(new_ids)):
+        old_v = old_pv.get(vid) or {}
+        new_v = new_pv.get(vid) or {}
+        if (old_v.get("decision"), old_v.get("winner")) != (
+            new_v.get("decision"),
+            new_v.get("winner"),
+        ):
+            variant_drift.append(
+                {
+                    "variant": vid,
+                    "operator": new_v.get("operator"),
+                    "old_decision": old_v.get("decision"),
+                    "old_winner": old_v.get("winner"),
+                    "new_decision": new_v.get("decision"),
+                    "new_winner": new_v.get("winner"),
+                }
+            )
+    old_operators = old.get("operators")
+    new_operators = new.get("operators")
+    operators_changed = old_operators != new_operators
+    result["variant_drift"] = variant_drift
+    result["variants_added"] = variants_added
+    result["variants_removed"] = variants_removed
+    result["operators_changed"] = operators_changed
+    result["changed"] = bool(
+        stability_changed
+        or variant_drift
+        or variants_added
+        or variants_removed
+        or operators_changed
+    )
+    return result
+
+
 def _render_contamination_summary(
     contamination_diff: dict[str, Any] | None,
 ) -> list[str]:
@@ -1255,6 +1373,58 @@ def _render_transfer_summary(transfer_diff: dict[str, Any] | None) -> list[str]:
         lines.append(f"Transfer checkpoints added: {', '.join(_display_id(c) for c in added)}")
     if removed:
         lines.append(f"Transfer checkpoints removed: {', '.join(_display_id(c) for c in removed)}")
+    return lines
+
+
+def _render_perturbation_summary(perturbation_diff: dict[str, Any] | None) -> list[str]:
+    """Perturbation comparison lines for the stderr summary."""
+    if type(perturbation_diff) is not dict:
+        return []
+    available = perturbation_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Perturbation comparison unavailable: "
+            f"{missing} run did not record the perturbation experiment."
+        ]
+    lines: list[str] = []
+    stability = perturbation_diff.get("stability") or {}
+    if stability.get("changed"):
+        old = stability.get("old") or {}
+        new = stability.get("new") or {}
+
+        def _count(value: Any) -> str:
+            # Counts are ints (control-char-free); None means "not
+            # applicable" (e.g. no primary winner to retain).
+            return "(n/a)" if value is None else str(value)
+
+        lines.append(
+            "Perturbation stability: "
+            f"{_count(old.get('winner_retained'))}/{_count(old.get('n_evaluable'))} -> "
+            f"{_count(new.get('winner_retained'))}/{_count(new.get('n_evaluable'))} "
+            "variants retain the winner"
+        )
+    drift = perturbation_diff.get("variant_drift") or []
+    if drift:
+        lines.append(f"Perturbation variant drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['variant'])} ({_display_id(entry.get('operator'))}): "
+                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
+                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    added = perturbation_diff.get("variants_added") or []
+    removed = perturbation_diff.get("variants_removed") or []
+    if added:
+        lines.append(f"Perturbation variants added: {', '.join(_display_id(v) for v in added)}")
+    if removed:
+        lines.append(f"Perturbation variants removed: {', '.join(_display_id(v) for v in removed)}")
+    if perturbation_diff.get("operators_changed"):
+        lines.append("Perturbation operator set changed between runs.")
     return lines
 
 
@@ -1493,6 +1663,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_robustness_summary(diff.get("selection_robustness")))
     lines.extend(_render_transfer_summary(diff.get("transfer")))
     lines.extend(_render_contamination_summary(diff.get("contamination")))
+    lines.extend(_render_perturbation_summary(diff.get("perturbation")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
@@ -1528,6 +1699,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("token-budget frontier")
         if diff["held_out_floor"]["available"] == "both":
             axes.append("held-out budget floor")
+        if diff["perturbation"]["available"] == "both":
+            axes.append("fixture-perturbation robustness")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."
