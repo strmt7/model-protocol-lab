@@ -318,6 +318,16 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         diff = diffreports.diff_selection_robustness(None, None)
         self.assertEqual(diff["available"], "neither")
 
+    def test_mixed_key_types_fail_closed(self):
+        # Hostile results.json with non-string semantic keys must not
+        # crash the comparator; the malformed side degrades to asymmetric.
+        good = _analyze()
+        hostile = _analyze()
+        hostile["per_semantic"][1] = {"decision": "selected", "winner": "alpha"}
+        diff = diffreports.diff_selection_robustness(good, hostile)
+        self.assertEqual(diff["available"], "old")
+        self.assertFalse(diff["changed"])
+
     def test_summary_feeds_identical(self):
         old_report = {"decision": "ambiguous", "selection_robustness": _analyze()}
         new_report = {"decision": "ambiguous", "selection_robustness": _analyze()}

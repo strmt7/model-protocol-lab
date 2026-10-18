@@ -899,10 +899,12 @@ def diff_boundary_audit(old: Any, new: Any) -> dict[str, Any]:
 
 def _valid_selection_robustness(payload: Any) -> bool:
     """Structural check for a ``selection_robustness`` payload."""
+    per_semantic = payload.get("per_semantic") if type(payload) is dict else None
     return (
         type(payload) is dict
         and payload.get("available") is True
-        and type(payload.get("per_semantic")) is dict
+        and type(per_semantic) is dict
+        and all(type(k) is str for k in per_semantic)
         and type(payload.get("flips")) is list
     )
 
@@ -960,11 +962,16 @@ def diff_selection_robustness(old: Any, new: Any) -> dict[str, Any]:
 
 def _valid_transfer(payload: Any) -> bool:
     """Structural check for a ``transfer`` payload."""
+    per_checkpoint = payload.get("per_checkpoint") if type(payload) is dict else None
+    matrix = payload.get("matrix") if type(payload) is dict else None
     return (
         type(payload) is dict
         and payload.get("available") is True
-        and type(payload.get("per_checkpoint")) is dict
-        and type(payload.get("matrix")) is dict
+        and type(per_checkpoint) is dict
+        and all(type(k) is str for k in per_checkpoint)
+        and type(matrix) is dict
+        and all(type(k) is str for k in matrix)
+        and all(type(v) is dict and all(type(k) is str for k in v) for v in matrix.values())
     )
 
 

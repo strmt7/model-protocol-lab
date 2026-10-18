@@ -435,10 +435,12 @@ def oracle_diff_reports(
     _o_ba_asymmetric = _o_ba_available not in ("both", "neither")
 
     def _or_sr_valid(value: Any) -> bool:
+        ps = value.get("per_semantic") if type(value) is dict else None
         return (
             type(value) is dict
             and value.get("available") is True
-            and type(value.get("per_semantic")) is dict
+            and type(ps) is dict
+            and all(type(k) is str for k in ps)
             and type(value.get("flips")) is list
         )
 
@@ -455,11 +457,16 @@ def oracle_diff_reports(
     _o_sr_asymmetric = _o_sr_available not in ("both", "neither")
 
     def _or_tr_valid(value: Any) -> bool:
+        pc = value.get("per_checkpoint") if type(value) is dict else None
+        mx = value.get("matrix") if type(value) is dict else None
         return (
             type(value) is dict
             and value.get("available") is True
-            and type(value.get("per_checkpoint")) is dict
-            and type(value.get("matrix")) is dict
+            and type(pc) is dict
+            and all(type(k) is str for k in pc)
+            and type(mx) is dict
+            and all(type(k) is str for k in mx)
+            and all(type(v) is dict and all(type(k) is str for k in v) for v in mx.values())
         )
 
     _tr_old_ok = _or_tr_valid(old.get("transfer"))

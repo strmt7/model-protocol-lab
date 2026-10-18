@@ -461,6 +461,7 @@ def transfer_portability(
         or not all(type(c) is str and c for c in candidates)
         or len(set(candidates)) != len(candidates)
         or type(transfer) is not dict
+        or not all(type(k) is str and k for k in transfer)
     ):
         return {"available": False, "detail": "invalid_candidates_or_transfer"}
     if primary_winner is not None and (
