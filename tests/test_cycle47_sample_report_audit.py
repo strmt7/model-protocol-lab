@@ -75,6 +75,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "hierarchy",
     "prefill",
     "synthhistory",
+    "batch_invariance",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

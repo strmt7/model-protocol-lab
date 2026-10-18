@@ -257,6 +257,17 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--batch-invariance",
+        action="store_true",
+        help="Batch-invariance audit: re-run every search fixture's exact "
+        "prompt token sequence through the backend's batch path (when one "
+        "exists) and compare solo vs batched greedy continuation ids "
+        "token-for-token, reporting the divergence rate and first-"
+        "divergence positions. Backends without a batch path record "
+        "batch_unsupported instead of failing; the stage never fails "
+        "the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -651,6 +662,65 @@ def _run_synthhistory_probe(
         result["synthhistory"] = {
             "available": False,
             "detail": "synthhistory_unavailable",
+        }
+
+
+def _encode_probe_prompt(backend: Any, reference: Any, case: Any) -> tuple[int, ...] | None:
+    """Encode one probe fixture's prompt; None when the fixture degrades.
+
+    A fixture that cannot be rendered or encoded is skipped by the
+    batch-invariance probe instead of failing the run.
+    """
+    try:
+        encoded: tuple[int, ...] | None = backend.encode(reference.render(case.messages))
+    except Exception:  # noqa: BLE001 -- one fixture degrades, not the probe
+        return None
+    return encoded
+
+
+def _run_batch_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the batch-invariance audit; never raises.
+
+    Encodes every search fixture with the first search candidate's
+    rendering (the exact token sequences the lab actually sends) and
+    runs :func:`experiments.batch_stage`: solo vs batched greedy
+    decoding compared token-for-token. A backend without a batch path
+    records ``batch_unsupported``; any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import batch_stage
+
+        reference = formats[0]
+        prompts: dict[str, tuple[int, ...]] = {}
+        for case in cases:
+            encoded = _encode_probe_prompt(backend, reference, case)
+            if encoded is not None:
+                prompts[case.id] = encoded
+        if not prompts:
+            result["batch_invariance"] = {
+                "available": False,
+                "detail": "no_prompts",
+            }
+            return
+        result["batch_invariance"] = batch_stage(
+            backend,
+            prompts,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+    except Exception:  # noqa: BLE001 -- batch-invariance must not fail the run
+        result["batch_invariance"] = {
+            "available": False,
+            "detail": "batch_unavailable",
         }
 
 
@@ -1391,6 +1461,24 @@ def main(argv: list[str] | None = None) -> int:
                         tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Batch-invariance audit (opt-in: one solo generation per
+                # search fixture plus one batched call when the backend
+                # exposes a batch path). Re-runs every search fixture's
+                # exact prompt token sequence solo vs co-batched and
+                # compares continuation ids token-for-token -- the audit
+                # of the lab's "exact token sequences" invariant against
+                # batch-composition nondeterminism. A backend without a
+                # batch path records batch_unsupported; the probe never
+                # fails the run.
+                if args.batch_invariance:
+                    _run_batch_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
                     )

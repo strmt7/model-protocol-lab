@@ -827,6 +827,64 @@ def oracle_diff_reports(
     else:
         _o_sh_available = "neither"
     _o_sh_asymmetric = _o_sh_available not in ("both", "neither")
+
+    def _or_bi_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_batchinv exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        for key in ("n_prompts", "n_evaluable", "n_failed", "n_diverged"):
+            if type(value.get(key)) is not int or value[key] < 0:
+                return False
+        if value["n_evaluable"] + value["n_failed"] != value["n_prompts"]:
+            return False
+        if value["n_diverged"] > value["n_evaluable"]:
+            return False
+        rate = value.get("divergence_rate")
+        if value["n_evaluable"]:
+            if type(rate) not in (int, float):
+                return False
+        elif rate is not None:
+            return False
+        if value.get("verdict") not in (
+            "batch_invariant",
+            "batch_variant",
+            "unavailable",
+        ):
+            return False
+        per_prompt = value.get("per_prompt")
+        if type(per_prompt) is not dict or not all(type(k) is str for k in per_prompt):
+            return False
+        for entry in per_prompt.values():
+            if type(entry) is not dict:
+                return False
+            diverged = entry.get("diverged")
+            if diverged is not None and type(diverged) is not bool:
+                return False
+            first = entry.get("first_divergence")
+            if first is not None and (type(first) is not int or first < 0):
+                return False
+            for length_key in ("solo_len", "batched_len"):
+                length = entry.get(length_key)
+                if length is not None and (type(length) is not int or length < 0):
+                    return False
+            error = entry.get("error")
+            if error is not None and type(error) is not str:
+                return False
+        return True
+
+    _bi_old_ok = _or_bi_valid(old.get("batch_invariance"))
+    _bi_new_ok = _or_bi_valid(new.get("batch_invariance"))
+    if _bi_old_ok and _bi_new_ok:
+        _o_bi_available = "both"
+    elif _bi_old_ok:
+        _o_bi_available = "old"
+    elif _bi_new_ok:
+        _o_bi_available = "new"
+    else:
+        _o_bi_available = "neither"
+    _o_bi_asymmetric = _o_bi_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -846,6 +904,7 @@ def oracle_diff_reports(
         and not _o_pf_asymmetric
         and not _o_po_asymmetric
         and not _o_sh_asymmetric
+        and not _o_bi_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -878,6 +937,8 @@ def oracle_diff_reports(
         "portfolio_asymmetric": _o_po_asymmetric,
         "synthhistory_changed": False,
         "synthhistory_asymmetric": _o_sh_asymmetric,
+        "batch_invariance_changed": False,
+        "batch_invariance_asymmetric": _o_bi_asymmetric,
         "identical": identical,
     }
     return {
@@ -898,6 +959,7 @@ def oracle_diff_reports(
         "prefill": {"available": _o_pf_available, "changed": False},
         "portfolio": {"available": _o_po_available, "changed": False},
         "synthhistory": {"available": _o_sh_available, "changed": False},
+        "batch_invariance": {"available": _o_bi_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

@@ -538,6 +538,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    batchinv_diff = diff_batchinv(old.get("batch_invariance"), new.get("batch_invariance"))
+    batchinv_asymmetric = batchinv_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -569,6 +574,8 @@ def diff_reports(
         and not portfolio_asymmetric
         and not synthhistory_diff["changed"]
         and not synthhistory_asymmetric
+        and not batchinv_diff["changed"]
+        and not batchinv_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -601,6 +608,8 @@ def diff_reports(
         "portfolio_asymmetric": portfolio_asymmetric,
         "synthhistory_changed": synthhistory_diff["changed"],
         "synthhistory_asymmetric": synthhistory_asymmetric,
+        "batch_invariance_changed": batchinv_diff["changed"],
+        "batch_invariance_asymmetric": batchinv_asymmetric,
         "identical": identical,
     }
     return {
@@ -621,6 +630,7 @@ def diff_reports(
         "prefill": prefill_diff,
         "portfolio": portfolio_diff,
         "synthhistory": synthhistory_diff,
+        "batch_invariance": batchinv_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2129,6 +2139,120 @@ def diff_synthhistory(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_batchinv(payload: Any) -> bool:
+    """Structural check for a ``batch_invariance`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never
+    hit a TypeError on a hostile payload, and map keys must be
+    strings. A malformed side degrades to asymmetric instead of
+    raising.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    for key in ("n_prompts", "n_evaluable", "n_failed", "n_diverged"):
+        if type(payload.get(key)) is not int or payload[key] < 0:
+            return False
+    if payload["n_evaluable"] + payload["n_failed"] != payload["n_prompts"]:
+        return False
+    if payload["n_diverged"] > payload["n_evaluable"]:
+        return False
+    rate = payload.get("divergence_rate")
+    if payload["n_evaluable"]:
+        if type(rate) not in (int, float):
+            return False
+    elif rate is not None:
+        return False
+    if payload.get("verdict") not in (
+        "batch_invariant",
+        "batch_variant",
+        "unavailable",
+    ):
+        return False
+    per_prompt = payload.get("per_prompt")
+    if type(per_prompt) is not dict or not all(type(k) is str for k in per_prompt):
+        return False
+    for entry in per_prompt.values():
+        if type(entry) is not dict:
+            return False
+        diverged = entry.get("diverged")
+        if diverged is not None and type(diverged) is not bool:
+            return False
+        first = entry.get("first_divergence")
+        if first is not None and (type(first) is not int or first < 0):
+            return False
+        for length_key in ("solo_len", "batched_len"):
+            length = entry.get(length_key)
+            if length is not None and (type(length) is not int or length < 0):
+                return False
+        error = entry.get("error")
+        if error is not None and type(error) is not str:
+            return False
+    return True
+
+
+def diff_batchinv(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``batch_invariance`` payloads; deterministic.
+
+    Answers "did the batch-invariance story change between runs?": the
+    audit verdict (invariant vs variant), the divergence-rate drift,
+    and the diverged-prompt sets. A newly diverged prompt after a
+    backend or fixture update is the batch-nondeterminism regression
+    signal. A side without a recorded batch-invariance audit is
+    reported plainly. No model, no network.
+    """
+    old_ok = _valid_batchinv(old)
+    new_ok = _valid_batchinv(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _diverged_set(payload: Any) -> set[str]:
+        per_prompt = payload.get("per_prompt") or {}
+        return {
+            pid
+            for pid, entry in per_prompt.items()
+            if type(entry) is dict and entry.get("diverged") is True
+        }
+
+    verdict_changed = old.get("verdict") != new.get("verdict")
+    divergence_rate_changed = old.get("divergence_rate") != new.get("divergence_rate")
+    old_diverged = _diverged_set(old)
+    new_diverged = _diverged_set(new)
+    diverged_added = sorted(new_diverged - old_diverged)
+    diverged_removed = sorted(old_diverged - new_diverged)
+    old_prompts = set(old.get("per_prompt") or {})
+    new_prompts = set(new.get("per_prompt") or {})
+    prompts_added = sorted(new_prompts - old_prompts)
+    prompts_removed = sorted(old_prompts - new_prompts)
+    result["verdict_changed"] = verdict_changed
+    result["divergence_rate_changed"] = divergence_rate_changed
+    result["diverged_added"] = diverged_added
+    result["diverged_removed"] = diverged_removed
+    result["prompts_added"] = prompts_added
+    result["prompts_removed"] = prompts_removed
+    # NOTE: batchinv-specific names keep this line textually distinct
+    # from every other section's changed anchor (mutation-gate
+    # uniqueness).
+    result["changed"] = bool(
+        verdict_changed
+        or divergence_rate_changed
+        or diverged_added
+        or diverged_removed
+        or prompts_added
+        or prompts_removed
+    )
+    return result
+
+
 def _healing_verdict_triplet(payload: Any) -> tuple[Any, Any, Any]:
     """(flipped, healed_decision, healed_winner) for drift comparison."""
     if type(payload) is not dict:
@@ -2660,6 +2784,42 @@ def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> li
     return lines
 
 
+def _render_batchinv_summary(batchinv_diff: dict[str, Any] | None) -> list[str]:
+    """Batch-invariance comparison lines for the stderr summary."""
+    if type(batchinv_diff) is not dict:
+        return []
+    available = batchinv_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Batch-invariance audit unavailable: "
+            f"{missing} run did not record the batch_invariance experiment."
+        ]
+    lines: list[str] = []
+    if batchinv_diff.get("verdict_changed"):
+        lines.append("Batch-invariance verdict changed between runs.")
+    if batchinv_diff.get("divergence_rate_changed"):
+        lines.append("Batch-invariance divergence rate changed between runs.")
+    diverged_added = batchinv_diff.get("diverged_added") or []
+    if diverged_added:
+        shown = ", ".join(_display_id(p) for p in diverged_added[:5])
+        lines.append(f"Newly diverged prompts ({len(diverged_added)}): {shown}")
+        if len(diverged_added) > 5:
+            lines.append(f"  ... and {len(diverged_added) - 5} more")
+    diverged_removed = batchinv_diff.get("diverged_removed") or []
+    if diverged_removed:
+        lines.append(f"Divergence resolved on {len(diverged_removed)} prompt(s).")
+    prompts_added = batchinv_diff.get("prompts_added") or []
+    if prompts_added:
+        lines.append(f"Batch-audit prompts added: {len(prompts_added)}")
+    prompts_removed = batchinv_diff.get("prompts_removed") or []
+    if prompts_removed:
+        lines.append(f"Batch-audit prompts removed: {len(prompts_removed)}")
+    return lines
+
+
 def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     """Prompt-boundary canonicality comparison lines for the stderr summary."""
     available = audit_diff.get("available")
@@ -2900,6 +3060,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_hierarchy_summary(diff.get("hierarchy")))
     lines.extend(_render_prefill_summary(diff.get("prefill")))
     lines.extend(_render_synthhistory_summary(diff.get("synthhistory")))
+    lines.extend(_render_batchinv_summary(diff.get("batch_invariance")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
