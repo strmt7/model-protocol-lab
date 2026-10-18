@@ -259,6 +259,43 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "selection_robustness_unavailable",
         }
+    # Cross-checkpoint transfer: self-transfer against the same synthetic
+    # backend, so the committed sample report exercises the transfer
+    # section (a self-transfer must show "transfers" everywhere -- the
+    # sanity property from the IDEAS brief). Degrades to an "unavailable"
+    # marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import transfer_portability, transfer_stage
+
+        _fmts = candidates("llama3", mutate=True)
+        _outcomes = transfer_stage(
+            lambda cid: DemoBackend(),
+            ("demo-self",),
+            _fmts,
+            tuple(split.search),
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        _transfer = transfer_portability(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _fmts),
+            _outcomes,
+        )
+        _transfer["checkpoints"] = [
+            {
+                "id": "demo-self",
+                "path": "synthetic",
+                "fingerprint": DemoBackend.fingerprint,
+            }
+        ]
+        result["transfer"] = _transfer
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["transfer"] = {
+            "available": False,
+            "detail": "transfer_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

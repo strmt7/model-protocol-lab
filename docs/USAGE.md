@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -544,6 +544,28 @@ and flip callouts. `diff-reports` compares the per-semantic verdicts
 and the flip pattern between runs (`selection_robustness_changed`,
 feeding `identical`) -- the serving-stack migration signal: the same
 stack selecting a different winner than before.
+
+### 8.14 Cross-checkpoint transfer (`transfer`)
+
+`run --transfer-model` (repeatable, max 4) answers "does the winner also
+win on my other checkpoints?" After the primary run, every search
+candidate is re-evaluated against each transfer checkpoint on the
+search split only (same boundary, same `--max-new-tokens`; greedy,
+exact), and the conservative selection rule is re-applied per
+checkpoint (`experiments.transfer_stage` + pure
+`experiments.transfer_portability`).
+
+`results.json` carries `transfer` with the checkpoint ids, paths and
+fingerprints, the per-checkpoint decision/winner, the candidate x
+checkpoint verdict matrix, and the transfer verdict (`full` / `partial`
+/ `none` / `unavailable`). Per-cell verdicts: `transfers` (the primary
+winner is the unique winner there), `wins_there` (another candidate
+wins there), `ties_there`, `fails_there`, `checkpoint_incompatible`
+(the candidate could not be evaluated there -- e.g. boundary IDs
+outside the checkpoint's vocabulary -- fail-closed, never silently
+skipped). The report renders a "Cross-checkpoint transfer" section;
+the decision banner notes the verdict. Compute multiplies by
+(1 + #checkpoints); the transfer stage never fails the run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

@@ -2105,6 +2105,42 @@
     ],
     "flips": []
   },
+  "transfer": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "checkpoints": [
+      {
+        "id": "demo-self",
+        "path": "synthetic",
+        "fingerprint": "synthetic-demo-backend-v1-not-a-model"
+      }
+    ],
+    "per_checkpoint": {
+      "demo-self": {
+        "decision": "selected",
+        "winner": "llama3"
+      }
+    },
+    "matrix": {
+      "llama3": {
+        "demo-self": "transfers"
+      },
+      "llama3/toggle-bos": {
+        "demo-self": "fails_there"
+      },
+      "llama3/no-bos": {
+        "demo-self": "fails_there"
+      },
+      "llama3/prefix-newline": {
+        "demo-self": "fails_there"
+      },
+      "llama3/prefix-trim": {
+        "demo-self": "fails_there"
+      }
+    },
+    "transfer_verdict": "full"
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

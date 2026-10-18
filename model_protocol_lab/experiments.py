@@ -425,6 +425,195 @@ def selection_robustness(
     }
 
 
+def transfer_portability(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    transfer: dict[str, dict[str, bool | None]],
+) -> dict[str, Any]:
+    """Re-apply the selection rule per transfer checkpoint (pure post-hoc).
+
+    Answers "does the primary winner also win on my other checkpoints?":
+    for each transfer checkpoint, the conservative selection rule is
+    re-applied to that checkpoint's per-candidate pass/fail outcomes, and
+    the primary winner's fate there is recorded.
+
+    ``transfer[checkpoint_id][candidate_name]`` is True when the candidate
+    passed every fixture at that checkpoint, False when it did not, and
+    None when it could not be evaluated there (e.g. boundary IDs outside
+    the checkpoint's vocabulary -- fail-closed, never silently skipped).
+
+    Returns ``{"available": True, "primary_winner": ..., "checkpoints":
+    [...], "per_checkpoint": {ckpt: {"decision", "winner"}}, "matrix":
+    {candidate: {ckpt: verdict}}, "transfer_verdict": ...}``. The per-cell
+    verdict is ``"transfers"`` (primary winner is the unique winner
+    there), ``"ties_there"``, ``"fails_there"``, or
+    ``"checkpoint_incompatible"``; non-winner candidates get
+    ``"wins_there"`` instead of ``"transfers"``. ``transfer_verdict`` is
+    ``"full"`` / ``"partial"`` / ``"none"`` over the evaluable
+    checkpoints, or ``"unavailable"`` when there is no primary winner or
+    no checkpoint to transfer to. Never raises on malformed input:
+    returns ``{"available": False}``.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+        or type(transfer) is not dict
+    ):
+        return {"available": False, "detail": "invalid_candidates_or_transfer"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    checkpoints = sorted(transfer)
+    for ckpt in checkpoints:
+        per_cand = transfer[ckpt]
+        if type(per_cand) is not dict:
+            return {"available": False, "detail": f"checkpoint_{ckpt}_invalid"}
+        for cand in candidates:
+            val = per_cand.get(cand)
+            if val is not None and type(val) is not bool:
+                return {"available": False, "detail": f"checkpoint_{ckpt}_invalid"}
+
+    per_checkpoint: dict[str, dict[str, Any]] = {}
+    matrix: dict[str, dict[str, str]] = {c: {} for c in candidates}
+    for ckpt in checkpoints:
+        per_cand = transfer[ckpt]
+        # A checkpoint where no candidate could be evaluated is
+        # unavailable, not a no_candidate verdict.
+        if all(per_cand.get(c) is None for c in candidates):
+            per_checkpoint[ckpt] = {"decision": "unavailable", "winner": None}
+            for cand in candidates:
+                matrix[cand][ckpt] = "checkpoint_incompatible"
+            continue
+        winners = [c for c in candidates if per_cand.get(c) is True]
+        # Mirrors _select_winner(winners, cancelled=False).
+        if len(winners) == 1:
+            per_checkpoint[ckpt] = {"decision": "selected", "winner": winners[0]}
+        elif winners:
+            per_checkpoint[ckpt] = {"decision": "ambiguous", "winner": None}
+        else:
+            per_checkpoint[ckpt] = {"decision": "no_candidate", "winner": None}
+        for cand in candidates:
+            val = per_cand.get(cand)
+            if val is None:
+                matrix[cand][ckpt] = "checkpoint_incompatible"
+            elif val is False:
+                matrix[cand][ckpt] = "fails_there"
+            elif cand == primary_winner:
+                matrix[cand][ckpt] = "transfers" if winners == [cand] else "ties_there"
+            else:
+                matrix[cand][ckpt] = "wins_there" if winners == [cand] else "ties_there"
+
+    if primary_winner is None or not checkpoints:
+        transfer_verdict = "unavailable"
+    else:
+        outcomes = [
+            matrix[primary_winner][ckpt]
+            for ckpt in checkpoints
+            if matrix[primary_winner][ckpt] != "checkpoint_incompatible"
+        ]
+        if not outcomes:
+            transfer_verdict = "unavailable"
+        elif all(o == "transfers" for o in outcomes):
+            transfer_verdict = "full"
+        elif any(o == "transfers" for o in outcomes):
+            transfer_verdict = "partial"
+        else:
+            transfer_verdict = "none"
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "checkpoints": checkpoints,
+        "per_checkpoint": per_checkpoint,
+        "matrix": matrix,
+        "transfer_verdict": transfer_verdict,
+    }
+
+
+def transfer_stage(
+    backend_factory: Callable[[str], Backend],
+    checkpoint_ids: tuple[str, ...],
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, dict[str, bool | None]]:
+    """Evaluate every candidate against each transfer checkpoint.
+
+    Re-runs ``core.evaluate()`` for every search candidate against each
+    additional local checkpoint, on the search split only (bounded, same
+    fixture limit), with the same boundary and max_new_tokens. Greedy,
+    exact. ``backend_factory(checkpoint_id)`` builds a backend per
+    checkpoint; any backend construction or evaluation failure records
+    None for that (checkpoint, candidate) cell -- fail-closed, never
+    silently skipped.
+
+    Returns ``transfer[checkpoint_id][candidate_name]``: True when the
+    candidate passed every fixture there, False when it did not, None
+    when it could not be evaluated. Pure in its return contract (no
+    global state), though backend construction performs I/O.
+    """
+    if not callable(backend_factory):
+        raise ValueError("backend_factory must be callable")
+    if (
+        type(checkpoint_ids) is not tuple
+        or not 1 <= len(checkpoint_ids) <= 4
+        or not all(type(c) is str and c for c in checkpoint_ids)
+        or len(set(checkpoint_ids)) != len(checkpoint_ids)
+    ):
+        raise ValueError("checkpoint_ids must be 1-4 unique nonblank strings")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    transfer: dict[str, dict[str, bool | None]] = {}
+    for ckpt in checkpoint_ids:
+        per_candidate: dict[str, bool | None] = {}
+        try:
+            backend = backend_factory(ckpt)
+        except Exception:  # noqa: BLE001 -- whole checkpoint degrades, not the stage
+            backend = None
+        for fmt in formats:
+            if backend is None:
+                per_candidate[fmt.name] = None
+                continue
+            try:
+                report = evaluate(
+                    backend,
+                    fmt,
+                    cases,
+                    boundary=boundaries[fmt.name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                )
+            except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                per_candidate[fmt.name] = None
+                continue
+            if not report.aggregate_eligible:
+                per_candidate[fmt.name] = None
+                continue
+            passed = sum(o.exact_match and o.boundary_found for o in report.observations)
+            per_candidate[fmt.name] = passed == report.planned_count
+        transfer[ckpt] = per_candidate
+    return transfer
+
+
 def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> int | None:
     """Minimal token budget at which one recorded observation passes.
 
