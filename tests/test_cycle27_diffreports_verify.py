@@ -480,6 +480,27 @@ def oracle_diff_reports(
     else:
         _o_tr_available = "neither"
     _o_tr_asymmetric = _o_tr_available not in ("both", "neither")
+
+    def _or_ct_valid(value: Any) -> bool:
+        pairs = value.get("pairs") if type(value) is dict else None
+        return (
+            type(value) is dict
+            and type(value.get("worst_tier")) is str
+            and type(pairs) is list
+            and all(type(p) is dict for p in pairs)
+        )
+
+    _ct_old_ok = _or_ct_valid(old.get("contamination"))
+    _ct_new_ok = _or_ct_valid(new.get("contamination"))
+    if _ct_old_ok and _ct_new_ok:
+        _o_ct_available = "both"
+    elif _ct_old_ok:
+        _o_ct_available = "old"
+    elif _ct_new_ok:
+        _o_ct_available = "new"
+    else:
+        _o_ct_available = "neither"
+    _o_ct_asymmetric = _o_ct_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -492,6 +513,7 @@ def oracle_diff_reports(
         and not _o_ba_asymmetric
         and not _o_sr_asymmetric
         and not _o_tr_asymmetric
+        and not _o_ct_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -510,6 +532,8 @@ def oracle_diff_reports(
         "selection_robustness_asymmetric": _o_sr_asymmetric,
         "transfer_changed": False,
         "transfer_asymmetric": _o_tr_asymmetric,
+        "contamination_changed": False,
+        "contamination_asymmetric": _o_ct_asymmetric,
         "identical": identical,
     }
     return {
@@ -523,6 +547,7 @@ def oracle_diff_reports(
         "boundary_audit": {"available": _o_ba_available, "changed": False},
         "selection_robustness": {"available": _o_sr_available, "changed": False},
         "transfer": {"available": _o_tr_available, "changed": False},
+        "contamination": {"available": _o_ct_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

@@ -11,6 +11,7 @@ import sys
 import unittest
 from pathlib import Path
 
+from model_protocol_lab import diffreports
 from model_protocol_lab.contamination import (
     _normalize_text,
     classify_pair,
@@ -438,6 +439,89 @@ class ContaminationHtmlInjectionTest(unittest.TestCase):
             _contamination_line({"worst_tier": "clean", "pairs": []}),
             "clean: no search/held-out near-duplicate pairs",
         )
+
+
+def _contamination_payload(worst="clean", pairs=None):
+    return {"worst_tier": worst, "pairs": pairs or []}
+
+
+class DiffContaminationTest(unittest.TestCase):
+    def test_identical_unchanged(self):
+        payload = _contamination_payload(
+            "near_duplicate",
+            [{"held_out": "h1", "search": "s1", "tier": "near_duplicate"}],
+        )
+        diff = diffreports.diff_contamination(payload, payload)
+        self.assertEqual(diff["available"], "both")
+        self.assertFalse(diff["changed"])
+
+    def test_worst_tier_change_detected(self):
+        old = _contamination_payload("clean", [])
+        new = _contamination_payload(
+            "near_duplicate",
+            [{"held_out": "h1", "search": "s1", "tier": "near_duplicate"}],
+        )
+        diff = diffreports.diff_contamination(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertTrue(diff["worst_tier"]["changed"])
+        self.assertEqual(len(diff["pairs_added"]), 1)
+
+    def test_pair_removed(self):
+        old = _contamination_payload(
+            "duplicate",
+            [{"held_out": "h1", "search": "s1", "tier": "duplicate"}],
+        )
+        new = _contamination_payload("clean", [])
+        diff = diffreports.diff_contamination(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertEqual(len(diff["pairs_removed"]), 1)
+
+    def test_tier_change_detected(self):
+        old = _contamination_payload(
+            "near_duplicate",
+            [{"held_out": "h1", "search": "s1", "tier": "near_duplicate"}],
+        )
+        new = _contamination_payload(
+            "duplicate",
+            [{"held_out": "h1", "search": "s1", "tier": "duplicate"}],
+        )
+        diff = diffreports.diff_contamination(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertEqual(len(diff["tier_changes"]), 1)
+        self.assertEqual(diff["tier_changes"][0]["old_tier"], "near_duplicate")
+        self.assertEqual(diff["tier_changes"][0]["new_tier"], "duplicate")
+
+    def test_asymmetric(self):
+        diff = diffreports.diff_contamination(_contamination_payload(), {"worst_tier": "clean"})
+        self.assertEqual(diff["available"], "old")
+        self.assertFalse(diff["changed"])
+
+    def test_malformed_pairs_ignored(self):
+        # Pairs without string IDs are ignored, not crashed on.
+        old = _contamination_payload("clean", [])
+        new = _contamination_payload(
+            "clean",
+            [{"held_out": 123, "search": "s1", "tier": "duplicate"}],
+        )
+        diff = diffreports.diff_contamination(old, new)
+        self.assertFalse(diff["changed"])
+        self.assertEqual(diff["pairs_added"], [])
+
+    def test_feeds_identical(self):
+        old = {"decision": "selected", "contamination": _contamination_payload()}
+        new = {"decision": "selected", "contamination": _contamination_payload()}
+        diff = diffreports.diff_reports(old, new)
+        self.assertFalse(diff["summary"]["contamination_changed"])
+        new2 = {
+            "decision": "selected",
+            "contamination": _contamination_payload(
+                "duplicate",
+                [{"held_out": "h1", "search": "s1", "tier": "duplicate"}],
+            ),
+        }
+        diff2 = diffreports.diff_reports(old, new2)
+        self.assertTrue(diff2["summary"]["contamination_changed"])
+        self.assertFalse(diff2["summary"]["identical"])
 
 
 if __name__ == "__main__":
