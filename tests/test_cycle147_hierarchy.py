@@ -1285,3 +1285,24 @@ class HierarchyCliProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HierarchyGroupLabelSanitizationTests(unittest.TestCase):
+    """Wave-3 red-team A F2: hostile group_adherence labels must not
+    inject terminal escapes into the stderr summary."""
+
+    def test_group_label_terminal_escapes_stripped(self):
+        base = {
+            "decision": "select_best",
+            "selected_candidate": "alpha",
+            "search": [],
+            "held_out": {},
+        }
+        evil = "\x1b[2J\x1b[31mHIER\x1b[0m"
+        old = _hierarchy_payload()
+        new = _hierarchy_payload()
+        new["group_adherence"][evil] = {"n_candidates": 1, "n_families": 1, "mean_system_rate": 0.9}
+        old["group_adherence"][evil] = {"n_candidates": 1, "n_families": 1, "mean_system_rate": 0.1}
+        text = render_summary(diff_reports(dict(base, hierarchy=old), dict(base, hierarchy=new)))
+        self.assertNotIn("\x1b", text)
+        self.assertIn("HIER", text)

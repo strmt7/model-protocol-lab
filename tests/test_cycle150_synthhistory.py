@@ -1404,3 +1404,52 @@ class SynthhistoryRedteamRegressionTests(unittest.TestCase):
         out = synthhistory_stability("llama3", "compatible_on_fixture_set", ("llama3",), stages)
         self.assertFalse(out["available"])
         self.assertEqual(out["detail"], "stage_history_2_invalid")
+
+
+class SynthhistoryGroupLabelSanitizationTests(unittest.TestCase):
+    """Wave-3 red-team A F1: hostile group_pass_rates labels must not
+    inject terminal escapes into the stderr summary."""
+
+    def _evil_reports(self, label):
+        def payload(rate):
+            return {
+                "available": True,
+                "primary_decision": "selected",
+                "primary_winner": "chatml",
+                "n_fixtures": 4,
+                "conditions": ["history_2"],
+                "per_condition": {
+                    "history_2": {
+                        "decision": "selected",
+                        "winner": "chatml",
+                        "n_evaluable": 1,
+                        "per_candidate": {"chatml": {"pass_rate": 1.0, "pass": True}},
+                    }
+                },
+                "flips": [],
+                "group_pass_rates": {
+                    "explicit": {"n_candidates": 1, "mean_pass_rate": 1.0},
+                    label: {"n_candidates": 1, "mean_pass_rate": rate},
+                },
+            }
+
+        def results(rate):
+            return {
+                "decision": "selected",
+                "selected_candidate": "chatml",
+                "search": [],
+                "synthhistory": payload(rate),
+            }
+
+        return results(0.5), results(1.0)
+
+    def test_group_label_terminal_escapes_stripped(self):
+        old, new = self._evil_reports("\x1b[2J\x1b[31mPWNED\x1b[0m")
+        text = render_summary(diffreports.diff_reports(old, new))
+        self.assertNotIn("\x1b", text)
+        self.assertIn("PWNED", text)  # visible text survives, escapes don't
+
+    def test_group_label_bidi_controls_stripped(self):
+        old, new = self._evil_reports("safe-\u202e-EVIL")
+        text = render_summary(diffreports.diff_reports(old, new))
+        self.assertNotIn("\u202e", text)

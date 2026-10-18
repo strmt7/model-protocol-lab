@@ -5619,3 +5619,13 @@ time of writing — updated on push.
 - **B3 (low):** a hand-crafted zero-fixture stage yielded `decision="selected"` from zero evidence. Fix: `n_fixtures <= 0` stages degrade to `stage_<condition>_invalid`, aligning the analysis with the diff validator (which already requires `n_fixtures > 0`).
 
 **Verification:** 4 new regression tests (phantom-flip, genuine-flip-still-recorded, whitespace rejection, zero-fixture rejection); the 200-case brute-force oracle extended to cover the normalization (run-level decisions in the choice set); sample report regenerated (now shows only the genuine history_6 flip), byte-identical x3. Full battery per the mandatory protocol.
+
+## Cycle 152 (2026-10-18) — wave-3 red-team A terminal-escape fixes
+
+**Context:** wave-3 red-team A found two CONFIRMED terminal-escape/bidi-control injection vectors in `diff-reports` stderr rendering (reproduced end-to-end via the CLI; red-team B's brief predates A's publication so no cross-check was possible -- the coordinator reproduced F1 independently).
+
+**Fixed:**
+- **F1 (new in cycle 150):** `_render_synthhistory_summary` interpolated the hostile-controlled `group_pass_rates` label raw into stderr (`History {label} mean pass rate:`); a label like `\x1b[2J\x1b[31mPWNED\x1b[0m` cleared/recolored the victim's terminal, and `\u202e` enabled Trojan Source-style reordering. The section validator never constrained group keys and `_group_means` passed escape-bearing strings through. Fix: wrap in `_display_id`, matching every other interpolation in the function.
+- **F2 (pre-existing):** the identical raw-`{label}` pattern in `_render_hierarchy_summary` and `_render_prefill_summary` (missed by the wave-2 C2 remediation). Same fix in both.
+
+**Verification:** 4 new regression tests (escape + bidi payloads per renderer, asserting `\x1b`/`\u202e` absent while visible text survives); the coordinator's independent F1 reproduction now emits zero escape bytes. Severity moderate-low (requires attacker-influenced results.json; terminal manipulation, not code execution). Full battery per the mandatory protocol.

@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 152 — wave-3 red-team A terminal-escape fixes, 2026-10-18)
+
+- `diff-reports` stderr rendering interpolated hostile-controlled
+  group labels raw in three summary renderers
+  (`_render_synthhistory_summary`, `_render_hierarchy_summary`,
+  `_render_prefill_summary`): a `group_pass_rates` label like
+  `\x1b[2J\x1b[31mPWNED\x1b[0m` cleared/recolored the terminal and
+  `\u202e` enabled bidi reordering. All three labels are now wrapped
+  in `_display_id`, completing the wave-2 C2 remediation. 4 new
+  regression tests.
+
 ### Fixed (cycle 151 — wave-3 red-team fixes for synthhistory, 2026-10-18)
 
 - `synthhistory_stability` flip detection compared the selection
