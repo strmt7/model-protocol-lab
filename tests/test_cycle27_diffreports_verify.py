@@ -952,6 +952,45 @@ def oracle_diff_reports(
     else:
         _o_pos_available = "neither"
     _o_pos_asymmetric = _o_pos_available not in ("both", "neither")
+
+    def _or_sc_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_stop_cause exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if type(entry) is not dict:
+                return False
+            rates = entry.get("cause_rates")
+            if type(rates) is not dict:
+                return False
+            for cause, rate in rates.items():
+                if cause not in ("eos_id", "stop_string", "max_length", "stop_unknown"):
+                    return False
+                if type(rate) not in (int, float):
+                    return False
+            for key in ("over_generation_rate", "would_stop_early_rate", "max_length_rate"):
+                agg_value = entry.get(key)
+                if agg_value is not None and type(agg_value) not in (int, float):
+                    return False
+        overall = value.get("overall")
+        return not (overall is not None and type(overall) is not dict)
+
+    _sc_old_ok = _or_sc_valid(old.get("stop_cause"))
+    _sc_new_ok = _or_sc_valid(new.get("stop_cause"))
+    if _sc_old_ok and _sc_new_ok:
+        _o_sc_available = "both"
+    elif _sc_old_ok:
+        _o_sc_available = "old"
+    elif _sc_new_ok:
+        _o_sc_available = "new"
+    else:
+        _o_sc_available = "neither"
+    _o_sc_asymmetric = _o_sc_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -973,6 +1012,7 @@ def oracle_diff_reports(
         and not _o_sh_asymmetric
         and not _o_bi_asymmetric
         and not _o_pos_asymmetric
+        and not _o_sc_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1009,6 +1049,8 @@ def oracle_diff_reports(
         "batch_invariance_asymmetric": _o_bi_asymmetric,
         "position_changed": False,
         "position_asymmetric": _o_pos_asymmetric,
+        "stop_cause_changed": False,
+        "stop_cause_asymmetric": _o_sc_asymmetric,
         "identical": identical,
     }
     return {
@@ -1031,6 +1073,7 @@ def oracle_diff_reports(
         "synthhistory": {"available": _o_sh_available, "changed": False},
         "batch_invariance": {"available": _o_bi_available, "changed": False},
         "position": {"available": _o_pos_available, "changed": False},
+        "stop_cause": {"available": _o_sc_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

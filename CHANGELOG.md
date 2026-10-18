@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 155 — stop-cause termination audit, wave-3 research idea #3, 2026-10-19)
+
+- New `mpl run --stop-cause` experiment classifying every search
+  candidate's recorded generations into `eos_id` / `stop_string` /
+  `max_length` / `stop_unknown` (arXiv:2407.20042 "When to Stop?";
+  llama-cpp `"stop"` conflates EOS token and stop-string match). New
+  pure `model_protocol_lab/stopcause.py` (100% line coverage:
+  first-EOT positions, the classify_cause decision table with the
+  documented stop-string-beats-EOS same-step tie rule, over-generation
+  bleed arithmetic, cause-rate aggregation); `experiments.stop_stage`
+  (pure post-hoc on stored observations -- no new generations;
+  per-candidate and overall aggregates; fail-closed
+  `stop_unknown`); `results.json` `stop_cause` section; HTML
+  "Stop-cause termination audit" section; `diffreports.diff_stop_cause`
+  (`stop_cause_changed` / `stop_cause_asymmetric` feed `identical`);
+  sample-report exercise with a scripted EOT-emitting backend showing
+  genuine `eos_id` vs `stop_string` variation and over-generation
+  bleed. Honest framing: the lab's decoder never stops early, so every
+  cause is post-hoc classification of what a stop-aware engine would
+  have done. 61 new tests (4/4 mutation gates, 200-case brute-force
+  oracles, Hypothesis properties); both diff oracles extended.
+
 ### Added (cycle 154 — position sensitivity, wave-3 research idea #1, 2026-10-18)
 
 - New `mpl run --position` experiment measuring option-position bias as a

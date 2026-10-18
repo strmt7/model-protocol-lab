@@ -77,6 +77,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "synthhistory",
     "batch_invariance",
     "position",
+    "stop_cause",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

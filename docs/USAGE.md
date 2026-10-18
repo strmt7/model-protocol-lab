@@ -178,7 +178,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -902,6 +902,48 @@ per-candidate correct-rate drift, and primacy-index drift
 `identical`) -- a primacy-index shift after a template or fixture
 change is the position-bias regression signal. The stage never fails
 the run.
+
+### 8.23 Stop-cause termination audit (`stop_cause`)
+
+The lab's backend contract deliberately generates *through* EOS to the
+token cap ("Never stop at EOS or candidate boundaries"), so every
+cause below is post-hoc classification of what a stop-aware engine
+*would have* done with the recorded token ids -- the same honest
+emulation stance as cycle 137's `eos_appended` cell. The boundary
+audit (cycle 134) measures *where* a response ends; this experiment
+measures *how it would have stopped*. Termination is a learned
+behavior, not a guaranteed mechanism (arXiv:2407.20042, "When to
+Stop?"), and the serving stack conflates two distinct mechanisms into
+one finish reason (llama-cpp's `"stop"` covers both the EOS token and
+the stop-string substring match).
+`model-protocol-lab run --stop-cause` classifies every search
+candidate's recorded generations into `eos_id` (the family's
+end-of-turn token id was emitted), `stop_string` (the HF stop-string
+emulation on the candidate's boundary text fired), `max_length` (the
+cap was reached with no mechanism firing), or `stop_unknown`
+(fail-closed: neither the EOT id nor a stop text was available).
+Cause precedence follows the vLLM port notes in `backends.py`: the
+earliest-firing mechanism wins, with a same-step tie going to
+`stop_string`.
+
+Per candidate the report carries the termination-cause rates, the
+would-stop-early rate, and the over-generation bleed -- tokens the
+lab's non-stopping decoder emitted past the first end-of-turn token,
+which no real engine would emit. The pre-registered falsifiable claim
+(in `stopcause.py`) is that termination-cause distributions are
+identical across template families; a family that systematically runs
+to max-length or bleeds past its own end-of-turn token while others
+terminate cleanly falsifies it -- and means the template's own stop
+tokens are leaking into measured verdicts. `results.json` carries
+`stop_cause` with the per-candidate aggregates and per-observation
+records. The report's "Stop-cause termination audit" section renders
+the cause-rate table. `diff-reports` compares per-candidate
+cause-rate drift, over-generation / would-stop-early / max-length
+rate drift, and added/removed candidates (`diff_stop_cause`;
+`stop_cause_changed` / `stop_cause_asymmetric` feed `identical`) -- a
+newly eos-emitting candidate after a checkpoint or fixture update is
+the termination-behavior regression signal. The stage runs no new
+generations and never fails the run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

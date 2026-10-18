@@ -4019,6 +4019,115 @@ def _position_section(result: dict[str, Any]) -> str:
     )
 
 
+#: Stop-cause vocabulary mirrored from stopcause.CAUSES (kept local so the
+#: renderer stays import-light; pinned equal by test).
+_STOPCAUSE_CAUSES = ("eos_id", "stop_string", "max_length", "stop_unknown")
+
+
+def _stopcause_section(result: dict[str, Any]) -> str:
+    """Stop-cause termination audit: how would each generation have stopped?
+
+    Every search candidate's recorded generations are classified
+    post-hoc into eos_id (the family's end-of-turn token id was
+    emitted), stop_string (the HF stop-string emulation on the
+    candidate's boundary text fired), max_length (the cap was reached
+    with no mechanism firing), or stop_unknown (fail-closed: neither
+    the EOT id nor a stop text was available). Reports per-candidate
+    termination-cause rates, the would-stop-early rate, and the
+    over-generation bleed (tokens the lab's non-stopping decoder
+    emitted past the first EOT token, which no real engine would
+    emit). Renders nothing when the stop-cause probe did not run.
+    """
+    audit: Any = result.get("stop_cause")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    def _num(value: Any) -> str:
+        return str(value) if type(value) is int else "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rates = entry.get("cause_rates")
+        if type(rates) is not dict:
+            rates = {}
+        cells = "".join(
+            "<td>" + escape(_rate(rates.get(cause))) + "</td>" for cause in _STOPCAUSE_CAUSES
+        )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td>"
+            + cells
+            + "<td>"
+            + escape(_rate(entry.get("would_stop_early_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("over_generation_rate")))
+            + "</td><td>"
+            + escape(_num(entry.get("n_evaluable")))
+            + "</td></tr>"
+        )
+    overall = audit.get("overall")
+    overall_line = ""
+    if type(overall) is dict:
+        overall_rates = overall.get("cause_rates")
+        if type(overall_rates) is not dict:
+            overall_rates = {}
+        overall_line = (
+            "<p>Overall termination-cause distribution: "
+            + ", ".join(
+                "<strong>" + escape(cause) + "</strong> " + escape(_rate(overall_rates.get(cause)))
+                for cause in _STOPCAUSE_CAUSES
+            )
+            + "; would-stop-early rate <strong>"
+            + escape(_rate(overall.get("would_stop_early_rate")))
+            + "</strong>.</p>"
+        )
+    n_text = ""
+    max_tokens = audit.get("max_new_tokens")
+    if type(max_tokens) is int:
+        n_text = f" (cap {max_tokens} tokens)"
+    return (
+        '<section class="card" id="stop-cause"><h2>Stop-cause termination audit</h2>'
+        "<p>Post-hoc classification of what a stop-aware engine would have "
+        "done with each recorded generation: <strong>eos_id</strong> (the "
+        "family's end-of-turn token was emitted), <strong>stop_string</strong> "
+        "(the boundary stop text fired under HF stop-string semantics), "
+        "<strong>max_length</strong> (the cap was reached with no mechanism "
+        "firing), or <strong>stop_unknown</strong> (neither mechanism was "
+        "evaluable). Over-generation is the share of generations with tokens "
+        "past the first end-of-turn token -- output the lab's non-stopping "
+        "decoder emits that no real engine would."
+        + escape(n_text)
+        + "</p>"
+        + overall_line
+        + (
+            '<div class="table-wrap"><table><caption>Termination-cause rates '
+            "per candidate.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">eos_id</th><th scope="col">stop_string</th>'
+            '<th scope="col">max_length</th><th scope="col">stop_unknown</th>'
+            '<th scope="col">Would stop early</th>'
+            '<th scope="col">Over-generated</th><th scope="col">Evaluable</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -4769,6 +4878,7 @@ def render_html(result: dict[str, Any]) -> str:
     synthhistory_html = _synthhistory_section(result)
     batchinv_html = _batchinv_section(result)
     position_html = _position_section(result)
+    stopcause_html = _stopcause_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4832,6 +4942,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Position sensitivity",
                 position_html,
             ),
+            (
+                "stop-cause",
+                "Stop-cause termination audit",
+                stopcause_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -4882,6 +4997,7 @@ def render_html(result: dict[str, Any]) -> str:
         + synthhistory_html
         + batchinv_html
         + position_html
+        + stopcause_html
         + sweep_html
         + logprob_html
         + held_out_html
