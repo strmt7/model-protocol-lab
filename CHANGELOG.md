@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 149 — oracle-mixture / protocol-portfolio gap, 2026-10-18)
+
+- Protocol portfolio analysis (wave-2 research idea #4): pure post-hoc
+  over the stored search observations, computed on every `mpl run` at
+  zero extra model cost. Answers "how much does the single global
+  winner leave on the table versus a per-fixture oracle, and which
+  small protocol portfolio covers every solvable fixture?" -- the
+  routing lens of RouteLLM applied within the lab to *prompt
+  protocols*, not models. New pure module
+  `model_protocol_lab/portfolio.py` (input validation, `oracle_rates`,
+  `per_fixture_oracle_winners` with deterministic name-sorted
+  tie-breaks, `greedy_cover` with deterministic lexicographic
+  tie-breaks), `experiments.portfolio_analysis` (derives per-candidate
+  per-fixture pass from stored observations -- exact answer AND
+  explicit boundary, never re-scored; misaligned candidates excluded),
+  an HTML "Protocol portfolio" section (gap, cover list, per-fixture
+  winner table), and `diffreports.diff_portfolio` (`portfolio_changed`
+  / `portfolio_asymmetric` feed `identical`; compares the gap, rates,
+  solvable-fixture set, portfolio membership, per-fixture oracle
+  winners, and per-member covers). Two honesty points stated in the
+  report itself: the portfolio is a greedy set-cover *approximation*,
+  not a proven optimum, and fixtures no protocol passes are reported
+  as unsolvable, never folded into the portfolio. `gap >= 0` is pinned
+  by Hypothesis properties; the stage never fails the run.
+
 ### Added (cycle 148 — assistant-prefill sensitivity experiment, 2026-10-18)
 
 - `mpl run --prefill` (wave-2 research idea #2): re-evaluates every

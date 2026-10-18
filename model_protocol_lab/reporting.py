@@ -4098,6 +4098,130 @@ def _template_firewall_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _portfolio_section(result: dict[str, Any]) -> str:
+    """Oracle-mixture / protocol-portfolio gap: what the winner leaves behind.
+
+    Pure post-hoc over the stored search observations (exact answer AND
+    explicit boundary): the per-fixture oracle (which candidates pass
+    each fixture), the oracle pass rate vs the global winner's rate and
+    the gap, and the greedy covering protocol portfolio over solvable
+    fixtures. The portfolio is a greedy set-cover approximation, not a
+    proven optimum -- the section says so. Renders nothing when the
+    analysis did not run.
+    """
+    portfolio: Any = result.get("portfolio")
+    if type(portfolio) is not dict or not portfolio.get("available"):
+        return ""
+    oracle = portfolio.get("oracle")
+    cover = portfolio.get("portfolio")
+    if type(oracle) is not dict or type(cover) is not dict:
+        return ""
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    n_fixtures = portfolio.get("n_fixtures")
+    n_solvable = oracle.get("n_solvable")
+    gap = oracle.get("gap")
+    winner = portfolio.get("winner")
+    gap_line = (
+        "<p>Oracle pass rate <strong>"
+        + escape(_rate(oracle.get("oracle_pass_rate")))
+        + "</strong> vs global winner <strong>"
+        + escape(_name(winner))
+        + "</strong> at <strong>"
+        + escape(_rate(oracle.get("winner_pass_rate")))
+        + "</strong> -- gap <strong>"
+        + escape(_rate(gap) if type(gap) in (int, float) else "n/a")
+        + "</strong> of "
+        + escape(str(n_fixtures) if type(n_fixtures) is int else "?")
+        + " fixtures ("
+        + escape(str(n_solvable) if type(n_solvable) is int else "?")
+        + " solvable by at least one protocol).</p>"
+    )
+    members = cover.get("members")
+    member_rows = []
+    if type(members) is list:
+        per_member = cover.get("per_member_covers")
+        per_member = per_member if type(per_member) is dict else {}
+        for name in members:
+            fixtures = per_member.get(name)
+            fixtures = list(fixtures) if type(fixtures) is list else []
+            member_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + "</span></td><td>"
+                + escape(", ".join(str(fid) for fid in fixtures) or "(none)")
+                + "</td></tr>"
+            )
+    portfolio_block = (
+        "<p>Greedy covering portfolio (size "
+        + escape(str(cover.get("size")))
+        + "): "
+        + escape(", ".join(str(m) for m in members) if type(members) is list else "(none)")
+        + ". <em>"
+        + escape(
+            str(cover.get("greedy_note") or "")
+            or "Greedy set-cover approximation; not guaranteed optimal."
+        )
+        + "</em></p>"
+        + (
+            '<div class="table-wrap"><table><caption>Portfolio members and '
+            "the solvable fixtures each covers.</caption>"
+            '<thead><tr><th scope="col">Protocol</th>'
+            '<th scope="col">Covers</th>'
+            "</tr></thead><tbody>" + "".join(member_rows) + "</tbody></table></div>"
+            if member_rows
+            else ""
+        )
+    )
+    per_fixture = oracle.get("per_fixture_winners")
+    fixture_rows = []
+    if type(per_fixture) is dict:
+        for key in sorted(per_fixture, key=str):
+            names = per_fixture[key]
+            names = list(names) if type(names) is list else []
+            fixture_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(key))
+                + "</span></td><td>"
+                + escape(", ".join(str(name) for name in names))
+                + "</td></tr>"
+            )
+    unsolvable = oracle.get("unsolvable_fixture_ids")
+    unsolvable_line = ""
+    if type(unsolvable) is list and unsolvable:
+        unsolvable_line = (
+            "<p>No protocol passed: " + escape(", ".join(str(fid) for fid in unsolvable)) + ".</p>"
+        )
+    return (
+        '<section id="protocol-portfolio"><h2>Protocol portfolio</h2>'
+        "<p>The routing lens applied within the lab to prompt protocols: "
+        "how much does committing to the single global winner leave on "
+        "the table versus a per-fixture oracle, and which small protocol "
+        "set covers every solvable fixture?</p>"
+        + gap_line
+        + portfolio_block
+        + (
+            '<div class="table-wrap"><table><caption>Per-fixture oracle '
+            "winners (any passing protocol is a correct choice "
+            "here).</caption>"
+            '<thead><tr><th scope="col">Fixture</th>'
+            '<th scope="col">Oracle winners</th>'
+            "</tr></thead><tbody>" + "".join(fixture_rows) + "</tbody></table></div>"
+            if fixture_rows
+            else "<p>No fixture was passed by any protocol.</p>"
+        )
+        + unsolvable_line
+        + "</section>"
+    )
+
+
 def render_html(result: dict[str, Any]) -> str:
     """Render an experiment result dict as a self-contained HTML report string.
 
@@ -4147,6 +4271,7 @@ def render_html(result: dict[str, Any]) -> str:
     healing_html = _token_healing_section(result)
     hierarchy_html = _hierarchy_section(result)
     prefill_html = _prefill_section(result)
+    portfolio_html = _portfolio_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4189,6 +4314,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "prefill-sensitivity",
                 "Assistant-prefill sensitivity",
                 prefill_html,
+            ),
+            (
+                "protocol-portfolio",
+                "Protocol portfolio",
+                portfolio_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
@@ -4236,6 +4366,7 @@ def render_html(result: dict[str, Any]) -> str:
         + healing_html
         + hierarchy_html
         + prefill_html
+        + portfolio_html
         + sweep_html
         + logprob_html
         + held_out_html

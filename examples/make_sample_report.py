@@ -344,6 +344,20 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "selection_robustness_unavailable",
         }
+    # Oracle-mixture / protocol-portfolio gap (research wave-2 idea 4):
+    # pure post-hoc over the run's own stored search observations
+    # (exact answer AND explicit boundary), so the committed sample
+    # report exercises the portfolio section. Degrades to an
+    # "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import portfolio_analysis
+
+        result["portfolio"] = portfolio_analysis(result, tuple(split.search))
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["portfolio"] = {
+            "available": False,
+            "detail": "portfolio_unavailable",
+        }
     # Cross-checkpoint transfer: self-transfer against the same synthetic
     # backend, so the committed sample report exercises the transfer
     # section (a self-transfer must show "transfers" everywhere -- the

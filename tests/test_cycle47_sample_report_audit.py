@@ -69,6 +69,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "marker_isolation",
     "template_firewall",
     "selection_robustness",
+    "portfolio",
     "transfer",
     "perturbation",
     "hierarchy",

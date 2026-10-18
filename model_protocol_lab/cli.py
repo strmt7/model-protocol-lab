@@ -1050,6 +1050,22 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "selection_robustness_unavailable",
                     }
+                # Oracle-mixture / protocol-portfolio gap (research
+                # wave-2 idea 4): pure post-hoc over stored search
+                # observations, no model calls. Answers "how much does
+                # the single global winner leave on the table versus a
+                # per-fixture oracle, and which small protocol portfolio
+                # covers every solvable fixture?" Degrades to an
+                # "unavailable" marker instead of failing the run.
+                try:
+                    from .experiments import portfolio_analysis
+
+                    result["portfolio"] = portfolio_analysis(result, tuple(split.search))
+                except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                    result["portfolio"] = {
+                        "available": False,
+                        "detail": "portfolio_unavailable",
+                    }
                 # Cross-checkpoint transfer experiment (IDEAS #1): re-evaluate
                 # every search candidate against each --transfer-model
                 # checkpoint on the search split, then re-apply the

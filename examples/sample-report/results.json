@@ -2105,6 +2105,51 @@
     ],
     "flips": []
   },
+  "portfolio": {
+    "available": true,
+    "n_fixtures": 2,
+    "n_candidates": 5,
+    "decision": "compatible_on_fixture_set",
+    "winner": "llama3",
+    "excluded_candidates": [],
+    "oracle": {
+      "n_solvable": 2,
+      "solvable_fixture_ids": [
+        "search-copy-blue",
+        "search-latest-green"
+      ],
+      "unsolvable_fixture_ids": [],
+      "oracle_pass_rate": 1.0,
+      "winner_pass_rate": 1.0,
+      "gap": 0.0,
+      "per_fixture_winners": {
+        "search-copy-blue": [
+          "llama3"
+        ],
+        "search-latest-green": [
+          "llama3"
+        ]
+      }
+    },
+    "portfolio": {
+      "size": 1,
+      "members": [
+        "llama3"
+      ],
+      "per_member_covers": {
+        "llama3": [
+          "search-copy-blue",
+          "search-latest-green"
+        ]
+      },
+      "covered_fixture_ids": [
+        "search-copy-blue",
+        "search-latest-green"
+      ],
+      "uncovered_fixture_ids": [],
+      "greedy_note": "greedy set-cover approximation; not guaranteed optimal"
+    }
+  },
   "transfer": {
     "available": true,
     "primary_winner": "llama3",

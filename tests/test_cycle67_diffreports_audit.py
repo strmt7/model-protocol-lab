@@ -243,6 +243,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "token_healing": {"available": "neither", "changed": False},
         "hierarchy": {"available": "neither", "changed": False},
         "prefill": {"available": "neither", "changed": False},
+        "portfolio": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -279,6 +280,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "hierarchy_asymmetric": False,
             "prefill_changed": False,
             "prefill_asymmetric": False,
+            "portfolio_changed": False,
+            "portfolio_asymmetric": False,
             "identical": True,
         },
     }
@@ -1109,6 +1112,141 @@ def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     diff["changed"] = changed
     return diff, changed, asymmetric
 
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_portfolio_valid(value: Any) -> bool:
+    """Oracle validator mirroring diffreports._valid_portfolio."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if type(value.get("n_fixtures")) is not int or value["n_fixtures"] <= 0:
+        return False
+    oracle = value.get("oracle")
+    if type(oracle) is not dict:
+        return False
+    for key in ("gap", "oracle_pass_rate"):
+        if type(oracle.get(key)) not in (int, float):
+            return False
+    winner_rate = oracle.get("winner_pass_rate")
+    if winner_rate is not None and type(winner_rate) not in (int, float):
+        return False
+    solvable = oracle.get("solvable_fixture_ids")
+    if type(solvable) is not list or not all(type(fid) is str for fid in solvable):
+        return False
+    winners = oracle.get("per_fixture_winners")
+    if type(winners) is not dict or not all(type(key) is str for key in winners):
+        return False
+    for names in winners.values():
+        if type(names) is not list or not all(type(name) is str for name in names):
+            return False
+    cover = value.get("portfolio")
+    if type(cover) is not dict:
+        return False
+    members = cover.get("members")
+    if type(members) is not list or not all(type(member) is str for member in members):
+        return False
+    per_member = cover.get("per_member_covers")
+    if type(per_member) is not dict or not all(type(key) is str for key in per_member):
+        return False
+    for fixtures in per_member.values():
+        if type(fixtures) is not list or not all(type(fid) is str for fid in fixtures):
+            return False
+    return True
+
+
+def _o_portfolio(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle portfolio section: gap/rates, solvable set, membership, drift."""
+    old_ok = _o_portfolio_valid(old)
+    new_ok = _o_portfolio_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _triplet(payload: Any) -> tuple[Any, Any, Any]:
+        oracle = payload.get("oracle") or {}
+        return (
+            oracle.get("gap"),
+            oracle.get("oracle_pass_rate"),
+            oracle.get("winner_pass_rate"),
+        )
+
+    old_triplet, new_triplet = _triplet(old), _triplet(new)
+    rates_shifted = old_triplet != new_triplet
+    diff["rates"] = {
+        "old": {
+            "gap": old_triplet[0],
+            "oracle_pass_rate": old_triplet[1],
+            "winner_pass_rate": old_triplet[2],
+        },
+        "new": {
+            "gap": new_triplet[0],
+            "oracle_pass_rate": new_triplet[1],
+            "winner_pass_rate": new_triplet[2],
+        },
+        "changed": rates_shifted,
+    }
+    old_solvable = set((old.get("oracle") or {}).get("solvable_fixture_ids") or [])
+    new_solvable = set((new.get("oracle") or {}).get("solvable_fixture_ids") or [])
+    solvable_added = sorted(new_solvable - old_solvable)
+    solvable_removed = sorted(old_solvable - new_solvable)
+    diff["solvable_added"] = solvable_added
+    diff["solvable_removed"] = solvable_removed
+    old_members = list((old.get("portfolio") or {}).get("members") or [])
+    new_members = list((new.get("portfolio") or {}).get("members") or [])
+    members_added = [m for m in new_members if m not in old_members]
+    members_removed = [m for m in old_members if m not in new_members]
+    diff["members_added"] = members_added
+    diff["members_removed"] = members_removed
+    old_winners = {
+        str(k): list(v)
+        for k, v in ((old.get("oracle") or {}).get("per_fixture_winners") or {}).items()
+    }
+    new_winners = {
+        str(k): list(v)
+        for k, v in ((new.get("oracle") or {}).get("per_fixture_winners") or {}).items()
+    }
+    fixture_winner_drift = [
+        {"fixture": fid, "old_winners": old_winners[fid], "new_winners": new_winners[fid]}
+        for fid in sorted(set(old_winners) & set(new_winners))
+        if old_winners[fid] != new_winners[fid]
+    ]
+    diff["fixture_winner_drift"] = fixture_winner_drift
+    old_covers = {
+        str(k): sorted(v)
+        for k, v in ((old.get("portfolio") or {}).get("per_member_covers") or {}).items()
+    }
+    new_covers = {
+        str(k): sorted(v)
+        for k, v in ((new.get("portfolio") or {}).get("per_member_covers") or {}).items()
+    }
+    cover_drift = [
+        {"member": m, "old_covers": old_covers[m], "new_covers": new_covers[m]}
+        for m in sorted(set(old_covers) & set(new_covers))
+        if old_covers[m] != new_covers[m]
+    ]
+    diff["cover_drift"] = cover_drift
+    changed = bool(
+        rates_shifted
+        or solvable_added
+        or solvable_removed
+        or members_added
+        or members_removed
+        or fixture_winner_drift
+        or cover_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
 
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
@@ -1452,6 +1590,7 @@ def _oracle_diff(
     )
     o_hy, o_hy_changed, o_hy_asymmetric = _o_hierarchy(old.get("hierarchy"), new.get("hierarchy"))
     o_pf, o_pf_changed, o_pf_asymmetric = _o_prefill(old.get("prefill"), new.get("prefill"))
+    o_po, o_po_changed, o_po_asymmetric = _o_portfolio(old.get("portfolio"), new.get("portfolio"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -1479,6 +1618,8 @@ def _oracle_diff(
         and not o_hy_asymmetric
         and not o_pf_changed
         and not o_pf_asymmetric
+        and not o_po_changed
+        and not o_po_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1496,6 +1637,7 @@ def _oracle_diff(
         "token_healing": o_hl,
         "hierarchy": o_hy,
         "prefill": o_pf,
+        "portfolio": o_po,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1528,6 +1670,8 @@ def _oracle_diff(
             "hierarchy_asymmetric": o_hy_asymmetric,
             "prefill_changed": o_pf_changed,
             "prefill_asymmetric": o_pf_asymmetric,
+            "portfolio_changed": o_po_changed,
+            "portfolio_asymmetric": o_po_asymmetric,
             "identical": identical,
         },
     }
@@ -1671,6 +1815,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "hierarchy_asymmetric": False,
                 "prefill_changed": False,
                 "prefill_asymmetric": False,
+                "portfolio_changed": False,
+                "portfolio_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2719,6 +2865,54 @@ def _fuzz_prefill_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_portfolio_section(rng: random.Random) -> dict[str, Any]:
+    fixtures = ["f1", "f2", "f3"]
+    per_fixture_winners = {}
+    for fid in fixtures:
+        if rng.random() < 0.85:
+            per_fixture_winners[fid] = sorted(
+                rng.sample(["alpha", "beta", "gamma"], rng.randint(1, 2))
+            )
+    members = sorted(rng.sample(["alpha", "beta", "gamma"], rng.randint(1, 3)))
+    per_member_covers = {name: sorted(rng.sample(fixtures, rng.randint(0, 3))) for name in members}
+    if rng.random() < 0.15:
+        per_member_covers[rng.choice([7, 8.5])] = ["f1"]
+    solvable = sorted(per_fixture_winners)
+    gap = rng.choice([0.0, 0.25, 0.5, 1.0])
+    return {
+        "available": True,
+        "n_fixtures": 3,
+        "n_candidates": rng.randint(1, 3),
+        "decision": rng.choice(["selected", "ambiguous", "no_candidate"]),
+        "winner": rng.choice(["alpha", None]),
+        "excluded_candidates": [],
+        "oracle": {
+            "n_solvable": len(solvable),
+            "solvable_fixture_ids": solvable,
+            "unsolvable_fixture_ids": [f for f in fixtures if f not in solvable],
+            "oracle_pass_rate": len(solvable) / 3,
+            "winner_pass_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "gap": gap,
+            "per_fixture_winners": per_fixture_winners,
+        },
+        "portfolio": {
+            "size": len(members),
+            "members": members,
+            "per_member_covers": per_member_covers,
+            "covered_fixture_ids": sorted(
+                {
+                    fid
+                    for covers in per_member_covers.values()
+                    if type(covers) is list
+                    for fid in covers
+                }
+            ),
+            "uncovered_fixture_ids": [f for f in fixtures if f not in solvable],
+            "greedy_note": "greedy set-cover approximation; not guaranteed optimal",
+        },
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2749,9 +2943,9 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.30:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
-    # robustness, perturbation, token healing, hierarchy, prefill):
-    # emitted often enough that the differential fuzz exercises them,
-    # not just the legacy axes.
+    # robustness, perturbation, token healing, hierarchy, prefill,
+    # portfolio): emitted often enough that the differential fuzz
+    # exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -2766,13 +2960,15 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["hierarchy"] = _fuzz_hierarchy_section(rng)
     if rng.random() < 0.45:
         report["prefill"] = _fuzz_prefill_section(rng)
+    if rng.random() < 0.45:
+        report["portfolio"] = _fuzz_portfolio_section(rng)
     return report
 
 
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(16)
+        op = rng.randrange(17)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -2851,6 +3047,11 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
                 cell = per_cond[key]
                 if isinstance(cell, dict):
                     cell["winner"] = rng.choice(["alpha", "zzz", None])
+        elif op == 16:
+            port = report.get("portfolio")
+            oracle = port.get("oracle") if isinstance(port, dict) else None
+            if isinstance(oracle, dict):
+                oracle["gap"] = rng.choice([0.0, 0.99, "mutated"])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
@@ -2977,6 +3178,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not hierarchy_asymmetric\n"
             '        and not prefill_diff["changed"]\n'
             "        and not prefill_asymmetric\n"
+            '        and not portfolio_diff["changed"]\n'
+            "        and not portfolio_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -3001,6 +3204,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or perturbation_asymmetric\n"
             '        or healing_diff["changed"]\n'
             "        or healing_asymmetric\n"
+            '        or portfolio_diff["changed"]\n'
+            "        or portfolio_asymmetric\n"
             "    )\n",
             scenario,
         )
