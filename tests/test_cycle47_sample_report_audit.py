@@ -70,6 +70,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "template_firewall",
     "selection_robustness",
     "transfer",
+    "perturbation",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

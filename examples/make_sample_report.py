@@ -296,6 +296,39 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "transfer_unavailable",
         }
+    # Fixture-perturbation robustness: run the real perturbation stage
+    # (N=4, one variant per operator) against the synthetic backend, so
+    # the committed sample report exercises the perturbation section
+    # with genuine flips (the scripted backend keys its answer on exact
+    # keywords, so case/typo/Unicode noise really does flip variants --
+    # exactly the phrasing-luck signal the experiment measures).
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import perturbation_robustness, perturbation_stage
+        from model_protocol_lab.perturbation import PERTURBATION_OPERATORS
+
+        _p_fmts = candidates("llama3", mutate=True)
+        _p_stage = perturbation_stage(
+            DemoBackend(),
+            _p_fmts,
+            tuple(split.search),
+            n_variants=4,
+            operators=PERTURBATION_OPERATORS,
+            seed=20261012,
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+        )
+        result["perturbation"] = perturbation_robustness(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _p_fmts),
+            _p_stage,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["perturbation"] = {
+            "available": False,
+            "detail": "perturbation_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

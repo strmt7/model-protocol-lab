@@ -26,6 +26,7 @@ from .core import (
     evaluate,
     first_boundary,
 )
+from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 
 FAILURE_MODES = (
@@ -613,6 +614,275 @@ def transfer_stage(
             per_candidate[fmt.name] = passed == report.planned_count
         transfer[ckpt] = per_candidate
     return transfer
+
+
+def perturbation_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    n_variants: int,
+    operators: tuple[str, ...] = PERTURBATION_OPERATORS,
+    seed: int = 0,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate on perturbed fixture variants.
+
+    For each of ``n_variants`` deterministically perturbed fixture
+    variants (operator assigned round-robin by
+    :func:`perturbation.variant_plan`, seeded from ``seed``), every
+    search candidate is re-evaluated with ``core.evaluate()`` on the
+    search split only, with the same boundary and max_new_tokens.
+    Greedy, exact. Only fixture *message content* is perturbed --
+    ids, groups, and expected answers are preserved, so per-variant
+    verdicts stay comparable to the primary run.
+
+    Any backend construction or evaluation failure records None for
+    that (variant, candidate) cell -- fail-closed, never silently
+    skipped. ``changed_fixtures`` counts the fixtures whose message
+    content actually changed under the variant's operator, so a
+    no-op perturbation is reported honestly instead of inflating
+    stability.
+
+    Returns ``{"n_variants": ..., "operators": [...], "variants":
+    {variant_id: {"operator", "seed", "changed_fixtures",
+    "n_fixtures", "outcomes": {candidate: bool | None}}}}``. Pure in
+    its return contract (no global state), though evaluation performs
+    I/O.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    plan = variant_plan(n_variants, operators, seed=seed)
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    variants: dict[str, dict[str, Any]] = {}
+    for spec in plan:
+        variant_id = spec["variant_id"]
+        operator = spec["operator"]
+        variant_seed = spec["seed"]
+        perturbed = perturb_fixtures(cases, operator, seed=variant_seed)
+        changed = sum(
+            any(
+                new.content != old.content
+                for new, old in zip(p_case.messages, case.messages, strict=True)
+            )
+            for p_case, case in zip(perturbed, cases, strict=True)
+        )
+        outcomes: dict[str, bool | None] = {}
+        for fmt in formats:
+            try:
+                report = evaluate(
+                    backend,
+                    fmt,
+                    perturbed,
+                    boundary=boundaries[fmt.name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                )
+            except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                outcomes[fmt.name] = None
+                continue
+            if not report.aggregate_eligible:
+                outcomes[fmt.name] = None
+                continue
+            passed = sum(o.exact_match and o.boundary_found for o in report.observations)
+            outcomes[fmt.name] = passed == report.planned_count
+        variants[variant_id] = {
+            "operator": operator,
+            "seed": variant_seed,
+            "changed_fixtures": changed,
+            "n_fixtures": len(cases),
+            "outcomes": outcomes,
+        }
+    return {
+        "n_variants": n_variants,
+        "operators": list(operators),
+        "variants": variants,
+    }
+
+
+def perturbation_robustness(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-apply the selection rule per perturbation variant (pure post-hoc).
+
+    Answers "does the winner survive fixture phrasing perturbations?":
+    for each perturbed variant the conservative selection rule is
+    re-applied to that variant's per-candidate pass/fail outcomes, and
+    the primary (decision, winner) is compared against every variant.
+
+    A variant where no candidate could be evaluated is reported as
+    ``"unavailable"``, never as a phantom ``no_candidate`` --
+    "unknown" must not masquerade as a verdict. ``stability``
+    summarizes how many evaluable variants retain the primary winner
+    and the primary decision; ``per_operator`` breaks the retention
+    down by perturbation operator with the mean fixture-change rate,
+    so a reader can see *which* phrasing noise the winner is fragile
+    to. ``flips`` lists the evaluable variants whose (decision,
+    winner) differs from the primary run.
+
+    Returns ``{"available": True, "primary_winner": ...,
+    "primary_decision": ..., "n_variants": ..., "operators": [...],
+    "per_variant": {variant_id: {"operator", "decision", "winner",
+    "changed_fixtures", "changed_rate"}}, "flips": [...],
+    "stability": {...}, "per_operator": {...}}``. Never raises on
+    malformed input: returns ``{"available": False}``.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_not_a_dict"}
+    raw_variants = stage.get("variants")
+    if (
+        type(raw_variants) is not dict
+        or not raw_variants
+        or not all(type(k) is str and k for k in raw_variants)
+    ):
+        return {"available": False, "detail": "variants_invalid"}
+    for vid, spec in raw_variants.items():
+        if type(spec) is not dict or type(spec.get("operator")) is not str:
+            return {"available": False, "detail": f"variant_{vid}_invalid"}
+        outcomes = spec.get("outcomes")
+        if type(outcomes) is not dict:
+            return {"available": False, "detail": f"variant_{vid}_invalid"}
+        for cand in candidates:
+            val = outcomes.get(cand)
+            if val is not None and type(val) is not bool:
+                return {"available": False, "detail": f"variant_{vid}_invalid"}
+
+    per_variant: dict[str, dict[str, Any]] = {}
+    for vid in sorted(raw_variants):
+        spec = raw_variants[vid]
+        outcomes = spec["outcomes"]
+        vals = [outcomes.get(c) for c in candidates]
+        if all(v is None for v in vals):
+            per_variant[vid] = {
+                "operator": spec["operator"],
+                "decision": "unavailable",
+                "winner": None,
+                "changed_fixtures": spec.get("changed_fixtures"),
+                "changed_rate": _changed_rate(spec),
+            }
+            continue
+        winners = [c for c, v in zip(candidates, vals, strict=True) if v is True]
+        # Mirrors _select_winner(winners, cancelled=False): exactly one
+        # passing candidate wins; ties and failures abstain.
+        if len(winners) == 1:
+            decision, winner = "selected", winners[0]
+        elif winners:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        per_variant[vid] = {
+            "operator": spec["operator"],
+            "decision": decision,
+            "winner": winner,
+            "changed_fixtures": spec.get("changed_fixtures"),
+            "changed_rate": _changed_rate(spec),
+        }
+
+    evaluable = [v for v in per_variant.values() if v["decision"] != "unavailable"]
+    flips = []
+    for vid in sorted(per_variant):
+        verdict = per_variant[vid]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != (primary_decision, primary_winner):
+            flips.append(
+                {
+                    "variant": vid,
+                    "operator": verdict["operator"],
+                    "decision_from": primary_decision,
+                    "decision_to": verdict["decision"],
+                    "winner_from": primary_winner,
+                    "winner_to": verdict["winner"],
+                }
+            )
+    winner_retained = (
+        sum(1 for v in evaluable if v["winner"] == primary_winner)
+        if primary_winner is not None
+        else None
+    )
+    stability = {
+        "n_variants": len(per_variant),
+        "n_evaluable": len(evaluable),
+        "n_unavailable": len(per_variant) - len(evaluable),
+        "winner_retained": winner_retained,
+        "decision_retained": sum(1 for v in evaluable if v["decision"] == primary_decision),
+    }
+    per_operator: dict[str, dict[str, Any]] = {}
+    for vid in sorted(per_variant):
+        verdict = per_variant[vid]
+        op = verdict["operator"]
+        agg = per_operator.setdefault(
+            op, {"variants": 0, "evaluable": 0, "winner_retained": 0, "changed_rates": []}
+        )
+        agg["variants"] += 1
+        if verdict["decision"] != "unavailable":
+            agg["evaluable"] += 1
+            if primary_winner is not None and verdict["winner"] == primary_winner:
+                agg["winner_retained"] += 1
+        if type(verdict["changed_rate"]) is float:
+            agg["changed_rates"].append(verdict["changed_rate"])
+    for op, agg in per_operator.items():
+        rates = agg.pop("changed_rates")
+        per_operator[op] = {
+            "variants": agg["variants"],
+            "evaluable": agg["evaluable"],
+            "winner_retained": agg["winner_retained"] if primary_winner is not None else None,
+            "mean_changed_rate": (sum(rates) / len(rates)) if rates else None,
+        }
+    raw_operators = stage.get("operators")
+    operators = (
+        list(raw_operators)
+        if type(raw_operators) is list and all(type(o) is str for o in raw_operators)
+        else sorted(per_operator)
+    )
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "n_variants": len(per_variant),
+        "operators": operators,
+        "per_variant": per_variant,
+        "flips": flips,
+        "stability": stability,
+        "per_operator": per_operator,
+    }
+
+
+def _changed_rate(spec: dict[str, Any]) -> float | None:
+    """Fraction of fixtures actually changed by a variant's operator."""
+    changed = spec.get("changed_fixtures")
+    total = spec.get("n_fixtures")
+    if type(changed) is int and type(total) is int and total > 0:
+        return changed / total
+    return None
 
 
 def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> int | None:

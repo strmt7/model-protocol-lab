@@ -501,6 +501,29 @@ def oracle_diff_reports(
     else:
         _o_ct_available = "neither"
     _o_ct_asymmetric = _o_ct_available not in ("both", "neither")
+
+    def _or_pb_valid(value: Any) -> bool:
+        pv = value.get("per_variant") if type(value) is dict else None
+        st = value.get("stability") if type(value) is dict else None
+        return (
+            type(value) is dict
+            and value.get("available") is True
+            and type(pv) is dict
+            and all(type(k) is str for k in pv)
+            and type(st) is dict
+        )
+
+    _pb_old_ok = _or_pb_valid(old.get("perturbation"))
+    _pb_new_ok = _or_pb_valid(new.get("perturbation"))
+    if _pb_old_ok and _pb_new_ok:
+        _o_pb_available = "both"
+    elif _pb_old_ok:
+        _o_pb_available = "old"
+    elif _pb_new_ok:
+        _o_pb_available = "new"
+    else:
+        _o_pb_available = "neither"
+    _o_pb_asymmetric = _o_pb_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -514,6 +537,7 @@ def oracle_diff_reports(
         and not _o_sr_asymmetric
         and not _o_tr_asymmetric
         and not _o_ct_asymmetric
+        and not _o_pb_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -534,6 +558,8 @@ def oracle_diff_reports(
         "transfer_asymmetric": _o_tr_asymmetric,
         "contamination_changed": False,
         "contamination_asymmetric": _o_ct_asymmetric,
+        "perturbation_changed": False,
+        "perturbation_asymmetric": _o_pb_asymmetric,
         "identical": identical,
     }
     return {
@@ -548,6 +574,7 @@ def oracle_diff_reports(
         "selection_robustness": {"available": _o_sr_available, "changed": False},
         "transfer": {"available": _o_tr_available, "changed": False},
         "contamination": {"available": _o_ct_available, "changed": False},
+        "perturbation": {"available": _o_pb_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

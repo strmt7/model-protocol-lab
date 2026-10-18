@@ -2141,6 +2141,116 @@
     },
     "transfer_verdict": "full"
   },
+  "perturbation": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "n_variants": 4,
+    "operators": [
+      "typo",
+      "case_flip",
+      "whitespace",
+      "unicode_variant",
+      "punctuation_strip"
+    ],
+    "per_variant": {
+      "v00": {
+        "operator": "typo",
+        "decision": "selected",
+        "winner": "llama3",
+        "changed_fixtures": 2,
+        "changed_rate": 1.0
+      },
+      "v01": {
+        "operator": "case_flip",
+        "decision": "no_candidate",
+        "winner": null,
+        "changed_fixtures": 2,
+        "changed_rate": 1.0
+      },
+      "v02": {
+        "operator": "whitespace",
+        "decision": "selected",
+        "winner": "llama3",
+        "changed_fixtures": 2,
+        "changed_rate": 1.0
+      },
+      "v03": {
+        "operator": "unicode_variant",
+        "decision": "no_candidate",
+        "winner": null,
+        "changed_fixtures": 2,
+        "changed_rate": 1.0
+      }
+    },
+    "flips": [
+      {
+        "variant": "v00",
+        "operator": "typo",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      },
+      {
+        "variant": "v01",
+        "operator": "case_flip",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      },
+      {
+        "variant": "v02",
+        "operator": "whitespace",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      },
+      {
+        "variant": "v03",
+        "operator": "unicode_variant",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      }
+    ],
+    "stability": {
+      "n_variants": 4,
+      "n_evaluable": 4,
+      "n_unavailable": 0,
+      "winner_retained": 2,
+      "decision_retained": 0
+    },
+    "per_operator": {
+      "typo": {
+        "variants": 1,
+        "evaluable": 1,
+        "winner_retained": 1,
+        "mean_changed_rate": 1.0
+      },
+      "case_flip": {
+        "variants": 1,
+        "evaluable": 1,
+        "winner_retained": 0,
+        "mean_changed_rate": 1.0
+      },
+      "whitespace": {
+        "variants": 1,
+        "evaluable": 1,
+        "winner_retained": 1,
+        "mean_changed_rate": 1.0
+      },
+      "unicode_variant": {
+        "variants": 1,
+        "evaluable": 1,
+        "winner_retained": 0,
+        "mean_changed_rate": 1.0
+      }
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

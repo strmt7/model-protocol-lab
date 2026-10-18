@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 144 — fixture-perturbation robustness experiment, 2026-10-18)
+
+- New `run --perturb N` (1-8): re-evaluates every search candidate
+  against the primary checkpoint on N deterministically perturbed
+  fixture variants (search split only) and re-applies the conservative
+  selection rule per variant -- answering "does the winner survive
+  fixture phrasing perturbations, or did it win on phrasing luck?"
+  New pure `model_protocol_lab/perturbation.py` (seeded operators:
+  typo, case flip, whitespace, Unicode variant, punctuation strip --
+  message content only; ids, groups, expected answers untouched),
+  `experiments.perturbation_stage` (re-runs the evaluation pipeline
+  per variant, fail-closed per cell, honest `changed_fixtures`
+  counts), and pure `experiments.perturbation_robustness`
+  (per-variant verdicts, flips, stability summary, per-operator
+  breakdown with mean fixture-change rates). Wired into
+  `results.json`, the HTML "Fixture-perturbation robustness" section,
+  and `diff-reports` (`diff_perturbation` with
+  `perturbation_changed` / `perturbation_asymmetric` feeding
+  `identical`). Completes the winner-reliability trilogy with
+  stop-semantics robustness (cycle 137) and cross-checkpoint transfer
+  (cycle 138). 48 new tests, 2/2 mutation gates killed.
+
 ### Added (cycle 143 — contamination comparison in diff-reports, 2026-10-18)
 
 - `diff-reports` now compares the `contamination` report between runs

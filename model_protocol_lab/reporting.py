@@ -3300,6 +3300,126 @@ def _transfer_section(result: dict[str, Any]) -> str:
     )
 
 
+def _perturbation_section(result: dict[str, Any]) -> str:
+    """Fixture-perturbation robustness: does the winner survive phrasing noise?
+
+    Re-applies the conservative selection rule to every search candidate
+    on each deterministically perturbed fixture variant (search split
+    only) and reports whether the primary (decision, winner) survives.
+    A variant where no candidate could be evaluated is shown as n/a,
+    never as a verdict. Renders nothing when the perturbation
+    experiment did not run.
+    """
+    perturbation: Any = result.get("perturbation")
+    if type(perturbation) is not dict or not perturbation.get("available"):
+        return ""
+    per_variant = perturbation.get("per_variant")
+    stability = perturbation.get("stability")
+    per_operator = perturbation.get("per_operator")
+    if (
+        type(per_variant) is not dict
+        or type(stability) is not dict
+        or type(per_operator) is not dict
+    ):
+        return ""
+    primary_winner = perturbation.get("primary_winner")
+    primary_decision = perturbation.get("primary_decision")
+    n_eval = stability.get("n_evaluable")
+    retained = stability.get("winner_retained")
+    decision_retained = stability.get("decision_retained")
+    if type(n_eval) is int and n_eval:
+        if type(retained) is int:
+            stability_line = f"{retained}/{n_eval} evaluable variants retain the primary winner"
+        else:
+            stability_line = (
+                f"{decision_retained}/{n_eval} evaluable variants retain the primary decision"
+            )
+    else:
+        stability_line = "no variant was evaluable"
+    flips = perturbation.get("flips")
+    n_flips = len(flips) if type(flips) is list else 0
+
+    op_rows = []
+    for op in sorted(str(o) for o in per_operator):
+        agg = per_operator[op]
+        if type(agg) is not dict:
+            continue
+        wr = agg.get("winner_retained")
+        ev = agg.get("evaluable")
+        rate = agg.get("mean_changed_rate")
+        if type(wr) is int and type(ev) is int and ev:
+            cell = f"{wr}/{ev}"
+        elif type(ev) is int and ev:
+            cell = f"{ev} evaluable"
+        else:
+            cell = "n/a"
+        rate_cell = f"{rate:.0%}" if type(rate) is float else "n/a"
+        op_rows.append(
+            '<tr><td><span class="mono">'
+            + escape(op)
+            + "</span></td><td>"
+            + escape(cell)
+            + "</td><td>"
+            + escape(rate_cell)
+            + "</td></tr>"
+        )
+    variant_rows = []
+    for vid in sorted(str(v) for v in per_variant):
+        verdict = per_variant[vid]
+        if type(verdict) is not dict:
+            continue
+        decision = verdict.get("decision")
+        winner = verdict.get("winner")
+        operator = verdict.get("operator")
+        if decision == "unavailable":
+            badge, note = "neutral", "n/a"
+        elif (decision, winner) == (primary_decision, primary_winner):
+            badge, note = "pass", "matches"
+        else:
+            badge, note = "fail", "differs"
+        variant_rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(vid))
+            + '</span></td><td><span class="mono">'
+            + escape(str(operator))
+            + '</span></td><td><span class="mono">'
+            + escape(str(decision))
+            + '</span></td><td><span class="mono">'
+            + escape(str(winner) if winner is not None else "(none)")
+            + '</span></td><td><span class="badge '
+            + badge
+            + '">'
+            + note
+            + "</span></td></tr>"
+        )
+    return (
+        '<section class="card"><h2>Fixture-perturbation robustness</h2>'
+        "<p>Every search candidate re-evaluated on each deterministically "
+        "perturbed fixture variant (typos, case flips, whitespace, Unicode "
+        "variants, punctuation stripping; search split only); the selection "
+        "rule re-applied per variant. A variant that flips the "
+        "(decision, winner) is phrasing luck, not merit.</p>"
+        "<p>Stability: <strong>"
+        + escape(stability_line)
+        + "</strong>"
+        + (f" — {n_flips} variant(s) flip the primary verdict." if n_flips else ".")
+        + "</p>"
+        + (
+            '<div class="table-wrap"><table><thead><tr><th scope="col">Operator</th>'
+            '<th scope="col">Winner retained</th>'
+            '<th scope="col">Fixtures changed</th>'
+            "</tr></thead><tbody>" + "".join(op_rows) + "</tbody></table></div>"
+            if op_rows
+            else ""
+        )
+        + '<div class="table-wrap"><table><thead><tr><th scope="col">Variant</th>'
+        '<th scope="col">Operator</th><th scope="col">Decision</th>'
+        '<th scope="col">Winner</th><th scope="col">vs primary</th>'
+        "</tr></thead><tbody>" + "".join(variant_rows) + "</tbody></table></div>"
+        "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3410,6 +3530,7 @@ def render_html(result: dict[str, Any]) -> str:
     marker_isolation_html = _marker_isolation_section(result)
     template_firewall_html = _template_firewall_section(result)
     transfer_html = _transfer_section(result)
+    perturbation_html = _perturbation_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3433,6 +3554,11 @@ def render_html(result: dict[str, Any]) -> str:
             ("marker-isolation", "Chat-marker isolation", marker_isolation_html),
             ("template-firewall", "Template firewall", template_firewall_html),
             ("transfer", "Cross-checkpoint transfer", transfer_html),
+            (
+                "perturbation-robustness",
+                "Fixture-perturbation robustness",
+                perturbation_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -3475,6 +3601,7 @@ def render_html(result: dict[str, Any]) -> str:
         + marker_isolation_html
         + template_firewall_html
         + transfer_html
+        + perturbation_html
         + sweep_html
         + logprob_html
         + held_out_html
