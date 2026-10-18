@@ -528,6 +528,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    portfolio_diff = diff_portfolio(old.get("portfolio"), new.get("portfolio"))
+    portfolio_asymmetric = portfolio_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -555,6 +560,8 @@ def diff_reports(
         and not hierarchy_asymmetric
         and not prefill_diff["changed"]
         and not prefill_asymmetric
+        and not portfolio_diff["changed"]
+        and not portfolio_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -583,6 +590,8 @@ def diff_reports(
         "hierarchy_asymmetric": hierarchy_asymmetric,
         "prefill_changed": prefill_diff["changed"],
         "prefill_asymmetric": prefill_asymmetric,
+        "portfolio_changed": portfolio_diff["changed"],
+        "portfolio_asymmetric": portfolio_asymmetric,
         "identical": identical,
     }
     return {
@@ -601,6 +610,7 @@ def diff_reports(
         "token_healing": healing_diff,
         "hierarchy": hierarchy_diff,
         "prefill": prefill_diff,
+        "portfolio": portfolio_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1730,6 +1740,178 @@ def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_portfolio(payload: Any) -> bool:
+    """Light validation: is this a comparable ``portfolio`` payload?
+
+    Structural checks only (key types and value shapes); a malformed
+    side degrades to asymmetric instead of raising, per the module's
+    degrade-gracefully contract. Mixed-type fixture/member keys would
+    otherwise TypeError inside the set comparisons below.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if type(payload.get("n_fixtures")) is not int or payload["n_fixtures"] <= 0:
+        return False
+    oracle = payload.get("oracle")
+    if type(oracle) is not dict:
+        return False
+    for key in ("gap", "oracle_pass_rate"):
+        if type(oracle.get(key)) not in (int, float):
+            return False
+    winner_rate = oracle.get("winner_pass_rate")
+    if winner_rate is not None and type(winner_rate) not in (int, float):
+        return False
+    solvable = oracle.get("solvable_fixture_ids")
+    if type(solvable) is not list or not all(type(fid) is str for fid in solvable):
+        return False
+    winners = oracle.get("per_fixture_winners")
+    if type(winners) is not dict or not all(type(key) is str for key in winners):
+        return False
+    for names in winners.values():
+        if type(names) is not list or not all(type(name) is str for name in names):
+            return False
+    cover = payload.get("portfolio")
+    if type(cover) is not dict:
+        return False
+    members = cover.get("members")
+    if type(members) is not list or not all(type(member) is str for member in members):
+        return False
+    per_member = cover.get("per_member_covers")
+    if type(per_member) is not dict or not all(type(key) is str for key in per_member):
+        return False
+    for fixtures in per_member.values():
+        if type(fixtures) is not list or not all(type(fid) is str for fid in fixtures):
+            return False
+    return True
+
+
+def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``portfolio`` payloads; deterministic.
+
+    Answers "did the oracle-mixture story change between runs?": the
+    oracle gap and rates, the solvable-fixture set, the greedy
+    portfolio membership, the per-fixture oracle-winner sets, and each
+    member's covered fixtures. A shrinking gap after a checkpoint or
+    fixture update means the protocols are converging; a growing gap
+    means the winner is increasingly specialized. Members present on
+    only one side are reported as added/removed. A side without a
+    recorded portfolio analysis is reported plainly. No model, no
+    network.
+    """
+    old_ok = _valid_portfolio(old)
+    new_ok = _valid_portfolio(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _rate_triplet(payload: Any) -> tuple[Any, Any, Any]:
+        oracle = payload.get("oracle") or {}
+        return (
+            oracle.get("gap"),
+            oracle.get("oracle_pass_rate"),
+            oracle.get("winner_pass_rate"),
+        )
+
+    old_triplet = _rate_triplet(old)
+    new_triplet = _rate_triplet(new)
+    rates_shifted = old_triplet != new_triplet
+    result["rates"] = {
+        "old": {
+            "gap": old_triplet[0],
+            "oracle_pass_rate": old_triplet[1],
+            "winner_pass_rate": old_triplet[2],
+        },
+        "new": {
+            "gap": new_triplet[0],
+            "oracle_pass_rate": new_triplet[1],
+            "winner_pass_rate": new_triplet[2],
+        },
+        "changed": rates_shifted,
+    }
+
+    def _solvable(payload: Any) -> set[str]:
+        oracle = payload.get("oracle") or {}
+        return set(oracle.get("solvable_fixture_ids") or [])
+
+    old_solvable = _solvable(old)
+    new_solvable = _solvable(new)
+    solvable_added = sorted(new_solvable - old_solvable)
+    solvable_removed = sorted(old_solvable - new_solvable)
+    result["solvable_added"] = solvable_added
+    result["solvable_removed"] = solvable_removed
+
+    def _members(payload: Any) -> list[str]:
+        cover = payload.get("portfolio") or {}
+        return list(cover.get("members") or [])
+
+    old_members = _members(old)
+    new_members = _members(new)
+    members_added = [member for member in new_members if member not in old_members]
+    members_removed = [member for member in old_members if member not in new_members]
+    result["members_added"] = members_added
+    result["members_removed"] = members_removed
+
+    def _fixture_winners(payload: Any) -> dict[str, list[str]]:
+        oracle = payload.get("oracle") or {}
+        winners = oracle.get("per_fixture_winners") or {}
+        return {str(key): list(names) for key, names in winners.items()}
+
+    old_winners = _fixture_winners(old)
+    new_winners = _fixture_winners(new)
+    fixture_winner_drift: list[dict[str, Any]] = []
+    for fixture_id in sorted(set(old_winners) & set(new_winners)):
+        if old_winners[fixture_id] != new_winners[fixture_id]:
+            fixture_winner_drift.append(
+                {
+                    "fixture": fixture_id,
+                    "old_winners": old_winners[fixture_id],
+                    "new_winners": new_winners[fixture_id],
+                }
+            )
+    result["fixture_winner_drift"] = fixture_winner_drift
+
+    def _covers(payload: Any) -> dict[str, list[str]]:
+        cover = payload.get("portfolio") or {}
+        per_member = cover.get("per_member_covers") or {}
+        return {str(key): sorted(fixtures) for key, fixtures in per_member.items()}
+
+    old_covers = _covers(old)
+    new_covers = _covers(new)
+    cover_drift: list[dict[str, Any]] = []
+    for member in sorted(set(old_covers) & set(new_covers)):
+        if old_covers[member] != new_covers[member]:
+            cover_drift.append(
+                {
+                    "member": member,
+                    "old_covers": old_covers[member],
+                    "new_covers": new_covers[member],
+                }
+            )
+    result["cover_drift"] = cover_drift
+
+    # NOTE: phrased with portfolio-specific names so this line stays
+    # textually distinct from every other section's changed anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        rates_shifted
+        or solvable_added
+        or solvable_removed
+        or members_added
+        or members_removed
+        or fixture_winner_drift
+        or cover_drift
+    )
+    return result
+
+
 def _healing_verdict_triplet(payload: Any) -> tuple[Any, Any, Any]:
     """(flipped, healed_decision, healed_winner) for drift comparison."""
     if type(payload) is not dict:
@@ -2473,6 +2655,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("instruction-hierarchy adherence")
         if diff["prefill"]["available"] == "both":
             axes.append("assistant-prefill sensitivity")
+        if diff["portfolio"]["available"] == "both":
+            axes.append("protocol-portfolio gap")
         lines.append(
             "No differences: the two runs are identical on every compared axis "
             f"({', '.join(axes)})."

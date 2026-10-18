@@ -689,6 +689,58 @@ def oracle_diff_reports(
     else:
         _o_pf_available = "neither"
     _o_pf_asymmetric = _o_pf_available not in ("both", "neither")
+
+    def _or_po_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_portfolio exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if type(value.get("n_fixtures")) is not int or value["n_fixtures"] <= 0:
+            return False
+        oracle = value.get("oracle")
+        if type(oracle) is not dict:
+            return False
+        for key in ("gap", "oracle_pass_rate"):
+            if type(oracle.get(key)) not in (int, float):
+                return False
+        winner_rate = oracle.get("winner_pass_rate")
+        if winner_rate is not None and type(winner_rate) not in (int, float):
+            return False
+        solvable = oracle.get("solvable_fixture_ids")
+        if type(solvable) is not list or not all(type(fid) is str for fid in solvable):
+            return False
+        winners = oracle.get("per_fixture_winners")
+        if type(winners) is not dict or not all(type(key) is str for key in winners):
+            return False
+        for names in winners.values():
+            if type(names) is not list or not all(type(name) is str for name in names):
+                return False
+        cover = value.get("portfolio")
+        if type(cover) is not dict:
+            return False
+        members = cover.get("members")
+        if type(members) is not list or not all(type(member) is str for member in members):
+            return False
+        per_member = cover.get("per_member_covers")
+        if type(per_member) is not dict or not all(type(key) is str for key in per_member):
+            return False
+        for fixtures in per_member.values():
+            if type(fixtures) is not list or not all(type(fid) is str for fid in fixtures):
+                return False
+        return True
+
+    _po_old_ok = _or_po_valid(old.get("portfolio"))
+    _po_new_ok = _or_po_valid(new.get("portfolio"))
+    if _po_old_ok and _po_new_ok:
+        _o_po_available = "both"
+    elif _po_old_ok:
+        _o_po_available = "old"
+    elif _po_new_ok:
+        _o_po_available = "new"
+    else:
+        _o_po_available = "neither"
+    _o_po_asymmetric = _o_po_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -706,6 +758,7 @@ def oracle_diff_reports(
         and not _o_hl_asymmetric
         and not _o_hy_asymmetric
         and not _o_pf_asymmetric
+        and not _o_po_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -734,6 +787,8 @@ def oracle_diff_reports(
         "hierarchy_asymmetric": _o_hy_asymmetric,
         "prefill_changed": False,
         "prefill_asymmetric": _o_pf_asymmetric,
+        "portfolio_changed": False,
+        "portfolio_asymmetric": _o_po_asymmetric,
         "identical": identical,
     }
     return {
@@ -752,6 +807,7 @@ def oracle_diff_reports(
         "token_healing": {"available": _o_hl_available, "changed": False},
         "hierarchy": {"available": _o_hy_available, "changed": False},
         "prefill": {"available": _o_pf_available, "changed": False},
+        "portfolio": {"available": _o_po_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

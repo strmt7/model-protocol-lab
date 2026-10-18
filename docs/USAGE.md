@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -766,6 +766,41 @@ and the group rates between runs (`diff_prefill`;
 prefill-sensitivity regression signal after a checkpoint or fixture
 update. Roughly quadruples search compute; the stage never fails the
 run.
+
+### 8.19 Protocol portfolio (`portfolio`)
+
+How much does committing to the single global winner leave on the
+table versus a per-fixture oracle -- and what is the smallest protocol
+portfolio that covers every solvable fixture? The routing literature
+(RouteLLM et al., 2024) shows per-request model selection beats any
+single model on the cost--quality frontier, but routing is always
+*across models*. This is the routing lens applied *within* the lab to
+*prompt protocols*: the per-fixture oracle is the set of passing
+candidates for each fixture, and the gap quantifies what the
+conservative single-winner commitment costs.
+
+Every `run` computes this post-hoc over the stored search
+observations (a candidate *passes* a fixture exactly when the run's
+own measurement says `exact_match and boundary_found` -- nothing is
+re-scored). `results.json` carries `portfolio` with the oracle pass
+rate vs the global winner's rate and the gap (`gap >= 0` always: the
+oracle passes every fixture the winner passes -- pinned by a
+Hypothesis property), the per-fixture oracle winner sets, and the
+greedy covering portfolio over solvable fixtures (deterministic
+greedy set cover with lexicographic tie-breaks). The report's
+"Protocol portfolio" section renders the gap, the cover list, and a
+per-fixture winner table.
+
+Two honesty points, stated in the report itself: the portfolio is a
+greedy set-cover *approximation*, not a proven optimum; and fixtures
+no protocol passes are reported as unsolvable, never folded into the
+portfolio. `diff-reports` compares the gap, the rates, the
+solvable-fixture set, the portfolio membership, the per-fixture
+oracle-winner sets, and each member's covers between runs
+(`diff_portfolio`; `portfolio_changed` / `portfolio_asymmetric` feed
+`identical`) -- a shrinking gap means the protocols are converging; a
+growing gap means the winner is increasingly specialized. Zero new
+model runs; the stage never fails the run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

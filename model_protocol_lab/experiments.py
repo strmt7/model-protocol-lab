@@ -29,6 +29,7 @@ from .core import (
 )
 from .hierarchy import POSITIONS, family_of, system_treatment
 from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
+from .portfolio import greedy_cover, oracle_rates, per_fixture_oracle_winners
 from .prefill import (
     PrefillBackend,
     build_prefill_fixtures,
@@ -2843,3 +2844,99 @@ def run_experiment(
         passed = all(o.exact_match and o.boundary_found for o in held.observations)
         output["decision"] = "compatible_on_fixture_set" if passed else "held_out_failed"
     return finish()
+
+
+def portfolio_analysis(
+    result: dict[str, Any],
+    cases: tuple[Fixture, ...],
+) -> dict[str, Any]:
+    """Oracle-mixture / protocol-portfolio gap (pure post-hoc).
+
+    Derives per-candidate per-fixture pass from the stored search
+    observations (exact answer AND explicit boundary -- the run's own
+    measurement, never re-scored) and reports:
+
+    * the per-fixture oracle: passing candidates per fixture,
+      oracle pass rate vs the global winner's rate, and the gap;
+    * the greedy covering protocol portfolio over solvable fixtures.
+
+    The oracle and the portfolio answer "how much does the single
+    global winner leave on the table, and which small protocol set
+    would cover every solvable fixture?" -- the routing lens of
+    RouteLLM applied within the lab to prompt protocols, not models.
+    Zero new model runs; fully deterministic.
+
+    A candidate whose observations do not align with ``cases`` is
+    excluded (one bad record cannot poison the verdicts). Never raises
+    on malformed input: returns ``{"available": False}`` with a
+    ``detail`` code.
+    """
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    if type(cases) is not tuple or not cases or any(type(c) is not Fixture for c in cases):
+        return {"available": False, "detail": "cases_invalid"}
+    fixture_ids = tuple(c.id for c in cases)
+
+    passing: dict[str, tuple[str, ...]] = {}
+    excluded: list[str] = []
+    for entry in entries:
+        if type(entry) is not dict or type(entry.get("format")) is not dict:
+            continue
+        name = entry["format"].get("name")
+        if type(name) is not str or not name:
+            continue
+        observations = entry.get("observations")
+        try:
+            if type(observations) is not list or len(observations) != len(cases):
+                raise ValueError("observation/case misalignment")
+            passed: list[str] = []
+            for case, obs in zip(cases, observations, strict=True):
+                if type(obs) is not dict:
+                    raise ValueError("observation not a dict")
+                if obs.get("exact_match") is True and obs.get("boundary_found") is True:
+                    passed.append(case.id)
+            passing[name] = tuple(passed)
+        except ValueError:
+            excluded.append(name)
+
+    if not passing:
+        return {"available": False, "detail": "no_usable_candidates"}
+    winner = result.get("selected_candidate")
+    if type(winner) is not str or winner not in passing:
+        winner = None
+    decision = result.get("decision")
+    if type(decision) is not str:
+        decision = "unknown"
+
+    rates = oracle_rates(passing, fixture_ids, winner)
+    oracle_winners = per_fixture_oracle_winners(passing, fixture_ids)
+    portfolio = greedy_cover(passing, fixture_ids)
+    covered = sorted({fid for name in portfolio for fid in passing[name]})
+    return {
+        "available": True,
+        "n_fixtures": len(cases),
+        "n_candidates": len(passing),
+        "decision": decision,
+        "winner": winner,
+        "excluded_candidates": sorted(excluded),
+        "oracle": {
+            "n_solvable": rates["n_solvable"],
+            "solvable_fixture_ids": rates["solvable_fixture_ids"],
+            "unsolvable_fixture_ids": rates["unsolvable_fixture_ids"],
+            "oracle_pass_rate": rates["oracle_pass_rate"],
+            "winner_pass_rate": rates["winner_pass_rate"],
+            "gap": rates["gap"],
+            "per_fixture_winners": oracle_winners,
+        },
+        "portfolio": {
+            "size": len(portfolio),
+            "members": portfolio,
+            "per_member_covers": {name: list(passing[name]) for name in portfolio},
+            "covered_fixture_ids": covered,
+            "uncovered_fixture_ids": rates["unsolvable_fixture_ids"],
+            "greedy_note": "greedy set-cover approximation; not guaranteed optimal",
+        },
+    }
