@@ -209,6 +209,38 @@ def build_sample_report(output_dir: Path) -> dict:
             "detail": "marker_isolation_unavailable",
             "probes": [],
         }
+    # Template firewall: attached via the real static scanner on a benign
+    # synthetic template, so the committed sample report exercises the
+    # firewall section. Degrades to an "unavailable" marker instead of
+    # failing the build.
+    try:
+        from model_protocol_lab.template_audit import scan_template_ast
+
+        _demo_template = (
+            "{% for message in messages %}"
+            "{{ message.role }}: {{ message.content }}\n"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}assistant:{% endif %}"
+        )
+        _fw_findings = scan_template_ast(_demo_template)
+        if _fw_findings:
+            result["template_firewall"] = {
+                "status": "denied",
+                "detail": "template_firewall_denied",
+                "findings": [{"rule": f.rule, "detail": f.detail} for f in _fw_findings],
+            }
+        else:
+            result["template_firewall"] = {
+                "status": "allowed",
+                "detail": "no_rce_primitives_found",
+                "findings": [],
+            }
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["template_firewall"] = {
+            "status": "unavailable",
+            "detail": "template_firewall_unavailable",
+            "findings": [],
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

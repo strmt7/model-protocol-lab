@@ -692,7 +692,7 @@ def main(argv: list[str] | None = None) -> int:
             result["contamination"] = contamination_report(split.search, split.held_out)
             # Diagnosis sections; none of these may fail the run.
             try:
-                from .doctor import template_conformance
+                from .doctor import marker_isolation, template_conformance, template_firewall
 
                 # Byte-space HF stop matching when the backend's tokenizer is
                 # byte-oriented; otherwise the classic string path is used.
@@ -702,11 +702,13 @@ def main(argv: list[str] | None = None) -> int:
                 result["template_conformance"] = template_conformance(
                     args.model, formats, split.search
                 )
+                # Template firewall (research R3): static AST scan of the
+                # checkpoint's chat_template for RCE primitives, before any
+                # render. Fail-closed; never fails the run.
+                result["template_firewall"] = template_firewall(args.model)
                 # Chat-marker isolation (research R2/R4 line): hostile marker
                 # strings injected into user text must not become real
                 # control tokens. Pure tokenizer check, never fails the run.
-                from .doctor import marker_isolation
-
                 result["marker_isolation"] = marker_isolation(args.model, formats, split.search)
                 if result["selected_candidate"] is not None:
                     winner = result["selected_candidate"]

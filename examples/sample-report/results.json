@@ -2036,6 +2036,11 @@
       }
     ]
   },
+  "template_firewall": {
+    "status": "allowed",
+    "detail": "no_rce_primitives_found",
+    "findings": []
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

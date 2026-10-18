@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -498,6 +498,26 @@ the run: a tokenizer declaring no special ids reports `no_special_ids`
 `unavailable`. The core lives in `model_protocol_lab/control_tokens.py`
 with `render`/`encode` injected, so the whole probe is testable without a
 model; `doctor.marker_isolation` is the checkpoint-backed driver.
+
+### 8.12 Template firewall (`template_firewall`)
+
+A checkpoint's `chat_template` is attacker-controlled Jinja, and the
+conformance check renders it locally. Before any render, every `run`
+statically scans the template source for RCE primitives
+(`model_protocol_lab/template_audit.py`): dunder attribute/subscript
+access, the `|attr` filter (CVE-2025-27516 sandbox escape), dangerous
+Jinja globals (`lipsum`, `cycler`, `joiner`, `self`), `super()` calls,
+and non-literal or huge `range()` bounds. A denied template is never
+rendered — `template_conformance` fails closed with status `denied` —
+and the findings surface as a "Template firewall" section in the report.
+
+`results.json` carries `template_firewall` with the verdict (`allowed` /
+`denied` / `no_template` / `unavailable`) and fixed-vocabulary findings.
+An `allowed` verdict is not a safety proof: it means none of the known
+primitives were found, and the render still runs inside transformers'
+`ImmutableSandboxedEnvironment` (the lab pins `jinja2>=3.1.6` for the
+sandbox-escape fix) under the existing CPU watchdog and memory cap. The
+stack is: static firewall -> sandboxed render -> watchdog + memory cap.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

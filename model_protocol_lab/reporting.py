@@ -3065,6 +3065,71 @@ def _marker_isolation_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _template_firewall_section(result: dict[str, Any]) -> str:
+    """Template firewall: the static AST verdict on the checkpoint's template.
+
+    Reports whether the checkpoint's ``chat_template`` passed the static
+    RCE-primitive scan before any render, and lists denied findings. An
+    "allowed" verdict is not a safety proof -- it means none of the known
+    RCE primitives (dunder access, ``|attr``, dangerous Jinja globals,
+    unbounded ``range()``) were found; the sandboxed render, CPU watchdog,
+    and memory cap remain the backstops. Renders nothing when the check did
+    not run.
+    """
+    check: Any = result.get("template_firewall")
+    if type(check) is not dict:
+        return ""
+    status = check.get("status")
+    if status == "allowed":
+        badge = '<span class="badge pass">allowed</span>'
+        note = (
+            "No RCE primitives found in the checkpoint's chat template "
+            "(no dunder access, no |attr filter, no dangerous Jinja globals, "
+            "no unbounded range()). The template was still rendered inside "
+            "the sandboxed environment with the CPU watchdog and memory cap."
+        )
+    elif status == "denied":
+        badge = '<span class="badge fail">denied</span>'
+        note = (
+            "The checkpoint's chat template was DENIED by the static firewall "
+            "and was never rendered: template conformance did not execute. "
+            "Inspect the findings below before trusting this checkpoint."
+        )
+    elif status == "no_template":
+        badge = '<span class="badge">n/a</span>'
+        note = "The checkpoint declares no chat template; nothing was scanned."
+    else:
+        return ""
+    findings = check.get("findings")
+    rows = []
+    if type(findings) is list:
+        for finding in findings:
+            if type(finding) is not dict:
+                continue
+            rows.append(
+                "<tr><td>"
+                + escape(str(finding.get("rule", "?")))
+                + "</td><td>"
+                + escape(str(finding.get("detail", "?")))
+                + "</td></tr>"
+            )
+    parts = [
+        '<section id="template-firewall"><h2>Template firewall</h2>',
+        "<p>" + badge + " " + escape(note) + "</p>",
+    ]
+    if rows:
+        parts.append(
+            '<div class="table-wrap"><table>'
+            "<caption>Firewall findings.</caption>"
+            '<thead><tr><th scope="col">Rule</th>'
+            '<th scope="col">Detail</th></tr></thead><tbody>'
+            + "".join(rows)
+            + "</tbody></table></div>"
+        )
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def render_html(result: dict[str, Any]) -> str:
     """Render an experiment result dict as a self-contained HTML report string.
 
@@ -3107,6 +3172,7 @@ def render_html(result: dict[str, Any]) -> str:
     frontier_html = _frontier_section(result)
     boundary_audit_html = _boundary_audit_section(result)
     marker_isolation_html = _marker_isolation_section(result)
+    template_firewall_html = _template_firewall_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3123,6 +3189,7 @@ def render_html(result: dict[str, Any]) -> str:
             ("token-budget-frontier", "Token-budget frontier", frontier_html),
             ("boundary-canonicality", "Prompt-boundary canonicality", boundary_audit_html),
             ("marker-isolation", "Chat-marker isolation", marker_isolation_html),
+            ("template-firewall", "Template firewall", template_firewall_html),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -3162,6 +3229,7 @@ def render_html(result: dict[str, Any]) -> str:
         + frontier_html
         + boundary_audit_html
         + marker_isolation_html
+        + template_firewall_html
         + sweep_html
         + logprob_html
         + held_out_html

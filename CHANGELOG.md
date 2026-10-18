@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 136 — template conformance firewall, 2026-10-18)
+
+- New `model_protocol_lab/template_audit.py`: static firewall scan of the
+  checkpoint's Jinja `chat_template` (research backlog R3, the RCE-class gap
+  the CPU watchdog doesn't cover — CVE-2026-5760). `scan_template_ast`
+  walks the parsed AST *before* any render and denies dunder
+  attribute/subscript access, the `|attr` filter (CVE-2025-27516 sandbox
+  escape), dangerous Jinja globals (`lipsum`, `cycler`, `joiner`, `self`),
+  `super()` calls, and non-literal or huge `range()` bounds, with
+  fixed-vocabulary findings. Pure and fail-closed (parse failures deny);
+  zero false positives on ChatML/Llama-3-style templates.
+- New `doctor.template_firewall(model_path)`: the checkpoint-backed driver
+  (reads `tokenizer_config.json`, never renders); `doctor.template_conformance`
+  now refuses to render a denied template (fail closed, status `denied`).
+- `model-protocol-lab run` attaches `template_firewall`; the HTML report
+  renders a "Template firewall" section with the verdict and findings;
+  `jinja2>=3.1.6` pinned in the `hf` extra (sandbox-escape fix); the
+  committed sample report exercises the section via the real scanner.
+- New `tests/test_cycle136_template_firewall.py` (29 tests): benign-template
+  allowlist, a 10-payload SSTI corpus (each denied with the expected rule),
+  fail-closed paths, the driver against real `tokenizer_config.json` files,
+  HTML rendering with hostile-finding escaping, and a 4-mutant kill gate —
+  4/4 killed.
+
 ### Added (cycle 135 — chat-marker isolation conformance, 2026-10-18)
 
 - New `model_protocol_lab/control_tokens.py`: chat-marker isolation

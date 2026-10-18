@@ -891,6 +891,52 @@ def _render_with_time_budget(
                     signal.pthread_sigmask(signal.SIG_SETMASK, saved_mask)
 
 
+def template_firewall(model_path: str | Path) -> dict[str, Any]:
+    """Static firewall scan of the checkpoint's ``chat_template``.
+
+    Reads ``tokenizer_config.json``, extracts the ``chat_template`` source,
+    and runs :func:`template_audit.scan_template_ast` — *before* any render.
+    Returns ``{"status": "allowed"|"denied"|"no_template"|"unavailable",
+    "findings": [...]}`` with fixed-vocabulary findings. Never raises and
+    never renders: a denied template must not reach the Jinja compiler.
+    """
+    from .template_audit import scan_template_ast
+
+    try:
+        root = _directory(model_path)
+        try:
+            config_doc = _read_json(_member(root, "tokenizer_config.json"))
+        except ValueError:
+            return {
+                "status": "unavailable",
+                "detail": "tokenizer_config_unreadable",
+                "findings": [],
+            }
+        template = config_doc.get("chat_template")
+        if type(template) is not str or not template.strip():
+            return {
+                "status": "no_template",
+                "detail": "no_chat_template_in_config",
+                "findings": [],
+            }
+        if len(template) > _CHAT_TEMPLATE_MAX_CHARS:
+            return {
+                "status": "unavailable",
+                "detail": "chat_template_too_large",
+                "findings": [],
+            }
+    except Exception:  # noqa: BLE001 -- firewall must not fail the run
+        return {"status": "unavailable", "detail": "firewall_check_failed", "findings": []}
+    findings = scan_template_ast(template)
+    if findings:
+        return {
+            "status": "denied",
+            "detail": "template_firewall_denied",
+            "findings": [{"rule": f.rule, "detail": f.detail} for f in findings],
+        }
+    return {"status": "allowed", "detail": "no_rce_primitives_found", "findings": []}
+
+
 def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -940,6 +986,18 @@ def template_conformance(
             return {
                 "status": "unavailable",
                 "detail": "chat_template_too_large",
+                "diffs": [],
+            }
+        # Firewall: static AST scan before the template reaches any Jinja
+        # compiler. A denied template is never rendered (fail closed).
+        from .template_audit import scan_template_ast
+
+        firewall_findings = scan_template_ast(template)
+        if firewall_findings:
+            return {
+                "status": "denied",
+                "detail": "template_firewall_denied",
+                "findings": [{"rule": f.rule, "detail": f.detail} for f in firewall_findings],
                 "diffs": [],
             }
         from transformers import PreTrainedTokenizerFast
