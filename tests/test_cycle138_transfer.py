@@ -10,7 +10,7 @@ the HTML "Cross-checkpoint transfer" section, and results.json.
 
 import unittest
 
-from model_protocol_lab import core, experiments
+from model_protocol_lab import core, diffreports, experiments
 from model_protocol_lab.core import Fixture, Format, Message
 from model_protocol_lab.reporting import _transfer_section
 
@@ -274,6 +274,76 @@ class TransferHtmlTest(unittest.TestCase):
         self.assertEqual(_transfer_section({}), "")
         self.assertEqual(_transfer_section({"transfer": {"available": False}}), "")
         self.assertEqual(_transfer_section({"transfer": {"available": True}}), "")
+
+
+def _transfer_payload(verdict="full", winner="alpha"):
+    return {
+        "available": True,
+        "primary_winner": "alpha",
+        "transfer_verdict": verdict,
+        "per_checkpoint": {
+            "ckptA": {"decision": "selected", "winner": winner},
+        },
+        "matrix": {
+            "alpha": {"ckptA": "transfers" if winner == "alpha" else "fails_there"},
+            "beta": {"ckptA": "fails_there"},
+        },
+    }
+
+
+class DiffTransferTest(unittest.TestCase):
+    def test_identical_unchanged(self):
+        diff = diffreports.diff_transfer(_transfer_payload(), _transfer_payload())
+        self.assertEqual(diff["available"], "both")
+        self.assertFalse(diff["changed"])
+
+    def test_verdict_change_detected(self):
+        old = _transfer_payload(verdict="full")
+        new = _transfer_payload(verdict="partial")
+        diff = diffreports.diff_transfer(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertTrue(diff["transfer_verdict"]["changed"])
+
+    def test_checkpoint_drift_detected(self):
+        old = _transfer_payload()
+        new = _transfer_payload(winner="beta")
+        new["matrix"]["alpha"]["ckptA"] = "fails_there"
+        new["matrix"]["beta"]["ckptA"] = "wins_there"
+        diff = diffreports.diff_transfer(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertEqual(len(diff["checkpoint_drift"]), 1)
+        self.assertEqual(diff["checkpoint_drift"][0]["checkpoint"], "ckptA")
+        self.assertEqual(len(diff["cell_drift"]), 2)
+
+    def test_checkpoint_added_removed(self):
+        old = _transfer_payload()
+        new = _transfer_payload()
+        new["per_checkpoint"]["ckptB"] = {"decision": "selected", "winner": "alpha"}
+        new["matrix"]["alpha"]["ckptB"] = "transfers"
+        new["matrix"]["beta"]["ckptB"] = "fails_there"
+        diff = diffreports.diff_transfer(old, new)
+        self.assertTrue(diff["changed"])
+        self.assertEqual(diff["checkpoints_added"], ["ckptB"])
+        self.assertEqual(diff["checkpoints_removed"], [])
+
+    def test_asymmetric(self):
+        diff = diffreports.diff_transfer(_transfer_payload(), {"available": False})
+        self.assertEqual(diff["available"], "old")
+        self.assertFalse(diff["changed"])
+        diff = diffreports.diff_transfer(None, None)
+        self.assertEqual(diff["available"], "neither")
+
+    def test_feeds_identical(self):
+        old = {"decision": "selected", "transfer": _transfer_payload()}
+        new = {"decision": "selected", "transfer": _transfer_payload()}
+        diff = diffreports.diff_reports(old, new)
+        self.assertFalse(diff["summary"]["transfer_changed"])
+        self.assertFalse(diff["summary"]["transfer_asymmetric"])
+        # A changed transfer breaks identical.
+        new2 = {"decision": "selected", "transfer": _transfer_payload(verdict="none")}
+        diff2 = diffreports.diff_reports(old, new2)
+        self.assertTrue(diff2["summary"]["transfer_changed"])
+        self.assertFalse(diff2["summary"]["identical"])
 
 
 if __name__ == "__main__":

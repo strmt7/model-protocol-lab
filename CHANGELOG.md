@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 140 — transfer comparison in diff-reports, 2026-10-18)
+
+- `diff-reports` now compares the `transfer` experiment between runs
+  (`diff_transfer`): transfer-verdict drift, per-checkpoint (decision,
+  winner) drift, per-cell candidate x checkpoint verdict drift, and
+  checkpoints added/removed — the fleet-portability regression signal
+  after a checkpoint or fixture update. New `transfer_changed` /
+  `transfer_asymmetric` summary flags feed `identical`.
+
 ### Changed (cycle 139 — test-suite speed, 2026-10-18)
 
 - The two `pytest --collect-only` subprocess spawns (README test-count
