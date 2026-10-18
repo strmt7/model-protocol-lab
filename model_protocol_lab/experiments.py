@@ -38,6 +38,12 @@ from .prefill import (
     validate_prefill_specs,
 )
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
+from .synthhistory import (
+    CONDITIONS,
+    DELIMITER_LABELS,
+    TURN_COUNTS,
+    candidate_delimiter_label,
+)
 
 FAILURE_MODES = (
     "no-boundary-in-N",
@@ -1516,6 +1522,241 @@ def hierarchy_adherence(
         "flips": flips,
         "position_effect": position_effect,
         "group_adherence": group_adherence,
+    }
+
+
+def synthhistory_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    history_fixtures: tuple[Fixture, ...],
+    *,
+    condition: str,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate with synthetic history prepended.
+
+    For one history ``condition`` (see :mod:`synthhistory`), every
+    search candidate is re-evaluated with ``core.evaluate()`` on the
+    given history-conditioned fixtures, with the same boundary and
+    max_new_tokens. Greedy, exact. The fixture's ``expected`` is
+    unchanged by history prepending, so the pipeline's ``exact_match``
+    already grades the history-conditioned run.
+
+    Any backend construction or evaluation failure records None for that
+    candidate cell -- fail-closed, never silently skipped. ``pass`` is
+    the conservative per-candidate verdict: every history fixture
+    exactly matched with its boundary found (mirrors the hierarchy
+    stage's all-pass rule), so the selection rule can be re-applied
+    unchanged by :func:`synthhistory_stability`.
+
+    Returns ``{"condition": ..., "n_turns": ..., "n_fixtures": ...,
+    "per_candidate": {name: {"n", "passed", "pass"} | None}}``.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(history_fixtures) is not tuple or not history_fixtures:
+        raise ValueError("history_fixtures must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in history_fixtures):
+        raise ValueError("history_fixtures must contain Fixture values")
+    if condition not in CONDITIONS:
+        raise ValueError(f"condition must be one of {CONDITIONS}")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        try:
+            report = evaluate(
+                backend,
+                fmt,
+                history_fixtures,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        if not report.aggregate_eligible:
+            per_candidate[fmt.name] = None
+            continue
+        passed = sum(1 for obs in report.observations if obs.exact_match and obs.boundary_found)
+        per_candidate[fmt.name] = {
+            "n": len(history_fixtures),
+            "passed": passed,
+            "pass": passed == len(history_fixtures),
+        }
+    return {
+        "condition": condition,
+        "n_turns": TURN_COUNTS[condition],
+        "n_fixtures": len(history_fixtures),
+        "per_candidate": per_candidate,
+    }
+
+
+def _synthhistory_entry_valid(entry: Any, n_fixtures: int) -> bool:
+    """Structural check for one candidate cell of a synthhistory stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    if entry.get("n") != n_fixtures:
+        return False
+    passed = entry.get("passed")
+    if type(passed) is not int or passed < 0 or passed > n_fixtures:
+        return False
+    return type(entry.get("pass")) is bool
+
+
+def synthhistory_stability(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    stages: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-apply the selection rule per history condition (pure post-hoc).
+
+    Answers "does the winner survive synthetic history?": for each
+    history condition the conservative selection rule is re-applied to
+    that condition's per-candidate pass/fail outcomes, and the primary
+    (decision, winner) is compared against every condition.
+
+    Per candidate per condition the history pass rate is reported;
+    ``flips`` lists the conditions whose (decision, winner) differs from
+    the primary run; ``group_pass_rates`` tests the pre-registered
+    structural hypothesis from :mod:`synthhistory` -- families whose
+    templates use unambiguous per-turn open/close markers vs families
+    with loose delimiting -- as mean history pass rate per
+    mechanically-derived label group (a correlation readout, not a
+    causal claim).
+
+    Returns ``{"available": True, ...}``. Never raises on malformed
+    input: returns ``{"available": False}`` with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(stages) is not dict or not stages or not all(type(k) is str for k in stages):
+        return {"available": False, "detail": "stages_invalid"}
+    n_fixtures = -1  # sentinel: stages is guaranteed nonempty above
+    for condition, stage in stages.items():
+        if type(stage) is not dict:
+            return {"available": False, "detail": f"stage_{condition}_invalid"}
+        if stage.get("condition") != condition:
+            return {"available": False, "detail": f"stage_{condition}_invalid"}
+        count = stage.get("n_fixtures")
+        if type(count) is not int or count < 0:
+            return {"available": False, "detail": f"stage_{condition}_invalid"}
+        if n_fixtures < 0:
+            n_fixtures = count
+        elif n_fixtures != count:
+            return {"available": False, "detail": "fixture_count_mismatch"}
+        per_candidate = stage.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return {"available": False, "detail": f"stage_{condition}_invalid"}
+        for _cand, entry in per_candidate.items():
+            if not _synthhistory_entry_valid(entry, count):
+                return {"available": False, "detail": f"stage_{condition}_invalid"}
+
+    def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        if entry is None:
+            return None
+        n = entry["n"]
+        return {
+            "pass_rate": entry["passed"] / n if n else None,
+            "pass": entry["pass"],
+        }
+
+    per_condition: dict[str, dict[str, Any]] = {}
+    for condition in sorted(stages):
+        stage = stages[condition]
+        per_candidate = stage["per_candidate"]
+        entries = [per_candidate.get(c) for c in candidates]
+        evaluable = [e for e in entries if e is not None]
+        winners = [
+            c for c, e in zip(candidates, entries, strict=True) if e is not None and e["pass"]
+        ]
+        # Mirrors _select_winner(winners, cancelled=False): exactly one
+        # passing candidate wins; ties and failures abstain. A condition
+        # where no candidate could be evaluated is "unavailable", never a
+        # phantom "no_candidate".
+        if not evaluable:
+            decision, winner = "unavailable", None
+        elif len(winners) == 1:
+            decision, winner = "selected", winners[0]
+        elif winners:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        per_condition[condition] = {
+            "decision": decision,
+            "winner": winner,
+            "n_evaluable": len(evaluable),
+            "per_candidate": {c: _rates(per_candidate.get(c)) for c in candidates},
+        }
+
+    flips = []
+    for condition in sorted(per_condition):
+        verdict = per_condition[condition]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != (primary_decision, primary_winner):
+            flips.append(
+                {
+                    "condition": condition,
+                    "decision_from": primary_decision,
+                    "decision_to": verdict["decision"],
+                    "winner_from": primary_winner,
+                    "winner_to": verdict["winner"],
+                }
+            )
+
+    group_pass_rates: dict[str, dict[str, Any]] = {}
+    for label in DELIMITER_LABELS:
+        pairs = []
+        for candidate in candidates:
+            if candidate_delimiter_label(candidate) != label:
+                continue
+            rates = [
+                per_condition[condition]["per_candidate"][candidate]
+                for condition in sorted(per_condition)
+            ]
+            valid = [r["pass_rate"] for r in rates if r is not None and r["pass_rate"] is not None]
+            if valid:
+                pairs.append(sum(valid) / len(valid))
+        group_pass_rates[label] = {
+            "n_candidates": len(pairs),
+            "mean_pass_rate": (sum(pairs) / len(pairs)) if pairs else None,
+        }
+
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "n_fixtures": n_fixtures,
+        "conditions": sorted(stages),
+        "per_condition": per_condition,
+        "flips": flips,
+        "group_pass_rates": group_pass_rates,
     }
 
 

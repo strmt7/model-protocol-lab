@@ -802,6 +802,39 @@ oracle-winner sets, and each member's covers between runs
 growing gap means the winner is increasingly specialized. Zero new
 model runs; the stage never fails the run.
 
+### 8.20 Synthetic-history selection stability (`synthhistory`)
+
+Does the winning protocol survive when fixtures are asked after
+synthetic prior conversation turns -- is protocol selection robust to
+conversational context, or does history flip the winner? The
+many-shot literature (Anil et al., Anthropic, 2024) proved that prior
+turns -- even fabricated assistant turns -- steer subsequent behavior
+predictably; no prompt-format harness re-runs *selection* under
+synthetic history. `model-protocol-lab run --synth-history` prepends K fixed, benign,
+fully deterministic synthetic prior turns to every fixture (one
+exchange for `history_2`, three for `history_6`) and re-applies the
+conservative selection rule per condition. The fixture's `expected`
+answer is unchanged, so the standard `exact_match` grading already
+scores the history-conditioned run.
+
+`results.json` carries `synthhistory` with the per-condition
+(decision, winner) re-application, the winner flips against the
+primary run, per-candidate history pass rates, and the
+delimiter-explicitness group comparison: families whose templates use
+unambiguous per-turn open/close markers (derived mechanically from
+the lab's own `Format` hypotheses -- non-blank open *and* close
+marker per turn type) vs loosely-delimited families, reported as a
+correlation readout, not a causal claim. The report's
+"Synthetic-history selection stability" section renders the verdict
+lines, the flip list, the pass-rate table, and the group comparison.
+`diff-reports` compares the per-condition verdicts, the flip pattern,
+per-candidate pass-rate drift, and the group rates between runs
+(`diff_synthhistory`; `synthhistory_changed` /
+`synthhistory_asymmetric` feed `identical`) -- a changed flip pattern
+after a checkpoint or fixture update is the history-robustness
+regression signal. Roughly triples search compute; the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

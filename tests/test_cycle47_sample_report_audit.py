@@ -74,6 +74,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "perturbation",
     "hierarchy",
     "prefill",
+    "synthhistory",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

@@ -245,6 +245,18 @@ def build_parser() -> argparse.ArgumentParser:
         "fails the run.",
     )
     run.add_argument(
+        "--synth-history",
+        action="store_true",
+        help="Synthetic-history selection stability experiment: prepend "
+        "fixed benign synthetic prior conversation turns (one and three "
+        "exchanges) to every fixture and re-apply the selection rule per "
+        "history condition, reporting per-candidate history pass rates, "
+        "winner-vs-clean flips, and the delimiter-explicitness group "
+        "comparison (families with unambiguous per-turn open/close markers "
+        "vs loose delimiting). Roughly triples search compute; the stage "
+        "never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -590,6 +602,55 @@ def _run_prefill_probe(
         result["prefill"] = {
             "available": False,
             "detail": "prefill_unavailable",
+        }
+
+
+def _run_synthhistory_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the synthetic-history stability experiment; never raises.
+
+    Prepends the fixed benign synthetic prior turns (one and three
+    exchanges) to every search fixture, re-runs every search candidate
+    per history condition, and stores the ``synthhistory`` analysis
+    payload on ``result``. Any failure degrades to an "unavailable"
+    marker instead of failing the run.
+    """
+    try:
+        from .experiments import synthhistory_stability, synthhistory_stage
+        from .synthhistory import CONDITIONS, build_history_fixtures
+
+        stages: dict[str, Any] = {}
+        for condition in CONDITIONS:
+            fixtures, _n_turns = build_history_fixtures(cases, condition=condition)
+            stages[condition] = synthhistory_stage(
+                backend,
+                formats,
+                fixtures,
+                condition=condition,
+                boundary=boundary,
+                boundary_map=boundary_map,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        result["synthhistory"] = synthhistory_stability(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(fmt.name for fmt in formats),
+            stages,
+        )
+    except Exception:  # noqa: BLE001 -- synthhistory must not fail the run
+        result["synthhistory"] = {
+            "available": False,
+            "detail": "synthhistory_unavailable",
         }
 
 
@@ -1304,6 +1365,26 @@ def main(argv: list[str] | None = None) -> int:
                 # never fails the run.
                 if args.prefill:
                     _run_prefill_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Synthetic-history selection stability experiment
+                # (research wave-2 idea 5): prepend fixed benign synthetic
+                # prior turns (one and three exchanges) to every fixture
+                # and re-apply the selection rule per history condition.
+                # Answers "does the winning protocol survive conversational
+                # context, and do explicitly-delimited templates degrade
+                # less?" A failed condition degrades to "unavailable"
+                # inside the analysis, never a phantom verdict, and
+                # never fails the run.
+                if args.synth_history:
+                    _run_synthhistory_probe(
                         backend,
                         formats,
                         result,
