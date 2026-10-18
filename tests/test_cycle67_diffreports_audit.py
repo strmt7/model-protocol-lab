@@ -236,6 +236,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "frontier": {"available": "neither", "changed": False},
         "held_out_floor": {"available": "neither", "changed": False},
         "boundary_audit": {"available": "neither", "changed": False},
+        "selection_robustness": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -258,6 +259,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "held_out_floor_asymmetric": False,
             "boundary_audit_changed": False,
             "boundary_audit_asymmetric": False,
+            "selection_robustness_changed": False,
+            "selection_robustness_asymmetric": False,
             "identical": True,
         },
     }
@@ -538,6 +541,59 @@ def _o_boundary_audit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_selection_robustness_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    return (
+        type(value) is dict
+        and value.get("available") is True
+        and type(value.get("per_semantic")) is dict
+        and type(value.get("flips")) is list
+    )
+
+
+def _o_selection_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle selection-robustness section: verdict drift and flip changes."""
+    old_ok = _o_selection_robustness_valid(old)
+    new_ok = _o_selection_robustness_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_ps = old.get("per_semantic") or {}
+    new_ps = new.get("per_semantic") or {}
+    verdict_drift = []
+    for semantic in sorted(set(old_ps) | set(new_ps)):
+        old_v = old_ps.get(semantic) or {}
+        new_v = new_ps.get(semantic) or {}
+        if (old_v.get("decision"), old_v.get("winner")) != (
+            new_v.get("decision"),
+            new_v.get("winner"),
+        ):
+            verdict_drift.append(
+                {
+                    "semantic": semantic,
+                    "old_decision": old_v.get("decision"),
+                    "old_winner": old_v.get("winner"),
+                    "new_decision": new_v.get("decision"),
+                    "new_winner": new_v.get("winner"),
+                }
+            )
+    flips_changed = (old.get("flips") or []) != (new.get("flips") or [])
+    diff["verdict_drift"] = verdict_drift
+    diff["flips_changed"] = flips_changed
+    changed = bool(verdict_drift or flips_changed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _oracle_diff(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -640,6 +696,9 @@ def _oracle_diff(
     o_ba, o_ba_changed, o_ba_asymmetric = _o_boundary_audit(
         old.get("boundary_audit"), new.get("boundary_audit")
     )
+    o_sr, o_sr_changed, o_sr_asymmetric = _o_selection_robustness(
+        old.get("selection_robustness"), new.get("selection_robustness")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -653,6 +712,8 @@ def _oracle_diff(
         and not o_hof_asymmetric
         and not o_ba_changed
         and not o_ba_asymmetric
+        and not o_sr_changed
+        and not o_sr_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -663,6 +724,7 @@ def _oracle_diff(
         "frontier": o_frontier,
         "held_out_floor": o_hof,
         "boundary_audit": o_ba,
+        "selection_robustness": o_sr,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -681,6 +743,8 @@ def _oracle_diff(
             "held_out_floor_asymmetric": o_hof_asymmetric,
             "boundary_audit_changed": o_ba_changed,
             "boundary_audit_asymmetric": o_ba_asymmetric,
+            "selection_robustness_changed": o_sr_changed,
+            "selection_robustness_asymmetric": o_sr_asymmetric,
             "identical": identical,
         },
     }
@@ -810,6 +874,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "held_out_floor_asymmetric": False,
                 "boundary_audit_changed": False,
                 "boundary_audit_asymmetric": False,
+                "selection_robustness_changed": False,
+                "selection_robustness_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1813,6 +1879,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not held_out_floor_asymmetric\n"
             '        and not boundary_audit_diff["changed"]\n'
             "        and not boundary_audit_asymmetric\n"
+            '        and not robustness_diff["changed"]\n'
+            "        and not robustness_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -1827,6 +1895,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or held_out_floor_asymmetric\n"
             '        or boundary_audit_diff["changed"]\n'
             "        or boundary_audit_asymmetric\n"
+            '        or robustness_diff["changed"]\n'
+            "        or robustness_asymmetric\n"
             "    )\n",
             scenario,
         )

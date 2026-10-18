@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 137 — selection robustness under stop semantics, 2026-10-18)
+
+- New `experiments.selection_robustness` (IDEAS #3): pure post-hoc
+  re-application of the conservative selection rule to *every* search
+  candidate under each emulated stop semantic (native, HF
+  StopStringCriteria, vLLM detokenizer, EOS-appended) — answering "would
+  a different protocol have won under my serving stack's stop
+  semantics?" Tokenizer-only, no model calls. Reports per-semantic
+  verdicts, the per-candidate pass matrix, `excluded_candidates`, and
+  `flips`; a semantic whose emulation cannot run for every candidate
+  (e.g. unknown EOS id) is reported as `unavailable`, never as a phantom
+  `no_candidate`. Wired into `mpl run` (`results.json`), the HTML report
+  ("Selection robustness under stop semantics" section), and
+  `diff-reports` (`diff_selection_robustness` +
+  `selection_robustness_changed`/`selection_robustness_asymmetric` flags
+  feeding `identical`) — the serving-stack migration signal.
+
 ### Added (cycle 136 — template conformance firewall, 2026-10-18)
 
 - New `model_protocol_lab/template_audit.py`: static firewall scan of the

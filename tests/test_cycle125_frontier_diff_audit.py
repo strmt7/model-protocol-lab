@@ -280,6 +280,12 @@ class TestMutationGate(unittest.TestCase):
                 )
             finally:
                 self.SOURCE.write_text(source)
+                # Invalidate the bytecode cache: a same-size mutant can
+                # leave a .pyc whose (mtime, size) still validates
+                # against the reverted source, poisoning later imports
+                # with mutant bytecode (see the cycle-135 gate fix).
+                for _pyc in self.SOURCE.parent.glob("__pycache__/diffreports.*.pyc"):
+                    _pyc.unlink(missing_ok=True)
             if proc.returncode != 0:
                 killed.append(mutant)
             else:

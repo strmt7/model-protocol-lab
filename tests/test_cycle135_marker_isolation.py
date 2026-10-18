@@ -446,6 +446,12 @@ class MarkerIsolationMutationGateTests(unittest.TestCase):
                 )
             finally:
                 src.write_text(original, encoding="utf-8")
+                # Invalidate the bytecode cache: a same-size mutant (e.g.
+                # the M4 sign flip) can leave a .pyc whose (mtime, size)
+                # still validates against the reverted source, poisoning
+                # later imports in this process run with mutant bytecode.
+                for pyc in src.parent.glob("__pycache__/control_tokens.*.pyc"):
+                    pyc.unlink(missing_ok=True)
             if proc.returncode != 0:
                 killed.append(name)
             else:

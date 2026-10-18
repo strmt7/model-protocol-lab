@@ -861,6 +861,29 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "frontier_unavailable",
                     }
+                # Selection robustness under stop semantics: post-hoc,
+                # exact, no model calls. Re-applies the selection rule to
+                # every search candidate under each emulated stop semantic
+                # so a user deploying on a different serving stack sees
+                # whether the winner would change. Degrades to an
+                # "unavailable" marker instead of failing the run.
+                try:
+                    from .experiments import selection_robustness
+
+                    result["selection_robustness"] = selection_robustness(
+                        backend,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        eos_id=eos_id,
+                        token_bytes=token_bytes,
+                    )
+                except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
+                    result["selection_robustness"] = {
+                        "available": False,
+                        "detail": "selection_robustness_unavailable",
+                    }
                 # Held-out budget floor: post-hoc, exact, no model calls.
                 # Only meaningful when the held-out stage completed; it
                 # degrades to an "unavailable" marker instead of failing.

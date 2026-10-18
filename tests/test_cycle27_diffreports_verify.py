@@ -433,6 +433,26 @@ def oracle_diff_reports(
     else:
         _o_ba_available = "neither"
     _o_ba_asymmetric = _o_ba_available not in ("both", "neither")
+
+    def _or_sr_valid(value: Any) -> bool:
+        return (
+            type(value) is dict
+            and value.get("available") is True
+            and type(value.get("per_semantic")) is dict
+            and type(value.get("flips")) is list
+        )
+
+    _sr_old_ok = _or_sr_valid(old.get("selection_robustness"))
+    _sr_new_ok = _or_sr_valid(new.get("selection_robustness"))
+    if _sr_old_ok and _sr_new_ok:
+        _o_sr_available = "both"
+    elif _sr_old_ok:
+        _o_sr_available = "old"
+    elif _sr_new_ok:
+        _o_sr_available = "new"
+    else:
+        _o_sr_available = "neither"
+    _o_sr_asymmetric = _o_sr_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -443,6 +463,7 @@ def oracle_diff_reports(
         and not _o_frontier_asymmetric
         and not _o_hof_asymmetric
         and not _o_ba_asymmetric
+        and not _o_sr_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -457,6 +478,8 @@ def oracle_diff_reports(
         "held_out_floor_asymmetric": _o_hof_asymmetric,
         "boundary_audit_changed": False,
         "boundary_audit_asymmetric": _o_ba_asymmetric,
+        "selection_robustness_changed": False,
+        "selection_robustness_asymmetric": _o_sr_asymmetric,
         "identical": identical,
     }
     return {
@@ -468,6 +491,7 @@ def oracle_diff_reports(
         "frontier": {"available": _o_available, "changed": False},
         "held_out_floor": {"available": _o_hof_available, "changed": False},
         "boundary_audit": {"available": _o_ba_available, "changed": False},
+        "selection_robustness": {"available": _o_sr_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

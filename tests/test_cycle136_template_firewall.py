@@ -305,6 +305,12 @@ class FirewallMutationGateTests(unittest.TestCase):
                 )
             finally:
                 src.write_text(original, encoding="utf-8")
+                # Invalidate the bytecode cache: a same-size mutant can
+                # leave a .pyc whose (mtime, size) still validates against
+                # the reverted source, poisoning later imports with mutant
+                # bytecode (see the cycle-135 gate fix).
+                for pyc in src.parent.glob("__pycache__/template_audit.*.pyc"):
+                    pyc.unlink(missing_ok=True)
             if proc.returncode != 0:
                 killed.append(name)
             else:
