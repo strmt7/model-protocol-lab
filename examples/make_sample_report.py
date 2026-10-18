@@ -231,6 +231,40 @@ class PositionDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class StopDemoBackend(DemoBackend):
+    """Scripted end-of-turn-emitting backend for the stop-cause exercise.
+
+    Behaves like DemoBackend, except the winner candidate's GREEN
+    answers have the family's end-of-turn token id spliced into the
+    output at index 2 (replacing, never inserting, so the token cap
+    contract holds). Every other generation keeps the plain
+    ``answer + "|"`` shape, so the boundary stop text fires under the
+    HF stop-string emulation. The committed sample report therefore
+    exercises the stop-cause section with genuine cause variation:
+    ``eos_id`` on the winner's GREEN fixture, ``stop_string``
+    everywhere else -- the exact signal the experiment measures.
+    Deterministic.
+    """
+
+    eos_token_id = 0x10FFFF  # chr-safe distinctive id, never a real token
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        is_winner = (
+            prompt.startswith(WINNER_PREFIX)
+            and prompt.count("<|begin_of_text|>") == 1
+            and prompt.endswith(WINNER_SUFFIX)
+        )
+        base = super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+        tokens = list(base.token_ids)
+        if is_winner and "GREEN" in prompt and len(tokens) > 3:
+            # Scripted EOT emission mid-generation: a stop-aware engine
+            # would truncate here; the lab's non-stopping decoder keeps
+            # the trailing tokens as over-generation bleed.
+            tokens[2] = self.eos_token_id
+        return Generation(tuple(tokens), base.reason, base.error)
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -682,6 +716,39 @@ def build_sample_report(output_dir: Path) -> dict:
         result["position"] = {
             "available": False,
             "detail": "position_unavailable",
+        }
+    # Stop-cause termination audit: run a small scripted experiment
+    # whose backend emits a distinctive end-of-turn token id on the
+    # winner candidate's GREEN fixture, then run the real stop stage
+    # post-hoc on its stored observations. The committed sample report
+    # exercises the stop-cause section with genuine cause variation
+    # (eos_id vs stop_string) and genuine over-generation bleed.
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import stop_stage
+
+        _s_backend = StopDemoBackend()
+        _s_fmts = candidates("llama3", mutate=True)
+        _s_result = run_experiment(
+            _s_backend,
+            _s_fmts,
+            split,
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+            eos_id=StopDemoBackend.eos_token_id,
+        )
+        result["stop_cause"] = stop_stage(
+            _s_result,
+            tuple(split.search),
+            boundary=BOUNDARY,
+            eos_id=StopDemoBackend.eos_token_id,
+            backend=_s_backend,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["stop_cause"] = {
+            "available": False,
+            "detail": "stop_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

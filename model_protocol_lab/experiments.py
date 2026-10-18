@@ -3564,3 +3564,164 @@ def batch_stage(
         "max_new_tokens": max_new_tokens,
         "seed": seed,
     }
+
+
+def stop_stage(
+    result: dict[str, Any],
+    cases: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    eos_id: int | None = None,
+    backend: Any = None,
+    token_bytes: Any = None,
+) -> dict[str, Any]:
+    """Audit stop-cause termination distributions (pure post-hoc).
+
+    Answers "how would each generation have terminated under a
+    stop-aware engine?": for every search candidate and every search
+    fixture, the recorded generation is classified post-hoc with
+    :mod:`stopcause` into ``eos_id`` (the family's end-of-turn token
+    id was emitted), ``stop_string`` (the HF stop-string emulation on
+    the candidate's boundary text fired), ``max_length`` (the cap was
+    reached with no mechanism firing), or ``stop_unknown``
+    (fail-closed: neither the EOT id nor a stop text was available).
+
+    Cause precedence follows the vLLM port notes in ``backends.py``:
+    the earliest-firing mechanism wins, with a same-step tie going to
+    ``stop_string``. ``over_generated`` counts the tokens the lab's
+    non-stopping decoder emitted past the first EOT token -- output no
+    real engine would emit. No new generations are run: the audit
+    reuses the stored search observations, so it is exact and free.
+
+    Returns ``{"available": True, "per_candidate": ..., "overall":
+    ...}``. Never raises on malformed entries: returns
+    ``{"available": False}`` with a ``detail`` code. Raises
+    ``ValueError`` on a None backend or invalid ``cases`` /
+    ``boundary`` / ``eos_id`` (caller-contract violations, not data).
+    """
+    from .stopcause import (
+        aggregate_cause_records,
+        classify_cause,
+        first_position,
+        over_generated_tokens,
+    )
+
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    if type(cases) is not tuple or not cases or any(type(c) is not Fixture for c in cases):
+        raise ValueError("cases must be a nonempty tuple of Fixture")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("boundary must be a nonempty tuple of token IDs")
+    if eos_id is not None and (type(eos_id) is not int or eos_id < 0):
+        raise ValueError("eos_id must be a nonnegative integer or None")
+    if boundary_map is not None and (
+        type(boundary_map) is not dict or not all(type(k) is str for k in boundary_map)
+    ):
+        raise ValueError("boundary_map must be a dict of str to id tuples or None")
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    raw_cap = result.get("max_new_tokens")
+    max_new_tokens = raw_cap if type(raw_cap) is int and 1 <= raw_cap <= 4096 else 64
+
+    per_candidate: dict[str, dict[str, Any]] = {}
+    excluded: list[str] = []
+    all_records: list[dict[str, object]] = []
+    for entry in entries:
+        if type(entry) is not dict or type(entry.get("format")) is not dict:
+            continue
+        name = entry["format"].get("name")
+        if type(name) is not str or not name:
+            continue
+        observations = entry.get("observations")
+        if type(observations) is not list or len(observations) != len(cases):
+            excluded.append(name)
+            continue
+        cand_boundary = boundary
+        raw_bids = entry.get("boundary_token_ids")
+        if type(raw_bids) is list and raw_bids and all(type(t) is int and t >= 0 for t in raw_bids):
+            cand_boundary = tuple(raw_bids)
+        elif boundary_map and type(boundary_map.get(name)) is tuple:
+            cand_boundary = boundary_map[name]
+        try:
+            boundary_text: Any = backend.decode(cand_boundary)
+        except Exception:  # noqa: BLE001 -- string cells degrade, never fail
+            boundary_text = None
+        stop_known = type(boundary_text) is str and bool(boundary_text)
+        eos_known = eos_id is not None
+        records: list[dict[str, object]] = []
+        evaluable_records: list[dict[str, object]] = []
+        for fixture, obs in zip(cases, observations, strict=True):
+            record: dict[str, object] = {
+                "fixture": fixture.id if type(fixture.id) is str else None,
+                "evaluable": False,
+                "cause": None,
+                "eos_first": None,
+                "stop_first": None,
+                "over_generated": 0,
+                "cap_reached": False,
+            }
+            if (
+                type(obs) is dict
+                and obs.get("fixture") == fixture.id
+                and obs.get("status") == "completed"
+            ):
+                output_ids = tuple(obs.get("output_ids") or ())
+                input_ids = tuple(obs.get("input_ids") or ())
+                if _valid_token_ids(output_ids, nonempty=True) and _valid_token_ids(input_ids):
+                    eos_first = first_position(output_ids, eos_id) if eos_id is not None else None
+                    stop_first: int | None = None
+                    if stop_known:
+                        outcome = emulate_hf_stop_string(
+                            backend,
+                            input_ids,
+                            output_ids,
+                            boundary_text,
+                            token_bytes=token_bytes,
+                        )
+                        if outcome.available and outcome.fired:
+                            stop_first = len(outcome.truncated_ids) - 1
+                    cause = classify_cause(
+                        output_len=len(output_ids),
+                        max_new_tokens=max_new_tokens,
+                        eos_first=eos_first,
+                        stop_first=stop_first,
+                        eos_known=eos_known,
+                        stop_known=stop_known,
+                    )
+                    bleed = over_generated_tokens(len(output_ids), eos_first)
+                    record.update(
+                        {
+                            "evaluable": True,
+                            "cause": cause,
+                            "eos_first": eos_first,
+                            "stop_first": stop_first,
+                            "over_generated": bleed,
+                            "cap_reached": len(output_ids) >= max_new_tokens,
+                        }
+                    )
+                    evaluable_records.append({"cause": cause, "over_generated": bleed})
+            records.append(record)
+        aggregates = aggregate_cause_records(evaluable_records)
+        per_candidate[name] = {
+            "n_observations": len(records),
+            "n_evaluable": aggregates["n"],
+            "eos_known": eos_known,
+            "stop_known": stop_known,
+            **aggregates,
+            "records": records,
+        }
+        all_records.extend(evaluable_records)
+    if not per_candidate:
+        return {"available": False, "detail": "no_evaluable_candidates"}
+    return {
+        "available": True,
+        "max_new_tokens": max_new_tokens,
+        "eos_known": eos_id is not None,
+        "per_candidate": per_candidate,
+        "excluded_candidates": sorted(excluded),
+        "overall": aggregate_cause_records(all_records),
+    }

@@ -247,6 +247,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "synthhistory": {"available": "neither", "changed": False},
         "batch_invariance": {"available": "neither", "changed": False},
         "position": {"available": "neither", "changed": False},
+        "stop_cause": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -291,6 +292,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "batch_invariance_asymmetric": False,
             "position_changed": False,
             "position_asymmetric": False,
+            "stop_cause_changed": False,
+            "stop_cause_asymmetric": False,
             "identical": True,
         },
     }
@@ -1718,6 +1721,101 @@ def _o_batchinv(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_stop_cause_valid(value: Any) -> bool:
+    """Oracle stop_cause validator: mirrors diffreports._valid_stop_cause."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        rates = entry.get("cause_rates")
+        if type(rates) is not dict:
+            return False
+        for cause, rate in rates.items():
+            if cause not in ("eos_id", "stop_string", "max_length", "stop_unknown"):
+                return False
+            if type(rate) not in (int, float):
+                return False
+        for key in ("over_generation_rate", "would_stop_early_rate", "max_length_rate"):
+            agg_value = entry.get(key)
+            if agg_value is not None and type(agg_value) not in (int, float):
+                return False
+    overall = value.get("overall")
+    return not (overall is not None and type(overall) is not dict)
+
+
+def _o_stop_cause(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle stop_cause section: cause-rate and aggregate drift."""
+    old_ok = _o_stop_cause_valid(old)
+    new_ok = _o_stop_cause_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            view[name] = {
+                "cause_rates": {
+                    cause: rate
+                    for cause, rate in (entry.get("cause_rates") or {}).items()
+                    if type(cause) is str
+                },
+                "over_generation_rate": entry.get("over_generation_rate"),
+                "would_stop_early_rate": entry.get("would_stop_early_rate"),
+                "max_length_rate": entry.get("max_length_rate"),
+            }
+        return view
+
+    old_view, new_view = _view(old), _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    cause_drift: list[dict[str, Any]] = []
+    aggregate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_rates, new_rates = old_view[name]["cause_rates"], new_view[name]["cause_rates"]
+        for cause in sorted(set(old_rates) | set(new_rates)):
+            if old_rates.get(cause) != new_rates.get(cause):
+                cause_drift.append(
+                    {
+                        "candidate": name,
+                        "cause": cause,
+                        "old_rate": old_rates.get(cause),
+                        "new_rate": new_rates.get(cause),
+                    }
+                )
+        for metric in ("over_generation_rate", "would_stop_early_rate", "max_length_rate"):
+            if old_view[name][metric] != new_view[name][metric]:
+                aggregate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_view[name][metric],
+                        "new": new_view[name][metric],
+                    }
+                )
+    diff["cause_drift"] = cause_drift
+    diff["aggregate_drift"] = aggregate_drift
+    changed = bool(cause_drift or aggregate_drift or candidates_added or candidates_removed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2068,6 +2166,9 @@ def _oracle_diff(
         old.get("batch_invariance"), new.get("batch_invariance")
     )
     o_pos, o_pos_changed, o_pos_asymmetric = _o_position(old.get("position"), new.get("position"))
+    o_sc, o_sc_changed, o_sc_asymmetric = _o_stop_cause(
+        old.get("stop_cause"), new.get("stop_cause")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -2103,6 +2204,8 @@ def _oracle_diff(
         and not o_bi_asymmetric
         and not o_pos_changed
         and not o_pos_asymmetric
+        and not o_sc_changed
+        and not o_sc_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2124,6 +2227,7 @@ def _oracle_diff(
         "synthhistory": o_sh,
         "batch_invariance": o_bi,
         "position": o_pos,
+        "stop_cause": o_sc,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2164,6 +2268,8 @@ def _oracle_diff(
             "batch_invariance_asymmetric": o_bi_asymmetric,
             "position_changed": o_pos_changed,
             "position_asymmetric": o_pos_asymmetric,
+            "stop_cause_changed": o_sc_changed,
+            "stop_cause_asymmetric": o_sc_asymmetric,
             "identical": identical,
         },
     }
@@ -2315,6 +2421,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "batch_invariance_asymmetric": False,
                 "position_changed": False,
                 "position_asymmetric": False,
+                "stop_cause_changed": False,
+                "stop_cause_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3564,6 +3672,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["batch_invariance"] = _fuzz_batchinv_section(rng)
     if rng.random() < 0.45:
         report["position"] = _fuzz_position_section(rng)
+    if rng.random() < 0.45:
+        report["stop_cause"] = _fuzz_stop_cause_section(rng)
     return report
 
 
@@ -3608,10 +3718,37 @@ def _fuzz_position_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_stop_cause_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        rates = {
+            cause: rng.choice([0.0, 0.25, 0.5, 1.0, None])
+            for cause in ("eos_id", "stop_string", "max_length", "stop_unknown")
+        }
+        if rng.random() < 0.15:
+            rates[rng.choice(["mystery", 7])] = 0.5
+        per_candidate[name] = {
+            "n_observations": rng.randint(0, 4),
+            "n_evaluable": rng.randint(0, 4),
+            "cause_rates": rates,
+            "over_generation_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "would_stop_early_rate": rng.choice([0.0, 1.0, None]),
+            "max_length_rate": rng.choice([0.0, 0.5, None]),
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"cause_rates": {"eos_id": 1.0}}
+    return {
+        "available": True,
+        "max_new_tokens": rng.choice([16, 64]),
+        "per_candidate": per_candidate,
+        "overall": {"cause_rates": {"eos_id": 0.5}},
+    }
+
+
 def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
     """Scripted small mutations turning a clone into a divergent report."""
     for _ in range(rng.randint(0, 4)):
-        op = rng.randrange(18)
+        op = rng.randrange(19)
         if op == 0:
             report["decision"] = rng.choice(["select_best", "abstain", "mutated"])
         elif op == 1:
@@ -3701,6 +3838,16 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
             if isinstance(primacy, dict) and primacy:
                 key = rng.choice(sorted(k for k in primacy if type(k) is str))
                 primacy[key] = rng.choice([1.0, -1.0, 0.0, None, "mutated"])
+        elif op == 18:
+            sc = report.get("stop_cause")
+            per_cand = sc.get("per_candidate") if isinstance(sc, dict) else None
+            if isinstance(per_cand, dict) and per_cand:
+                key = rng.choice(sorted(k for k in per_cand if type(k) is str))
+                cell = per_cand[key]
+                if isinstance(cell, dict):
+                    rates = cell.get("cause_rates")
+                    if isinstance(rates, dict):
+                        rates["eos_id"] = rng.choice([0.0, 1.0, "mutated"])
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
@@ -3835,6 +3982,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not batchinv_asymmetric\n"
             '        and not position_diff["changed"]\n'
             "        and not position_asymmetric\n"
+            '        and not stopcause_diff["changed"]\n'
+            "        and not stopcause_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -3867,6 +4016,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or batchinv_asymmetric\n"
             '        or position_diff["changed"]\n'
             "        or position_asymmetric\n"
+            '        or stopcause_diff["changed"]\n'
+            "        or stopcause_asymmetric\n"
             "    )\n",
             scenario,
         )

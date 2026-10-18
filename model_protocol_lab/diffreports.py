@@ -548,6 +548,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    stopcause_diff = diff_stop_cause(old.get("stop_cause"), new.get("stop_cause"))
+    stopcause_asymmetric = stopcause_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -583,6 +588,8 @@ def diff_reports(
         and not batchinv_asymmetric
         and not position_diff["changed"]
         and not position_asymmetric
+        and not stopcause_diff["changed"]
+        and not stopcause_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -619,6 +626,8 @@ def diff_reports(
         "batch_invariance_asymmetric": batchinv_asymmetric,
         "position_changed": position_diff["changed"],
         "position_asymmetric": position_asymmetric,
+        "stop_cause_changed": stopcause_diff["changed"],
+        "stop_cause_asymmetric": stopcause_asymmetric,
         "identical": identical,
     }
     return {
@@ -641,6 +650,7 @@ def diff_reports(
         "synthhistory": synthhistory_diff,
         "batch_invariance": batchinv_diff,
         "position": position_diff,
+        "stop_cause": stopcause_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1776,6 +1786,125 @@ def diff_position(old: Any, new: Any) -> dict[str, Any]:
         or candidates_removed
         or index_drift
         or mean_index_changed
+    )
+    return result
+
+
+_STOPCAUSE_CAUSES = ("eos_id", "stop_string", "max_length", "stop_unknown")
+
+
+def _valid_stop_cause(payload: Any) -> bool:
+    """Structural check for a ``stop_cause`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never
+    hit a TypeError on a hostile payload, and map keys must be
+    strings. A malformed side degrades to asymmetric instead of
+    raising.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        rates = entry.get("cause_rates")
+        if type(rates) is not dict:
+            return False
+        for cause, rate in rates.items():
+            if cause not in _STOPCAUSE_CAUSES:
+                return False
+            if type(rate) not in (int, float):
+                return False
+        for key in ("over_generation_rate", "would_stop_early_rate", "max_length_rate"):
+            value = entry.get(key)
+            if value is not None and type(value) not in (int, float):
+                return False
+    overall = payload.get("overall")
+    return not (overall is not None and type(overall) is not dict)
+
+
+def diff_stop_cause(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``stop_cause`` payloads; deterministic.
+
+    Answers "did the stop-cause termination story change between
+    runs?": per-candidate termination-cause rate drift (eos_id,
+    stop_string, max_length, stop_unknown), over-generation-rate and
+    would-stop-early-rate drift, and added/removed candidates. A newly
+    eos-emitting candidate after a checkpoint or fixture update is the
+    termination-behavior regression signal. A side without a recorded
+    stop-cause audit is reported plainly. No model, no network.
+    """
+    old_ok = _valid_stop_cause(old)
+    new_ok = _valid_stop_cause(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            view[name] = {
+                "cause_rates": {
+                    cause: rate
+                    for cause, rate in (entry.get("cause_rates") or {}).items()
+                    if type(cause) is str
+                },
+                "over_generation_rate": entry.get("over_generation_rate"),
+                "would_stop_early_rate": entry.get("would_stop_early_rate"),
+                "max_length_rate": entry.get("max_length_rate"),
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    cause_drift: list[dict[str, Any]] = []
+    aggregate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_rates = old_view[name]["cause_rates"]
+        new_rates = new_view[name]["cause_rates"]
+        for cause in sorted(set(old_rates) | set(new_rates)):
+            if old_rates.get(cause) != new_rates.get(cause):
+                cause_drift.append(
+                    {
+                        "candidate": name,
+                        "cause": cause,
+                        "old_rate": old_rates.get(cause),
+                        "new_rate": new_rates.get(cause),
+                    }
+                )
+        for metric in ("over_generation_rate", "would_stop_early_rate", "max_length_rate"):
+            if old_view[name][metric] != new_view[name][metric]:
+                aggregate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_view[name][metric],
+                        "new": new_view[name][metric],
+                    }
+                )
+    result["cause_drift"] = cause_drift
+    result["aggregate_drift"] = aggregate_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    # NOTE: stop-cause-specific disjunct names keep this line textually
+    # distinct from every other diff section's ``changed`` anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        cause_drift or aggregate_drift or candidates_added or candidates_removed
     )
     return result
 
@@ -2929,6 +3058,52 @@ def _render_position_summary(position_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_stop_cause_summary(stopcause_diff: dict[str, Any] | None) -> list[str]:
+    """Stop-cause comparison lines for the stderr summary."""
+    if type(stopcause_diff) is not dict:
+        return []
+    available = stopcause_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Stop-cause comparison unavailable: {missing} run did not record the stop-cause probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+
+    drift = stopcause_diff.get("cause_drift") or []
+    if drift:
+        lines.append(f"Stop-cause rate drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}/{_display_id(entry.get('cause'))}: "
+                f"{_fmt_rate(entry.get('old_rate'))} -> {_fmt_rate(entry.get('new_rate'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    aggregate = stopcause_diff.get("aggregate_drift") or []
+    if aggregate:
+        lines.append(f"Stop-cause aggregate drift ({len(aggregate)}):")
+        for entry in aggregate[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}/{_display_id(entry.get('metric'))}: "
+                f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+            )
+        if len(aggregate) > 5:
+            lines.append(f"  ... and {len(aggregate) - 5} more")
+    added = stopcause_diff.get("candidates_added") or []
+    removed = stopcause_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Stop-cause candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Stop-cause candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -3349,6 +3524,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_synthhistory_summary(diff.get("synthhistory")))
     lines.extend(_render_batchinv_summary(diff.get("batch_invariance")))
     lines.extend(_render_position_summary(diff.get("position")))
+    lines.extend(_render_stop_cause_summary(diff.get("stop_cause")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

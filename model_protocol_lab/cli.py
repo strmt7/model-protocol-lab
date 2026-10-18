@@ -280,6 +280,16 @@ def build_parser() -> argparse.ArgumentParser:
         "compute; the stage never fails the run.",
     )
     run.add_argument(
+        "--stop-cause",
+        action="store_true",
+        help="Stop-cause termination audit: post-hoc classification of "
+        "every search candidate's recorded generations into eos_id / "
+        "stop_string / max_length / stop_unknown, reporting per-family "
+        "termination-cause distributions and over-generation bleed "
+        "past the first end-of-turn token. No new generations; the "
+        "stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -631,6 +641,43 @@ def _run_position_probe(
         result["position"] = {
             "available": False,
             "detail": "position_unavailable",
+        }
+
+
+def _run_stop_probe(
+    backend: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    eos_id: Any,
+    token_bytes: Any = None,
+) -> None:
+    """Run the stop-cause termination audit; never raises.
+
+    Post-hoc classification (no new generations) of every search
+    candidate's recorded generations into eos_id / stop_string /
+    max_length / stop_unknown, stored as the ``stop_cause`` analysis
+    payload on ``result``. Any failure degrades to an "unavailable"
+    marker instead of failing the run.
+    """
+    try:
+        from .experiments import stop_stage
+
+        result["stop_cause"] = stop_stage(
+            result,
+            tuple(cases),
+            boundary=boundary,
+            boundary_map=boundary_map,
+            eos_id=eos_id,
+            backend=backend,
+            token_bytes=token_bytes,
+        )
+    except Exception:  # noqa: BLE001 -- stop-cause probe must not fail the run
+        result["stop_cause"] = {
+            "available": False,
+            "detail": "stop_unavailable",
         }
 
 
@@ -1566,6 +1613,24 @@ def main(argv: list[str] | None = None) -> int:
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
+                    )
+                # Stop-cause termination audit (research wave-3 idea 3):
+                # post-hoc classification of every search candidate's
+                # recorded generations into eos_id / stop_string /
+                # max_length / stop_unknown, reporting per-family
+                # termination-cause distributions and over-generation
+                # bleed. No new generations; a stop-aware engine's
+                # would-have-fired mechanism is classified from the
+                # recorded token ids. Never fails the run.
+                if args.stop_cause:
+                    _run_stop_probe(
+                        backend,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        eos_id=eos_id,
+                        token_bytes=token_bytes,
                     )
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each
