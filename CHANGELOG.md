@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 139 — test-suite speed, 2026-10-18)
+
+- The two `pytest --collect-only` subprocess spawns (README test-count
+  pin in `test_cycle4` and the every-file-collected gate in
+  `test_ci_portability_guard`, ~30-60s each) now share one memoized
+  collection per session via `tests/_collect_cache.py`. Zero coverage
+  change; both gates keep their retry-on-transient-failure behavior
+  (only successful collections are cached).
+
 ### Added (cycle 138 — cross-checkpoint transfer experiment, 2026-10-18)
 
 - New `run --transfer-model` (repeatable, max 4; IDEAS #1): after the

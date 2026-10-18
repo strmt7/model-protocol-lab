@@ -255,60 +255,33 @@ class TestDualRunnerContribution(unittest.TestCase):
         )
 
     def test_every_test_file_collected_by_pytest(self) -> None:
-        import subprocess
-        import sys
+        # The collection subprocess is shared with test_cycle4's README
+        # count pin via tests/_collect_cache.py (one ~30-60s spawn per
+        # session instead of two).
+        from tests._collect_cache import pytest_collect_counts
 
-        # Hardened (cycle 108): retry the subprocess collection up to 3
-        # times; a single transient failure (timeout under load, slow
-        # import of heavy deps) should not fail the gate opaquely.
-        last_diagnostics = ""
-        counts: dict[str, int] = {}
-        collected_ok = False
-        for attempt in range(3):
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "tests/",
-                        "--collect-only",
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                    ],
-                    cwd=TESTS_DIR.parent,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                )
-            except subprocess.TimeoutExpired as exc:
-                last_diagnostics = f"attempt {attempt + 1}: timed out after 300s: {exc}"
-                continue
-            if proc.returncode != 0:
-                last_diagnostics = (
-                    f"attempt {attempt + 1}: returncode={proc.returncode}, "
-                    f"stderr_tail={proc.stderr[-2000:]}"
-                )
-                continue
-            for line in proc.stdout.splitlines():
-                # lines look like: tests/test_x.py::TestY::test_z
-                if "::" not in line:
-                    continue
-                fname = line.split("::")[0].split("/")[-1]
-                counts[fname] = counts.get(fname, 0) + 1
-            collected_ok = True
-            break
-        self.assertTrue(
-            collected_ok,
-            "pytest --collect-only failed after 3 attempts; last diagnostics:\n" + last_diagnostics,
-        )
+        try:
+            counts, _ = pytest_collect_counts(TESTS_DIR.parent)
+        except RuntimeError as exc:
+            self.fail(str(exc))
         zero = [p.name for p in sorted(TESTS_DIR.glob("test_*.py")) if counts.get(p.name, 0) == 0]
         self.assertEqual(
             zero,
             [],
             "test files contributing zero tests under pytest:\n" + "\n".join(zero),
         )
+
+
+class CollectCacheTests(unittest.TestCase):
+    def test_memoized_within_process(self):
+        from tests._collect_cache import pytest_collect_counts
+
+        first = pytest_collect_counts(TESTS_DIR.parent)
+        second = pytest_collect_counts(TESTS_DIR.parent)
+        self.assertIs(first, second)
+        counts, total = first
+        self.assertGreater(total, 0)
+        self.assertGreater(sum(counts.values()), 0)
 
 
 if __name__ == "__main__":
