@@ -2512,7 +2512,7 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
         for label in sorted(set(old) | set(new)):
             if old.get(label) != new.get(label):
                 lines.append(
-                    f"Hierarchy {label}-frame mean system rate: "
+                    f"Hierarchy {_display_id(label)}-frame mean system rate: "
                     f"{_fmt_rate(old.get(label))} -> {_fmt_rate(new.get(label))}"
                 )
     return lines
@@ -2584,7 +2584,7 @@ def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
         for label in sorted(set(old) | set(new)):
             if old.get(label) != new.get(label):
                 lines.append(
-                    f"Prefill {label} mean honor rate: "
+                    f"Prefill {_display_id(label)} mean honor rate: "
                     f"{_fmt_rate(old.get(label))} -> {_fmt_rate(new.get(label))}"
                 )
     return lines
@@ -2654,7 +2654,7 @@ def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> li
         for label in sorted(set(old) | set(new)):
             if old.get(label) != new.get(label):
                 lines.append(
-                    f"History {label} mean pass rate: "
+                    f"History {_display_id(label)} mean pass rate: "
                     f"{_fmt_rate(old.get(label))} -> {_fmt_rate(new.get(label))}"
                 )
     return lines

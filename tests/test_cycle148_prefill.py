@@ -1255,3 +1255,24 @@ class PrefillCliProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrefillGroupLabelSanitizationTests(unittest.TestCase):
+    """Wave-3 red-team A F2: hostile think_effect labels must not
+    inject terminal escapes into the stderr summary."""
+
+    def test_group_label_terminal_escapes_stripped(self):
+        base = {
+            "decision": "select_best",
+            "selected_candidate": "alpha",
+            "search": [],
+            "held_out": {},
+        }
+        evil = "\x1b[2J\x1b[31mPREF\x1b[0m"
+        old = _prefill_payload()
+        new = _prefill_payload()
+        new["think_effect"][evil] = {"mean_honor_rate": 0.9, "n_candidates": 1}
+        old["think_effect"][evil] = {"mean_honor_rate": 0.1, "n_candidates": 1}
+        text = render_summary(diff_reports(dict(base, prefill=old), dict(base, prefill=new)))
+        self.assertNotIn("\x1b", text)
+        self.assertIn("PREF", text)
