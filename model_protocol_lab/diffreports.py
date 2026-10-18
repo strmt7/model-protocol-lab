@@ -48,14 +48,16 @@ _CONTROL_CHARS = re.compile(
 # reorder displayed text. Mirrors cli._CONTROL_CHARS.
 
 
-def _display_id(value: str) -> str:
+def _display_id(value: str | None) -> str:
     """Operator-visible names/IDs with control characters stripped.
 
     Fixture IDs and candidate names arrive from the compared files; a
     hostile results.json must not inject terminal escape sequences into
     stderr output. (Mirrors ``cli._display_id``; kept local so this module
-    does not import the CLI.)
+    does not import the CLI.) None renders as "(none)".
     """
+    if value is None:
+        return "(none)"
     return _CONTROL_CHARS.sub("", value)
 
 
@@ -490,6 +492,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    transfer_diff = diff_transfer(old.get("transfer"), new.get("transfer"))
+    transfer_asymmetric = transfer_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -505,6 +512,8 @@ def diff_reports(
         and not boundary_audit_asymmetric
         and not robustness_diff["changed"]
         and not robustness_asymmetric
+        and not transfer_diff["changed"]
+        and not transfer_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -521,6 +530,8 @@ def diff_reports(
         "boundary_audit_asymmetric": boundary_audit_asymmetric,
         "selection_robustness_changed": robustness_diff["changed"],
         "selection_robustness_asymmetric": robustness_asymmetric,
+        "transfer_changed": transfer_diff["changed"],
+        "transfer_asymmetric": transfer_asymmetric,
         "identical": identical,
     }
     return {
@@ -533,6 +544,7 @@ def diff_reports(
         "held_out_floor": held_out_floor_diff,
         "boundary_audit": boundary_audit_diff,
         "selection_robustness": robustness_diff,
+        "transfer": transfer_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -946,6 +958,149 @@ def diff_selection_robustness(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_transfer(payload: Any) -> bool:
+    """Structural check for a ``transfer`` payload."""
+    return (
+        type(payload) is dict
+        and payload.get("available") is True
+        and type(payload.get("per_checkpoint")) is dict
+        and type(payload.get("matrix")) is dict
+    )
+
+
+def diff_transfer(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``transfer`` payloads; deterministic.
+
+    Answers "did the cross-checkpoint transfer story change between
+    runs?": the transfer verdict, the per-checkpoint (decision, winner)
+    verdicts, and the per-cell candidate x checkpoint verdicts. A changed
+    transfer pattern after a checkpoint or fixture update is the
+    fleet-portability regression signal. Checkpoints present on only one
+    side are reported as added/removed. A side without a recorded
+    transfer experiment is reported plainly. No model, no network.
+    """
+    old_ok = _valid_transfer(old)
+    new_ok = _valid_transfer(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_verdict = old.get("transfer_verdict")
+    new_verdict = new.get("transfer_verdict")
+    old_pc = old.get("per_checkpoint") or {}
+    new_pc = new.get("per_checkpoint") or {}
+    old_matrix = old.get("matrix") or {}
+    new_matrix = new.get("matrix") or {}
+    old_ckpts = sorted(old_pc)
+    new_ckpts = sorted(new_pc)
+    checkpoints_added = [c for c in new_ckpts if c not in old_pc]
+    checkpoints_removed = [c for c in old_ckpts if c not in new_pc]
+    checkpoint_drift: list[dict[str, Any]] = []
+    for ckpt in sorted(set(old_ckpts) & set(new_ckpts)):
+        old_v = old_pc.get(ckpt) or {}
+        new_v = new_pc.get(ckpt) or {}
+        if (old_v.get("decision"), old_v.get("winner")) != (
+            new_v.get("decision"),
+            new_v.get("winner"),
+        ):
+            checkpoint_drift.append(
+                {
+                    "checkpoint": ckpt,
+                    "old_decision": old_v.get("decision"),
+                    "old_winner": old_v.get("winner"),
+                    "new_decision": new_v.get("decision"),
+                    "new_winner": new_v.get("winner"),
+                }
+            )
+    cell_drift: list[dict[str, Any]] = []
+    for cand in sorted(set(old_matrix) | set(new_matrix)):
+        old_row = old_matrix.get(cand) or {}
+        new_row = new_matrix.get(cand) or {}
+        for ckpt in sorted(set(old_row) | set(new_row)):
+            if old_row.get(ckpt) != new_row.get(ckpt):
+                cell_drift.append(
+                    {
+                        "candidate": cand,
+                        "checkpoint": ckpt,
+                        "old": old_row.get(ckpt),
+                        "new": new_row.get(ckpt),
+                    }
+                )
+    verdict_changed = old_verdict != new_verdict
+    result["transfer_verdict"] = {
+        "old": old_verdict,
+        "new": new_verdict,
+        "changed": verdict_changed,
+    }
+    result["checkpoint_drift"] = checkpoint_drift
+    result["cell_drift"] = cell_drift
+    result["checkpoints_added"] = checkpoints_added
+    result["checkpoints_removed"] = checkpoints_removed
+    result["changed"] = bool(
+        verdict_changed
+        or checkpoint_drift
+        or cell_drift
+        or checkpoints_added
+        or checkpoints_removed
+    )
+    return result
+
+
+def _render_transfer_summary(transfer_diff: dict[str, Any] | None) -> list[str]:
+    """Transfer comparison lines for the stderr summary."""
+    if type(transfer_diff) is not dict:
+        return []
+    available = transfer_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Transfer comparison unavailable: "
+            f"{missing} run did not record the transfer experiment."
+        ]
+    lines: list[str] = []
+    verdict = transfer_diff.get("transfer_verdict") or {}
+    if verdict.get("changed"):
+        lines.append(
+            f"Transfer verdict: {_display_id(verdict.get('old'))} -> "
+            f"{_display_id(verdict.get('new'))}"
+        )
+    drift = transfer_diff.get("checkpoint_drift") or []
+    if drift:
+        lines.append(f"Transfer checkpoint drift ({len(drift)}):")
+        for entry in drift:
+            lines.append(
+                f"  {_display_id(entry['checkpoint'])}: "
+                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
+                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+            )
+    cells = transfer_diff.get("cell_drift") or []
+    if cells:
+        lines.append(f"Transfer cell drift ({len(cells)}):")
+        for entry in cells[:10]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}/{_display_id(entry['checkpoint'])}: "
+                f"{_display_id(entry['old'])} -> {_display_id(entry['new'])}"
+            )
+        if len(cells) > 10:
+            lines.append(f"  ... and {len(cells) - 10} more")
+    added = transfer_diff.get("checkpoints_added") or []
+    removed = transfer_diff.get("checkpoints_removed") or []
+    if added:
+        lines.append(f"Transfer checkpoints added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Transfer checkpoints removed: {', '.join(_display_id(c) for c in removed)}")
+    return lines
+
+
 def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     """Prompt-boundary canonicality comparison lines for the stderr summary."""
     available = audit_diff.get("available")
@@ -1179,6 +1334,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_held_out_floor_summary(diff["held_out_floor"]))
     lines.extend(_render_boundary_audit_summary(diff["boundary_audit"]))
     lines.extend(_render_robustness_summary(diff.get("selection_robustness")))
+    lines.extend(_render_transfer_summary(diff.get("transfer")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

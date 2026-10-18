@@ -237,6 +237,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "held_out_floor": {"available": "neither", "changed": False},
         "boundary_audit": {"available": "neither", "changed": False},
         "selection_robustness": {"available": "neither", "changed": False},
+        "transfer": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -261,6 +262,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "boundary_audit_asymmetric": False,
             "selection_robustness_changed": False,
             "selection_robustness_asymmetric": False,
+            "transfer_changed": False,
+            "transfer_asymmetric": False,
             "identical": True,
         },
     }
@@ -594,6 +597,92 @@ def _o_selection_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, b
     return diff, changed, asymmetric
 
 
+def _o_transfer_valid(value: Any) -> bool:
+    """Oracle-side availability check, mirroring the implementation's rule."""
+    return (
+        type(value) is dict
+        and value.get("available") is True
+        and type(value.get("per_checkpoint")) is dict
+        and type(value.get("matrix")) is dict
+    )
+
+
+def _o_transfer(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle transfer section: verdict, checkpoint, and cell drift."""
+    old_ok = _o_transfer_valid(old)
+    new_ok = _o_transfer_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_verdict = old.get("transfer_verdict")
+    new_verdict = new.get("transfer_verdict")
+    old_pc = old.get("per_checkpoint") or {}
+    new_pc = new.get("per_checkpoint") or {}
+    old_matrix = old.get("matrix") or {}
+    new_matrix = new.get("matrix") or {}
+    checkpoints_added = [c for c in sorted(new_pc) if c not in old_pc]
+    checkpoints_removed = [c for c in sorted(old_pc) if c not in new_pc]
+    checkpoint_drift = []
+    for ckpt in sorted(set(old_pc) & set(new_pc)):
+        old_v = old_pc.get(ckpt) or {}
+        new_v = new_pc.get(ckpt) or {}
+        if (old_v.get("decision"), old_v.get("winner")) != (
+            new_v.get("decision"),
+            new_v.get("winner"),
+        ):
+            checkpoint_drift.append(
+                {
+                    "checkpoint": ckpt,
+                    "old_decision": old_v.get("decision"),
+                    "old_winner": old_v.get("winner"),
+                    "new_decision": new_v.get("decision"),
+                    "new_winner": new_v.get("winner"),
+                }
+            )
+    cell_drift = []
+    for cand in sorted(set(old_matrix) | set(new_matrix)):
+        old_row = old_matrix.get(cand) or {}
+        new_row = new_matrix.get(cand) or {}
+        for ckpt in sorted(set(old_row) | set(new_row)):
+            if old_row.get(ckpt) != new_row.get(ckpt):
+                cell_drift.append(
+                    {
+                        "candidate": cand,
+                        "checkpoint": ckpt,
+                        "old": old_row.get(ckpt),
+                        "new": new_row.get(ckpt),
+                    }
+                )
+    verdict_changed = old_verdict != new_verdict
+    diff["transfer_verdict"] = {
+        "old": old_verdict,
+        "new": new_verdict,
+        "changed": verdict_changed,
+    }
+    diff["checkpoint_drift"] = checkpoint_drift
+    diff["cell_drift"] = cell_drift
+    diff["checkpoints_added"] = checkpoints_added
+    diff["checkpoints_removed"] = checkpoints_removed
+    changed = bool(
+        verdict_changed
+        or checkpoint_drift
+        or cell_drift
+        or checkpoints_added
+        or checkpoints_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _oracle_diff(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -699,6 +788,7 @@ def _oracle_diff(
     o_sr, o_sr_changed, o_sr_asymmetric = _o_selection_robustness(
         old.get("selection_robustness"), new.get("selection_robustness")
     )
+    o_tr, o_tr_changed, o_tr_asymmetric = _o_transfer(old.get("transfer"), new.get("transfer"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -714,6 +804,8 @@ def _oracle_diff(
         and not o_ba_asymmetric
         and not o_sr_changed
         and not o_sr_asymmetric
+        and not o_tr_changed
+        and not o_tr_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -725,6 +817,7 @@ def _oracle_diff(
         "held_out_floor": o_hof,
         "boundary_audit": o_ba,
         "selection_robustness": o_sr,
+        "transfer": o_tr,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -745,6 +838,8 @@ def _oracle_diff(
             "boundary_audit_asymmetric": o_ba_asymmetric,
             "selection_robustness_changed": o_sr_changed,
             "selection_robustness_asymmetric": o_sr_asymmetric,
+            "transfer_changed": o_tr_changed,
+            "transfer_asymmetric": o_tr_asymmetric,
             "identical": identical,
         },
     }
@@ -876,6 +971,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "boundary_audit_asymmetric": False,
                 "selection_robustness_changed": False,
                 "selection_robustness_asymmetric": False,
+                "transfer_changed": False,
+                "transfer_asymmetric": False,
                 "identical": False,
             },
         )
@@ -1881,6 +1978,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not boundary_audit_asymmetric\n"
             '        and not robustness_diff["changed"]\n'
             "        and not robustness_asymmetric\n"
+            '        and not transfer_diff["changed"]\n'
+            "        and not transfer_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -1897,6 +1996,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or boundary_audit_asymmetric\n"
             '        or robustness_diff["changed"]\n'
             "        or robustness_asymmetric\n"
+            '        or transfer_diff["changed"]\n'
+            "        or transfer_asymmetric\n"
             "    )\n",
             scenario,
         )

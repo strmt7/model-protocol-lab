@@ -889,6 +889,9 @@ one-sided/missing floors), `boundary_audit` (the prompt-boundary
 canonicality comparison: overall and per-family PBP-rate drift),
 `selection_robustness` (the stop-semantics selection comparison:
 per-semantic (decision, winner) drift and flip-pattern changes),
+`transfer` (the cross-checkpoint transfer comparison: transfer-verdict
+drift, per-checkpoint (decision, winner) drift, per-cell verdict drift,
+checkpoints added/removed),
 `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate),
@@ -900,7 +903,7 @@ counts (`fixtures_flipped`, `candidates_changed_status`,
 `held_out_floor_changed`, `held_out_floor_asymmetric`,
 `boundary_audit_changed`, `boundary_audit_asymmetric`,
 `selection_robustness_changed`, `selection_robustness_asymmetric`,
-`identical`).
+`transfer_changed`, `transfer_asymmetric`, `identical`).
 
 What it compares, exactly:
 
