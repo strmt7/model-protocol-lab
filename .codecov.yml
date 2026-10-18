@@ -1,0 +1,23 @@
+# Codecov configuration for strmt7/model-protocol-lab.
+#
+# Mirrors the owner's other repos: project target tracks the default
+# branch automatically, patch target holds the line at the CI gate
+# (95%), and generated/test/support paths are ignored so the reported
+# number reflects the shipped package.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+    patch:
+      default:
+        target: 95%
+
+ignore:
+  - "tests/"
+  - "examples/"
+  - "model_protocol_lab/__main__.py"
+
+comment:
+  require_changes: true

@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 149 — Codecov wiring, owner-mandated add-on, 2026-10-18)
+
+- Codecov coverage upload in CI, mirroring the owner's other repos:
+  the test job emits `coverage xml -o coverage.xml` after the
+  `coverage report --fail-under=95` gate and uploads it with the
+  SHA-pinned `codecov-action` (v7.1.1) via OIDC (`use_oidc: true`,
+  `fail_ci_if_error: true`; the job gains `id-token: write`). New
+  `.codecov.yml` (project target auto, patch target 95% = the CI
+  gate, `tests/`/`examples/`/`__main__.py` ignored, comment
+  `require_changes: true`) and a codecov README badge directly after
+  the CI badge. Pinned by new CI-shape tests (pinned SHA, OIDC,
+  `fail_ci_if_error`, `id-token: write`, byte-exact badge URL).
+
 ### Added (cycle 149 — oracle-mixture / protocol-portfolio gap, 2026-10-18)
 
 - Protocol portfolio analysis (wave-2 research idea #4): pure post-hoc
