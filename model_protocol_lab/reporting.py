@@ -3221,7 +3221,8 @@ def _selection_robustness_section(result: dict[str, Any]) -> str:
             + ".</p>"
         )
     return (
-        '<section class="card"><h2>Selection robustness under stop semantics</h2>'
+        '<section class="card" id="selection-robustness">'
+        "<h2>Selection robustness under stop semantics</h2>"
         "<p>Each serving stack stops generation differently. This re-applies "
         "the lab's conservative selection rule to every search candidate "
         "under each emulated stop semantic (exact answer + boundary on the "
@@ -3315,7 +3316,7 @@ def _transfer_section(result: dict[str, Any]) -> str:
             + "</tr>"
         )
     return (
-        '<section class="card"><h2>Cross-checkpoint transfer</h2>'
+        '<section class="card" id="transfer"><h2>Cross-checkpoint transfer</h2>'
         "<p>Every search candidate re-evaluated against each transfer "
         "checkpoint (search split only); the selection rule re-applied per "
         "checkpoint. ★ marks the primary winner.</p>"
@@ -3424,7 +3425,8 @@ def _perturbation_section(result: dict[str, Any]) -> str:
             + "</span></td></tr>"
         )
     return (
-        '<section class="card"><h2>Fixture-perturbation robustness</h2>'
+        '<section class="card" id="perturbation-robustness">'
+        "<h2>Fixture-perturbation robustness</h2>"
         "<p>Every search candidate re-evaluated on each deterministically "
         "perturbed fixture variant (typos, case flips, whitespace, Unicode "
         "variants, punctuation stripping; search split only); the selection "
@@ -3571,7 +3573,7 @@ def _token_healing_section(result: dict[str, Any]) -> str:
     flips = healing.get("fixture_flips")
     n_flips = len(flips) if type(flips) is list else 0
     return (
-        '<section class="card"><h2>Token-healing selection sensitivity</h2>'
+        '<section class="card" id="token-healing"><h2>Token-healing selection sensitivity</h2>'
         "<p>Every search candidate re-evaluated with HF-style token healing "
         "applied to each prompt (the tail token is re-chosen among "
         "vocabulary extensions of its decoded text; search split only); the "
@@ -3786,7 +3788,7 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
 
     n_text = f" ({n_fixtures} conflict fixtures per position)" if type(n_fixtures) is int else ""
     return (
-        '<section class="card"><h2>Instruction-hierarchy adherence</h2>'
+        '<section class="card" id="instruction-hierarchy"><h2>Instruction-hierarchy adherence</h2>'
         "<p>Every search candidate re-evaluated on synthetic system-vs-user "
         "conflict fixtures: the system instruction is delivered as a "
         "privilege-marked block folded into the user turn, either before "
@@ -3987,7 +3989,8 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
 
     n_text = f" ({n_fixtures} fixtures per condition)" if type(n_fixtures) is int else ""
     return (
-        '<section class="card"><h2>Synthetic-history selection stability</h2>'
+        '<section class="card" id="synthetic-history">'
+        "<h2>Synthetic-history selection stability</h2>"
         "<p>Every search candidate re-evaluated with fixed benign synthetic "
         "prior conversation turns prepended to every fixture -- one exchange "
         "(history_2) and three exchanges (history_6); the selection rule is "
@@ -4019,6 +4022,111 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
             '<th scope="col">Mean pass rate</th>'
             "</tr></thead><tbody>" + "".join(group_rows) + "</tbody></table></div>" + group_note
             if group_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
+def _batchinv_section(result: dict[str, Any]) -> str:
+    """Batch-invariance audit: solo vs batched greedy decoding.
+
+    Every search fixture's exact prompt token sequence re-run through
+    the backend's batch path (when one exists) and compared
+    token-for-token against the isolated solo generation. Reports the
+    divergence rate and first-divergence positions -- the audit of the
+    lab's "exact token sequences" invariant against batch-composition
+    nondeterminism. Renders nothing when the audit did not run or the
+    backend exposed no batch path.
+    """
+    audit: Any = result.get("batch_invariance")
+    if type(audit) is not dict or audit.get("available") is not True:
+        return ""
+    per_prompt = audit.get("per_prompt")
+    if type(per_prompt) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1%}"
+        return "n/a"
+
+    def _num(value: Any) -> str:
+        return str(value) if type(value) is int else "n/a"
+
+    verdict = audit.get("verdict")
+    verdict_badge = (
+        '<span class="badge pass">batch-invariant</span>'
+        if verdict == "batch_invariant"
+        else '<span class="badge fail">batch-variant</span>'
+        if verdict == "batch_variant"
+        else '<span class="badge">n/a</span>'
+    )
+    rows = []
+    for key in sorted(per_prompt, key=str):
+        pid = str(key)
+        entry = per_prompt[key]
+        if type(entry) is not dict:
+            continue
+        diverged = entry.get("diverged")
+        badge = (
+            '<span class="badge fail">diverged</span>'
+            if diverged is True
+            else '<span class="badge pass">identical</span>'
+            if diverged is False
+            else '<span class="badge">n/a</span>'
+        )
+        first = entry.get("first_divergence")
+        first_text = _num(first) if diverged is True else "&mdash;"
+        error = entry.get("error")
+        note = " (" + escape(str(error)) + ")" if type(error) is str and error else ""
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(pid)
+            + "</span></td><td>"
+            + badge
+            + "</td><td>"
+            + first_text
+            + "</td><td>"
+            + _num(entry.get("solo_len"))
+            + "</td><td>"
+            + _num(entry.get("batched_len"))
+            + "</td><td>"
+            + note
+            + "</td></tr>"
+        )
+
+    n_prompts = audit.get("n_prompts")
+    n_evaluable = audit.get("n_evaluable")
+    n_diverged = audit.get("n_diverged")
+    counts = (
+        f" ({_num(n_evaluable)} of {_num(n_prompts)} prompts evaluable, "
+        f"{_num(n_diverged)} diverged)"
+    )
+    return (
+        '<section class="card" id="batch-invariance"><h2>Batch-invariance audit</h2>'
+        "<p>Each search fixture's exact prompt token sequence was decoded "
+        "greedily in isolation and co-batched through the backend's batch "
+        "path; continuation token ids were compared token-for-token. Any "
+        "divergence falsifies the determinism assumption for that backend."
+        + escape(counts)
+        + "</p>"
+        + "<p>Verdict: "
+        + verdict_badge
+        + " &mdash; divergence rate "
+        + escape(_rate(audit.get("divergence_rate")))
+        + "</p>"
+        + (
+            '<div class="table-wrap"><table><caption>Solo vs batched '
+            "comparison per prompt.</caption>"
+            '<thead><tr><th scope="col">Prompt</th>'
+            '<th scope="col">Outcome</th>'
+            '<th scope="col">First divergence</th>'
+            '<th scope="col">Solo ids</th>'
+            '<th scope="col">Batched ids</th>'
+            '<th scope="col">Note</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
             else ""
         )
         + "</section>"
@@ -4189,7 +4297,7 @@ def _prefill_section(result: dict[str, Any]) -> str:
 
     n_text = f" ({n_fixtures} fixtures per prefill)" if type(n_fixtures) is int else ""
     return (
-        '<section class="card"><h2>Assistant-prefill sensitivity</h2>'
+        '<section class="card" id="prefill-sensitivity"><h2>Assistant-prefill sensitivity</h2>'
         "<p>Every search candidate re-evaluated with benign format-lock "
         "prefills appended after the generation prompt (the model "
         "generates the continuation; the scored span is prefill + "
@@ -4470,6 +4578,7 @@ def render_html(result: dict[str, Any]) -> str:
     prefill_html = _prefill_section(result)
     portfolio_html = _portfolio_section(result)
     synthhistory_html = _synthhistory_section(result)
+    batchinv_html = _batchinv_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4523,6 +4632,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Synthetic-history selection stability",
                 synthhistory_html,
             ),
+            (
+                "batch-invariance",
+                "Batch-invariance audit",
+                batchinv_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -4571,6 +4685,7 @@ def render_html(result: dict[str, Any]) -> str:
         + prefill_html
         + portfolio_html
         + synthhistory_html
+        + batchinv_html
         + sweep_html
         + logprob_html
         + held_out_html

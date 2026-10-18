@@ -177,7 +177,8 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
+stability section (see §8.20), a batch-invariance audit section (see §8.21), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -833,6 +834,42 @@ per-candidate pass-rate drift, and the group rates between runs
 `synthhistory_asymmetric` feed `identical`) -- a changed flip pattern
 after a checkpoint or fixture update is the history-robustness
 regression signal. Roughly triples search compute; the stage never
+fails the run.
+
+### 8.21 Batch-invariance audit (`batch_invariance`)
+
+The lab's core invariant is "send exact token sequences, compare exact
+outcomes" -- but GPU inference is not batch invariant. Thinking
+Machines ("Defeating Nondeterminism in LLM Inference", Oct 2026)
+documents that kernel selection, attention reduction order, and
+KV-cache layout change per batch, so the *same prompt* can produce
+different logits depending on what else ran alongside it. Every
+prompt-format harness treats the serving path as a fixed point; the lab
+sends exact token sequences, so batch composition is a hidden
+confounder that could poison every comparison it publishes.
+`model-protocol-lab run --batch-invariance` re-runs every search
+fixture's exact prompt token sequence through the backend's batch path
+(when one exists) and compares solo vs batched greedy continuation ids
+token-for-token, reporting the divergence rate and first-divergence
+positions per prompt.
+
+Honesty note, pre-registered in `batchinv.py`: no backend in the
+current tree exposes a batch path, so on the real local backend the
+stage records `batch_unsupported` -- the audit deliberately does *not*
+synthesize a batch out of sequential calls. The comparison machinery
+is fully specified and tested (brute-force oracle, hostile backends),
+so the day a batch-capable backend exists, solo-vs-batch is checked,
+not assumed. Any nonzero divergence rate falsifies the determinism
+assumption for that backend -- and is a result in itself.
+`results.json` carries `batch_invariance` with the audit verdict
+(`batch_invariant` / `batch_variant` / `unavailable`), the divergence
+rate, and the per-prompt comparison. The report's "Batch-invariance
+audit" section renders the verdict badge and the per-prompt table.
+`diff-reports` compares the verdict, the divergence-rate drift, and
+the diverged-prompt sets between runs (`diff_batchinv`;
+`batch_invariance_changed` / `batch_invariance_asymmetric` feed
+`identical`) -- a newly diverged prompt after a backend or fixture
+update is the batch-nondeterminism regression signal. The stage never
 fails the run.
 
 ## 9. Authoring fixtures (`fixtures build`)

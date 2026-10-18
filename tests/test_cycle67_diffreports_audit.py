@@ -245,6 +245,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "prefill": {"available": "neither", "changed": False},
         "portfolio": {"available": "neither", "changed": False},
         "synthhistory": {"available": "neither", "changed": False},
+        "batch_invariance": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -285,6 +286,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "portfolio_asymmetric": False,
             "synthhistory_changed": False,
             "synthhistory_asymmetric": False,
+            "batch_invariance_changed": False,
+            "batch_invariance_asymmetric": False,
             "identical": True,
         },
     }
@@ -1434,6 +1437,99 @@ def _o_synthhistory(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_batchinv_valid(value: Any) -> bool:
+    """Oracle validator mirroring diffreports._valid_batchinv."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    for key in ("n_prompts", "n_evaluable", "n_failed", "n_diverged"):
+        if type(value.get(key)) is not int or value[key] < 0:
+            return False
+    if value["n_evaluable"] + value["n_failed"] != value["n_prompts"]:
+        return False
+    if value["n_diverged"] > value["n_evaluable"]:
+        return False
+    rate = value.get("divergence_rate")
+    if value["n_evaluable"]:
+        if type(rate) not in (int, float):
+            return False
+    elif rate is not None:
+        return False
+    if value.get("verdict") not in ("batch_invariant", "batch_variant", "unavailable"):
+        return False
+    per_prompt = value.get("per_prompt")
+    if type(per_prompt) is not dict or not all(type(k) is str for k in per_prompt):
+        return False
+    for entry in per_prompt.values():
+        if type(entry) is not dict:
+            return False
+        diverged = entry.get("diverged")
+        if diverged is not None and type(diverged) is not bool:
+            return False
+        first = entry.get("first_divergence")
+        if first is not None and (type(first) is not int or first < 0):
+            return False
+        for length_key in ("solo_len", "batched_len"):
+            length = entry.get(length_key)
+            if length is not None and (type(length) is not int or length < 0):
+                return False
+        error = entry.get("error")
+        if error is not None and type(error) is not str:
+            return False
+    return True
+
+
+def _o_batchinv(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle batch_invariance section: verdict, rate, diverged-set drift."""
+    old_ok = _o_batchinv_valid(old)
+    new_ok = _o_batchinv_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _diverged_set(payload: Any) -> set[str]:
+        per_prompt = payload.get("per_prompt") or {}
+        return {
+            pid
+            for pid, entry in per_prompt.items()
+            if type(entry) is dict and entry.get("diverged") is True
+        }
+
+    verdict_changed = old.get("verdict") != new.get("verdict")
+    diff["verdict_changed"] = verdict_changed
+    divergence_rate_changed = old.get("divergence_rate") != new.get("divergence_rate")
+    diff["divergence_rate_changed"] = divergence_rate_changed
+    old_diverged, new_diverged = _diverged_set(old), _diverged_set(new)
+    diverged_added = sorted(new_diverged - old_diverged)
+    diverged_removed = sorted(old_diverged - new_diverged)
+    diff["diverged_added"] = diverged_added
+    diff["diverged_removed"] = diverged_removed
+    old_prompts = set(old.get("per_prompt") or {})
+    new_prompts = set(new.get("per_prompt") or {})
+    prompts_added = sorted(new_prompts - old_prompts)
+    prompts_removed = sorted(old_prompts - new_prompts)
+    diff["prompts_added"] = prompts_added
+    diff["prompts_removed"] = prompts_removed
+    changed = bool(
+        verdict_changed
+        or divergence_rate_changed
+        or diverged_added
+        or diverged_removed
+        or prompts_added
+        or prompts_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -1780,6 +1876,9 @@ def _oracle_diff(
     o_sh, o_sh_changed, o_sh_asymmetric = _o_synthhistory(
         old.get("synthhistory"), new.get("synthhistory")
     )
+    o_bi, o_bi_changed, o_bi_asymmetric = _o_batchinv(
+        old.get("batch_invariance"), new.get("batch_invariance")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -1811,6 +1910,8 @@ def _oracle_diff(
         and not o_po_asymmetric
         and not o_sh_changed
         and not o_sh_asymmetric
+        and not o_bi_changed
+        and not o_bi_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1830,6 +1931,7 @@ def _oracle_diff(
         "prefill": o_pf,
         "portfolio": o_po,
         "synthhistory": o_sh,
+        "batch_invariance": o_bi,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1866,6 +1968,8 @@ def _oracle_diff(
             "portfolio_asymmetric": o_po_asymmetric,
             "synthhistory_changed": o_sh_changed,
             "synthhistory_asymmetric": o_sh_asymmetric,
+            "batch_invariance_changed": o_bi_changed,
+            "batch_invariance_asymmetric": o_bi_asymmetric,
             "identical": identical,
         },
     }
@@ -2013,6 +2117,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "portfolio_asymmetric": False,
                 "synthhistory_changed": False,
                 "synthhistory_asymmetric": False,
+                "batch_invariance_changed": False,
+                "batch_invariance_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3163,6 +3269,49 @@ def _fuzz_synthhistory_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_batchinv_section(rng: random.Random) -> dict[str, Any]:
+    pids = ["p1", "p2", "p3"]
+    per_prompt = {}
+    n_diverged = 0
+    for pid in pids:
+        roll = rng.random()
+        if roll < 0.10:
+            # Failed prompt: excluded from the divergence rate.
+            per_prompt[pid] = {
+                "diverged": None,
+                "first_divergence": None,
+                "solo_len": None,
+                "batched_len": None,
+                "error": "solo_failed",
+            }
+            continue
+        diverged = rng.random() < 0.35
+        if diverged:
+            n_diverged += 1
+        per_prompt[pid] = {
+            "diverged": diverged,
+            "first_divergence": rng.randint(0, 7) if diverged else None,
+            "solo_len": 8,
+            "batched_len": 8,
+            "error": None,
+        }
+    if rng.random() < 0.10:
+        # Hostile key: the validator must reject the whole payload.
+        per_prompt[rng.choice([7, 8.5])] = dict(per_prompt["p1"])
+    n_failed = sum(1 for e in per_prompt.values() if e.get("error"))
+    n_evaluable = len(pids) - n_failed
+    return {
+        "available": True,
+        "n_prompts": len(pids),
+        "n_evaluable": n_evaluable,
+        "n_failed": n_failed,
+        "n_diverged": n_diverged,
+        "divergence_rate": (n_diverged / n_evaluable) if n_evaluable else None,
+        "verdict": rng.choice(["batch_invariant", "batch_variant", "unavailable"]),
+        "per_prompt": per_prompt,
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -3214,6 +3363,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["portfolio"] = _fuzz_portfolio_section(rng)
     if rng.random() < 0.45:
         report["synthhistory"] = _fuzz_synthhistory_section(rng)
+    if rng.random() < 0.45:
+        report["batch_invariance"] = _fuzz_batchinv_section(rng)
     return report
 
 
@@ -3434,6 +3585,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not portfolio_asymmetric\n"
             '        and not synthhistory_diff["changed"]\n'
             "        and not synthhistory_asymmetric\n"
+            '        and not batchinv_diff["changed"]\n'
+            "        and not batchinv_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -3462,6 +3615,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or portfolio_asymmetric\n"
             '        or synthhistory_diff["changed"]\n'
             "        or synthhistory_asymmetric\n"
+            '        or batchinv_diff["changed"]\n'
+            "        or batchinv_asymmetric\n"
             "    )\n",
             scenario,
         )

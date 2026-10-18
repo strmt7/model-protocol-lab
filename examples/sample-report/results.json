@@ -2666,6 +2666,33 @@
       }
     }
   },
+  "batch_invariance": {
+    "available": true,
+    "n_prompts": 2,
+    "n_evaluable": 2,
+    "n_failed": 0,
+    "n_diverged": 1,
+    "divergence_rate": 0.5,
+    "verdict": "batch_variant",
+    "per_prompt": {
+      "search-copy-blue": {
+        "diverged": true,
+        "first_divergence": 0,
+        "solo_len": 16,
+        "batched_len": 16,
+        "error": null
+      },
+      "search-latest-green": {
+        "diverged": false,
+        "first_divergence": null,
+        "solo_len": 16,
+        "batched_len": 16,
+        "error": null
+      }
+    },
+    "max_new_tokens": 16,
+    "seed": 20261012
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

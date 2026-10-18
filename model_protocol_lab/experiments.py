@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 from hashlib import sha256
 from threading import Event
-from typing import Any
+from typing import Any, cast
 
 from .backends import (
     StopOutcome,
@@ -3192,4 +3192,124 @@ def portfolio_analysis(
             "uncovered_fixture_ids": rates["unsolvable_fixture_ids"],
             "greedy_note": "greedy set-cover approximation; not guaranteed optimal",
         },
+    }
+
+
+def batch_stage(
+    backend: Backend,
+    prompts: dict[str, tuple[int, ...]],
+    *,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Audit batch invariance: solo vs batched greedy decoding.
+
+    For every prompt (``{prompt_id: input_ids}``) the backend's plain
+    :meth:`generate` runs in isolation (solo) and its optional
+    ``generate_batch`` path runs all prompts together (batched); the
+    continuation token-id sequences are compared token-for-token with
+    :func:`batchinv.compare_solo_vs_batched`. Greedy, exact.
+
+    Fail-closed contract (see :mod:`batchinv`): a backend with no
+    ``generate_batch`` attribute records ``{"available": False,
+    "detail": "batch_unsupported"}`` -- the audit never synthesizes a
+    batch out of sequential calls. A batch path that raises records
+    ``batch_failed``; one that violates the arity/value contract
+    records ``batch_contract_failed``. A prompt whose solo generation
+    fails is marked with a per-prompt error and excluded from the
+    divergence rate, never silently dropped and never a phantom
+    divergence.
+
+    Returns the audit payload (``available`` True/False). Raises
+    ``ValueError`` on a None backend, malformed prompts, or bad
+    ``max_new_tokens``/``seed``.
+    """
+    from .batchinv import (
+        BATCH_CONTRACT_FAILED,
+        BATCH_FAILED,
+        BATCH_UNSUPPORTED,
+        audit_verdict,
+        compare_solo_vs_batched,
+        validate_prompt_ids,
+    )
+
+    if backend is None:
+        raise ValueError("backend must not be None")
+    clean_prompts = validate_prompt_ids(prompts)
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    try:
+        generate_batch = getattr(backend, "generate_batch", None)
+    except Exception:  # noqa: BLE001 -- a broken probe is a failed batch path
+        return {"available": False, "detail": BATCH_FAILED}
+    if not callable(generate_batch):
+        return {"available": False, "detail": BATCH_UNSUPPORTED}
+
+    ordered_ids = sorted(clean_prompts)
+    solo: dict[str, tuple[int, ...]] = {}
+    per_prompt: dict[str, dict[str, Any]] = {}
+    for pid in ordered_ids:
+        try:
+            generation = backend.generate(
+                clean_prompts[pid],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=Event(),
+            )
+        except Exception:  # noqa: BLE001 -- one prompt degrades, not the stage
+            generation = None
+        if (
+            generation is None
+            or generation.reason != "limit"
+            or not _valid_token_ids(generation.token_ids, nonempty=True)
+        ):
+            per_prompt[pid] = {
+                "diverged": None,
+                "first_divergence": None,
+                "solo_len": None,
+                "batched_len": None,
+                "error": "solo_failed",
+            }
+            continue
+        solo[pid] = generation.token_ids
+
+    try:
+        batched_raw = generate_batch(
+            tuple(clean_prompts[pid] for pid in ordered_ids),
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=Event(),
+        )
+    except Exception:  # noqa: BLE001 -- the batch path failed; fail closed
+        return {"available": False, "detail": BATCH_FAILED}
+    if (
+        type(batched_raw) is not tuple
+        or len(batched_raw) != len(ordered_ids)
+        or any(not _valid_token_ids(out, nonempty=True) for out in batched_raw)
+    ):
+        # A malformed batch response poisons the whole comparison: it
+        # cannot be attributed per prompt, so the stage fails closed.
+        return {"available": False, "detail": BATCH_CONTRACT_FAILED}
+    batched = dict(zip(ordered_ids, batched_raw, strict=True))
+
+    evaluable = {pid: solo[pid] for pid in ordered_ids if pid in solo}
+    comparison = compare_solo_vs_batched(evaluable, {pid: batched[pid] for pid in evaluable})
+    per_prompt_cmp = cast("dict[str, dict[str, int | bool | None]]", comparison["per_prompt"])
+    for pid, entry in per_prompt_cmp.items():
+        per_prompt[pid] = {**entry, "error": None}
+    n_evaluable = len(evaluable)
+    n_diverged = cast(int, comparison["n_diverged"])
+    return {
+        "available": True,
+        "n_prompts": len(ordered_ids),
+        "n_evaluable": n_evaluable,
+        "n_failed": len(ordered_ids) - n_evaluable,
+        "n_diverged": n_diverged,
+        "divergence_rate": (n_diverged / n_evaluable) if n_evaluable else None,
+        "verdict": audit_verdict(n_evaluable, n_diverged),
+        "per_prompt": per_prompt,
+        "max_new_tokens": max_new_tokens,
+        "seed": seed,
     }

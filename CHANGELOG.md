@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 153 — batch-invariance audit, wave-3 research idea #2, 2026-10-18)
+
+- New `mpl run --batch-invariance` experiment auditing the lab's core
+  "exact token sequences" invariant against batch-composition
+  nondeterminism (Thinking Machines, "Defeating Nondeterminism in LLM
+  Inference", Oct 2026): every search fixture's exact prompt token
+  sequence is decoded greedily in isolation and co-batched through the
+  backend's optional `generate_batch` path, and continuation ids are
+  compared token-for-token. New pure `model_protocol_lab/batchinv.py`
+  (first-divergence comparison, divergence rate, `batch_invariant` /
+  `batch_variant` / `unavailable` verdicts); `experiments.batch_stage`
+  fails closed (`batch_unsupported` when no batch path exists --
+  never a synthesized batch; `batch_contract_failed` /
+  `batch_failed` on contract violations; per-prompt solo failures
+  degrade to error markers, never phantom divergences);
+  `results.json` `batch_invariance` section; HTML "Batch-invariance
+  audit" section; `diffreports.diff_batchinv`
+  (`batch_invariance_changed` / `batch_invariance_asymmetric` feed
+  `identical`); sample-report exercise with a scripted batch-capable
+  backend demonstrating a genuine detected divergence. 57 new tests
+  (4/4 mutation gates, 200-case brute-force oracles, Hypothesis
+  properties, 8 fake-backend stage scenarios); both diff oracles
+  extended.
+
+### Fixed (cycle 153 — self red-team: broken report TOC anchors, 2026-10-18)
+
+- The report's table of contents linked to `#selection-robustness`,
+  `#transfer`, `#perturbation-robustness`, `#token-healing`,
+  `#instruction-hierarchy`, `#synthetic-history` (cycle 150),
+  `#batch-invariance` (this cycle), and `#prefill-sensitivity`, but
+  those sections rendered `<section class="card">` with no `id` --
+  every one of those TOC links was dead, contradicting the `_toc`
+  docstring's "never points at a missing id" claim (found while
+  verifying the new section's anchor). All eight sections now carry
+  their anchor as `id`; verified against the regenerated sample
+  report.
+
 ### Fixed (cycle 152 — wave-3 red-team A terminal-escape fixes, 2026-10-18)
 
 - `diff-reports` stderr rendering interpolated hostile-controlled

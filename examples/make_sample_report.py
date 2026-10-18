@@ -180,6 +180,30 @@ class SynthhistoryDemoBackend(DemoBackend):
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
 
 
+class BatchDemoBackend(DemoBackend):
+    """Scripted batch-capable backend for the batch-invariance exercise.
+
+    Solo ``generate`` behaves exactly like DemoBackend. The scripted
+    ``generate_batch`` path returns the identical solo outputs for
+    every prompt except the first, where it flips one continuation
+    token -- the scripted demonstration that the audit detects
+    batch-induced divergence (the exact signal the experiment
+    measures). Deterministic.
+    """
+
+    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+        outputs = []
+        for index, ids in enumerate(prompts):
+            solo = self.generate(ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+            tokens = solo.token_ids
+            if index == 0 and tokens:
+                # Scripted divergence on the first prompt only, emulating
+                # batch-composition nondeterminism.
+                tokens = (tokens[0] ^ 1,) + tokens[1:]
+            outputs.append(tokens)
+        return tuple(outputs)
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -564,6 +588,30 @@ def build_sample_report(output_dir: Path) -> dict:
         result["synthhistory"] = {
             "available": False,
             "detail": "synthhistory_unavailable",
+        }
+    # Batch-invariance audit: run the real batch stage against the
+    # scripted batch-capable backend, whose batch path diverges on one
+    # fixture -- the sample report exercises the audit with a genuine
+    # detected divergence (the exact signal the experiment measures).
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import batch_stage
+
+        _b_backend = BatchDemoBackend()
+        _b_fmts = candidates("llama3", mutate=True)
+        _b_prompts = {}
+        for _b_case in tuple(split.search):
+            _b_prompts[_b_case.id] = _b_backend.encode(_b_fmts[0].render(_b_case.messages))
+        result["batch_invariance"] = batch_stage(
+            _b_backend,
+            _b_prompts,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["batch_invariance"] = {
+            "available": False,
+            "detail": "batch_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
