@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Verified (cycle 142 — contamination HTML safety audit, 2026-10-18)
+
+- Security audit of the contamination detector's HTML integration
+  (cycle 132 feature): confirmed the `worst_tier` is escaped at the
+  `_config_section` boundary (no injection); added a regression test
+  pinning the escaping guarantee at the integration point. The transfer
+  report section was likewise verified to escape all dynamic values.
+
 ### Fixed (cycle 141 — hostile-input crash hardening, 2026-10-18)
 
 - Fixed three `TypeError` crashes on hostile/malformed input with
