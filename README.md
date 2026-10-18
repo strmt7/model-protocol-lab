@@ -13,7 +13,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4551 tests, 97% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (4580 tests, 97% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -95,6 +95,7 @@ raw prompts or generations.
 - Held-out verification-budget floor: the first token budget from which the held-out verification verdict holds unchanged (exact, monotone, post-hoc).
 - Prompt-boundary canonicality: the fraction of stored prompt x completion pairs whose concatenated text re-encodes to the recorded ids, per template family (the Prompt Boundary Problem rate).
 - Chat-marker isolation: hostile marker strings (`<|im_start|>`, `<s>`, `[INST]`, …) injected into user text must not become real control tokens — a per-family conformance matrix against the checkpoint tokenizer.
+- Template firewall: the checkpoint's Jinja `chat_template` is statically scanned for RCE primitives (dunder access, `|attr`, dangerous globals, unbounded `range()`) before any render; denied templates are never rendered (fail closed).
 - Token-budget robustness frontier: the search decision recomputed at every smaller token budget, post-hoc and exact — plus a deterministic inline-SVG frontier chart with a decision ribbon and a per-budget selection-margin trajectory chart.
 - Cross-tokenizer boundary portability check (`doctor --reference-model`).
 - Prompt-boundary sensitivity sweep (`run --sensitivity-sweep`): measures whether truncating the prompt mid-token flips the selection.

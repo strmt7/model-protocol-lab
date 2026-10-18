@@ -500,6 +500,16 @@ def build_kitchen_sink():
                 },
             ],
         },
+        "template_firewall": {
+            # Hostile rule/detail strings: the firewall section must escape
+            # them. A denied verdict exercises the findings table.
+            "status": "denied",
+            "detail": "template_firewall_denied",
+            "findings": [
+                {"rule": p(18), "detail": p(19)},
+                {"rule": "dunder_getattr", "detail": "dunder attribute access"},
+            ],
+        },
         "held_out": {
             "summary": {
                 "status": p(3),

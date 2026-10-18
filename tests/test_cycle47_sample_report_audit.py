@@ -67,6 +67,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "contamination",
     "boundary_audit",
     "marker_isolation",
+    "template_firewall",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",
