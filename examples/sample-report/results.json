@@ -2041,6 +2041,70 @@
     "detail": "no_rce_primitives_found",
     "findings": []
   },
+  "selection_robustness": {
+    "available": true,
+    "semantics": [
+      "native",
+      "hf_stop_string",
+      "vllm_holdback",
+      "eos_appended"
+    ],
+    "per_semantic": {
+      "native": {
+        "decision": "selected",
+        "winner": "llama3"
+      },
+      "hf_stop_string": {
+        "decision": "selected",
+        "winner": "llama3"
+      },
+      "vllm_holdback": {
+        "decision": "selected",
+        "winner": "llama3"
+      },
+      "eos_appended": {
+        "decision": "unavailable",
+        "winner": null
+      }
+    },
+    "per_candidate": {
+      "llama3": {
+        "native": true,
+        "hf_stop_string": true,
+        "vllm_holdback": true,
+        "eos_appended": null
+      },
+      "llama3/toggle-bos": {
+        "native": false,
+        "hf_stop_string": false,
+        "vllm_holdback": false,
+        "eos_appended": null
+      },
+      "llama3/no-bos": {
+        "native": false,
+        "hf_stop_string": false,
+        "vllm_holdback": false,
+        "eos_appended": null
+      },
+      "llama3/prefix-newline": {
+        "native": false,
+        "hf_stop_string": false,
+        "vllm_holdback": false,
+        "eos_appended": null
+      },
+      "llama3/prefix-trim": {
+        "native": false,
+        "hf_stop_string": false,
+        "vllm_holdback": false,
+        "eos_appended": null
+      }
+    },
+    "excluded_candidates": [],
+    "unavailable_semantics": [
+      "eos_appended"
+    ],
+    "flips": []
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

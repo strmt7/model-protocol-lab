@@ -177,7 +177,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), token-overhead card (see §8.8), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -519,6 +519,32 @@ primitives were found, and the render still runs inside transformers'
 sandbox-escape fix) under the existing CPU watchdog and memory cap. The
 stack is: static firewall -> sandboxed render -> watchdog + memory cap.
 
+### 8.13 Selection robustness under stop semantics (`selection_robustness`)
+
+The stop matrix (§8.2) re-measures only the *winner* under emulated stop
+semantics; the selection rule itself is only ever applied to native
+generations. A user deploying on vLLM has no answer to "would a different
+protocol have won under my serving stack's stop semantics?" Every `run`
+now answers it post-hoc (`experiments.selection_robustness`, pure:
+tokenizer-only, no model calls): for every search candidate it builds the
+stop matrix, re-derives per-candidate pass/fail under each semantic
+(exact answer + boundary on the truncated output), and re-applies the
+conservative selection rule per semantic.
+
+`results.json` carries `selection_robustness` with the per-semantic
+verdicts (`native`, `hf_stop_string`, `vllm_holdback`, `eos_appended`),
+the per-candidate pass matrix, and `flips` -- the semantics whose
+(decision, winner) differs from native's, e.g. `vllm_holdback: ambiguous
+-> selected(chatml)`. A semantic whose emulation cannot run for every
+candidate (e.g. an unknown EOS id) is reported as `unavailable`, never
+as a phantom `no_candidate`: "unknown" must not masquerade as a
+verdict. The report renders a "Selection robustness under stop
+semantics" section with the verdicts, the candidate x semantic matrix,
+and flip callouts. `diff-reports` compares the per-semantic verdicts
+and the flip pattern between runs (`selection_robustness_changed`,
+feeding `identical`) -- the serving-stack migration signal: the same
+stack selecting a different winner than before.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -839,6 +865,8 @@ driving (candidate, fixture) pass-status changes), `held_out_floor` (the
 held-out verification-floor comparison: floor drift, floor mismatch,
 one-sided/missing floors), `boundary_audit` (the prompt-boundary
 canonicality comparison: overall and per-family PBP-rate drift),
+`selection_robustness` (the stop-semantics selection comparison:
+per-semantic (decision, winner) drift and flip-pattern changes),
 `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate),
@@ -848,7 +876,9 @@ side carried `--include-evidence` observations), and a `summary` with
 counts (`fixtures_flipped`, `candidates_changed_status`,
 `config_drift_warnings`, `frontier_changed`, `frontier_asymmetric`,
 `held_out_floor_changed`, `held_out_floor_asymmetric`,
-`boundary_audit_changed`, `boundary_audit_asymmetric`, `identical`).
+`boundary_audit_changed`, `boundary_audit_asymmetric`,
+`selection_robustness_changed`, `selection_robustness_asymmetric`,
+`identical`).
 
 What it compares, exactly:
 

@@ -241,6 +241,24 @@ def build_sample_report(output_dir: Path) -> dict:
             "detail": "template_firewall_unavailable",
             "findings": [],
         }
+    # Selection robustness: attached via the real post-hoc analysis on the
+    # run's own search observations, so the committed sample report
+    # exercises the new section. Degrades to an "unavailable" marker
+    # instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import selection_robustness
+
+        result["selection_robustness"] = selection_robustness(
+            DemoBackend(),
+            result,
+            tuple(split.search),
+            boundary=BOUNDARY,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["selection_robustness"] = {
+            "available": False,
+            "detail": "selection_robustness_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

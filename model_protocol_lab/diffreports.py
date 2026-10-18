@@ -483,6 +483,13 @@ def diff_reports(
         "both",
         "neither",
     )
+    robustness_diff = diff_selection_robustness(
+        old.get("selection_robustness"), new.get("selection_robustness")
+    )
+    robustness_asymmetric = robustness_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -496,6 +503,8 @@ def diff_reports(
         and not held_out_floor_asymmetric
         and not boundary_audit_diff["changed"]
         and not boundary_audit_asymmetric
+        and not robustness_diff["changed"]
+        and not robustness_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -510,6 +519,8 @@ def diff_reports(
         "held_out_floor_asymmetric": held_out_floor_asymmetric,
         "boundary_audit_changed": boundary_audit_diff["changed"],
         "boundary_audit_asymmetric": boundary_audit_asymmetric,
+        "selection_robustness_changed": robustness_diff["changed"],
+        "selection_robustness_asymmetric": robustness_asymmetric,
         "identical": identical,
     }
     return {
@@ -521,6 +532,7 @@ def diff_reports(
         "frontier": frontier_diff,
         "held_out_floor": held_out_floor_diff,
         "boundary_audit": boundary_audit_diff,
+        "selection_robustness": robustness_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -873,6 +885,67 @@ def diff_boundary_audit(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_selection_robustness(payload: Any) -> bool:
+    """Structural check for a ``selection_robustness`` payload."""
+    return (
+        type(payload) is dict
+        and payload.get("available") is True
+        and type(payload.get("per_semantic")) is dict
+        and type(payload.get("flips")) is list
+    )
+
+
+def diff_selection_robustness(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``selection_robustness`` payloads; deterministic.
+
+    Answers "did the stop-semantics selection story change between runs?":
+    the per-semantic (decision, winner) verdicts and the flip lists. A
+    changed flip pattern between runs is the serving-stack migration
+    signal: the same serving stack now selects a different winner than
+    before. A side without a recorded analysis is reported plainly. No
+    model, no network.
+    """
+    old_ok = _valid_selection_robustness(old)
+    new_ok = _valid_selection_robustness(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_ps = old.get("per_semantic") or {}
+    new_ps = new.get("per_semantic") or {}
+    verdict_drift: list[dict[str, Any]] = []
+    for semantic in sorted(set(old_ps) | set(new_ps)):
+        old_v = old_ps.get(semantic) or {}
+        new_v = new_ps.get(semantic) or {}
+        if (old_v.get("decision"), old_v.get("winner")) != (
+            new_v.get("decision"),
+            new_v.get("winner"),
+        ):
+            verdict_drift.append(
+                {
+                    "semantic": semantic,
+                    "old_decision": old_v.get("decision"),
+                    "old_winner": old_v.get("winner"),
+                    "new_decision": new_v.get("decision"),
+                    "new_winner": new_v.get("winner"),
+                }
+            )
+    old_flips = old.get("flips") or []
+    new_flips = new.get("flips") or []
+    flips_changed = old_flips != new_flips
+    result["verdict_drift"] = verdict_drift
+    result["flips_changed"] = flips_changed
+    result["changed"] = bool(verdict_drift or flips_changed)
+    return result
+
+
 def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     """Prompt-boundary canonicality comparison lines for the stderr summary."""
     available = audit_diff.get("available")
@@ -899,6 +972,34 @@ def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
                 f"  {_display_id(entry['family'])}: "
                 f"{_fmt(entry['old_rate'])} -> {_fmt(entry['new_rate'])}"
             )
+    return lines
+
+
+def _render_robustness_summary(robustness_diff: dict[str, Any] | None) -> list[str]:
+    """Selection-robustness comparison lines for the stderr summary."""
+    if type(robustness_diff) is not dict:
+        return []
+    available = robustness_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Selection-robustness comparison unavailable: "
+            f"{missing} run did not record the analysis."
+        ]
+    lines: list[str] = []
+    drift = robustness_diff.get("verdict_drift") or []
+    if drift:
+        lines.append(f"Stop-semantics selection drift ({len(drift)}):")
+        for entry in drift:
+            lines.append(
+                f"  {_display_id(entry['semantic'])}: "
+                f"{entry['old_decision']}/{_display_id(entry['old_winner'])} -> "
+                f"{entry['new_decision']}/{_display_id(entry['new_winner'])}"
+            )
+    if robustness_diff.get("flips_changed"):
+        lines.append("Selection flip pattern changed between runs.")
     return lines
 
 
@@ -1077,6 +1178,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_frontier_summary(diff["frontier"]))
     lines.extend(_render_held_out_floor_summary(diff["held_out_floor"]))
     lines.extend(_render_boundary_audit_summary(diff["boundary_audit"]))
+    lines.extend(_render_robustness_summary(diff.get("selection_robustness")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

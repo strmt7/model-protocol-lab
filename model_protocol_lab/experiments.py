@@ -281,6 +281,150 @@ def stop_matrix(
     return rows
 
 
+def selection_robustness(
+    backend: Backend,
+    result: dict[str, Any],
+    cases: tuple[Fixture, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    eos_id: int | None = None,
+    token_bytes: Callable[[int], bytes | None] | None = None,
+    vllm_include_stop_str_in_output: bool = False,
+    vllm_min_tokens: int = 0,
+) -> dict[str, Any]:
+    """Re-apply the selection rule under every stop semantic (post-hoc).
+
+    The stop matrix re-measures only the *winner* under emulated stop
+    semantics; the selection rule itself is only ever applied to native
+    generations. This answers "would a different protocol have won under my
+    serving stack's stop semantics?": for every search candidate it builds
+    the stop matrix (tokenizer-only, no model calls), re-derives
+    per-candidate pass/fail per semantic (exact answer + boundary under that
+    semantic's truncation), and re-applies the conservative
+    :func:`_select_winner` rule per semantic.
+
+    Returns ``{"available": True, "per_semantic": {semantic: {"decision",
+    "winner"}}, "per_candidate": {name: {semantic: bool}}, "flips": [...]}``
+    where ``flips`` lists non-native semantics whose (decision, winner)
+    differs from native's. The native row reproduces the run's own
+    decision/winner by construction (consistency anchor, pinned by test).
+    A semantic whose emulation cannot run for every candidate (e.g. an
+    unknown EOS id) is reported as ``"unavailable"`` rather than as a
+    failure -- "unknown" must not masquerade as "no_candidate". A
+    candidate whose observations do not align is excluded (listed in
+    ``excluded_candidates``) so one bad record cannot poison the
+    verdicts. A missing/empty search yields ``{"available": False}``.
+    Never raises on malformed entries.
+    """
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    if type(cases) is not tuple or not cases or any(type(c) is not Fixture for c in cases):
+        return {"available": False, "detail": "cases_invalid"}
+    if not _valid_token_ids(boundary, nonempty=True):
+        return {"available": False, "detail": "boundary_invalid"}
+
+    # Per-candidate boundaries: prefer the entry's own recorded boundary
+    # (per-candidate boundaries, Cycle 2), else the boundary_map/default.
+    # Per-candidate stop matrices. A candidate whose observations do not
+    # align is excluded (one bad record must not poison the verdicts);
+    # per_candidate records None for semantics whose cell was unavailable.
+    per_candidate: dict[str, dict[str, bool | None]] = {}
+    excluded_candidates: list[str] = []
+    cell_pass: dict[str, dict[str, bool | None]] = {}
+    for entry in entries:
+        if type(entry) is not dict or type(entry.get("format")) is not dict:
+            continue
+        name = entry["format"].get("name")
+        if type(name) is not str or not name:
+            continue
+        observations = entry.get("observations")
+        cand_boundary = boundary
+        raw_bids = entry.get("boundary_token_ids")
+        if type(raw_bids) is list and raw_bids and all(type(t) is int and t >= 0 for t in raw_bids):
+            cand_boundary = tuple(raw_bids)
+        elif boundary_map and type(boundary_map.get(name)) is tuple:
+            cand_boundary = boundary_map[name]
+        try:
+            if type(observations) is not list or len(observations) != len(cases):
+                raise ValueError("observation/case misalignment")
+            rows = stop_matrix(
+                backend,
+                name,
+                cases,
+                tuple(observations),
+                boundary=cand_boundary,
+                eos_id=eos_id,
+                token_bytes=token_bytes,
+                vllm_include_stop_str_in_output=vllm_include_stop_str_in_output,
+                vllm_min_tokens=vllm_min_tokens,
+            )
+        except Exception:  # noqa: BLE001 -- one bad candidate degrades, not the analysis
+            rows = []
+        if not rows:
+            excluded_candidates.append(name)
+            continue
+        judged: dict[str, bool | None] = {}
+        judged["native"] = all(r["native_pass"] for r in rows)
+        for semantic in STOP_SEMANTICS[1:]:
+            cells = [r["cells"].get(semantic) or {} for r in rows]
+            if all(c.get("available") for c in cells):
+                judged[semantic] = all(bool(c.get("pass")) for c in cells)
+            else:
+                judged[semantic] = None
+        per_candidate[name] = judged
+        cell_pass[name] = judged
+
+    per_semantic: dict[str, dict[str, Any]] = {}
+    unavailable_semantics: list[str] = []
+    # Mirrors _select_winner(winners, cancelled=False): exactly one passing
+    # candidate wins; ties and failures abstain. A semantic is evaluable
+    # only when every included candidate has an available cell for it;
+    # otherwise the honest verdict is "unavailable", never a phantom
+    # no_candidate.
+    for semantic in STOP_SEMANTICS:
+        if any(cell_pass[name].get(semantic) is None for name in cell_pass):
+            per_semantic[semantic] = {"decision": "unavailable", "winner": None}
+            if semantic != "native":
+                unavailable_semantics.append(semantic)
+            continue
+        names = [name for name in cell_pass if cell_pass[name].get(semantic)]
+        if len(names) == 1:
+            per_semantic[semantic] = {"decision": "selected", "winner": names[0]}
+        elif names:
+            per_semantic[semantic] = {"decision": "ambiguous", "winner": None}
+        else:
+            per_semantic[semantic] = {"decision": "no_candidate", "winner": None}
+    native = per_semantic["native"]
+    flips = []
+    for semantic in STOP_SEMANTICS[1:]:
+        verdict = per_semantic[semantic]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != (native["decision"], native["winner"]):
+            flips.append(
+                {
+                    "semantic": semantic,
+                    "decision_from": native["decision"],
+                    "decision_to": verdict["decision"],
+                    "winner_from": native["winner"],
+                    "winner_to": verdict["winner"],
+                }
+            )
+    return {
+        "available": True,
+        "semantics": list(STOP_SEMANTICS),
+        "per_semantic": per_semantic,
+        "per_candidate": per_candidate,
+        "excluded_candidates": excluded_candidates,
+        "unavailable_semantics": unavailable_semantics,
+        "flips": flips,
+    }
+
+
 def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> int | None:
     """Minimal token budget at which one recorded observation passes.
 

@@ -3065,6 +3065,148 @@ def _marker_isolation_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _selection_robustness_section(result: dict[str, Any]) -> str:
+    """Selection robustness: does the winner survive other stop semantics?
+
+    The stop matrix re-measures only the winner under emulated stop
+    semantics; this section re-applies the conservative selection rule to
+    *every* search candidate under each semantic (tokenizer-only, no model
+    calls) and reports whether the decision or the winner changes. A flip
+    means the protocol that wins in the lab would not win on that serving
+    stack -- the deployment-relevant question the winner-only matrix cannot
+    answer. Renders nothing when the analysis did not run.
+    """
+    analysis: Any = result.get("selection_robustness")
+    if type(analysis) is not dict or not analysis.get("available"):
+        return ""
+    labels = {
+        "native": "Native (lab)",
+        "hf_stop_string": "HF StopStringCriteria",
+        "vllm_holdback": "vLLM detokenizer",
+        "eos_appended": "EOS-appended",
+    }
+    per_semantic = analysis.get("per_semantic")
+    per_candidate = analysis.get("per_candidate")
+    flips = analysis.get("flips")
+    if type(per_semantic) is not dict or type(per_candidate) is not dict:
+        return ""
+    semantics = [s for s in labels if s in per_semantic]
+    # Verdict line: per-semantic decision + winner.
+    verdict_items = []
+    for semantic in semantics:
+        verdict = per_semantic[semantic]
+        if type(verdict) is not dict:
+            continue
+        decision = str(verdict.get("decision", "?"))
+        winner = verdict.get("winner")
+        badge_cls = (
+            "pass"
+            if decision == "selected"
+            else ("neutral" if decision in ("ambiguous", "unavailable") else "fail")
+        )
+        verdict_items.append(
+            "<li><strong>"
+            + escape(labels[semantic])
+            + ':</strong> <span class="badge '
+            + badge_cls
+            + '">'
+            + escape(decision)
+            + "</span>"
+            + (
+                ' winner <span class="mono">' + escape(str(winner)) + "</span>"
+                if winner is not None
+                else ""
+            )
+            + "</li>"
+        )
+    # Candidate x semantic pass matrix.
+    names = sorted(str(n) for n in per_candidate)
+    header = "".join('<th scope="col">' + escape(labels[s]) + "</th>" for s in semantics)
+    body_rows = []
+    for name in names:
+        row = per_candidate[name]
+        cells = []
+        for semantic in semantics:
+            passed = row.get(semantic) if type(row) is dict else None
+            if passed is None:
+                cells.append('<td><span class="badge neutral">n/a</span></td>')
+            else:
+                cells.append(
+                    '<td><span class="badge '
+                    + ("pass" if passed else "fail")
+                    + '">'
+                    + ("pass" if passed else "fail")
+                    + "</span></td>"
+                )
+        body_rows.append(
+            '<tr><td><span class="mono">' + escape(name) + "</span></td>" + "".join(cells) + "</tr>"
+        )
+    flip_html = ""
+    if type(flips) is list and flips:
+        items = []
+        for flip in flips:
+            if type(flip) is not dict:
+                continue
+            items.append(
+                "<li><strong>"
+                + escape(labels.get(str(flip.get("semantic", "?")), str(flip.get("semantic", "?"))))
+                + ":</strong> decision "
+                + escape(str(flip.get("decision_from", "?")))
+                + " &rarr; "
+                + escape(str(flip.get("decision_to", "?")))
+                + ", winner "
+                + escape(str(flip.get("winner_from")))
+                + " &rarr; "
+                + escape(str(flip.get("winner_to")))
+                + "</li>"
+            )
+        flip_html = (
+            "<details><summary><strong>Winner flips under other stop "
+            "semantics ("
+            + str(len(items))
+            + ")</strong></summary><ul>"
+            + "".join(items)
+            + "</ul></details>"
+        )
+    else:
+        flip_html = (
+            "<p>The selection is <strong>robust</strong>: every evaluable "
+            "emulated stop semantic selects the same decision and winner "
+            "as native.</p>"
+        )
+    unavailable = analysis.get("unavailable_semantics")
+    if type(unavailable) is list and unavailable:
+        flip_html += (
+            "<p>Not evaluable (missing emulation input, e.g. unknown EOS "
+            "id): "
+            + escape(", ".join(labels.get(str(s), str(s)) for s in unavailable if type(s) is str))
+            + ".</p>"
+        )
+    excluded = analysis.get("excluded_candidates")
+    if type(excluded) is list and excluded:
+        flip_html += (
+            "<p>Excluded from the analysis (unaligned observations): "
+            + escape(", ".join(str(s) for s in excluded))
+            + ".</p>"
+        )
+    return (
+        '<section class="card"><h2>Selection robustness under stop semantics</h2>'
+        "<p>Each serving stack stops generation differently. This re-applies "
+        "the lab's conservative selection rule to every search candidate "
+        "under each emulated stop semantic (exact answer + boundary on the "
+        "truncated output); no model calls, derived from the recorded "
+        "observations.</p>"
+        "<ul>" + "".join(verdict_items) + "</ul>"
+        '<div class="table-wrap"><table><thead><tr><th scope="col">Candidate</th>'
+        + header
+        + "</tr></thead><tbody>"
+        + "".join(body_rows)
+        + "</tbody></table></div>"
+        + flip_html
+        + "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3168,6 +3310,7 @@ def render_html(result: dict[str, Any]) -> str:
     overhead_html = _token_overhead_section(result)
     conformance_html = _conformance_section(result)
     stop_matrix_html = _stop_matrix_section(result)
+    selection_robustness_html = _selection_robustness_section(result)
     divergence_html = _backend_divergence_section(result)
     frontier_html = _frontier_section(result)
     boundary_audit_html = _boundary_audit_section(result)
@@ -3185,6 +3328,11 @@ def render_html(result: dict[str, Any]) -> str:
             ("token-overhead", "Token overhead", overhead_html),
             ("template-conformance", "Template conformance", conformance_html),
             ("stop-behavior-matrix", "Stop-behavior isolation matrix", stop_matrix_html),
+            (
+                "selection-robustness",
+                "Selection robustness under stop semantics",
+                selection_robustness_html,
+            ),
             ("backend-divergence", "Backend divergence", divergence_html),
             ("token-budget-frontier", "Token-budget frontier", frontier_html),
             ("boundary-canonicality", "Prompt-boundary canonicality", boundary_audit_html),
@@ -3225,6 +3373,7 @@ def render_html(result: dict[str, Any]) -> str:
         + overhead_html
         + conformance_html
         + stop_matrix_html
+        + selection_robustness_html
         + divergence_html
         + frontier_html
         + boundary_audit_html
