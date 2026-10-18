@@ -2577,6 +2577,102 @@
       "delta": null
     }
   },
+  "synthhistory": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "n_fixtures": 2,
+    "conditions": [
+      "history_2",
+      "history_6"
+    ],
+    "per_condition": {
+      "history_2": {
+        "decision": "selected",
+        "winner": "llama3",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "pass_rate": 1.0,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "pass_rate": 0.0,
+            "pass": false
+          }
+        }
+      },
+      "history_6": {
+        "decision": "no_candidate",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/toggle-bos": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "pass_rate": 0.0,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "pass_rate": 0.0,
+            "pass": false
+          }
+        }
+      }
+    },
+    "flips": [
+      {
+        "condition": "history_2",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      },
+      {
+        "condition": "history_6",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      }
+    ],
+    "group_pass_rates": {
+      "explicit": {
+        "n_candidates": 5,
+        "mean_pass_rate": 0.1
+      },
+      "loose": {
+        "n_candidates": 0,
+        "mean_pass_rate": null
+      },
+      "unknown": {
+        "n_candidates": 0,
+        "mean_pass_rate": null
+      }
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

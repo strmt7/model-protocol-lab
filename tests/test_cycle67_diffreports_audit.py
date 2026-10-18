@@ -244,6 +244,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "hierarchy": {"available": "neither", "changed": False},
         "prefill": {"available": "neither", "changed": False},
         "portfolio": {"available": "neither", "changed": False},
+        "synthhistory": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -282,6 +283,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "prefill_asymmetric": False,
             "portfolio_changed": False,
             "portfolio_asymmetric": False,
+            "synthhistory_changed": False,
+            "synthhistory_asymmetric": False,
             "identical": True,
         },
     }
@@ -1248,6 +1251,189 @@ def _o_portfolio(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_synthhistory_valid(value: Any) -> bool:
+    """Oracle validator mirroring diffreports._valid_synthhistory."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if type(value.get("primary_decision")) is not str:
+        return False
+    winner = value.get("primary_winner")
+    if winner is not None and type(winner) is not str:
+        return False
+    if type(value.get("n_fixtures")) is not int or value["n_fixtures"] <= 0:
+        return False
+    conditions = value.get("conditions")
+    if (
+        type(conditions) is not list
+        or not conditions
+        or not all(type(c) is str for c in conditions)
+    ):
+        return False
+    per_condition = value.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(conditions):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        cond_winner = condition.get("winner")
+        if cond_winner is not None and type(cond_winner) is not str:
+            return False
+        if type(condition.get("n_evaluable")) is not int or condition["n_evaluable"] < 0:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            rate = entry.get("pass_rate")
+            if rate is not None and type(rate) not in (int, float):
+                return False
+            if type(entry.get("pass")) is not bool:
+                return False
+    flips = value.get("flips")
+    if type(flips) is not list:
+        return False
+    for entry in flips:
+        if type(entry) is not dict:
+            return False
+        if type(entry.get("condition")) is not str:
+            return False
+        if type(entry.get("decision_from")) is not str:
+            return False
+        if type(entry.get("decision_to")) is not str:
+            return False
+        for key in ("winner_from", "winner_to"):
+            if entry.get(key) is not None and type(entry.get(key)) is not str:
+                return False
+    groups = value.get("group_pass_rates")
+    if type(groups) is not dict:
+        return False
+    for group in groups.values():
+        if type(group) is not dict:
+            return False
+        if type(group.get("n_candidates")) is not int or group["n_candidates"] < 0:
+            return False
+        mean = group.get("mean_pass_rate")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+    return True
+
+
+def _o_synthhistory(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle synthhistory section: condition verdicts, flips, rate drift."""
+    old_ok = _o_synthhistory_valid(old)
+    new_ok = _o_synthhistory_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    old_conditions = old.get("conditions") or []
+    new_conditions = new.get("conditions") or []
+    conditions_added = [c for c in new_conditions if c not in old_conditions]
+    conditions_removed = [c for c in old_conditions if c not in new_conditions]
+    diff["conditions_added"] = conditions_added
+    diff["conditions_removed"] = conditions_removed
+    condition_changed: dict[str, dict[str, Any]] = {}
+    for condition in sorted(set(old_conditions) & set(new_conditions)):
+        old_c = (old.get("per_condition") or {}).get(condition) or {}
+        new_c = (new.get("per_condition") or {}).get(condition) or {}
+        old_verdict = (old_c.get("decision"), old_c.get("winner"))
+        new_verdict = (new_c.get("decision"), new_c.get("winner"))
+        changed = old_verdict != new_verdict
+        condition_changed[condition] = {
+            "old_decision": old_verdict[0],
+            "old_winner": old_verdict[1],
+            "new_decision": new_verdict[0],
+            "new_winner": new_verdict[1],
+            "changed": changed,
+        }
+    diff["condition_changed"] = condition_changed
+
+    def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        keys = []
+        for entry in flips or []:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("condition"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
+    diff["flips_changed"] = flips_changed
+
+    def _rates(payload: Any) -> dict[str, dict[str, Any]]:
+        rates: dict[str, dict[str, Any]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for condition in sorted(per_condition):
+            candidates = (per_condition.get(condition) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[condition] = entry.get("pass_rate")
+        return rates
+
+    old_rates, new_rates = _rates(old), _rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    pass_rate_drift = [
+        {
+            "candidate": name,
+            "condition": condition,
+            "old_pass_rate": old_rates[name][condition],
+            "new_pass_rate": new_rates[name][condition],
+        }
+        for name in sorted(set(old_rates) & set(new_rates))
+        for condition in sorted(set(old_rates[name]) & set(new_rates[name]))
+        if old_rates[name][condition] != new_rates[name][condition]
+    ]
+    diff["pass_rate_drift"] = pass_rate_drift
+
+    def _group_means(payload: Any) -> dict[str, Any]:
+        groups = payload.get("group_pass_rates") or {}
+        return {
+            label: (group or {}).get("mean_pass_rate")
+            for label, group in groups.items()
+            if type(label) is str
+        }
+
+    old_groups, new_groups = _group_means(old), _group_means(new)
+    group_changed = old_groups != new_groups
+    diff["group_rates"] = {"old": old_groups, "new": new_groups, "changed": group_changed}
+    changed = bool(
+        conditions_added
+        or conditions_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or pass_rate_drift
+        or candidates_added
+        or candidates_removed
+        or group_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -1591,6 +1777,9 @@ def _oracle_diff(
     o_hy, o_hy_changed, o_hy_asymmetric = _o_hierarchy(old.get("hierarchy"), new.get("hierarchy"))
     o_pf, o_pf_changed, o_pf_asymmetric = _o_prefill(old.get("prefill"), new.get("prefill"))
     o_po, o_po_changed, o_po_asymmetric = _o_portfolio(old.get("portfolio"), new.get("portfolio"))
+    o_sh, o_sh_changed, o_sh_asymmetric = _o_synthhistory(
+        old.get("synthhistory"), new.get("synthhistory")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -1620,6 +1809,8 @@ def _oracle_diff(
         and not o_pf_asymmetric
         and not o_po_changed
         and not o_po_asymmetric
+        and not o_sh_changed
+        and not o_sh_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -1638,6 +1829,7 @@ def _oracle_diff(
         "hierarchy": o_hy,
         "prefill": o_pf,
         "portfolio": o_po,
+        "synthhistory": o_sh,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -1672,6 +1864,8 @@ def _oracle_diff(
             "prefill_asymmetric": o_pf_asymmetric,
             "portfolio_changed": o_po_changed,
             "portfolio_asymmetric": o_po_asymmetric,
+            "synthhistory_changed": o_sh_changed,
+            "synthhistory_asymmetric": o_sh_asymmetric,
             "identical": identical,
         },
     }
@@ -1817,6 +2011,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "prefill_asymmetric": False,
                 "portfolio_changed": False,
                 "portfolio_asymmetric": False,
+                "synthhistory_changed": False,
+                "synthhistory_asymmetric": False,
                 "identical": False,
             },
         )
@@ -2913,6 +3109,60 @@ def _fuzz_portfolio_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_synthhistory_section(rng: random.Random) -> dict[str, Any]:
+    conditions = ["history_2", "history_6"]
+    per_condition = {}
+    for condition in conditions:
+        per_candidate = {}
+        for name in ["alpha", "beta", "gamma/mut"]:
+            roll = rng.random()
+            if roll < 0.10:
+                per_candidate[name] = None
+            else:
+                passed = rng.randint(0, 2)
+                per_candidate[name] = {
+                    "n": 2,
+                    "passed": passed,
+                    "pass": passed == 2,
+                }
+        if rng.random() < 0.10:
+            per_candidate[rng.choice([7, 8.5])] = {"n": 2, "passed": 1, "pass": False}
+        per_condition[condition] = {
+            "decision": rng.choice(["selected", "ambiguous", "no_candidate", "unavailable"]),
+            "winner": rng.choice(["alpha", "beta", None]),
+            "n_evaluable": rng.randint(0, 3),
+            "per_candidate": per_candidate,
+        }
+    flips = []
+    if rng.random() < 0.5:
+        flips.append(
+            {
+                "condition": rng.choice(conditions),
+                "decision_from": "selected",
+                "decision_to": rng.choice(["ambiguous", "no_candidate"]),
+                "winner_from": "alpha",
+                "winner_to": None,
+            }
+        )
+    groups = {}
+    for label in ("explicit", "loose", "unknown"):
+        if rng.random() < 0.85:
+            groups[label] = {
+                "n_candidates": rng.randint(0, 3),
+                "mean_pass_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            }
+    return {
+        "available": True,
+        "primary_winner": rng.choice(["alpha", None]),
+        "primary_decision": rng.choice(["selected", "ambiguous"]),
+        "n_fixtures": 2,
+        "conditions": conditions,
+        "per_condition": per_condition,
+        "flips": flips,
+        "group_pass_rates": groups,
+    }
+
+
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
@@ -2944,8 +3194,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
-    # portfolio): emitted often enough that the differential fuzz
-    # exercises them, not just the legacy axes.
+    # portfolio, synthhistory): emitted often enough that the
+    # differential fuzz exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -2962,6 +3212,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["prefill"] = _fuzz_prefill_section(rng)
     if rng.random() < 0.45:
         report["portfolio"] = _fuzz_portfolio_section(rng)
+    if rng.random() < 0.45:
+        report["synthhistory"] = _fuzz_synthhistory_section(rng)
     return report
 
 
@@ -3180,6 +3432,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not prefill_asymmetric\n"
             '        and not portfolio_diff["changed"]\n'
             "        and not portfolio_asymmetric\n"
+            '        and not synthhistory_diff["changed"]\n'
+            "        and not synthhistory_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -3206,6 +3460,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or healing_asymmetric\n"
             '        or portfolio_diff["changed"]\n'
             "        or portfolio_asymmetric\n"
+            '        or synthhistory_diff["changed"]\n'
+            "        or synthhistory_asymmetric\n"
             "    )\n",
             scenario,
         )

@@ -156,6 +156,30 @@ class PrefillDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class SynthhistoryDemoBackend(DemoBackend):
+    """Scripted history-sensitivity policy for the synthhistory exercise.
+
+    Behaves exactly like DemoBackend, except the base candidate is
+    steered off-answer once the synthetic history reaches three
+    exchanges: it echoes the last synthetic assistant turn instead of
+    answering -- an emulation of the many-shot steering effect the
+    probe measures (longer histories steer harder). One exchange is
+    tolerated, so the sample report shows a genuine winner flip only
+    under history_6.
+    """
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        from model_protocol_lab.synthhistory import SYNTHETIC_TURNS
+
+        prompt = self.decode(input_ids)
+        n_exchanges = sum(turn.content in prompt for turn in SYNTHETIC_TURNS[1::2])
+        if n_exchanges >= 3 and prompt.startswith(WINNER_PREFIX):
+            echo = SYNTHETIC_TURNS[-1].content + "|"
+            text = echo.ljust(max_new_tokens)[:max_new_tokens]
+            return Generation(tuple(map(ord, text)), "limit")
+        return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -502,6 +526,44 @@ def build_sample_report(output_dir: Path) -> dict:
         result["prefill"] = {
             "available": False,
             "detail": "prefill_unavailable",
+        }
+    # Synthetic-history selection stability experiment: run the real
+    # synthhistory stage (both history conditions) against the scripted
+    # history-sensitivity policy backend, so the committed sample report
+    # exercises the synthhistory section with a genuine winner flip (the
+    # base candidate tolerates one history exchange but is steered
+    # off-answer by three). Degrades to an "unavailable" marker instead
+    # of failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            synthhistory_stability,
+            synthhistory_stage,
+        )
+        from model_protocol_lab.synthhistory import CONDITIONS, build_history_fixtures
+
+        _s_fmts = candidates("llama3", mutate=True)
+        _s_stages = {}
+        for _s_condition in CONDITIONS:
+            _s_fixtures, _ = build_history_fixtures(tuple(split.search), condition=_s_condition)
+            _s_stages[_s_condition] = synthhistory_stage(
+                SynthhistoryDemoBackend(),
+                _s_fmts,
+                _s_fixtures,
+                condition=_s_condition,
+                boundary=BOUNDARY,
+                max_new_tokens=MAX_NEW_TOKENS,
+                seed=20261012,
+            )
+        result["synthhistory"] = synthhistory_stability(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(f.name for f in _s_fmts),
+            _s_stages,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["synthhistory"] = {
+            "available": False,
+            "detail": "synthhistory_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

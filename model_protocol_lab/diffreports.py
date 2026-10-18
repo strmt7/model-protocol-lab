@@ -533,6 +533,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    synthhistory_diff = diff_synthhistory(old.get("synthhistory"), new.get("synthhistory"))
+    synthhistory_asymmetric = synthhistory_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -562,6 +567,8 @@ def diff_reports(
         and not prefill_asymmetric
         and not portfolio_diff["changed"]
         and not portfolio_asymmetric
+        and not synthhistory_diff["changed"]
+        and not synthhistory_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -592,6 +599,8 @@ def diff_reports(
         "prefill_asymmetric": prefill_asymmetric,
         "portfolio_changed": portfolio_diff["changed"],
         "portfolio_asymmetric": portfolio_asymmetric,
+        "synthhistory_changed": synthhistory_diff["changed"],
+        "synthhistory_asymmetric": synthhistory_asymmetric,
         "identical": identical,
     }
     return {
@@ -611,6 +620,7 @@ def diff_reports(
         "hierarchy": hierarchy_diff,
         "prefill": prefill_diff,
         "portfolio": portfolio_diff,
+        "synthhistory": synthhistory_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1912,6 +1922,213 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_synthhistory(payload: Any) -> bool:
+    """Structural check for a ``synthhistory`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never hit
+    a TypeError on a hostile payload, and map keys must be strings. A
+    malformed side degrades to asymmetric instead of raising.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if type(payload.get("primary_decision")) is not str:
+        return False
+    winner = payload.get("primary_winner")
+    if winner is not None and type(winner) is not str:
+        return False
+    if type(payload.get("n_fixtures")) is not int or payload["n_fixtures"] <= 0:
+        return False
+    conditions = payload.get("conditions")
+    if (
+        type(conditions) is not list
+        or not conditions
+        or not all(type(c) is str for c in conditions)
+    ):
+        return False
+    per_condition = payload.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(conditions):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        cond_winner = condition.get("winner")
+        if cond_winner is not None and type(cond_winner) is not str:
+            return False
+        if type(condition.get("n_evaluable")) is not int or condition["n_evaluable"] < 0:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            rate = entry.get("pass_rate")
+            if rate is not None and type(rate) not in (int, float):
+                return False
+            if type(entry.get("pass")) is not bool:
+                return False
+    flips = payload.get("flips")
+    if type(flips) is not list:
+        return False
+    for entry in flips:
+        if type(entry) is not dict:
+            return False
+        if type(entry.get("condition")) is not str:
+            return False
+        if type(entry.get("decision_from")) is not str or type(entry.get("decision_to")) is not str:
+            return False
+        for key in ("winner_from", "winner_to"):
+            if entry.get(key) is not None and type(entry.get(key)) is not str:
+                return False
+    groups = payload.get("group_pass_rates")
+    if type(groups) is not dict:
+        return False
+    for group in groups.values():
+        if type(group) is not dict:
+            return False
+        if type(group.get("n_candidates")) is not int or group["n_candidates"] < 0:
+            return False
+        mean = group.get("mean_pass_rate")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+    return True
+
+
+def diff_synthhistory(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``synthhistory`` payloads; deterministic.
+
+    Answers "did the synthetic-history stability story change between
+    runs?": the per-condition (decision, winner) pairs, the winner-flip
+    pattern against the primary run, per-candidate history pass-rate
+    drift, and the explicit-vs-loose delimiter group-rate comparison. A
+    changed flip pattern after a checkpoint or fixture update is the
+    history-robustness regression signal. Candidates present on only
+    one side are reported as added/removed. A side without a recorded
+    synthetic-history experiment is reported plainly. No model, no
+    network.
+    """
+    old_ok = _valid_synthhistory(old)
+    new_ok = _valid_synthhistory(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_conditions = old.get("conditions") or []
+    new_conditions = new.get("conditions") or []
+    conditions_added = [c for c in new_conditions if c not in old_conditions]
+    conditions_removed = [c for c in old_conditions if c not in new_conditions]
+    condition_changed: dict[str, dict[str, Any]] = {}
+    for condition in sorted(set(old_conditions) & set(new_conditions)):
+        old_verdict_pair = (old.get("per_condition") or {}).get(condition) or {}
+        new_verdict_pair = (new.get("per_condition") or {}).get(condition) or {}
+        old_verdict = (old_verdict_pair.get("decision"), old_verdict_pair.get("winner"))
+        new_verdict = (new_verdict_pair.get("decision"), new_verdict_pair.get("winner"))
+        changed = old_verdict != new_verdict
+        condition_changed[condition] = {
+            "old_decision": old_verdict[0],
+            "old_winner": old_verdict[1],
+            "new_decision": new_verdict[0],
+            "new_winner": new_verdict[1],
+            "changed": changed,
+        }
+
+    def _history_flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
+        # ``flips`` entries are all dicts here: _valid_synthhistory rejects
+        # anything else before this point, so no defensive branch is needed.
+        keys = []
+        for entry in flips:
+            keys.append(
+                (
+                    entry.get("condition"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    flips_changed = _history_flip_key(old.get("flips")) != _history_flip_key(new.get("flips"))
+
+    def _candidate_pass_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        rates: dict[str, dict[str, Any]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for condition in sorted(per_condition):
+            candidates = (per_condition.get(condition) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[condition] = entry.get("pass_rate")
+        return rates
+
+    old_rates = _candidate_pass_rates(old)
+    new_rates = _candidate_pass_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    pass_rate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for condition in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_rate = old_rates[name][condition]
+            new_rate = new_rates[name][condition]
+            if old_rate != new_rate:
+                pass_rate_drift.append(
+                    {
+                        "candidate": name,
+                        "condition": condition,
+                        "old_pass_rate": old_rate,
+                        "new_pass_rate": new_rate,
+                    }
+                )
+
+    def _group_means(payload: Any) -> dict[str, Any]:
+        groups = payload.get("group_pass_rates") or {}
+        return {
+            label: (group or {}).get("mean_pass_rate")
+            for label, group in groups.items()
+            if type(label) is str
+        }
+
+    old_groups = _group_means(old)
+    new_groups = _group_means(new)
+    group_changed = new_groups != old_groups  # history: swapped operand order
+    result["conditions_added"] = conditions_added
+    result["conditions_removed"] = conditions_removed
+    result["condition_changed"] = condition_changed
+    result["flips_changed"] = flips_changed
+    result["pass_rate_drift"] = pass_rate_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    result["group_rates"] = {
+        "old": old_groups,
+        "new": new_groups,
+        "changed": group_changed,
+    }
+    # NOTE: history-specific names keep this line textually distinct from
+    # every other section's changed anchor (mutation-gate uniqueness).
+    result["changed"] = bool(
+        conditions_added
+        or conditions_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or pass_rate_drift
+        or candidates_added
+        or candidates_removed
+        or group_changed
+    )
+    return result
+
+
 def _healing_verdict_triplet(payload: Any) -> tuple[Any, Any, Any]:
     """(flipped, healed_decision, healed_winner) for drift comparison."""
     if type(payload) is not dict:
@@ -2373,6 +2590,76 @@ def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> list[str]:
+    """Synthetic-history comparison lines for the stderr summary."""
+    if type(synthhistory_diff) is not dict:
+        return []
+    available = synthhistory_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Synthetic-history comparison unavailable: "
+            f"{missing} run did not record the synthhistory experiment."
+        ]
+    lines: list[str] = []
+
+    def _verdict(decision: Any, winner: Any) -> str:
+        return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
+
+    conditions = synthhistory_diff.get("condition_changed") or {}
+    for condition in sorted(conditions):
+        entry = conditions[condition]
+        if entry.get("changed"):
+            lines.append(
+                f"Synthetic history ({_display_id(condition)}): "
+                f"{_verdict(entry.get('old_decision'), entry.get('old_winner'))} -> "
+                f"{_verdict(entry.get('new_decision'), entry.get('new_winner'))}"
+            )
+    added = synthhistory_diff.get("conditions_added") or []
+    removed = synthhistory_diff.get("conditions_removed") or []
+    if added:
+        lines.append(f"History conditions added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"History conditions removed: {', '.join(_display_id(c) for c in removed)}")
+    if synthhistory_diff.get("flips_changed"):
+        lines.append("Synthetic-history flip pattern changed between runs.")
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+
+    drift = synthhistory_diff.get("pass_rate_drift") or []
+    if drift:
+        lines.append(f"History pass-rate drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])} "
+                f"({_display_id(entry.get('condition'))}): "
+                f"{_fmt_rate(entry.get('old_pass_rate'))}->"
+                f"{_fmt_rate(entry.get('new_pass_rate'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    added_c = synthhistory_diff.get("candidates_added") or []
+    removed_c = synthhistory_diff.get("candidates_removed") or []
+    if added_c:
+        lines.append(f"History candidates added: {', '.join(_display_id(c) for c in added_c)}")
+    if removed_c:
+        lines.append(f"History candidates removed: {', '.join(_display_id(c) for c in removed_c)}")
+    groups = synthhistory_diff.get("group_rates") or {}
+    if groups.get("changed"):
+        old = groups.get("old") or {}
+        new = groups.get("new") or {}
+        for label in sorted(set(old) | set(new)):
+            if old.get(label) != new.get(label):
+                lines.append(
+                    f"History {label} mean pass rate: "
+                    f"{_fmt_rate(old.get(label))} -> {_fmt_rate(new.get(label))}"
+                )
+    return lines
+
+
 def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     """Prompt-boundary canonicality comparison lines for the stderr summary."""
     available = audit_diff.get("available")
@@ -2612,6 +2899,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_healing_summary(diff.get("token_healing")))
     lines.extend(_render_hierarchy_summary(diff.get("hierarchy")))
     lines.extend(_render_prefill_summary(diff.get("prefill")))
+    lines.extend(_render_synthhistory_summary(diff.get("synthhistory")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

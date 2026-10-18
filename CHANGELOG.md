@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 150 — synthetic-history selection stability, 2026-10-18)
+
+- Synthetic-history selection stability experiment (wave-2 research
+  idea #5, the last brief item): `mpl run --synth-history` prepends
+  fixed benign synthetic prior turns (one exchange for `history_2`,
+  three for `history_6`) to every fixture and re-applies the
+  conservative selection rule per condition. New pure module
+  `model_protocol_lab/synthhistory.py` (history construction with
+  id/group namespacing; mechanical delimiter-explicitness labels
+  derived from the lab's own `Format` hypotheses -- 22 explicit / 7
+  loose across the catalog); `experiments.synthhistory_stage` /
+  `synthhistory_stability` (fail-closed cells, flips vs primary,
+  per-candidate pass rates, delimiter-group means reported as
+  correlation); HTML section; `diff_synthhistory` with
+  `synthhistory_changed` / `synthhistory_asymmetric` feeding
+  `identical`; sample-report exercise with a scripted many-shot
+  steering policy (genuine winner flip under `history_6`).
+  Pre-registered falsifiable claims in the module docstring.
+
 ### Added (cycle 149 — Codecov wiring, owner-mandated add-on, 2026-10-18)
 
 - Codecov coverage upload in CI, mirroring the owner's other repos:

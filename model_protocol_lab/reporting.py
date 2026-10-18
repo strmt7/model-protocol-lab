@@ -3828,6 +3828,203 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     )
 
 
+def _synthhistory_section(result: dict[str, Any]) -> str:
+    """Synthetic-history selection stability: does the winner survive context?
+
+    Every search candidate re-evaluated with fixed benign synthetic prior
+    conversation turns prepended (one and three exchanges); the selection
+    rule re-applied per history condition. Reports per-candidate history
+    pass rates, the winner-vs-clean flips, and the delimiter-explicitness
+    group comparison (families with unambiguous per-turn open/close
+    markers vs loose delimiting -- a correlation readout over the lab's
+    own catalog, not a causal claim). Renders nothing when the
+    synthetic-history experiment did not run.
+    """
+    history: Any = result.get("synthhistory")
+    if type(history) is not dict or not history.get("available"):
+        return ""
+    per_condition = history.get("per_condition")
+    if type(per_condition) is not dict:
+        return ""
+    primary_winner = history.get("primary_winner")
+    primary_decision = history.get("primary_decision")
+    n_fixtures = history.get("n_fixtures")
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    verdict_lines = []
+    for key in sorted(per_condition, key=str):
+        condition = str(key)
+        verdict = per_condition[key]
+        if type(verdict) is not dict:
+            continue
+        decision = verdict.get("decision")
+        winner = verdict.get("winner")
+        line = (
+            escape(condition)
+            + ": <strong>"
+            + escape(_name(decision))
+            + " / "
+            + escape(_name(winner))
+            + "</strong> vs primary "
+            + escape(_name(primary_decision))
+            + " / "
+            + escape(_name(primary_winner))
+        )
+        if (decision, winner) != (primary_decision, primary_winner):
+            line += ' <span class="badge fail">differs</span>'
+        else:
+            line += ' <span class="badge pass">same</span>'
+        verdict_lines.append("<p>" + line + "</p>")
+
+    cand_rows = []
+    for key in sorted(per_condition, key=str):
+        condition = str(key)
+        verdict = per_condition[key]
+        if type(verdict) is not dict:
+            continue
+        candidates = verdict.get("per_candidate")
+        if type(candidates) is not dict:
+            continue
+        for ckey in sorted(candidates, key=str):
+            cand = str(ckey)
+            entry = candidates[ckey]
+            if type(entry) is not dict:
+                continue
+            passed = entry.get("pass")
+            badge = (
+                '<span class="badge pass">pass</span>'
+                if passed is True
+                else '<span class="badge fail">fail</span>'
+                if passed is False
+                else '<span class="badge">n/a</span>'
+            )
+            cand_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td><span class="mono">'
+                + escape(condition)
+                + "</span></td><td>"
+                + escape(_rate(entry.get("pass_rate")))
+                + "</td><td>"
+                + badge
+                + "</td></tr>"
+            )
+
+    flips = history.get("flips")
+    flip_lines = []
+    if type(flips) is list:
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            flip_lines.append(
+                '<li><span class="mono">'
+                + escape(str(entry.get("condition")))
+                + "</span>: "
+                + escape(_name(entry.get("decision_from")))
+                + " / "
+                + escape(_name(entry.get("winner_from")))
+                + " &rarr; "
+                + escape(_name(entry.get("decision_to")))
+                + " / "
+                + escape(_name(entry.get("winner_to")))
+                + "</li>"
+            )
+
+    group_rates = history.get("group_pass_rates")
+    group_rows = []
+
+    def _as_rate(value: Any) -> float | None:
+        # Strict: bools are excluded (type() check, not isinstance()).
+        return float(value) if type(value) in (int, float) else None
+
+    exp_rate: float | None = None
+    loose_rate: float | None = None
+    if type(group_rates) is dict:
+        for label in ("explicit", "loose", "unknown"):
+            group = group_rates.get(label)
+            if type(group) is not dict:
+                continue
+            rate = _as_rate(group.get("mean_pass_rate"))
+            if label == "explicit":
+                exp_rate = rate
+            elif label == "loose":
+                loose_rate = rate
+            group_rows.append(
+                "<tr><td>"
+                + escape(str(label))
+                + "</td><td>"
+                + escape(str(group.get("n_candidates")))
+                + "</td><td>"
+                + escape(_rate(group.get("mean_pass_rate")))
+                + "</td></tr>"
+            )
+    group_note = ""
+    if exp_rate is not None and loose_rate is not None:
+        relation = (
+            "higher than"
+            if exp_rate > loose_rate
+            else "lower than"
+            if exp_rate < loose_rate
+            else "equal to"
+        )
+        group_note = (
+            "<p>Explicitly-delimited families average "
+            + escape(_rate(exp_rate))
+            + " history pass rate vs "
+            + escape(_rate(loose_rate))
+            + " for loosely-delimited families ("
+            + relation
+            + " -- a correlation readout over "
+            "mechanically-derived catalog labels, not a causal claim).</p>"
+        )
+
+    n_text = f" ({n_fixtures} fixtures per condition)" if type(n_fixtures) is int else ""
+    return (
+        '<section class="card"><h2>Synthetic-history selection stability</h2>'
+        "<p>Every search candidate re-evaluated with fixed benign synthetic "
+        "prior conversation turns prepended to every fixture -- one exchange "
+        "(history_2) and three exchanges (history_6); the selection rule is "
+        "re-applied per history condition. History pass rate is the fraction "
+        "of fixtures still answered exactly under history."
+        + escape(n_text)
+        + "</p>"
+        + "".join(verdict_lines)
+        + (
+            "<ul>" + "".join(flip_lines) + "</ul>"
+            if flip_lines
+            else "<p>No winner flips against the primary run.</p>"
+        )
+        + (
+            '<div class="table-wrap"><table><caption>History pass rate '
+            "by condition.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Condition</th><th scope="col">Pass rate</th>'
+            '<th scope="col">Pass</th>'
+            "</tr></thead><tbody>" + "".join(cand_rows) + "</tbody></table></div>"
+            if cand_rows
+            else ""
+        )
+        + (
+            '<div class="table-wrap"><table><caption>History pass rate by '
+            "delimiter-explicitness label (correlation only).</caption>"
+            '<thead><tr><th scope="col">Label</th>'
+            '<th scope="col">Candidates</th>'
+            '<th scope="col">Mean pass rate</th>'
+            "</tr></thead><tbody>" + "".join(group_rows) + "</tbody></table></div>" + group_note
+            if group_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _prefill_section(result: dict[str, Any]) -> str:
     """Assistant-prefill sensitivity: does the winner survive prefill?
 
@@ -4272,6 +4469,7 @@ def render_html(result: dict[str, Any]) -> str:
     hierarchy_html = _hierarchy_section(result)
     prefill_html = _prefill_section(result)
     portfolio_html = _portfolio_section(result)
+    synthhistory_html = _synthhistory_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4320,6 +4518,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Protocol portfolio",
                 portfolio_html,
             ),
+            (
+                "synthetic-history",
+                "Synthetic-history selection stability",
+                synthhistory_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -4367,6 +4570,7 @@ def render_html(result: dict[str, Any]) -> str:
         + hierarchy_html
         + prefill_html
         + portfolio_html
+        + synthhistory_html
         + sweep_html
         + logprob_html
         + held_out_html

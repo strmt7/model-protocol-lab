@@ -741,6 +741,92 @@ def oracle_diff_reports(
     else:
         _o_po_available = "neither"
     _o_po_asymmetric = _o_po_available not in ("both", "neither")
+
+    def _or_sh_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_synthhistory exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if type(value.get("primary_decision")) is not str:
+            return False
+        winner = value.get("primary_winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        if type(value.get("n_fixtures")) is not int or value["n_fixtures"] <= 0:
+            return False
+        conditions = value.get("conditions")
+        if (
+            type(conditions) is not list
+            or not conditions
+            or not all(type(c) is str for c in conditions)
+        ):
+            return False
+        per_condition = value.get("per_condition")
+        if type(per_condition) is not dict or set(per_condition) != set(conditions):
+            return False
+        for condition in per_condition.values():
+            if type(condition) is not dict:
+                return False
+            if type(condition.get("decision")) is not str:
+                return False
+            cond_winner = condition.get("winner")
+            if cond_winner is not None and type(cond_winner) is not str:
+                return False
+            if type(condition.get("n_evaluable")) is not int or condition["n_evaluable"] < 0:
+                return False
+            candidates = condition.get("per_candidate")
+            if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+                return False
+            for entry in candidates.values():
+                if entry is None:
+                    continue
+                if type(entry) is not dict:
+                    return False
+                rate = entry.get("pass_rate")
+                if rate is not None and type(rate) not in (int, float):
+                    return False
+                if type(entry.get("pass")) is not bool:
+                    return False
+        flips = value.get("flips")
+        if type(flips) is not list:
+            return False
+        for entry in flips:
+            if type(entry) is not dict:
+                return False
+            if type(entry.get("condition")) is not str:
+                return False
+            if type(entry.get("decision_from")) is not str:
+                return False
+            if type(entry.get("decision_to")) is not str:
+                return False
+            for key in ("winner_from", "winner_to"):
+                if entry.get(key) is not None and type(entry.get(key)) is not str:
+                    return False
+        groups = value.get("group_pass_rates")
+        if type(groups) is not dict:
+            return False
+        for group in groups.values():
+            if type(group) is not dict:
+                return False
+            if type(group.get("n_candidates")) is not int or group["n_candidates"] < 0:
+                return False
+            mean = group.get("mean_pass_rate")
+            if mean is not None and type(mean) not in (int, float):
+                return False
+        return True
+
+    _sh_old_ok = _or_sh_valid(old.get("synthhistory"))
+    _sh_new_ok = _or_sh_valid(new.get("synthhistory"))
+    if _sh_old_ok and _sh_new_ok:
+        _o_sh_available = "both"
+    elif _sh_old_ok:
+        _o_sh_available = "old"
+    elif _sh_new_ok:
+        _o_sh_available = "new"
+    else:
+        _o_sh_available = "neither"
+    _o_sh_asymmetric = _o_sh_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -759,6 +845,7 @@ def oracle_diff_reports(
         and not _o_hy_asymmetric
         and not _o_pf_asymmetric
         and not _o_po_asymmetric
+        and not _o_sh_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -789,6 +876,8 @@ def oracle_diff_reports(
         "prefill_asymmetric": _o_pf_asymmetric,
         "portfolio_changed": False,
         "portfolio_asymmetric": _o_po_asymmetric,
+        "synthhistory_changed": False,
+        "synthhistory_asymmetric": _o_sh_asymmetric,
         "identical": identical,
     }
     return {
@@ -808,6 +897,7 @@ def oracle_diff_reports(
         "hierarchy": {"available": _o_hy_available, "changed": False},
         "prefill": {"available": _o_pf_available, "changed": False},
         "portfolio": {"available": _o_po_available, "changed": False},
+        "synthhistory": {"available": _o_sh_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
