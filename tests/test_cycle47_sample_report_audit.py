@@ -72,6 +72,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "transfer",
     "perturbation",
     "hierarchy",
+    "prefill",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

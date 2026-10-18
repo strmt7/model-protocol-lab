@@ -2374,6 +2374,164 @@
       }
     }
   },
+  "prefill": {
+    "available": true,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "n_fixtures": 2,
+    "prefills": [
+      "answer-colon",
+      "final-answer",
+      "result-colon"
+    ],
+    "per_condition": {
+      "answer-colon": {
+        "decision": "selected",
+        "winner": "llama3",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "honor_rate": 0.0,
+            "restart_rate": 1.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          }
+        }
+      },
+      "final-answer": {
+        "decision": "selected",
+        "winner": "llama3",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "honor_rate": 0.0,
+            "restart_rate": 1.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          }
+        }
+      },
+      "result-colon": {
+        "decision": "selected",
+        "winner": "llama3",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": true
+          },
+          "llama3/toggle-bos": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/no-bos": {
+            "honor_rate": 0.0,
+            "restart_rate": 1.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-newline": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          },
+          "llama3/prefix-trim": {
+            "honor_rate": 1.0,
+            "restart_rate": 0.0,
+            "think_channel": false,
+            "pass": false
+          }
+        }
+      }
+    },
+    "flips": [
+      {
+        "prefill": "answer-colon",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      },
+      {
+        "prefill": "final-answer",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      },
+      {
+        "prefill": "result-colon",
+        "decision_from": "compatible_on_fixture_set",
+        "decision_to": "selected",
+        "winner_from": "llama3",
+        "winner_to": "llama3"
+      }
+    ],
+    "think_effect": {
+      "think_channel": {
+        "mean_honor_rate": null,
+        "n_candidates": 0
+      },
+      "plain": {
+        "mean_honor_rate": 0.8,
+        "n_candidates": 5
+      },
+      "delta": null
+    }
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

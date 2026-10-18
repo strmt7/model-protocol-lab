@@ -621,6 +621,74 @@ def oracle_diff_reports(
     else:
         _o_hy_available = "neither"
     _o_hy_asymmetric = _o_hy_available not in ("both", "neither")
+
+    def _or_pf_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_prefill exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        prefills = value.get("prefills")
+        if type(prefills) is not list or not prefills or not all(type(p) is str for p in prefills):
+            return False
+        per_condition = value.get("per_condition")
+        if type(per_condition) is not dict or set(per_condition) != set(prefills):
+            return False
+        for condition in per_condition.values():
+            if type(condition) is not dict:
+                return False
+            if type(condition.get("decision")) is not str:
+                return False
+            winner = condition.get("winner")
+            if winner is not None and type(winner) is not str:
+                return False
+            candidates = condition.get("per_candidate")
+            if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+                return False
+            for entry in candidates.values():
+                if entry is None:
+                    continue
+                if type(entry) is not dict:
+                    return False
+                for key in ("honor_rate", "restart_rate"):
+                    rate = entry.get(key)
+                    if rate is not None and type(rate) not in (int, float):
+                        return False
+                think = entry.get("think_channel")
+                if think is not None and type(think) is not bool:
+                    return False
+                if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                    return False
+        think_effect = value.get("think_effect")
+        if type(think_effect) is not dict:
+            return False
+        for label, group in think_effect.items():
+            if type(label) is not str:
+                return False
+            if label == "delta":
+                if group is not None and type(group) not in (int, float):
+                    return False
+                continue
+            if type(group) is not dict:
+                return False
+            mean = group.get("mean_honor_rate")
+            if mean is not None and type(mean) not in (int, float):
+                return False
+            if type(group.get("n_candidates")) is not int:
+                return False
+        return type(value.get("flips")) is list
+
+    _pf_old_ok = _or_pf_valid(old.get("prefill"))
+    _pf_new_ok = _or_pf_valid(new.get("prefill"))
+    if _pf_old_ok and _pf_new_ok:
+        _o_pf_available = "both"
+    elif _pf_old_ok:
+        _o_pf_available = "old"
+    elif _pf_new_ok:
+        _o_pf_available = "new"
+    else:
+        _o_pf_available = "neither"
+    _o_pf_asymmetric = _o_pf_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -637,6 +705,7 @@ def oracle_diff_reports(
         and not _o_pb_asymmetric
         and not _o_hl_asymmetric
         and not _o_hy_asymmetric
+        and not _o_pf_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -663,6 +732,8 @@ def oracle_diff_reports(
         "healing_asymmetric": _o_hl_asymmetric,
         "hierarchy_changed": False,
         "hierarchy_asymmetric": _o_hy_asymmetric,
+        "prefill_changed": False,
+        "prefill_asymmetric": _o_pf_asymmetric,
         "identical": identical,
     }
     return {
@@ -680,6 +751,7 @@ def oracle_diff_reports(
         "perturbation": {"available": _o_pb_available, "changed": False},
         "token_healing": {"available": _o_hl_available, "changed": False},
         "hierarchy": {"available": _o_hy_available, "changed": False},
+        "prefill": {"available": _o_pf_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

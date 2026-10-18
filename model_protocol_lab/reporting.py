@@ -3828,6 +3828,211 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     )
 
 
+def _prefill_section(result: dict[str, Any]) -> str:
+    """Assistant-prefill sensitivity: does the winner survive prefill?
+
+    Every search candidate re-evaluated with benign format-lock prefills
+    appended after the generation prompt; the selection rule re-applied
+    per prefill. Reports per-candidate honoring rates (did the model
+    accept the prefill as its own opening, or restart its turn and
+    duplicate it?), the winner-vs-native flips, and the think-channel
+    group comparison. Renders nothing when the prefill experiment did
+    not run.
+    """
+    prefill: Any = result.get("prefill")
+    if type(prefill) is not dict or not prefill.get("available"):
+        return ""
+    per_condition = prefill.get("per_condition")
+    if type(per_condition) is not dict:
+        return ""
+    primary_winner = prefill.get("primary_winner")
+    primary_decision = prefill.get("primary_decision")
+    n_fixtures = prefill.get("n_fixtures")
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    verdict_lines = []
+    for key in sorted(per_condition, key=str):
+        condition_id = str(key)
+        condition = per_condition[key]
+        if type(condition) is not dict:
+            continue
+        decision = condition.get("decision")
+        winner = condition.get("winner")
+        line = (
+            escape(condition_id)
+            + ": <strong>"
+            + escape(_name(decision))
+            + " / "
+            + escape(_name(winner))
+            + "</strong> vs primary "
+            + escape(_name(primary_decision))
+            + " / "
+            + escape(_name(primary_winner))
+        )
+        if (decision, winner) != (primary_decision, primary_winner):
+            line += ' <span class="badge fail">differs</span>'
+        else:
+            line += ' <span class="badge pass">same</span>'
+        verdict_lines.append("<p>" + line + "</p>")
+
+    cand_rows = []
+    for key in sorted(per_condition, key=str):
+        condition_id = str(key)
+        condition = per_condition[key]
+        if type(condition) is not dict:
+            continue
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict:
+            continue
+        for ckey in sorted(candidates, key=str):
+            cand = str(ckey)
+            entry = candidates[ckey]
+            if type(entry) is not dict:
+                continue
+            passed = entry.get("pass")
+            badge = (
+                '<span class="badge pass">pass</span>'
+                if passed is True
+                else '<span class="badge fail">fail</span>'
+                if passed is False
+                else '<span class="badge">n/a</span>'
+            )
+            think = entry.get("think_channel")
+            think_text = "think-channel" if think is True else "plain" if think is False else "n/a"
+            cand_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td><span class="mono">'
+                + escape(str(condition_id))
+                + "</span></td><td>"
+                + escape(_rate(entry.get("honor_rate")))
+                + "</td><td>"
+                + escape(_rate(entry.get("restart_rate")))
+                + "</td><td>"
+                + escape(think_text)
+                + "</td><td>"
+                + badge
+                + "</td></tr>"
+            )
+
+    flips = prefill.get("flips")
+    flip_lines = []
+    if type(flips) is list:
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            flip_lines.append(
+                '<li><span class="mono">'
+                + escape(str(entry.get("prefill")))
+                + "</span>: "
+                + escape(_name(entry.get("decision_from")))
+                + " / "
+                + escape(_name(entry.get("winner_from")))
+                + " &rarr; "
+                + escape(_name(entry.get("decision_to")))
+                + " / "
+                + escape(_name(entry.get("winner_to")))
+                + "</li>"
+            )
+
+    think_effect = prefill.get("think_effect")
+    think_rows = []
+    think_note = ""
+
+    def _as_rate(value: Any) -> float | None:
+        # Strict: bools are excluded (type() check, not isinstance()).
+        return float(value) if type(value) in (int, float) else None
+
+    if type(think_effect) is dict:
+        think_rate: float | None = None
+        plain_rate: float | None = None
+        for label in ("think_channel", "plain"):
+            group = think_effect.get(label)
+            if type(group) is not dict:
+                continue
+            rate = _as_rate(group.get("mean_honor_rate"))
+            if label == "think_channel":
+                think_rate = rate
+            else:
+                plain_rate = rate
+            think_rows.append(
+                "<tr><td>"
+                + escape(str(label))
+                + "</td><td>"
+                + escape(str(group.get("n_candidates")))
+                + "</td><td>"
+                + escape(_rate(rate))
+                + "</td></tr>"
+            )
+        if think_rate is not None and plain_rate is not None:
+            relation = (
+                "lower than"
+                if think_rate < plain_rate
+                else "higher than"
+                if think_rate > plain_rate
+                else "equal to"
+            )
+            think_note = (
+                "<p>Think-channel candidates average "
+                + escape(_rate(think_rate))
+                + " honoring vs "
+                + escape(_rate(plain_rate))
+                + " for plain candidates ("
+                + relation
+                + " -- a correlation readout over the "
+                "generation-prompt structure, not a causal claim).</p>"
+            )
+
+    n_text = f" ({n_fixtures} fixtures per prefill)" if type(n_fixtures) is int else ""
+    return (
+        '<section class="card"><h2>Assistant-prefill sensitivity</h2>'
+        "<p>Every search candidate re-evaluated with benign format-lock "
+        "prefills appended after the generation prompt (the model "
+        "generates the continuation; the scored span is prefill + "
+        "generated text); the selection rule is re-applied per prefill. "
+        "A model <em>honors</em> the prefill when it accepts it as its "
+        "own opening and continues; it <em>restarts</em> when it ignores "
+        "the prefill and re-emits its preferred opener, duplicating the "
+        "prefill text."
+        + escape(n_text)
+        + "</p>"
+        + "".join(verdict_lines)
+        + (
+            "<ul>" + "".join(flip_lines) + "</ul>"
+            if flip_lines
+            else "<p>No winner flips against the primary run.</p>"
+        )
+        + (
+            '<div class="table-wrap"><table><caption>Per-candidate honoring '
+            "by prefill.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Prefill</th><th scope="col">Honored</th>'
+            '<th scope="col">Restarted</th><th scope="col">Prompt</th>'
+            '<th scope="col">Pass</th>'
+            "</tr></thead><tbody>" + "".join(cand_rows) + "</tbody></table></div>"
+            if cand_rows
+            else ""
+        )
+        + (
+            '<div class="table-wrap"><table><caption>Honoring by '
+            "generation-prompt structure (correlation only).</caption>"
+            '<thead><tr><th scope="col">Group</th>'
+            '<th scope="col">Candidates</th><th scope="col">Mean honor rate</th>'
+            "</tr></thead><tbody>" + "".join(think_rows) + "</tbody></table></div>" + think_note
+            if think_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _template_firewall_section(result: dict[str, Any]) -> str:
     """Template firewall: the static AST verdict on the checkpoint's template.
 
@@ -3941,6 +4146,7 @@ def render_html(result: dict[str, Any]) -> str:
     perturbation_html = _perturbation_section(result)
     healing_html = _token_healing_section(result)
     hierarchy_html = _hierarchy_section(result)
+    prefill_html = _prefill_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -3978,6 +4184,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "instruction-hierarchy",
                 "Instruction-hierarchy adherence",
                 hierarchy_html,
+            ),
+            (
+                "prefill-sensitivity",
+                "Assistant-prefill sensitivity",
+                prefill_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
@@ -4024,6 +4235,7 @@ def render_html(result: dict[str, Any]) -> str:
         + perturbation_html
         + healing_html
         + hierarchy_html
+        + prefill_html
         + sweep_html
         + logprob_html
         + held_out_html
