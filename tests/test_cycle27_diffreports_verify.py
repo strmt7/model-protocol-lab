@@ -524,6 +524,38 @@ def oracle_diff_reports(
     else:
         _o_pb_available = "neither"
     _o_pb_asymmetric = _o_pb_available not in ("both", "neither")
+
+    def _or_hl_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_token_healing exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if type(value.get("flipped")) is not bool:
+            return False
+        pc = value.get("per_candidate")
+        if type(pc) is not dict or not all(
+            type(k) is str and type(v) is dict for k, v in pc.items()
+        ):
+            return False
+        for entry in pc.values():
+            for key in ("native", "healed"):
+                v = entry.get(key)
+                if v is not None and type(v) is not bool:
+                    return False
+        return True
+
+    _hl_old_ok = _or_hl_valid(old.get("token_healing"))
+    _hl_new_ok = _or_hl_valid(new.get("token_healing"))
+    if _hl_old_ok and _hl_new_ok:
+        _o_hl_available = "both"
+    elif _hl_old_ok:
+        _o_hl_available = "old"
+    elif _hl_new_ok:
+        _o_hl_available = "new"
+    else:
+        _o_hl_available = "neither"
+    _o_hl_asymmetric = _o_hl_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -538,6 +570,7 @@ def oracle_diff_reports(
         and not _o_tr_asymmetric
         and not _o_ct_asymmetric
         and not _o_pb_asymmetric
+        and not _o_hl_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -560,6 +593,8 @@ def oracle_diff_reports(
         "contamination_asymmetric": _o_ct_asymmetric,
         "perturbation_changed": False,
         "perturbation_asymmetric": _o_pb_asymmetric,
+        "healing_changed": False,
+        "healing_asymmetric": _o_hl_asymmetric,
         "identical": identical,
     }
     return {
@@ -575,6 +610,7 @@ def oracle_diff_reports(
         "transfer": {"available": _o_tr_available, "changed": False},
         "contamination": {"available": _o_ct_available, "changed": False},
         "perturbation": {"available": _o_pb_available, "changed": False},
+        "token_healing": {"available": _o_hl_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

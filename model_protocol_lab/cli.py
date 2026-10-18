@@ -207,6 +207,18 @@ def build_parser() -> argparse.ArgumentParser:
         "fails the run.",
     )
     run.add_argument(
+        "--token-healing",
+        action="store_true",
+        help="Token-healing selection sensitivity experiment: re-run every "
+        "search candidate with HF-style token healing applied to each "
+        "prompt (the tail token is re-chosen among vocabulary extensions "
+        "of its text) and re-apply the selection rule, reporting whether "
+        "the winner flips. The lab's own boundary-canonicality audit "
+        "predicts which candidates are healing-sensitive, so the report "
+        "includes the falsification table. Roughly doubles search "
+        "compute; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -422,6 +434,7 @@ _KNOWN_LOCAL_FAILURE_CODES = (
     "local_encode_failed",
     "local_decode_failed",
     "local_forward_failed",
+    "local_heal_failed",
 )
 """Backend RuntimeError codes the CLI is allowed to echo.
 
@@ -1067,6 +1080,52 @@ def main(argv: list[str] | None = None) -> int:
                         "available": False,
                         "detail": "boundary_audit_unavailable",
                     }
+                # Token-healing selection sensitivity experiment (research
+                # wave-2 idea 3): re-run every search candidate with
+                # HF-style token healing applied to each prompt, then
+                # re-apply the selection rule to the healed verdicts.
+                # Answers "does the winning protocol change under token
+                # healing?" The lab's own boundary-canonicality audit
+                # (above) predicts which candidates are healing-sensitive,
+                # so the falsification table tests that prediction --
+                # a negative result is as informative as a positive one.
+                # Healing failures degrade to native prompts per
+                # observation (counted, never silent) and never fail
+                # the run.
+                if args.token_healing:
+                    try:
+                        from .experiments import (
+                            healing_delta,
+                            healing_stage,
+                            native_search_outcomes,
+                        )
+
+                        _candidate_names = tuple(fmt.name for fmt in formats)
+                        _healed_stage = healing_stage(
+                            backend,
+                            formats,
+                            tuple(split.search),
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                        )
+                        _native_outcomes = native_search_outcomes(
+                            result.get("search") or [], _candidate_names
+                        )
+                        result["token_healing"] = healing_delta(
+                            result.get("selected_candidate"),
+                            result["decision"],
+                            _candidate_names,
+                            _native_outcomes,
+                            _healed_stage,
+                            result.get("boundary_audit"),
+                        )
+                    except Exception:  # noqa: BLE001 -- healing must not fail the run
+                        result["token_healing"] = {
+                            "available": False,
+                            "detail": "token_healing_unavailable",
+                        }
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each
                 # candidate's expected answer against the recorded search

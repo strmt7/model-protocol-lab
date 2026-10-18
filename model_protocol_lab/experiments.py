@@ -11,6 +11,7 @@ from typing import Any
 
 from .backends import (
     StopOutcome,
+    TokenHealingBackend,
     TruncatedPromptBackend,
     emulate_eos_stop,
     emulate_hf_stop_string,
@@ -873,6 +874,331 @@ def perturbation_robustness(
         "flips": flips,
         "stability": stability,
         "per_operator": per_operator,
+    }
+
+
+def healing_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate with token-healed prompts.
+
+    Wraps ``backend`` in :class:`backends.TokenHealingBackend` (raising
+    ``ValueError`` when the backend cannot heal) and re-runs
+    ``core.evaluate()`` for every search candidate on the search split
+    only, with the same boundary and max_new_tokens. Greedy, exact.
+    Only the prompt tail is healed -- fixtures, boundaries, and scoring
+    are unchanged, so healed verdicts stay comparable to the primary
+    run.
+
+    Any evaluation failure records None for that candidate --
+    fail-closed, never silently skipped. ``n_healed`` / ``n_fallback``
+    report how many prompts actually healed vs fell back to native ids.
+
+    Returns ``{"outcomes": {candidate: {"passed": bool | None,
+    "per_fixture": {fixture_id: bool}, "n_passed": int, "n_total":
+    int}}, "fixture_ids": [...], "n_healed": int, "n_fallback": int,
+    "n_fixtures": int}``. Pure in its return contract (no global
+    state), though evaluation performs I/O.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    healed_backend = TokenHealingBackend(backend)
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    outcomes: dict[str, dict[str, Any]] = {}
+    for fmt in formats:
+        try:
+            report = evaluate(
+                healed_backend,
+                fmt,
+                cases,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one candidate degrades, not the stage
+            outcomes[fmt.name] = {
+                "passed": None,
+                "per_fixture": {},
+                "n_passed": 0,
+                "n_total": 0,
+            }
+            continue
+        if not report.aggregate_eligible:
+            outcomes[fmt.name] = {
+                "passed": None,
+                "per_fixture": {},
+                "n_passed": 0,
+                "n_total": 0,
+            }
+            continue
+        per_fixture = {
+            str(o.fixture): bool(o.exact_match and o.boundary_found) for o in report.observations
+        }
+        n_passed = sum(per_fixture.values())
+        outcomes[fmt.name] = {
+            "passed": n_passed == len(per_fixture) and bool(per_fixture),
+            "per_fixture": per_fixture,
+            "n_passed": n_passed,
+            "n_total": len(per_fixture),
+        }
+    return {
+        "outcomes": outcomes,
+        "fixture_ids": [str(case.id) for case in cases],
+        "n_healed": healed_backend.n_healed,
+        "n_fallback": healed_backend.n_fallback,
+        "n_fixtures": len(cases),
+    }
+
+
+def native_search_outcomes(
+    search_entries: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    candidates: tuple[str, ...],
+) -> dict[str, dict[str, Any]]:
+    """Per-candidate pass/fail extracted from the primary search section.
+
+    Pure post-hoc helper: for each candidate, ``passed`` is True when
+    every search observation passed (exact answer and explicit boundary),
+    False when at least one failed, None when the candidate has no usable
+    observations or was not aggregate-eligible. ``per_fixture`` maps
+    fixture id to its verdict. Never raises on malformed entries: they
+    degrade to ``{"passed": None, "per_fixture": {}}``.
+    """
+    by_name: dict[str, dict[str, Any]] = {}
+    entries = list(search_entries) if type(search_entries) in (list, tuple) else []
+    for entry in entries:
+        if type(entry) is not dict:
+            continue
+        fmt = entry.get("format")
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(name) is str and name:
+            by_name[name] = entry
+    outcomes: dict[str, dict[str, Any]] = {}
+    for cand in candidates:
+        cand_entry = by_name.get(cand)
+        observations = cand_entry.get("observations") if type(cand_entry) is dict else None
+        summary = cand_entry.get("summary") if type(cand_entry) is dict else None
+        if type(observations) is not list or not observations:
+            outcomes[cand] = {"passed": None, "per_fixture": {}}
+            continue
+        if type(summary) is dict and summary.get("aggregate_eligible") is False:
+            outcomes[cand] = {"passed": None, "per_fixture": {}}
+            continue
+        per_fixture: dict[str, bool] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict:
+                usable = False
+                break
+            fid = obs.get("fixture")
+            if type(fid) is not str or not fid:
+                usable = False
+                break
+            exact = obs.get("exact_match")
+            boundary = obs.get("boundary_found")
+            if type(exact) is not bool or type(boundary) is not bool:
+                usable = False
+                break
+            per_fixture[fid] = exact and boundary
+        if not usable or not per_fixture:
+            outcomes[cand] = {"passed": None, "per_fixture": {}}
+        else:
+            outcomes[cand] = {
+                "passed": all(per_fixture.values()),
+                "per_fixture": per_fixture,
+            }
+    return outcomes
+
+
+def healing_delta(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    native_outcomes: dict[str, Any],
+    healed: dict[str, Any],
+    boundary_audit: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compare native vs token-healed selection verdicts (pure post-hoc).
+
+    Answers "does token healing change the winning protocol -- and does
+    the lab's own boundary-canonicality audit predict which candidates
+    flip?": the conservative selection rule is re-applied to the healed
+    per-candidate outcomes; the healed (decision, winner) is compared
+    against the primary run; per-candidate verdict deltas and per-fixture
+    flips are listed; and the falsification table checks the lab's own
+    prediction -- a candidate's verdict may only change under healing
+    when the boundary audit flagged it seam-fragile -- candidate by
+    candidate, so a negative result is as informative as a positive one.
+
+    ``native_outcomes`` is the :func:`native_search_outcomes` mapping;
+    ``healed`` is the :func:`healing_stage` payload; ``boundary_audit``
+    is the ``audit_search_observations`` payload (or None). Never raises
+    on malformed input: returns ``{"available": False}``.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(native_outcomes) is not dict or type(healed) is not dict:
+        return {"available": False, "detail": "outcomes_invalid"}
+    healed_outcomes = healed.get("outcomes")
+    if type(healed_outcomes) is not dict:
+        return {"available": False, "detail": "healed_outcomes_invalid"}
+    native_passed: dict[str, bool | None] = {}
+    native_per_fixture: dict[str, dict[str, bool]] = {}
+    for cand in candidates:
+        entry = native_outcomes.get(cand)
+        if type(entry) is not dict:
+            native_passed[cand] = None
+            native_per_fixture[cand] = {}
+            continue
+        passed = entry.get("passed")
+        native_passed[cand] = passed if type(passed) is bool else None
+        per_fixture = entry.get("per_fixture")
+        native_per_fixture[cand] = (
+            {k: v for k, v in per_fixture.items() if type(k) is str and type(v) is bool}
+            if type(per_fixture) is dict
+            else {}
+        )
+    healed_passed: dict[str, bool | None] = {}
+    healed_per_fixture: dict[str, dict[str, bool]] = {}
+    for cand in candidates:
+        entry = healed_outcomes.get(cand)
+        if type(entry) is not dict:
+            return {"available": False, "detail": f"healed_candidate_{cand}_invalid"}
+        passed = entry.get("passed")
+        if passed is not None and type(passed) is not bool:
+            return {"available": False, "detail": f"healed_candidate_{cand}_invalid"}
+        healed_passed[cand] = passed
+        per_fixture = entry.get("per_fixture")
+        healed_per_fixture[cand] = (
+            {k: v for k, v in per_fixture.items() if type(k) is str and type(v) is bool}
+            if type(per_fixture) is dict
+            else {}
+        )
+
+    if all(v is None for v in healed_passed.values()):
+        healed_decision, healed_winner = "unavailable", None
+    else:
+        winners = [c for c in candidates if healed_passed[c] is True]
+        # Mirrors _select_winner(winners, cancelled=False).
+        if len(winners) == 1:
+            healed_decision, healed_winner = "selected", winners[0]
+        elif winners:
+            healed_decision, healed_winner = "ambiguous", None
+        else:
+            healed_decision, healed_winner = "no_candidate", None
+    flipped = (healed_decision, healed_winner) != (primary_decision, primary_winner)
+
+    per_candidate: dict[str, dict[str, Any]] = {}
+    for cand in candidates:
+        native = native_passed[cand]
+        healed_v = healed_passed[cand]
+        if type(native) is bool and type(healed_v) is bool:
+            verdict_changed: bool | None = native != healed_v
+        else:
+            verdict_changed = None
+        per_candidate[cand] = {
+            "native": native,
+            "healed": healed_v,
+            "verdict_changed": verdict_changed,
+        }
+
+    fixture_flips: list[dict[str, Any]] = []
+    for cand in candidates:
+        native_pf = native_per_fixture[cand]
+        healed_pf = healed_per_fixture[cand]
+        for fid in sorted(set(native_pf) & set(healed_pf)):
+            if native_pf[fid] != healed_pf[fid]:
+                fixture_flips.append(
+                    {
+                        "candidate": cand,
+                        "fixture": fid,
+                        "native": native_pf[fid],
+                        "healed": healed_pf[fid],
+                    }
+                )
+    fixture_flips.sort(key=lambda e: (e["candidate"], e["fixture"]))
+
+    audit_per_candidate = (
+        boundary_audit.get("per_candidate") if type(boundary_audit) is dict else None
+    )
+    falsification_per_candidate: dict[str, dict[str, Any]] = {}
+    n_comparable = 0
+    n_holds = 0
+    for cand in candidates:
+        audit_entry = audit_per_candidate.get(cand) if type(audit_per_candidate) is dict else None
+        seam_fragile: bool | None = None
+        if type(audit_entry) is dict:
+            n_problem = audit_entry.get("n_problem")
+            n_usable = audit_entry.get("n_usable")
+            if type(n_problem) is int and type(n_usable) is int and n_usable > 0:
+                seam_fragile = n_problem > 0
+        verdict_changed = per_candidate[cand]["verdict_changed"]
+        prediction_holds: bool | None = None
+        if type(seam_fragile) is bool and type(verdict_changed) is bool:
+            # The falsifiable prediction (one direction): a verdict may
+            # only change under healing when the boundary audit flagged
+            # the candidate seam-fragile. A fragile candidate that does
+            # not flip is uninformative (the model may simply re-choose
+            # the same tail); a canonical candidate that flips falsifies
+            # the audit's predictive claim.
+            prediction_holds = (not verdict_changed) or seam_fragile
+            n_comparable += 1
+            if prediction_holds:
+                n_holds += 1
+        falsification_per_candidate[cand] = {
+            "seam_fragile": seam_fragile,
+            "verdict_changed": verdict_changed,
+            "prediction_holds": prediction_holds,
+        }
+    falsification = {
+        "per_candidate": falsification_per_candidate,
+        "n_comparable": n_comparable,
+        "n_holds": n_holds,
+        "n_violations": n_comparable - n_holds,
+        "prediction_holds": (n_holds == n_comparable) if n_comparable else None,
+    }
+
+    n_healed = healed.get("n_healed")
+    n_fallback = healed.get("n_fallback")
+    return {
+        "available": True,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "healed_decision": healed_decision,
+        "healed_winner": healed_winner,
+        "flipped": flipped,
+        "per_candidate": per_candidate,
+        "fixture_flips": fixture_flips,
+        "falsification": falsification,
+        "n_healed": n_healed if type(n_healed) is int else None,
+        "n_fallback": n_fallback if type(n_fallback) is int else None,
     }
 
 

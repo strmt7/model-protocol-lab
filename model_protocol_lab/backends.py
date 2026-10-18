@@ -804,6 +804,60 @@ class TruncatedPromptBackend:
         )
 
 
+class TokenHealingBackend:
+    """Wraps a backend; applies HF-style token healing to every prompt.
+
+    ``generate`` first heals ``input_ids`` through the inner backend's
+    ``heal_input_ids`` (the lab's port of ``transformers`` token healing);
+    when healing is unavailable or fails, the native ids are used instead
+    -- fail-closed, never a phantom prompt. ``n_healed`` / ``n_fallback``
+    count healed vs native-fallback prompts so the experiment stage can
+    report how much of the healed run actually healed. The fingerprint
+    gains a ``+token-healing`` suffix so healed runs are distinguishable
+    in reports.
+    """
+
+    def __init__(self, inner: Backend) -> None:
+        inner_fingerprint = getattr(inner, "fingerprint", None)
+        if type(inner_fingerprint) is not str:
+            raise ValueError("Backend fingerprint must be a string")
+        if not callable(getattr(inner, "heal_input_ids", None)):
+            raise ValueError("Inner backend does not support token healing")
+        self._inner = inner
+        self.fingerprint = f"{inner_fingerprint}+token-healing"
+        # Healing only rewrites prompts; the stop-string byte mapping is a
+        # pure tokenizer property, so it forwards unchanged.
+        self.hf_stop_token_bytes = getattr(inner, "hf_stop_token_bytes", None)
+        self.n_healed = 0
+        self.n_fallback = 0
+
+    def encode(self, text: str) -> tuple[int, ...]:
+        return self._inner.encode(text)
+
+    def decode(self, token_ids: tuple[int, ...]) -> str:
+        return self._inner.decode(token_ids)
+
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        heal = getattr(self._inner, "heal_input_ids", None)
+        try:
+            if not callable(heal):
+                raise ValueError("healing_unavailable")
+            healed = heal(input_ids)
+            # Enforce the heal_input_ids contract at the boundary: a
+            # misbehaving healer must degrade to the native prompt, never
+            # feed malformed ids into generation.
+            if type(healed) is not tuple or not all(type(t) is int and t >= 0 for t in healed):
+                raise ValueError("healing_contract_violated")
+        except Exception:  # noqa: BLE001 -- healing failure degrades, not the run
+            healed = input_ids
+            self.n_fallback += 1
+        else:
+            self.n_healed += 1
+        return self._inner.generate(healed, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
 class _ContextWindowError(Exception):
     """max_context exceeds the checkpoint's declared context window.
 
@@ -1045,6 +1099,106 @@ class LocalHFBackend:
         """Model vocabulary size: valid token IDs satisfy ``0 <= t < vocab_size``."""
         size: int = self._vocab_size
         return size
+
+    def heal_input_ids(self, input_ids: tuple[int, ...]) -> tuple[int, ...]:
+        """Apply HF-style token healing to a prompt (preprocessing step).
+
+        Faithful port of ``transformers.GenerationMixin.heal_tokens`` into
+        the lab's manual greedy loop (which never calls HF ``generate()``,
+        so the documented ``token_healing`` flag has no native plumbing
+        here): decode + strip + re-encode the prompt (re-canonicalization),
+        find every vocabulary token extending the tail token's text, trim
+        the tail, and greedily re-choose it with HF's sequence biases
+        (+10.0 per extension, +1.0 on the original tail token).
+
+        Deliberate, documented adaptations live in
+        :mod:`model_protocol_lab.healing`. Raises ``ValueError`` /
+        ``RuntimeError`` with fixed codes on any failure so the caller can
+        fail closed to the native prompt.
+        """
+        from .healing import heal_prompt_ids
+
+        if not _ids_valid(input_ids, self._vocab_size) or not input_ids:
+            raise ValueError("invalid_input_ids")
+        tokenizer, model = self._ready()
+        torch = self._torch
+        try:
+            vocab = dict(tokenizer.get_vocab())
+        except Exception as exc:  # noqa: BLE001 -- tokenizer introspection
+            raise RuntimeError("local_heal_failed") from exc
+        space_token_text: str | None = None
+        try:
+            space_id = tokenizer.convert_tokens_to_ids(" ")
+            if type(space_id) is int:
+                texts = tokenizer.convert_ids_to_tokens([space_id])
+                if texts and type(texts[0]) is str:
+                    space_token_text = texts[0]
+        except Exception:  # noqa: BLE001 -- optional whitespace trick
+            space_token_text = None
+
+        def _decode_prompt(ids: tuple[int, ...]) -> str:
+            # Skip-specials is False (deliberate adaptation, see healing):
+            # the lab's prompts are exact id sequences that must round-trip.
+            text: str = tokenizer.decode(
+                list(ids),
+                skip_special_tokens=False,
+                clean_up_tokenization_spaces=False,
+            )
+            return text
+
+        def _decode_token(token_id: int) -> str:
+            text: str = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
+            return text
+
+        def _reencode(text: str) -> tuple[int, ...]:
+            values = tuple(
+                tokenizer.encode(text, add_special_tokens=False, truncation=False, padding=False)
+            )
+            if not _ids_valid(values, self._vocab_size):
+                raise ValueError("invalid_healed_ids")
+            return values
+
+        def _biased_argmax(trimmed: tuple[int, ...], biases: dict[int, float]) -> int:
+            if len(trimmed) > self._context_limit:
+                raise ValueError("heal_context_limit_exceeded")
+            with torch.inference_mode():
+                sequence = torch.tensor([trimmed], dtype=torch.long, device=self._device)
+                result = model(
+                    input_ids=sequence,
+                    attention_mask=torch.ones_like(sequence),
+                    past_key_values=None,
+                    use_cache=False,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                logits = result.logits[0, -1, :]
+                if (
+                    logits.ndim != 1
+                    or logits.numel() != self._vocab_size
+                    or not bool(torch.isfinite(logits).all().item())
+                ):
+                    raise RuntimeError("local_heal_failed")
+                for token_id, bias in biases.items():
+                    if type(token_id) is int and 0 <= token_id < self._vocab_size:
+                        logits[token_id] = logits[token_id] + bias
+                return int(torch.argmax(logits).item())
+
+        with self._lock:
+            try:
+                return heal_prompt_ids(
+                    input_ids,
+                    decode_prompt=_decode_prompt,
+                    decode_token=_decode_token,
+                    reencode=_reencode,
+                    vocab=vocab,
+                    space_token_text=space_token_text,
+                    biased_argmax=_biased_argmax,
+                )
+            except (ValueError, RuntimeError):
+                raise
+            except Exception as exc:  # noqa: BLE001 -- healing must fail closed
+                raise RuntimeError("local_heal_failed") from exc
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
         """Run one full-sequence forward pass; return ``[T, vocab]`` fp32 logits.
