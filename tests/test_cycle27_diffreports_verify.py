@@ -885,6 +885,73 @@ def oracle_diff_reports(
     else:
         _o_bi_available = "neither"
     _o_bi_asymmetric = _o_bi_available not in ("both", "neither")
+
+    def _or_pos_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_position exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        conditions = value.get("conditions")
+        if (
+            type(conditions) is not list
+            or not conditions
+            or not all(type(c) is str for c in conditions)
+        ):
+            return False
+        per_condition = value.get("per_condition")
+        if type(per_condition) is not dict or set(per_condition) != set(conditions):
+            return False
+        for condition in per_condition.values():
+            if type(condition) is not dict:
+                return False
+            if type(condition.get("decision")) is not str:
+                return False
+            winner = condition.get("winner")
+            if winner is not None and type(winner) is not str:
+                return False
+            candidates = condition.get("per_candidate")
+            if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+                return False
+            for entry in candidates.values():
+                if entry is None:
+                    continue
+                if type(entry) is not dict:
+                    return False
+                rate = entry.get("correct_rate")
+                if rate is not None and type(rate) not in (int, float):
+                    return False
+                if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                    return False
+        primacy = value.get("primacy_index")
+        if type(primacy) is not dict or not all(type(k) is str for k in primacy):
+            return False
+        for index_value in primacy.values():
+            if index_value is not None and type(index_value) not in (int, float):
+                return False
+        effect = value.get("condition_effect")
+        if effect is not None:
+            if type(effect) is not dict:
+                return False
+            mean = effect.get("mean_index")
+            if mean is not None and type(mean) not in (int, float):
+                return False
+            for key in ("n_candidates", "n_positive", "n_negative"):
+                if type(effect.get(key)) is not int:
+                    return False
+        return type(value.get("flips")) is list
+
+    _pos_old_ok = _or_pos_valid(old.get("position"))
+    _pos_new_ok = _or_pos_valid(new.get("position"))
+    if _pos_old_ok and _pos_new_ok:
+        _o_pos_available = "both"
+    elif _pos_old_ok:
+        _o_pos_available = "old"
+    elif _pos_new_ok:
+        _o_pos_available = "new"
+    else:
+        _o_pos_available = "neither"
+    _o_pos_asymmetric = _o_pos_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -905,6 +972,7 @@ def oracle_diff_reports(
         and not _o_po_asymmetric
         and not _o_sh_asymmetric
         and not _o_bi_asymmetric
+        and not _o_pos_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -939,6 +1007,8 @@ def oracle_diff_reports(
         "synthhistory_asymmetric": _o_sh_asymmetric,
         "batch_invariance_changed": False,
         "batch_invariance_asymmetric": _o_bi_asymmetric,
+        "position_changed": False,
+        "position_asymmetric": _o_pos_asymmetric,
         "identical": identical,
     }
     return {
@@ -960,6 +1030,7 @@ def oracle_diff_reports(
         "portfolio": {"available": _o_po_available, "changed": False},
         "synthhistory": {"available": _o_sh_available, "changed": False},
         "batch_invariance": {"available": _o_bi_available, "changed": False},
+        "position": {"available": _o_pos_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

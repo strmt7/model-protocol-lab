@@ -3830,6 +3830,195 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     )
 
 
+def _position_section(result: dict[str, Any]) -> str:
+    """Position sensitivity: does option placement change the winner?
+
+    Every search candidate re-evaluated on synthetic multiple-choice
+    fixtures whose correct option is permuted between the first, middle,
+    and last positions (seeded distractor order); the selection rule
+    re-applied per condition. Reports per-condition winner verdicts,
+    the per-candidate primacy index (P(correct | first) minus P(correct
+    | last)), the winner flips against the primary run, and the
+    condition effect. Renders nothing when the position probe did not
+    run.
+    """
+    position: Any = result.get("position")
+    if type(position) is not dict or not position.get("available"):
+        return ""
+    per_condition = position.get("per_condition")
+    if type(per_condition) is not dict:
+        return ""
+    primary_winner = position.get("primary_winner")
+    primary_decision = position.get("primary_decision")
+    n_fixtures = position.get("n_fixtures")
+
+    def _name(value: Any) -> str:
+        return "(none)" if value is None else str(value)
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    def _index(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:+.2f}"
+        return "n/a"
+
+    verdict_lines = []
+    for key in sorted(per_condition, key=str):
+        condition = str(key)
+        verdict = per_condition[key]
+        if type(verdict) is not dict:
+            continue
+        decision = verdict.get("decision")
+        winner = verdict.get("winner")
+        line = (
+            escape(condition)
+            + ": <strong>"
+            + escape(_name(decision))
+            + " / "
+            + escape(_name(winner))
+            + "</strong> vs primary "
+            + escape(_name(primary_decision))
+            + " / "
+            + escape(_name(primary_winner))
+        )
+        if (decision, winner) != (primary_decision, primary_winner):
+            line += ' <span class="badge fail">differs</span>'
+        else:
+            line += ' <span class="badge pass">same</span>'
+        verdict_lines.append("<p>" + line + "</p>")
+
+    cand_rows = []
+    for key in sorted(per_condition, key=str):
+        condition = str(key)
+        verdict = per_condition[key]
+        if type(verdict) is not dict:
+            continue
+        candidates = verdict.get("per_candidate")
+        if type(candidates) is not dict:
+            continue
+        for ckey in sorted(candidates, key=str):
+            cand = str(ckey)
+            entry = candidates[ckey]
+            if type(entry) is not dict:
+                continue
+            passed = entry.get("pass")
+            badge = (
+                '<span class="badge pass">pass</span>'
+                if passed is True
+                else '<span class="badge fail">fail</span>'
+                if passed is False
+                else '<span class="badge">n/a</span>'
+            )
+            cand_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td><span class="mono">'
+                + escape(condition)
+                + "</span></td><td>"
+                + escape(_rate(entry.get("correct_rate")))
+                + "</td><td>"
+                + badge
+                + "</td></tr>"
+            )
+
+    index_rows = []
+    primacy = position.get("primacy_index")
+    if type(primacy) is dict:
+        for ckey in sorted(primacy, key=str):
+            cand = str(ckey)
+            index_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + "</span></td><td>"
+                + escape(_index(primacy[ckey]))
+                + "</td></tr>"
+            )
+
+    effect = position.get("condition_effect")
+    effect_line = ""
+    if type(effect) is dict:
+        mean = effect.get("mean_index")
+        mean_text = _index(mean) if type(mean) in (int, float) else "n/a"
+        n_pos = effect.get("n_positive")
+        n_neg = effect.get("n_negative")
+        n_cand = effect.get("n_candidates")
+        effect_line = (
+            "<p>Condition effect: mean primacy index <strong>"
+            + escape(mean_text)
+            + "</strong> over "
+            + escape(str(n_cand))
+            + " evaluable candidates ("
+            + escape(str(n_pos))
+            + " positive, "
+            + escape(str(n_neg))
+            + " negative). Positive means more correct answers when the "
+            "correct option is listed first; negative the reverse.</p>"
+        )
+
+    flips = position.get("flips")
+    flip_lines = []
+    if type(flips) is list:
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            flip_lines.append(
+                '<li><span class="mono">'
+                + escape(str(entry.get("condition")))
+                + "</span>: "
+                + escape(_name(entry.get("decision_from")))
+                + " / "
+                + escape(_name(entry.get("winner_from")))
+                + " &rarr; "
+                + escape(_name(entry.get("decision_to")))
+                + " / "
+                + escape(_name(entry.get("winner_to")))
+                + "</li>"
+            )
+
+    n_text = f" ({n_fixtures} fixtures per condition)" if type(n_fixtures) is int else ""
+    return (
+        '<section class="card" id="position-sensitivity"><h2>Position sensitivity</h2>'
+        "<p>Every search candidate re-evaluated on synthetic multiple-choice "
+        "fixtures whose correct option is permuted between the first, middle, "
+        "and last positions (seeded distractor order); the selection rule is "
+        "re-applied per condition. The primacy index is P(correct | first) "
+        "minus P(correct | last), in [-1, 1]; a nonzero index means option "
+        "placement moves the task verdict."
+        + escape(n_text)
+        + "</p>"
+        + "".join(verdict_lines)
+        + effect_line
+        + (
+            "<ul>" + "".join(flip_lines) + "</ul>"
+            if flip_lines
+            else "<p>No winner flips against the primary run.</p>"
+        )
+        + (
+            '<div class="table-wrap"><table><caption>Per-candidate correct '
+            "rates by condition.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Condition</th><th scope="col">Correct</th>'
+            '<th scope="col">Pass</th>'
+            "</tr></thead><tbody>" + "".join(cand_rows) + "</tbody></table></div>"
+            if cand_rows
+            else ""
+        )
+        + (
+            '<div class="table-wrap"><table><caption>Primacy index per '
+            "candidate.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Primacy index</th>'
+            "</tr></thead><tbody>" + "".join(index_rows) + "</tbody></table></div>"
+            if index_rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -4579,6 +4768,7 @@ def render_html(result: dict[str, Any]) -> str:
     portfolio_html = _portfolio_section(result)
     synthhistory_html = _synthhistory_section(result)
     batchinv_html = _batchinv_section(result)
+    position_html = _position_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4637,6 +4827,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Batch-invariance audit",
                 batchinv_html,
             ),
+            (
+                "position-sensitivity",
+                "Position sensitivity",
+                position_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -4686,6 +4881,7 @@ def render_html(result: dict[str, Any]) -> str:
         + portfolio_html
         + synthhistory_html
         + batchinv_html
+        + position_html
         + sweep_html
         + logprob_html
         + held_out_html

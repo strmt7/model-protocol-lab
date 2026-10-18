@@ -543,6 +543,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    position_diff = diff_position(old.get("position"), new.get("position"))
+    position_asymmetric = position_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -576,6 +581,8 @@ def diff_reports(
         and not synthhistory_asymmetric
         and not batchinv_diff["changed"]
         and not batchinv_asymmetric
+        and not position_diff["changed"]
+        and not position_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -610,6 +617,8 @@ def diff_reports(
         "synthhistory_asymmetric": synthhistory_asymmetric,
         "batch_invariance_changed": batchinv_diff["changed"],
         "batch_invariance_asymmetric": batchinv_asymmetric,
+        "position_changed": position_diff["changed"],
+        "position_asymmetric": position_asymmetric,
         "identical": identical,
     }
     return {
@@ -631,6 +640,7 @@ def diff_reports(
         "portfolio": portfolio_diff,
         "synthhistory": synthhistory_diff,
         "batch_invariance": batchinv_diff,
+        "position": position_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1553,6 +1563,219 @@ def diff_hierarchy(old: Any, new: Any) -> dict[str, Any]:
         or candidates_added
         or candidates_removed
         or group_changed
+    )
+    return result
+
+
+def _valid_position(payload: Any) -> bool:
+    """Structural check for a ``position`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never hit
+    a TypeError on a hostile payload, and map keys must be strings.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    conditions = payload.get("conditions")
+    if (
+        type(conditions) is not list
+        or not conditions
+        or not all(type(c) is str for c in conditions)
+    ):
+        return False
+    per_condition = payload.get("per_condition")
+    if type(per_condition) is not dict or set(per_condition) != set(conditions):
+        return False
+    for condition in per_condition.values():
+        if type(condition) is not dict:
+            return False
+        if type(condition.get("decision")) is not str:
+            return False
+        winner = condition.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+        candidates = condition.get("per_candidate")
+        if type(candidates) is not dict or not all(type(k) is str for k in candidates):
+            return False
+        for entry in candidates.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            rate = entry.get("correct_rate")
+            if rate is not None and type(rate) not in (int, float):
+                return False
+            if entry.get("pass") is not None and type(entry.get("pass")) is not bool:
+                return False
+    primacy = payload.get("primacy_index")
+    if type(primacy) is not dict or not all(type(k) is str for k in primacy):
+        return False
+    for value in primacy.values():
+        if value is not None and type(value) not in (int, float):
+            return False
+    effect = payload.get("condition_effect")
+    if effect is not None:
+        if type(effect) is not dict:
+            return False
+        mean = effect.get("mean_index")
+        if mean is not None and type(mean) not in (int, float):
+            return False
+        for key in ("n_candidates", "n_positive", "n_negative"):
+            if type(effect.get(key)) is not int:
+                return False
+    return type(payload.get("flips")) is list
+
+
+def _position_condition_pair(payload: Any, condition: str) -> tuple[Any, Any]:
+    """(decision, winner) for one position condition, for drift comparison."""
+    per_condition = payload.get("per_condition") or {}
+    entry = per_condition.get(condition) or {}
+    return (entry.get("decision"), entry.get("winner"))
+
+
+def diff_position(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``position`` payloads; deterministic.
+
+    Answers "did the position-sensitivity story change between runs?":
+    the per-condition (decision, winner) pairs, the winner-flip pattern
+    against the primary run, per-candidate correct-rate drift, and the
+    per-candidate primacy-index drift. A primacy-index shift after a
+    template or fixture change is the position-bias regression signal.
+    Candidates present on only one side are reported as added/removed.
+    A side without a recorded position probe is reported plainly. No
+    model, no network.
+    """
+    old_ok = _valid_position(old)
+    new_ok = _valid_position(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    old_conditions = old.get("conditions") or []
+    new_conditions = new.get("conditions") or []
+    conditions_added = [c for c in new_conditions if c not in old_conditions]
+    conditions_removed = [c for c in old_conditions if c not in new_conditions]
+    condition_changed: dict[str, dict[str, Any]] = {}
+    for condition in sorted(set(old_conditions) & set(new_conditions)):
+        old_pair = _position_condition_pair(old, condition)
+        new_pair = _position_condition_pair(new, condition)
+        changed = old_pair != new_pair
+        condition_changed[condition] = {
+            "old_decision": old_pair[0],
+            "old_winner": old_pair[1],
+            "new_decision": new_pair[0],
+            "new_winner": new_pair[1],
+            "changed": changed,
+        }
+
+    def _flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
+        # ``flips`` is a list here: _valid_position rejects anything else
+        # before this point, so no defensive branch is needed.
+        keys = []
+        for entry in flips:
+            if type(entry) is not dict:
+                continue
+            keys.append(
+                (
+                    entry.get("condition"),
+                    entry.get("decision_from"),
+                    entry.get("winner_from"),
+                    entry.get("decision_to"),
+                    entry.get("winner_to"),
+                )
+            )
+        return sorted(keys, key=lambda key: tuple(str(part) for part in key))
+
+    # NOTE: deliberately phrased to stay textually distinct from the
+    # cycle-147 flips gate anchor ("flips_changed = _flip_key(old...)
+    # != _flip_key(new...)"): new diff sections must not duplicate gate
+    # anchors (see the lesson in AGENTS.md).
+    flips_changed = _flip_key(new.get("flips")) != _flip_key(old.get("flips"))
+
+    def _candidate_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        rates: dict[str, dict[str, Any]] = {}
+        per_condition = payload.get("per_condition") or {}
+        for condition in sorted(per_condition):
+            candidates = (per_condition.get(condition) or {}).get("per_candidate") or {}
+            for name, entry in candidates.items():
+                entry = entry or {}
+                rates.setdefault(name, {})[condition] = entry.get("correct_rate")
+        return rates
+
+    old_rates = _candidate_rates(old)
+    new_rates = _candidate_rates(new)
+    candidates_added = sorted(set(new_rates) - set(old_rates))
+    candidates_removed = sorted(set(old_rates) - set(new_rates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_rates) & set(new_rates)):
+        for condition in sorted(set(old_rates[name]) & set(new_rates[name])):
+            old_rate = old_rates[name][condition]
+            new_rate = new_rates[name][condition]
+            if old_rate != new_rate:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "condition": condition,
+                        "old_correct_rate": old_rate,
+                        "new_correct_rate": new_rate,
+                    }
+                )
+
+    def _index_map(payload: Any) -> dict[str, Any]:
+        primacy = payload.get("primacy_index") or {}
+        return {k: v for k, v in primacy.items() if type(k) is str}
+
+    old_indexes = _index_map(old)
+    new_indexes = _index_map(new)
+    index_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_indexes) & set(new_indexes)):
+        if old_indexes[name] != new_indexes[name]:
+            index_drift.append(
+                {
+                    "candidate": name,
+                    "old_primacy_index": old_indexes[name],
+                    "new_primacy_index": new_indexes[name],
+                }
+            )
+
+    def _mean_index(payload: Any) -> Any:
+        effect = payload.get("condition_effect") or {}
+        return effect.get("mean_index")
+
+    mean_index_changed = _mean_index(old) != _mean_index(new)
+
+    result["conditions_added"] = conditions_added
+    result["conditions_removed"] = conditions_removed
+    result["condition_changed"] = condition_changed
+    result["flips_changed"] = flips_changed
+    result["candidate_drift"] = candidate_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    result["index_drift"] = index_drift
+    result["mean_index"] = {
+        "old": _mean_index(old),
+        "new": _mean_index(new),
+        "changed": mean_index_changed,
+    }
+    # NOTE: position-specific disjunct names keep these lines textually
+    # distinct from every other diff section's ``changed`` anchor.
+    result["changed"] = bool(
+        conditions_added
+        or conditions_removed
+        or any(entry["changed"] for entry in condition_changed.values())
+        or flips_changed
+        or candidate_drift
+        or candidates_added
+        or candidates_removed
+        or index_drift
+        or mean_index_changed
     )
     return result
 
@@ -2642,6 +2865,70 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
     return lines
 
 
+def _render_position_summary(position_diff: dict[str, Any] | None) -> list[str]:
+    """Position-sensitivity comparison lines for the stderr summary."""
+    if type(position_diff) is not dict:
+        return []
+    available = position_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Position-sensitivity comparison unavailable: "
+            f"{missing} run did not record the position probe."
+        ]
+    lines: list[str] = []
+
+    def _verdict(decision: Any, winner: Any) -> str:
+        return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
+
+    conditions = position_diff.get("condition_changed") or {}
+    for condition in sorted(conditions):
+        entry = conditions[condition]
+        if entry.get("changed"):
+            lines.append(
+                f"Position ({_display_id(condition)}): "
+                f"{_verdict(entry.get('old_decision'), entry.get('old_winner'))} -> "
+                f"{_verdict(entry.get('new_decision'), entry.get('new_winner'))}"
+            )
+    added = position_diff.get("conditions_added") or []
+    removed = position_diff.get("conditions_removed") or []
+    if added:
+        lines.append(f"Position conditions added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Position conditions removed: {', '.join(_display_id(c) for c in removed)}")
+    if position_diff.get("flips_changed"):
+        lines.append("Position flip pattern changed between runs.")
+
+    def _fmt_index(value: Any) -> str:
+        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+
+    drift = position_diff.get("index_drift") or []
+    if drift:
+        lines.append(f"Primacy-index drift ({len(drift)}):")
+        for entry in drift[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}: "
+                f"{_fmt_index(entry.get('old_primacy_index'))} -> "
+                f"{_fmt_index(entry.get('new_primacy_index'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    mean = position_diff.get("mean_index") or {}
+    if mean.get("changed"):
+        lines.append(
+            f"Mean primacy index: {_fmt_index(mean.get('old'))} -> {_fmt_index(mean.get('new'))}"
+        )
+    added_c = position_diff.get("candidates_added") or []
+    removed_c = position_diff.get("candidates_removed") or []
+    if added_c:
+        lines.append(f"Position candidates added: {', '.join(_display_id(c) for c in added_c)}")
+    if removed_c:
+        lines.append(f"Position candidates removed: {', '.join(_display_id(c) for c in removed_c)}")
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -3061,6 +3348,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_prefill_summary(diff.get("prefill")))
     lines.extend(_render_synthhistory_summary(diff.get("synthhistory")))
     lines.extend(_render_batchinv_summary(diff.get("batch_invariance")))
+    lines.extend(_render_position_summary(diff.get("position")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

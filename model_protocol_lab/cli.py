@@ -268,6 +268,18 @@ def build_parser() -> argparse.ArgumentParser:
         "the run.",
     )
     run.add_argument(
+        "--position",
+        action="store_true",
+        help="Position-sensitivity experiment: re-run every search "
+        "candidate on synthetic multiple-choice fixtures whose correct "
+        "option is permuted between the first, middle, and last positions "
+        "(seeded distractor order) and re-apply the selection rule per "
+        "condition, reporting per-candidate correct rates, the primacy "
+        "index (P(correct | first) - P(correct | last)), winner-vs-clean "
+        "flips, and the condition effect. Roughly triples search "
+        "compute; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -565,6 +577,60 @@ def _run_hierarchy_probe(
         result["hierarchy"] = {
             "available": False,
             "detail": "hierarchy_unavailable",
+        }
+
+
+def _run_position_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the position-sensitivity experiment; never raises.
+
+    Re-runs every search candidate on synthetic multiple-choice
+    fixtures whose correct option is permuted between the first,
+    middle, and last positions (seeded distractor order) and stores
+    the ``position`` analysis payload on ``result``. Any failure
+    degrades to an "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import position_sensitivity, position_stage
+        from .position import (
+            CONDITIONS,
+            POSITION_SPECS,
+            build_position_fixtures,
+            validate_position_specs,
+        )
+
+        specs = validate_position_specs(POSITION_SPECS)
+        stages: dict[str, Any] = {}
+        for condition in CONDITIONS:
+            fixtures = build_position_fixtures(specs, condition=condition, seed=seed)
+            stages[condition] = position_stage(
+                backend,
+                formats,
+                fixtures,
+                condition=condition,
+                boundary=boundary,
+                boundary_map=boundary_map,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        result["position"] = position_sensitivity(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(fmt.name for fmt in formats),
+            stages,
+        )
+    except Exception:  # noqa: BLE001 -- position probe must not fail the run
+        result["position"] = {
+            "available": False,
+            "detail": "position_unavailable",
         }
 
 
@@ -1479,6 +1545,25 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Position-sensitivity experiment (research wave-3 idea 1):
+                # re-run every search candidate on synthetic multiple-choice
+                # fixtures whose correct option is permuted between the
+                # first, middle, and last positions (seeded distractor
+                # order) and re-apply the selection rule per condition.
+                # Answers "does the winner survive option repositioning,
+                # and do templates differ in primacy bias?" A failed run
+                # degrades to "unavailable" inside the analysis, never a
+                # phantom verdict, and never fails the run.
+                if args.position:
+                    _run_position_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
                     )

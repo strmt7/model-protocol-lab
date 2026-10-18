@@ -178,7 +178,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -871,6 +871,37 @@ the diverged-prompt sets between runs (`diff_batchinv`;
 `identical`) -- a newly diverged prompt after a backend or fixture
 update is the batch-nondeterminism regression signal. The stage never
 fails the run.
+
+### 8.22 Position sensitivity (`position`)
+
+Option-order bias is studied by prompt *text*; the lab varies the
+*chat template* as the independent variable. arXiv:2507.13949
+("Exploiting Primacy Effect To Improve Large Language Models", Jul
+2025) shows fine-tuned LLMs pick the first listed option far more often
+than chance in MCQA; corroborated by arXiv:2512.02665 (primacy effect
+in multi-document summarization). A "robust template" claim is hollow
+if the template makes the model blind to anything not listed first.
+`model-protocol-lab run --position` re-runs every search candidate on
+synthetic multiple-choice fixtures whose correct option is permuted
+between the first, middle, and last positions (seeded distractor
+order) and re-applies the selection rule per condition.
+
+Each fixture's `expected` is the correct option's *text*, so the
+pipeline's `exact_match` grades the run unchanged; the per-candidate
+primacy index is P(correct | first) - P(correct | last), in [-1, 1]
+(pre-registered in `position.py` with the falsifiable claim that the
+index varies across template families rather than being constant).
+`results.json` carries `position` with the per-condition verdicts, the
+winner flips against the primary run, the per-candidate primacy
+indexes, and the condition effect (mean index, positive/negative
+counts). The report's "Position sensitivity" section renders the
+per-condition badges, the correct-rate table, and the index table.
+`diff-reports` compares condition verdicts, flip patterns,
+per-candidate correct-rate drift, and primacy-index drift
+(`diff_position`; `position_changed` / `position_asymmetric` feed
+`identical`) -- a primacy-index shift after a template or fixture
+change is the position-bias regression signal. The stage never fails
+the run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 
