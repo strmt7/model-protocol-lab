@@ -73,7 +73,7 @@ show_error_codes = true
 # The override must name the IMPORTED optional modules, not the importing file:
 # this silences missing-import errors for the optional HF stack when it is not
 # installed (the adapter itself stays importable without it).
-module = ["torch", "transformers"]
+module = ["torch", "transformers", "jinja2"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
