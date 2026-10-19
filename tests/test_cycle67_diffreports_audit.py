@@ -253,6 +253,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "deliforge": {"available": "neither", "changed": False},
         "fewshot": {"available": "neither", "changed": False},
         "faketurn": {"available": "neither", "changed": False},
+        "toolcall": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -309,6 +310,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "fewshot_asymmetric": False,
             "faketurn_changed": False,
             "faketurn_asymmetric": False,
+            "toolcall_changed": False,
+            "toolcall_asymmetric": False,
             "identical": True,
         },
     }
@@ -2517,6 +2520,118 @@ def _o_faketurn(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_toolcall_valid(value: Any) -> bool:
+    """Oracle toolcall validator: mirrors diffreports._valid_toolcall."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    n_fixtures = value.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable", "adherent", "parse_failed", "call_failed", "not_text"):
+            count = entry.get(key)
+            if type(count) is not int or count < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in ("selection_rate", "args_rate", "relevance_rate", "adherent_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+    excluded = value.get("excluded_candidates")
+    if type(excluded) is not list or not all(type(c) is str for c in excluded):
+        return False
+    weakest = value.get("weakest_candidates")
+    return type(weakest) is list and all(type(c) is str for c in weakest)
+
+
+def _o_toolcall(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle toolcall section: selection/args/relevance rate drift.
+
+    Independent reimplementation: comprehension-built views rather
+    than the implementation's accumulation loops, with the drift
+    buckets filled in the implementation's per-candidate rate order.
+    """
+    old_ok = _o_toolcall_valid(old)
+    new_ok = _o_toolcall_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            out[name] = {
+                "selection_rate": entry.get("selection_rate"),
+                "args_rate": entry.get("args_rate"),
+                "relevance_rate": entry.get("relevance_rate"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    # Same per-candidate rate order as the implementation's loop.
+    selection_drift: list[dict[str, Any]] = []
+    args_drift: list[dict[str, Any]] = []
+    relevance_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        for rate_key, bucket in (
+            ("selection_rate", selection_drift),
+            ("args_rate", args_drift),
+            ("relevance_rate", relevance_drift),
+        ):
+            if old_view[name][rate_key] != new_view[name][rate_key]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_view[name][rate_key],
+                        "new": new_view[name][rate_key],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    diff["selection_drift"] = selection_drift
+    diff["args_drift"] = args_drift
+    diff["relevance_drift"] = relevance_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        selection_drift
+        or args_drift
+        or relevance_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2879,6 +2994,7 @@ def _oracle_diff(
     o_dl, o_dl_changed, o_dl_asymmetric = _o_deliforge(old.get("deliforge"), new.get("deliforge"))
     o_fs, o_fs_changed, o_fs_asymmetric = _o_fewshot(old.get("fewshot"), new.get("fewshot"))
     o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
+    o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -2926,6 +3042,8 @@ def _oracle_diff(
         and not o_fs_asymmetric
         and not o_ft_changed
         and not o_ft_asymmetric
+        and not o_tc_changed
+        and not o_tc_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2953,6 +3071,7 @@ def _oracle_diff(
         "deliforge": o_dl,
         "fewshot": o_fs,
         "faketurn": o_ft,
+        "toolcall": o_tc,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3005,6 +3124,8 @@ def _oracle_diff(
             "fewshot_asymmetric": o_fs_asymmetric,
             "faketurn_changed": o_ft_changed,
             "faketurn_asymmetric": o_ft_asymmetric,
+            "toolcall_changed": o_tc_changed,
+            "toolcall_asymmetric": o_tc_asymmetric,
             "identical": identical,
         },
     }
@@ -3168,6 +3289,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "fewshot_asymmetric": False,
                 "faketurn_changed": False,
                 "faketurn_asymmetric": False,
+                "toolcall_changed": False,
+                "toolcall_asymmetric": False,
                 "identical": False,
             },
         )
@@ -4430,6 +4553,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["fewshot"] = _fuzz_fewshot_section(rng)
     if rng.random() < 0.45:
         report["faketurn"] = _fuzz_faketurn_section(rng)
+    if rng.random() < 0.45:
+        report["toolcall"] = _fuzz_toolcall_section(rng)
     return report
 
 
@@ -4686,6 +4811,41 @@ def _fuzz_faketurn_section(rng: random.Random) -> dict[str, Any]:
         "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
         "max_transfer_gap": rng.choice([-1.0, 0.0, 1.0, None]),
         "max_flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
+    }
+
+
+def _fuzz_toolcall_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        n_evaluable = rng.randint(0, 9)
+        entry = {
+            "n": 9,
+            "n_evaluable": n_evaluable,
+            "adherent": rng.randint(0, n_evaluable),
+            "parse_failed": 0,
+            "call_failed": 0,
+            "not_text": 9 - n_evaluable,
+            "selection_rate": rng.choice([0.0, 0.5, 1.0, None, "high"]),
+            "args_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "relevance_rate": rng.choice([0.0, 1.0, None]),
+            "adherent_rate": rng.choice([0.0, 0.5, 1.0, None]),
+        }
+        if rng.random() < 0.1:
+            entry["selection_rate"] = 1.5  # hostile: out of range
+        if rng.random() < 0.1:
+            entry[rng.choice(["n", 7])] = -1  # hostile: negative / bad key
+        per_candidate[name] = entry
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"n": 1}  # hostile: non-string key
+    return {
+        "available": True,
+        "n_fixtures": 9,
+        "per_candidate": per_candidate,
+        "weakest_candidates": rng.choice([[], ["alpha"], ["beta"], [7]]),
+        "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
     }
 
 
@@ -4977,6 +5137,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not fewshot_asymmetric\n"
             '        and not faketurn_diff["changed"]\n'
             "        and not faketurn_asymmetric\n"
+            '        and not toolcall_diff["changed"]\n'
+            "        and not toolcall_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -5017,6 +5179,12 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or structured_asymmetric\n"
             '        or deliforge_diff["changed"]\n'
             "        or deliforge_asymmetric\n"
+            '        or fewshot_diff["changed"]\n'
+            "        or fewshot_asymmetric\n"
+            '        or faketurn_diff["changed"]\n'
+            "        or faketurn_asymmetric\n"
+            '        or toolcall_diff["changed"]\n'
+            "        or toolcall_asymmetric\n"
             "    )\n",
             scenario,
         )

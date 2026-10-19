@@ -578,6 +578,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    toolcall_diff = diff_toolcall(old.get("toolcall"), new.get("toolcall"))
+    toolcall_asymmetric = toolcall_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -625,6 +630,8 @@ def diff_reports(
         and not fewshot_asymmetric
         and not faketurn_diff["changed"]
         and not faketurn_asymmetric
+        and not toolcall_diff["changed"]
+        and not toolcall_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -673,6 +680,8 @@ def diff_reports(
         "fewshot_asymmetric": fewshot_asymmetric,
         "faketurn_changed": faketurn_diff["changed"],
         "faketurn_asymmetric": faketurn_asymmetric,
+        "toolcall_changed": toolcall_diff["changed"],
+        "toolcall_asymmetric": toolcall_asymmetric,
         "identical": identical,
     }
     return {
@@ -701,6 +710,7 @@ def diff_reports(
         "deliforge": deliforge_diff,
         "fewshot": fewshot_diff,
         "faketurn": faketurn_diff,
+        "toolcall": toolcall_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2732,6 +2742,140 @@ def diff_faketurn(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_toolcall(payload: Any) -> bool:
+    """Structural check for a ``toolcall`` adherence payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the four rates
+    must be numbers/None in [0, 1], the outcome counts non-negative
+    ints, and map keys strings, so the renderers never hit a TypeError
+    on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    n_fixtures = payload.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable", "adherent", "parse_failed", "call_failed", "not_text"):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in ("selection_rate", "args_rate", "relevance_rate", "adherent_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+    excluded = payload.get("excluded_candidates")
+    if type(excluded) is not list or not all(type(c) is str for c in excluded):
+        return False
+    weakest = payload.get("weakest_candidates")
+    return type(weakest) is list and all(type(c) is str for c in weakest)
+
+
+def diff_toolcall(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``toolcall`` adherence payloads; deterministic.
+
+    Answers "did the tool-call adherence story change between runs?":
+    per-candidate selection-rate drift, argument-rate drift, and
+    relevance-rate drift, plus added/removed candidates and changes in
+    the excluded set. A newly positive selection gap after a template
+    change is the regression signal -- the template deciding which
+    tool gets picked. A side without a recorded probe is reported
+    plainly. No model, no network.
+    """
+    old_ok = _valid_toolcall(old)
+    new_ok = _valid_toolcall(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_toolcall guarantees str keys and dict/None entries,
+            # so no defensive skip is needed here (it would be dead code
+            # and an uncoverable line).
+            if entry is None:
+                view[name] = {
+                    "selection_rate": None,
+                    "args_rate": None,
+                    "relevance_rate": None,
+                    "excluded": True,
+                }
+            else:
+                view[name] = {
+                    "selection_rate": entry.get("selection_rate"),
+                    "args_rate": entry.get("args_rate"),
+                    "relevance_rate": entry.get("relevance_rate"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    toolcall_candidates_added = sorted(set(new_view) - set(old_view))
+    toolcall_candidates_removed = sorted(set(old_view) - set(new_view))
+    toolcall_selection_drift: list[dict[str, Any]] = []
+    toolcall_args_drift: list[dict[str, Any]] = []
+    toolcall_relevance_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        for rate_key, bucket in (
+            ("selection_rate", toolcall_selection_drift),
+            ("args_rate", toolcall_args_drift),
+            ("relevance_rate", toolcall_relevance_drift),
+        ):
+            if old_entry[rate_key] != new_entry[rate_key]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_entry[rate_key],
+                        "new": new_entry[rate_key],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    toolcall_excluded_added = sorted(new_excluded - old_excluded)
+    toolcall_excluded_removed = sorted(old_excluded - new_excluded)
+    result["selection_drift"] = toolcall_selection_drift
+    result["args_drift"] = toolcall_args_drift
+    result["relevance_drift"] = toolcall_relevance_drift
+    result["candidates_added"] = toolcall_candidates_added
+    result["candidates_removed"] = toolcall_candidates_removed
+    result["excluded_added"] = toolcall_excluded_added
+    result["excluded_removed"] = toolcall_excluded_removed
+    # NOTE: toolcall-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        toolcall_selection_drift
+        or toolcall_args_drift
+        or toolcall_relevance_drift
+        or toolcall_candidates_added
+        or toolcall_candidates_removed
+        or toolcall_excluded_added
+        or toolcall_excluded_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -4252,6 +4396,60 @@ def _render_faketurn_summary(faketurn_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
+    """Tool-call adherence comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson).
+    """
+    if type(toolcall_diff) is not dict:
+        return []
+    available = toolcall_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Tool-call comparison unavailable: {missing} run did not record the tool-call probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+
+    for drift_key, label in (
+        ("selection_drift", "selection-rate"),
+        ("args_drift", "args-rate"),
+        ("relevance_drift", "relevance-rate"),
+    ):
+        drift = toolcall_diff.get(drift_key) or []
+        for entry in drift[:3]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"Tool-call {label} drift ({_display_id(entry.get('candidate'))}): "
+                f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+            )
+        if len(drift) > 3:
+            lines.append(f"  ... and {len(drift) - 3} more {label} drifts")
+    added = toolcall_diff.get("candidates_added") or []
+    removed = toolcall_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Tool-call candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Tool-call candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    excl_added = toolcall_diff.get("excluded_added") or []
+    excl_removed = toolcall_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(f"Tool-call newly excluded: {', '.join(_display_id(c) for c in excl_added)}")
+    if excl_removed:
+        lines.append(
+            f"Tool-call no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -4678,6 +4876,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_deliforge_summary(diff.get("deliforge")))
     lines.extend(_render_fewshot_summary(diff.get("fewshot")))
     lines.extend(_render_faketurn_summary(diff.get("faketurn")))
+    lines.extend(_render_toolcall_summary(diff.get("toolcall")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

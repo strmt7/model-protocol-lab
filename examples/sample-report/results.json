@@ -5225,6 +5225,84 @@
     "max_transfer_gap": 0.0,
     "max_flip_rate": 1.0
   },
+  "toolcall": {
+    "available": true,
+    "n_fixtures": 9,
+    "per_candidate": {
+      "llama3": {
+        "n": 9,
+        "n_evaluable": 9,
+        "adherent": 9,
+        "parse_failed": 0,
+        "call_failed": 0,
+        "not_text": 0,
+        "selection_rate": 1.0,
+        "args_rate": 1.0,
+        "relevance_rate": 1.0,
+        "adherent_rate": 1.0
+      },
+      "llama3/toggle-bos": {
+        "n": 9,
+        "n_evaluable": 9,
+        "adherent": 0,
+        "parse_failed": 0,
+        "call_failed": 9,
+        "not_text": 0,
+        "selection_rate": 0.2222222222222222,
+        "args_rate": 0.0,
+        "relevance_rate": 0.7777777777777778,
+        "adherent_rate": 0.0
+      },
+      "llama3/no-bos": {
+        "n": 9,
+        "n_evaluable": 9,
+        "adherent": 0,
+        "parse_failed": 0,
+        "call_failed": 9,
+        "not_text": 0,
+        "selection_rate": 0.2222222222222222,
+        "args_rate": 0.0,
+        "relevance_rate": 0.7777777777777778,
+        "adherent_rate": 0.0
+      },
+      "llama3/prefix-newline": {
+        "n": 9,
+        "n_evaluable": 9,
+        "adherent": 0,
+        "parse_failed": 0,
+        "call_failed": 9,
+        "not_text": 0,
+        "selection_rate": 0.2222222222222222,
+        "args_rate": 0.0,
+        "relevance_rate": 0.7777777777777778,
+        "adherent_rate": 0.0
+      },
+      "llama3/prefix-trim": {
+        "n": 9,
+        "n_evaluable": 9,
+        "adherent": 0,
+        "parse_failed": 0,
+        "call_failed": 9,
+        "not_text": 0,
+        "selection_rate": 0.2222222222222222,
+        "args_rate": 0.0,
+        "relevance_rate": 0.7777777777777778,
+        "adherent_rate": 0.0
+      }
+    },
+    "weakest_candidates": [
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "excluded_candidates": [],
+    "selection_rate_gap": 0.7777777777777778,
+    "args_rate_gap": 1.0,
+    "relevance_rate_gap": 0.2222222222222222,
+    "adherent_rate_gap": 1.0,
+    "uniform": false
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

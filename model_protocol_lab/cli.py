@@ -350,6 +350,17 @@ def build_parser() -> argparse.ArgumentParser:
         "compute (2 payloads x 4 markers); the stage never fails the run.",
     )
     run.add_argument(
+        "--tool-call",
+        action="store_true",
+        help="Prompt-only tool-call syntax adherence probe (research "
+        "wave-4 idea 4): describe a fixed 4-function tool list in prompt "
+        "text and measure, per template family, correct function "
+        "selection, typed argument extraction, and abstention "
+        "(NO_CALL) when no tool fits -- the BFCL prompt-mode task with "
+        "the chat template as the independent variable. 9 synthetic "
+        "fixtures; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -932,6 +943,59 @@ def _run_faketurn_probe(
         result["faketurn"] = {
             "available": False,
             "detail": "faketurn_unavailable",
+        }
+
+
+def _run_toolcall_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the prompt-only tool-call adherence probe; never raises.
+
+    Describes the fixed 4-function tool list in prompt text (no native
+    function-calling APIs), evaluates each candidate on the 9
+    synthetic tool-call fixtures, classifies each decoded response
+    (selection / args / relevance) and stores the ``toolcall``
+    adherence analysis on ``result``. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import toolcall_adherence, toolcall_stage
+        from .toolcall import (
+            TOOLCALL_QUERIES,
+            build_toolcall_fixtures,
+            query_calls,
+            validate_toolcall_queries,
+        )
+
+        queries = validate_toolcall_queries(TOOLCALL_QUERIES)
+        candidates = tuple(fmt.name for fmt in formats)
+        # Floor the token budget: the longest canonical call is 79
+        # characters, and real tokenizers may split JSON punctuation,
+        # so the probe must not let an unrelated budget parameter
+        # truncate calls into parse_failed (that would confound the
+        # measurement with the budget).
+        stage = toolcall_stage(
+            backend,
+            formats,
+            build_toolcall_fixtures(queries),
+            calls=query_calls(queries),
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max(128, max_new_tokens),
+            seed=seed,
+        )
+        result["toolcall"] = toolcall_adherence(candidates, stage)
+    except Exception:  # noqa: BLE001 -- toolcall probe must not fail the run
+        result["toolcall"] = {
+            "available": False,
+            "detail": "toolcall_unavailable",
         }
 
 
@@ -2014,6 +2078,20 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Prompt-only tool-call adherence probe (research wave-4
+                # idea 4): fixed 4-function tool list described in
+                # prompt text; selection / typed args / NO_CALL
+                # abstention measured per family. Never fails the run.
+                if args.tool_call:
+                    _run_toolcall_probe(
+                        backend,
+                        formats,
+                        result,
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
