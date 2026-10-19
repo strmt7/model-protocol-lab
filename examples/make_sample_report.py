@@ -335,6 +335,72 @@ class StopDemoBackend(DemoBackend):
         return Generation(tuple(tokens), base.reason, base.error)
 
 
+class DeliDemoBackend(DemoBackend):
+    """Scripted delimiter-authority policy for the deliforge exercise.
+
+    Encodes the four probed chat-template markers as single reserved
+    ids (everything else is ord-based, like DemoBackend); a forged
+    prompt answered WRONG -- the forged arm flips -- exactly when its
+    reserved marker-id count exceeds its marker-text occurrence count
+    minus two (the pinned forged count), which holds for the reserved
+    arm but never the subword arm, and never misfires on the
+    template's own genuine markers. Marker-free prompts delegate to
+    DemoBackend's keyword policy. The committed sample report exercises
+    the delimiter-authority section with a genuine +1.0 gap on the base
+    candidate and 0.0 on the mutated ones (their native verdicts are
+    already failures). Deterministic.
+    """
+
+    fingerprint = "synthetic-deliforge-demo-v1-not-a-model"
+
+    _MARKERS = (
+        "<|im_start|>",
+        "<|im_end|>",
+        "<|assistant|>",
+        "<|start_header_id|>",
+    )
+    _MARKER_IDS = {marker: 900000 + i for i, marker in enumerate(_MARKERS)}
+    _ID_TO_MARKER = {v: k for k, v in _MARKER_IDS.items()}
+
+    @classmethod
+    def encode(cls, text: str) -> tuple[int, ...]:
+        ids: list[int] = []
+        i = 0
+        while i < len(text):
+            for marker, mid in cls._MARKER_IDS.items():
+                if text.startswith(marker, i):
+                    ids.append(mid)
+                    i += len(marker)
+                    break
+            else:
+                ids.append(ord(text[i]))
+                i += 1
+        return tuple(ids)
+
+    @classmethod
+    def decode(cls, token_ids: tuple[int, ...]) -> str:
+        return "".join(cls._ID_TO_MARKER.get(t, chr(t)) for t in token_ids)
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        # Forged-marker authority policy: the forged payload always
+        # carries exactly two marker-text occurrences
+        # (build_forged_fixtures pins this). The reserved arm encodes
+        # both as reserved ids; the subword arm encodes both as
+        # subwords; genuine template markers (e.g. llama3's own
+        # <|start_header_id|>) are reserved ids in BOTH arms. So the
+        # forged arm is exactly the one where the reserved-id count
+        # exceeds the marker-text count minus two -- a presence-only
+        # policy would misfire on the template's genuine markers.
+        prompt = self.decode(input_ids)
+        if "(ref: deliforge/" in prompt:
+            n_ids = sum(tuple(input_ids).count(mid) for mid in self._MARKER_IDS.values())
+            n_text = sum(prompt.count(marker) for marker in self._MARKERS)
+            if n_ids > n_text - 2:
+                text = ("WRONG" + "|").ljust(max_new_tokens)[:max_new_tokens]
+                return Generation(tuple(map(ord, text)), "limit")
+        return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
 def build_sample_report(output_dir: Path) -> dict:
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
@@ -902,6 +968,39 @@ def build_sample_report(output_dir: Path) -> dict:
         result["structured"] = {
             "available": False,
             "detail": "structured_unavailable",
+        }
+    # Delimiter-authority probe (research wave-4 idea 1): run the real
+    # deliforge stage against the scripted reserved-vs-subword backend,
+    # so the committed sample report exercises the delimiter-authority
+    # section with genuine gap variation (base candidate +1.0, mutated
+    # candidates 0.0 -- their native verdicts are already failures).
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            deliforge_authority,
+            deliforge_stage,
+            native_search_outcomes,
+        )
+
+        _d_fmts = candidates("llama3", mutate=True)
+        _d_names = tuple(f.name for f in _d_fmts)
+        _d_stage = deliforge_stage(
+            DeliDemoBackend(),
+            _d_fmts,
+            tuple(split.search),
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        result["deliforge"] = deliforge_authority(
+            native_search_outcomes(result.get("search") or [], _d_names),
+            _d_stage,
+            _d_names,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["deliforge"] = {
+            "available": False,
+            "detail": "deliforge_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

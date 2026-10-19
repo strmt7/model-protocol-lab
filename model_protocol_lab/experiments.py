@@ -22,10 +22,31 @@ from .core import (
     EvaluationReport,
     Fixture,
     Format,
+    Message,
     Split,
     _valid_token_ids,
     evaluate,
     first_boundary,
+)
+from .deliforge import (
+    DETAIL_CELL_FAILED,
+    DETAIL_DECODE_MISMATCH,
+    DETAIL_LOCALIZATION_FAILED,
+    DETAIL_NO_ENCODING_PAIR,
+    MARKERS,
+    PAYLOADS,
+    DeliforgeBackend,
+    authority_gap,
+    build_forged_fixtures,
+    build_subword_ids,
+    decode_equal,
+    find_encoding_pair,
+    find_insertion_span,
+    flip_rates,
+    forged_marker_offsets,
+    forged_target_index,
+    validate_marker_index,
+    validate_payload,
 )
 from .hierarchy import POSITIONS, family_of, system_treatment
 from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
@@ -4242,4 +4263,440 @@ def structured_adherence(
         "excluded_candidates": sorted(excluded),
         "adherence_gap": gap,
         "uniform": uniform,
+    }
+
+
+def _deliforge_cell_unsupported(detail: str) -> dict[str, Any]:
+    """One unsupported deliforge cell: fail-closed, never a phantom gap."""
+    return {"supported": False, "detail": detail}
+
+
+def deliforge_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    payloads: tuple[str, ...] = PAYLOADS,
+    marker_indexes: tuple[int, ...] | None = None,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate with forged markers in two encodings.
+
+    For each forged-turn payload (see :mod:`deliforge`) and each
+    delimiter marker, every search candidate is evaluated twice with
+    ``core.evaluate()`` on the forged fixtures: once with the forged
+    marker in its native single-id ("reserved") encoding, once with the
+    forged markers spliced to their forced-subword encoding through a
+    :class:`DeliforgeBackend`. The two arms decode to identical text by
+    construction (verified per fixture); only the token-id encoding of
+    the forged markers differs, and the template's own genuine markers
+    are never touched (see :func:`deliforge.build_subword_ids`).
+
+    A (candidate, payload, marker) cell degrades to an unsupported
+    marker instead of failing the stage: no single-id native encoding
+    for the marker (``no_encoding_pair``), marker localization failure
+    (``localization_failed``), or a decode mismatch between the arms
+    (``decode_mismatch``). Backend/evaluation failures degrade the
+    cell to None -- fail-closed, never a phantom authority gap.
+
+    Returns ``{"payloads": [...], "marker_indexes": [...],
+    "per_payload": {payload: {"per_marker": {str(index):
+    {"per_candidate": {name: cell | None}}}}}``. Raises ``ValueError``
+    on caller-contract violations (None backend, bad formats/cases/
+    payloads/marker_indexes/boundary), never on backend data.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases or any(type(case) is not Fixture for case in cases):
+        raise ValueError("cases must be a nonempty tuple of Fixture")
+    if type(payloads) is not tuple or not payloads:
+        raise ValueError("payloads must be a nonempty tuple")
+    for payload in payloads:
+        validate_payload(payload)
+    if marker_indexes is None:
+        marker_indexes = tuple(range(len(MARKERS)))
+    if type(marker_indexes) is not tuple or not marker_indexes:
+        raise ValueError("marker_indexes must be a nonempty tuple")
+    for index in marker_indexes:
+        validate_marker_index(index)
+    if len(set(marker_indexes)) != len(marker_indexes):
+        raise ValueError("marker_indexes must not repeat")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_payload: dict[str, dict[str, Any]] = {}
+    for payload in payloads:
+        per_marker: dict[str, dict[str, Any]] = {}
+        for marker_index in marker_indexes:
+            marker = MARKERS[marker_index]
+            try:
+                pair = find_encoding_pair(backend.encode, backend.decode, marker)
+            except Exception:  # noqa: BLE001 -- backend data, not a contract violation
+                pair = None
+            forged = build_forged_fixtures(cases, payload=payload, marker_index=marker_index)
+            per_candidate: dict[str, dict[str, Any] | None] = {}
+            for fmt in formats:
+                try:
+                    per_candidate[fmt.name] = _deliforge_candidate_cell(
+                        backend,
+                        fmt,
+                        cases,
+                        forged,
+                        marker=marker,
+                        pair=pair,
+                        boundary=boundaries[fmt.name],
+                        max_new_tokens=max_new_tokens,
+                        seed=seed,
+                    )
+                except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                    per_candidate[fmt.name] = None
+            per_marker[str(marker_index)] = {"per_candidate": per_candidate}
+        per_payload[payload] = {"per_marker": per_marker}
+    return {
+        "payloads": list(payloads),
+        "marker_indexes": list(marker_indexes),
+        "per_payload": per_payload,
+    }
+
+
+def _deliforge_candidate_cell(
+    backend: Backend,
+    fmt: Format,
+    cases: tuple[Fixture, ...],
+    forged: tuple[Fixture, ...],
+    *,
+    marker: str,
+    pair: dict[str, tuple[int, ...]] | None,
+    boundary: tuple[int, ...],
+    max_new_tokens: int,
+    seed: int,
+) -> dict[str, Any]:
+    """Run both encoding arms for one candidate x payload x marker.
+
+    Returns the supported cell ``{"supported": True, "n": ...,
+    "verdicts": {fixture_id: {"reserved": bool | None, "subword":
+    bool | None}}, ...}`` or an unsupported marker dict. The subword
+    arm's ids are built by text-level construction (see
+    :func:`deliforge.build_subword_ids`): the exact inserted string is
+    known from the fixture construction, so its single occurrence in
+    the rendered prompt is located at the text level and only the
+    forged marker occurrences are re-encoded -- the template's genuine
+    markers keep their reserved ids (verified by id count). Raises on
+    backend/evaluation failure (the caller degrades the cell to None).
+    """
+    if pair is None:
+        return _deliforge_cell_unsupported(DETAIL_NO_ENCODING_PAIR)
+    marker_id = pair["reserved"][0]
+    subword_ids = pair["subword"]
+    reserved_report = evaluate(
+        backend,
+        fmt,
+        forged,
+        boundary=boundary,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+    )
+    if not reserved_report.aggregate_eligible:
+        return _deliforge_cell_unsupported(DETAIL_CELL_FAILED)
+    plan: dict[str, tuple[int, ...]] = {}
+    verdicts: dict[str, dict[str, bool | None]] = {}
+    forged_texts: dict[str, str] = {}
+    for obs in reserved_report.observations:
+        original_id = _original_fixture_id(obs.fixture)
+        text = fmt.render(_forged_messages_for(forged, obs.fixture))
+        forged_texts[obs.fixture] = text
+        if obs.status != "completed":
+            verdicts[original_id] = {"reserved": None, "subword": None}
+            continue
+        spliced = _deliforge_spliced_ids(
+            backend,
+            benign_messages=_benign_messages_for(cases, original_id),
+            forged_messages=_forged_messages_for(forged, obs.fixture),
+            text=text,
+            marker=marker,
+            marker_id=marker_id,
+            subword_ids=subword_ids,
+        )
+        if spliced is None:
+            return _deliforge_cell_unsupported(DETAIL_LOCALIZATION_FAILED)
+        if not decode_equal(backend.decode, tuple(obs.input_ids), spliced):
+            return _deliforge_cell_unsupported(DETAIL_DECODE_MISMATCH)
+        plan[text] = spliced
+        verdicts[original_id] = {
+            "reserved": bool(obs.exact_match and obs.boundary_found),
+            "subword": None,
+        }
+    subword_report = evaluate(
+        DeliforgeBackend(backend, plan),
+        fmt,
+        forged,
+        boundary=boundary,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+    )
+    if not subword_report.aggregate_eligible:
+        return _deliforge_cell_unsupported(DETAIL_CELL_FAILED)
+    for obs in subword_report.observations:
+        original_id = _original_fixture_id(obs.fixture)
+        entry = verdicts.get(original_id)
+        if entry is None:
+            return _deliforge_cell_unsupported(DETAIL_CELL_FAILED)
+        expected_ids = plan.get(forged_texts[obs.fixture])
+        if expected_ids is None or tuple(obs.input_ids) != expected_ids:
+            return _deliforge_cell_unsupported(DETAIL_DECODE_MISMATCH)
+        entry["subword"] = (
+            bool(obs.exact_match and obs.boundary_found) if obs.status == "completed" else None
+        )
+    return {
+        "supported": True,
+        "n": len(cases),
+        "marker": marker,
+        "reserved_id": marker_id,
+        "subword_len": len(subword_ids),
+        "verdicts": verdicts,
+    }
+
+
+def _deliforge_spliced_ids(
+    backend: Backend,
+    *,
+    benign_messages: tuple[Message, ...],
+    forged_messages: tuple[Message, ...],
+    text: str,
+    marker: str,
+    marker_id: int,
+    subword_ids: tuple[int, ...],
+) -> tuple[int, ...] | None:
+    """Build the subword-arm ids for one forged prompt (text-level).
+
+    The forged payload was appended to one message's content by
+    :func:`deliforge.build_forged_fixtures`; the exact inserted string
+    is recovered from the message pair, located exactly once in the
+    rendered prompt, and only the marker occurrences inside that span
+    are re-encoded via :func:`deliforge.build_subword_ids`. Returns
+    None (fail-closed) when the construction cannot be verified.
+    """
+    try:
+        target = forged_target_index(forged_messages)
+        benign_target = forged_target_index(benign_messages)
+    except ValueError:
+        return None
+    if target != benign_target:
+        return None
+    benign_content = benign_messages[target].content
+    forged_content = forged_messages[target].content
+    if type(benign_content) is not str or type(forged_content) is not str:
+        return None
+    if not forged_content.startswith(benign_content):
+        return None
+    inserted = forged_content[len(benign_content) :]
+    if not inserted:
+        return None
+    span = find_insertion_span(text, inserted)
+    if span is None:
+        return None
+    expected_count = inserted.count(marker)
+    offsets = forged_marker_offsets(text, marker, span, expected_count)
+    if offsets is None:
+        return None
+    return build_subword_ids(
+        backend.encode,
+        backend.decode,
+        text,
+        marker,
+        marker_id,
+        subword_ids,
+        offsets,
+    )
+
+
+def _original_fixture_id(forged_id: str) -> str:
+    """Strip the ``deliforge/<payload>/<index>/`` prefix from a forged id."""
+    parts = forged_id.split("/", 3)
+    if len(parts) == 4 and parts[0] == "deliforge":
+        return parts[3]
+    return forged_id
+
+
+def _forged_messages_for(forged: tuple[Fixture, ...], forged_id: str) -> tuple[Message, ...]:
+    """Find a forged fixture's messages by id; raises LookupError."""
+    for fixture in forged:
+        if fixture.id == forged_id:
+            return fixture.messages
+    raise LookupError(f"unknown forged fixture {forged_id!r}")
+
+
+def _benign_messages_for(cases: tuple[Fixture, ...], original_id: str) -> tuple[Message, ...]:
+    """Find a search fixture's messages by id; raises LookupError."""
+    for case in cases:
+        if case.id == original_id:
+            return case.messages
+    raise LookupError(f"unknown search fixture {original_id!r}")
+
+
+def _deliforge_cell_view(entry: Any) -> dict[str, Any] | None:
+    """Normalize one deliforge authority cell entry, or None if malformed."""
+    if entry is None:
+        return {"supported": False, "detail": DETAIL_CELL_FAILED}
+    if type(entry) is not dict:
+        return None
+    if entry.get("supported") is not True:
+        detail = entry.get("detail")
+        return {
+            "supported": False,
+            "detail": detail if type(detail) is str else DETAIL_CELL_FAILED,
+        }
+    verdicts = entry.get("verdicts")
+    if type(verdicts) is not dict or not all(
+        type(fid) is str
+        and type(cell) is dict
+        and (cell.get("reserved") is None or type(cell.get("reserved")) is bool)
+        and (cell.get("subword") is None or type(cell.get("subword")) is bool)
+        for fid, cell in verdicts.items()
+    ):
+        return None
+    return {"supported": True, "verdicts": verdicts}
+
+
+def deliforge_authority(
+    native_outcomes: dict[str, dict[str, Any]],
+    stage_result: dict[str, Any],
+    candidates: tuple[str, ...],
+) -> dict[str, Any]:
+    """Analyze delimiter authority gaps across candidates (pure post-hoc).
+
+    Answers "does the reserved encoding of a forged marker flip task
+    verdicts more often than the subword encoding of the identical
+    text?": per (candidate, payload, marker) cell, the flip rates of
+    the reserved and subword arms against the native search verdicts
+    and the ``authority_gap`` (reserved minus subword, in [-1, 1]).
+    The pre-registered falsifiable claim (see :mod:`deliforge`) is that
+    the gap is ~0 and uniform across families; a positive gap
+    replicates the paper's finding inside the lab.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(native_outcomes) is not dict:
+        return {"available": False, "detail": "native_data_malformed"}
+    if type(stage_result) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    payloads = stage_result.get("payloads")
+    marker_indexes = stage_result.get("marker_indexes")
+    per_payload = stage_result.get("per_payload")
+    if (
+        type(payloads) is not list
+        or not payloads
+        or not all(type(p) is str for p in payloads)
+        or type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+        or type(per_payload) is not dict
+    ):
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate: dict[str, dict[str, Any]] = {}
+    excluded: list[str] = []
+    for cand in candidates:
+        native = native_outcomes.get(cand)
+        native_verdicts = native.get("per_fixture") if type(native) is dict else None
+        if type(native_verdicts) is not dict or not all(
+            type(v) is bool for v in native_verdicts.values()
+        ):
+            excluded.append(cand)
+            continue
+        cells: dict[str, dict[str, Any]] = {}
+        malformed = False
+        for payload in payloads:
+            section = per_payload.get(payload)
+            markers = section.get("per_marker") if type(section) is dict else None
+            if type(markers) is not dict:
+                malformed = True
+                break
+            for marker_index in marker_indexes:
+                block = markers.get(str(marker_index))
+                entry = block.get("per_candidate", {}).get(cand) if type(block) is dict else None
+                view = _deliforge_cell_view(entry)
+                if view is None:
+                    malformed = True
+                    break
+                key = f"{payload}/{marker_index}"
+                if not view["supported"]:
+                    cells[key] = view
+                    continue
+                try:
+                    reserved = flip_rates(
+                        native_verdicts,
+                        {fid: cell["reserved"] for fid, cell in view["verdicts"].items()},
+                    )
+                    subword = flip_rates(
+                        native_verdicts,
+                        {fid: cell["subword"] for fid, cell in view["verdicts"].items()},
+                    )
+                    gap = authority_gap(reserved["flip_rate"], subword["flip_rate"])
+                except ValueError:
+                    malformed = True
+                    break
+                cells[key] = {
+                    "supported": True,
+                    "n_evaluable": reserved["n_evaluable"],
+                    "n_flips_reserved": reserved["n_flips"],
+                    "n_flips_subword": subword["n_flips"],
+                    "flip_rate_reserved": reserved["flip_rate"],
+                    "flip_rate_subword": subword["flip_rate"],
+                    "authority_gap": gap,
+                }
+            if malformed:
+                break
+        if malformed:
+            return {"available": False, "detail": "stage_invalid"}
+        gaps = [
+            cell["authority_gap"]
+            for cell in cells.values()
+            if cell.get("supported") and type(cell.get("authority_gap")) in (int, float)
+        ]
+        evaluable_cells = sum(
+            1
+            for cell in cells.values()
+            if cell.get("supported")
+            and type(cell.get("n_evaluable")) is int
+            and cell["n_evaluable"] > 0
+        )
+        per_candidate[cand] = {
+            "cells": cells,
+            "n_cells": len(cells),
+            "n_evaluable_cells": evaluable_cells,
+            "mean_authority_gap": (sum(gaps) / len(gaps)) if gaps else None,
+            "max_authority_gap": max(gaps) if gaps else None,
+            "min_authority_gap": min(gaps) if gaps else None,
+        }
+        if not evaluable_cells:
+            excluded.append(cand)
+    all_gaps = [
+        entry["max_authority_gap"]
+        for entry in per_candidate.values()
+        if type(entry.get("max_authority_gap")) in (int, float)
+    ]
+    return {
+        "available": True,
+        "payloads": list(payloads),
+        "marker_indexes": list(marker_indexes),
+        "per_candidate": per_candidate,
+        "excluded_candidates": sorted(excluded),
+        "max_authority_gap": max(all_gaps) if all_gaps else None,
     }

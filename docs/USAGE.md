@@ -1018,6 +1018,50 @@ candidate after a template change is the regression signal. The stage
 runs no new generations beyond its own fixtures and never fails the
 run.
 
+### 8.26 Delimiter authority (`deliforge`)
+
+Reserved-token vs subword delimiter authority per template family: a
+forged chat-template marker (e.g. `<|im_start|>`) injected in user
+content reaches the model either as a single reserved control token or
+as ordinary subword tokens -- the two decode to exactly the same text,
+but arXiv:2609.35932 ("Same Bytes, Different Authority", Sep 2026)
+reports attack success dropping 39-66 percentage points when the
+marker is sent as subwords. The lab controls the exact token-id
+sequence it sends, so `model-protocol-lab run --deliforge` holds
+decoded text fixed while varying the encoding across all families --
+the missing instrument.
+
+For each of 2 forged-turn payloads (fake assistant turn asserting a
+wrong answer; fake system instruction contradicting the task) and 4
+delimiter markers, every search candidate is evaluated twice on the
+forged fixtures: once with the forged marker in its native single-id
+("reserved") encoding, once with the forged markers re-encoded to
+their forced-subword form through a `DeliforgeBackend` plan. The
+subword arm is built by text-level construction, not id alignment:
+the exact inserted string (forged payload plus its unique per-fixture
+ref) is located exactly once in the rendered prompt, and only the
+forged marker occurrences are re-encoded segment-wise -- the
+template's genuine markers keep their reserved ids (verified by id
+count; id-level difflib alignment was proved unsound by a brute-force
+oracle differential and is not used). Both arms decode to identical
+text by construction (verified per fixture); any localization failure
+degrades to an unsupported cell, never a phantom gap.
+
+Per cell, the flip rates of the two arms against the native search
+verdicts give `authority_gap = flip_rate(reserved) -
+flip_rate(subword)` in [-1, 1]. The pre-registered falsifiable claim
+(in `deliforge.py`) is a gap of ~0 uniform across families; a positive
+gap replicates the paper's reserved-token authority finding inside
+the lab. "Authority" is measured strictly as task-verdict flip rate on
+fixed fixtures, not open-ended harm. `results.json` carries
+`deliforge` with per-candidate cells, mean/max/min gaps, and
+`max_authority_gap`. `diff-reports` compares per-cell gap drift,
+top-gap drift, added/removed candidates, and excluded-set changes
+(`diff_deliforge`; `deliforge_changed` / `deliforge_asymmetric` feed
+`identical`) -- a newly positive gap after a template change is the
+regression signal. Roughly 16x search compute (2 payloads x 4 markers
+x 2 arms); the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

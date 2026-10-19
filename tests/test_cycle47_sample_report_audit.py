@@ -80,6 +80,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "stop_cause",
     "ws_canonical",
     "structured",
+    "deliforge",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

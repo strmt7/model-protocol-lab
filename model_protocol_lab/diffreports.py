@@ -563,6 +563,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    deliforge_diff = diff_deliforge(old.get("deliforge"), new.get("deliforge"))
+    deliforge_asymmetric = deliforge_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -604,6 +609,8 @@ def diff_reports(
         and not wscan_asymmetric
         and not structured_diff["changed"]
         and not structured_asymmetric
+        and not deliforge_diff["changed"]
+        and not deliforge_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -646,6 +653,8 @@ def diff_reports(
         "ws_canonical_asymmetric": wscan_asymmetric,
         "structured_changed": structured_diff["changed"],
         "structured_asymmetric": structured_asymmetric,
+        "deliforge_changed": deliforge_diff["changed"],
+        "deliforge_asymmetric": deliforge_asymmetric,
         "identical": identical,
     }
     return {
@@ -671,6 +680,7 @@ def diff_reports(
         "stop_cause": stopcause_diff,
         "ws_canonical": wscan_diff,
         "structured": structured_diff,
+        "deliforge": deliforge_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2227,6 +2237,144 @@ def diff_structured(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_deliforge(payload: Any) -> bool:
+    """Structural check for a ``deliforge`` delimiter-authority payload.
+
+    Enforces the wave-2 C3 lesson at the value level: flip rates must
+    be numbers/None in [0, 1], authority gaps numbers/None in [-1, 1],
+    and map keys strings, so the renderers never hit a TypeError on a
+    hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    payloads = payload.get("payloads")
+    if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+        return False
+    marker_indexes = payload.get("marker_indexes")
+    if (
+        type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+    ):
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        cells = entry.get("cells")
+        if type(cells) is not dict or not all(type(k) is str for k in cells):
+            return False
+        for cell in cells.values():
+            if type(cell) is not dict or cell.get("supported") is not True:
+                continue
+            n_evaluable = cell.get("n_evaluable")
+            if type(n_evaluable) is not int or n_evaluable < 0:
+                return False
+            for key in ("flip_rate_reserved", "flip_rate_subword"):
+                rate = cell.get(key)
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+            gap = cell.get("authority_gap")
+            if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+                return False
+        top = entry.get("max_authority_gap")
+        if top is not None and not (type(top) in (int, float) and -1.0 <= top <= 1.0):
+            return False
+    excluded = payload.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def diff_deliforge(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``deliforge`` delimiter-authority payloads; deterministic.
+
+    Answers "did the delimiter-authority story change between runs?":
+    per-candidate per-cell authority-gap drift, top-gap drift,
+    added/removed candidates, and changes in the excluded set. A newly
+    positive reserved-minus-subword gap after a template change is the
+    regression signal -- the reserved encoding gaining verdict-flip
+    authority it did not have before. A side without a recorded probe
+    is reported plainly. No model, no network.
+    """
+    old_ok = _valid_deliforge(old)
+    new_ok = _valid_deliforge(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_deliforge guarantees str keys and dict entries, so
+            # no defensive skip is needed here (it would be dead code
+            # and an uncoverable line).
+            cells: dict[str, Any] = {}
+            for key, cell in (entry.get("cells") or {}).items():
+                cells[key] = (
+                    cell.get("authority_gap")
+                    if type(cell) is dict and cell.get("supported") is True
+                    else None
+                )
+            view[name] = {
+                "cells": cells,
+                "max_authority_gap": entry.get("max_authority_gap"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    deliforge_candidates_added = sorted(set(new_view) - set(old_view))
+    deliforge_candidates_removed = sorted(set(old_view) - set(new_view))
+    deliforge_gap_drift: list[dict[str, Any]] = []
+    deliforge_top_gap_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_cells = old_view[name]["cells"]
+        new_cells = new_view[name]["cells"]
+        for key in sorted(set(old_cells) & set(new_cells)):
+            old_gap = old_cells[key]
+            new_gap = new_cells[key]
+            if old_gap != new_gap:
+                deliforge_gap_drift.append(
+                    {"candidate": name, "cell": key, "old": old_gap, "new": new_gap}
+                )
+        old_top = old_view[name]["max_authority_gap"]
+        new_top = new_view[name]["max_authority_gap"]
+        if old_top != new_top:
+            deliforge_top_gap_drift.append({"candidate": name, "old": old_top, "new": new_top})
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    deliforge_excluded_added = sorted(new_excluded - old_excluded)
+    deliforge_excluded_removed = sorted(old_excluded - new_excluded)
+    result["gap_drift"] = deliforge_gap_drift
+    result["top_gap_drift"] = deliforge_top_gap_drift
+    result["candidates_added"] = deliforge_candidates_added
+    result["candidates_removed"] = deliforge_candidates_removed
+    result["excluded_added"] = deliforge_excluded_added
+    result["excluded_removed"] = deliforge_excluded_removed
+    # NOTE: deliforge-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        deliforge_gap_drift
+        or deliforge_top_gap_drift
+        or deliforge_candidates_added
+        or deliforge_candidates_removed
+        or deliforge_excluded_added
+        or deliforge_excluded_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -3541,6 +3689,73 @@ def _render_structured_summary(structured_diff: dict[str, Any] | None) -> list[s
     return lines
 
 
+def _render_deliforge_summary(deliforge_diff: dict[str, Any] | None) -> list[str]:
+    """Delimiter-authority comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson).
+    """
+    if type(deliforge_diff) is not dict:
+        return []
+    available = deliforge_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Delimiter-authority comparison unavailable: "
+            f"{missing} run did not record the deliforge probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_gap(value: Any) -> str:
+        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+
+    drift = deliforge_diff.get("gap_drift") or []
+    if drift:
+        lines.append(f"Delimiter-authority gap drift ({len(drift)}):")
+        for entry in drift[:5]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"  {_display_id(entry.get('candidate'))}/{_display_id(entry.get('cell'))}: "
+                f"{_fmt_gap(entry.get('old'))} -> {_fmt_gap(entry.get('new'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    top_drift = deliforge_diff.get("top_gap_drift") or []
+    for entry in top_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Delimiter-authority top-gap drift "
+            f"({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_gap(entry.get('old'))} -> {_fmt_gap(entry.get('new'))}"
+        )
+    added = deliforge_diff.get("candidates_added") or []
+    removed = deliforge_diff.get("candidates_removed") or []
+    if added:
+        lines.append(
+            f"Delimiter-probe candidates added: {', '.join(_display_id(c) for c in added)}"
+        )
+    if removed:
+        lines.append(
+            f"Delimiter-probe candidates removed: {', '.join(_display_id(c) for c in removed)}"
+        )
+    excl_added = deliforge_diff.get("excluded_added") or []
+    excl_removed = deliforge_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(
+            f"Delimiter-probe newly excluded: {', '.join(_display_id(c) for c in excl_added)}"
+        )
+    if excl_removed:
+        lines.append(
+            f"Delimiter-probe no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -3964,6 +4179,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_stop_cause_summary(diff.get("stop_cause")))
     lines.extend(_render_ws_canonical_summary(diff.get("ws_canonical")))
     lines.extend(_render_structured_summary(diff.get("structured")))
+    lines.extend(_render_deliforge_summary(diff.get("deliforge")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

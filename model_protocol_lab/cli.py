@@ -312,6 +312,19 @@ def build_parser() -> argparse.ArgumentParser:
         "compute; the stage never fails the run.",
     )
     run.add_argument(
+        "--deliforge",
+        action="store_true",
+        help="Delimiter-authority probe (research wave-4 idea 1): forge "
+        "chat-template markers (e.g. <|im_start|>) into user content in "
+        "two encodings of identical decoded text -- the family's native "
+        "single-id (reserved) encoding vs forced subword tokens -- and "
+        "measure which encoding flips task verdicts more often per "
+        "template family, testing arXiv:2609.35932's reserved-token "
+        "authority claim across all families. Roughly 16x search "
+        "compute (2 payloads x 4 markers x 2 arms); the stage never "
+        "fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -803,6 +816,51 @@ def _run_structured_probe(
         result["structured"] = {
             "available": False,
             "detail": "structured_unavailable",
+        }
+
+
+def _run_deliforge_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the delimiter-authority probe; never raises.
+
+    Forges chat-template markers into the search fixtures' user
+    content and evaluates every candidate with the forged markers in
+    two encodings of identical decoded text (reserved single-id vs
+    forced subword), storing the ``deliforge`` authority analysis on
+    ``result``. Any failure degrades to an "unavailable" marker
+    instead of failing the run.
+    """
+    try:
+        from .experiments import deliforge_authority, deliforge_stage, native_search_outcomes
+
+        candidates = tuple(fmt.name for fmt in formats)
+        stage = deliforge_stage(
+            backend,
+            formats,
+            tuple(cases),
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["deliforge"] = deliforge_authority(
+            native_search_outcomes(result.get("search") or [], candidates),
+            stage,
+            candidates,
+        )
+    except Exception:  # noqa: BLE001 -- deliforge probe must not fail the run
+        result["deliforge"] = {
+            "available": False,
+            "detail": "deliforge_unavailable",
         }
 
 
@@ -1783,6 +1841,21 @@ def main(argv: list[str] | None = None) -> int:
                         backend,
                         formats,
                         result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Delimiter-authority probe (research wave-4 idea 1):
+                # forged chat-template markers in reserved vs subword
+                # encoding of identical text, per template family.
+                # Never fails the run.
+                if args.deliforge:
+                    _run_deliforge_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
