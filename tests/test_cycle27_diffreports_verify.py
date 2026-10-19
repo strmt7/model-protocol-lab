@@ -457,16 +457,17 @@ def oracle_diff_reports(
     _o_sr_asymmetric = _o_sr_available not in ("both", "neither")
 
     def _or_tr_valid(value: Any) -> bool:
-        pc = value.get("per_checkpoint") if type(value) is dict else None
-        mx = value.get("matrix") if type(value) is dict else None
+        # Mirrors diffreports._valid_transfer exactly.
+        per_checkpoint = value.get("per_checkpoint") if type(value) is dict else None
+        matrix = value.get("matrix") if type(value) is dict else None
         return (
             type(value) is dict
             and value.get("available") is True
-            and type(pc) is dict
-            and all(type(k) is str for k in pc)
-            and type(mx) is dict
-            and all(type(k) is str for k in mx)
-            and all(type(v) is dict and all(type(k) is str for k in v) for v in mx.values())
+            and type(per_checkpoint) is dict
+            and all(type(k) is str for k in per_checkpoint)
+            and type(matrix) is dict
+            and all(type(k) is str for k in matrix)
+            and all(type(v) is dict and all(type(k) is str for k in v) for v in matrix.values())
         )
 
     _tr_old_ok = _or_tr_valid(old.get("transfer"))
@@ -1370,6 +1371,42 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_trob_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_template_robustness exactly.
+        def _ok_rate(v: Any) -> bool:
+            return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
+
+        def _ok_report(rep: Any) -> bool:
+            if type(rep) is not dict:
+                return False
+            if rep.get("status") != "ok":
+                return True
+            if not _ok_rate(rep.get("preservation_rate")):
+                return False
+            for key in ("n_preserved", "n_preservation_denominator", "n_unevaluable"):
+                if type(rep.get(key)) is not int:
+                    return False
+            return True
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        return all(type(k) is str and _ok_report(v) for k, v in candidates.items())
+
+    _trob_old_ok = _or_trob_valid(old.get("template_robustness"))
+    _trob_new_ok = _or_trob_valid(new.get("template_robustness"))
+    if _trob_old_ok and _trob_new_ok:
+        _o_trob_available = "both"
+    elif _trob_old_ok:
+        _o_trob_available = "old"
+    elif _trob_new_ok:
+        _o_trob_available = "new"
+    else:
+        _o_trob_available = "neither"
+    _o_trob_asymmetric = _o_trob_available not in ("both", "neither")
+
     _vb_old_ok = _or_verbosity_valid(old.get("verbosity"))
     _vb_new_ok = _or_verbosity_valid(new.get("verbosity"))
     if _vb_old_ok and _vb_new_ok:
@@ -1410,6 +1447,7 @@ def oracle_diff_reports(
         and not _o_ft_asymmetric
         and not _o_tc_asymmetric
         and not _o_vb_asymmetric
+        and not _o_trob_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1462,6 +1500,8 @@ def oracle_diff_reports(
         "toolcall_asymmetric": _o_tc_asymmetric,
         "verbosity_changed": False,
         "verbosity_asymmetric": _o_vb_asymmetric,
+        "template_robustness_changed": False,
+        "template_robustness_asymmetric": _o_trob_asymmetric,
         "identical": identical,
     }
     return {
@@ -1492,6 +1532,7 @@ def oracle_diff_reports(
         "faketurn": {"available": _o_ft_available, "changed": False},
         "toolcall": {"available": _o_tc_available, "changed": False},
         "verbosity": {"available": _o_vb_available, "changed": False},
+        "template_robustness": {"available": _o_trob_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

@@ -255,6 +255,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "faketurn": {"available": "neither", "changed": False},
         "toolcall": {"available": "neither", "changed": False},
         "verbosity": {"available": "neither", "changed": False},
+        "template_robustness": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -315,6 +316,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "toolcall_asymmetric": False,
             "verbosity_changed": False,
             "verbosity_asymmetric": False,
+            "template_robustness_changed": False,
+            "template_robustness_asymmetric": False,
             "identical": True,
         },
     }
@@ -3159,6 +3162,9 @@ def _oracle_diff(
     o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
     o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
     o_vb, o_vb_changed, o_vb_asymmetric = _o_verbosity(old.get("verbosity"), new.get("verbosity"))
+    o_trob, o_trob_changed, o_trob_asymmetric = _o_template_robustness(
+        old.get("template_robustness"), new.get("template_robustness")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -3210,6 +3216,8 @@ def _oracle_diff(
         and not o_tc_asymmetric
         and not o_vb_changed
         and not o_vb_asymmetric
+        and not o_trob_changed
+        and not o_trob_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -3239,6 +3247,7 @@ def _oracle_diff(
         "faketurn": o_ft,
         "toolcall": o_tc,
         "verbosity": o_vb,
+        "template_robustness": o_trob,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3295,9 +3304,107 @@ def _oracle_diff(
             "toolcall_asymmetric": o_tc_asymmetric,
             "verbosity_changed": o_vb_changed,
             "verbosity_asymmetric": o_vb_asymmetric,
+            "template_robustness_changed": o_trob_changed,
+            "template_robustness_asymmetric": o_trob_asymmetric,
             "identical": identical,
         },
     }
+
+
+def _o_tr_valid(value: Any) -> bool:
+    """Oracle template-robustness validator: mirrors _valid_template_robustness."""
+
+    def _ok_rate(v: Any) -> bool:
+        return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
+
+    def _ok_report(rep: Any) -> bool:
+        if type(rep) is not dict:
+            return False
+        if rep.get("status") != "ok":
+            return True
+        if not _ok_rate(rep.get("preservation_rate")):
+            return False
+        for key in ("n_preserved", "n_preservation_denominator", "n_unevaluable"):
+            if type(rep.get(key)) is not int:
+                return False
+        return True
+
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    return all(type(k) is str and _ok_report(v) for k, v in candidates.items())
+
+
+def _o_template_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle template-robustness section: preservation/operator drift.
+
+    Independent reimplementation: dict-comprehension views rather than
+    the implementation's accumulation loops.
+    """
+    old_ok = _o_tr_valid(old)
+    new_ok = _o_tr_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in payload["candidates"].items():
+            if entry.get("status") != "ok":
+                out[name] = {"preservation_rate": None, "operators": {}}
+            else:
+                ops = entry.get("operators") or {}
+                out[name] = {
+                    "preservation_rate": entry.get("preservation_rate"),
+                    "operators": {
+                        op: (ops.get(op) or {}).get("preservation_rate")
+                        for op in ("case_flip", "whitespace", "unicode_variant")
+                    },
+                }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    preservation_drift = [
+        {
+            "candidate": name,
+            "old": old_view[name]["preservation_rate"],
+            "new": new_view[name]["preservation_rate"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["preservation_rate"] != new_view[name]["preservation_rate"]
+    ]
+    operator_drift = [
+        {
+            "candidate": name,
+            "operator": op,
+            "old": old_view[name]["operators"].get(op),
+            "new": new_view[name]["operators"].get(op),
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        for op in ("case_flip", "whitespace", "unicode_variant")
+        if old_view[name]["operators"].get(op) != new_view[name]["operators"].get(op)
+    ]
+    diff["preservation_drift"] = preservation_drift
+    diff["operator_drift"] = operator_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    changed = bool(preservation_drift or operator_drift or candidates_added or candidates_removed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
 
 
 # ---------------------------------------------------------------------------
@@ -3462,6 +3569,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "toolcall_asymmetric": False,
                 "verbosity_changed": False,
                 "verbosity_asymmetric": False,
+                "template_robustness_changed": False,
+                "template_robustness_asymmetric": False,
                 "identical": False,
             },
         )
@@ -5356,6 +5465,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not toolcall_asymmetric\n"
             '        and not verbosity_diff["changed"]\n'
             "        and not verbosity_asymmetric\n"
+            '        and not template_robustness_diff["changed"]\n'
+            "        and not template_robustness_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"

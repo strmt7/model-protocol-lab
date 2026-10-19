@@ -373,6 +373,18 @@ def build_parser() -> argparse.ArgumentParser:
         "shorter is not better. The stage never fails the run.",
     )
     run.add_argument(
+        "--template-robustness",
+        action="store_true",
+        help="Per-template surface-noise robustness (cycle 166): for each "
+        "candidate template, measure the verdict preservation rate -- the "
+        "fraction of its correct fixture verdicts that survive "
+        "presentation-level surface noise (whitespace, case, unicode "
+        "variants) applied to user message contents. Template is the "
+        "independent variable; weights fixed. Informational only, never "
+        "changes winner selection. Opt-in: costs about C*F*25 extra "
+        "generations. The stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -1059,6 +1071,47 @@ def _run_verbosity_probe(
         result["verbosity"] = {
             "available": False,
             "detail": "verbosity_unavailable",
+        }
+
+
+def _run_template_robustness_probe(
+    result: Any,
+    formats: Any,
+    *,
+    backend: Any,
+    search_fixtures: Any,
+    boundary: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the per-template surface-noise robustness stage; never raises.
+
+    For each candidate template, probes verdict preservation under
+    presentation-level surface noise on user message contents (cycle 166).
+    Informational only: results are stored as ``result["template_robustness"]``
+    and never change winner selection. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import template_robustness_stage
+
+        stage = template_robustness_stage(
+            tuple(formats),
+            tuple(search_fixtures),
+            backend,
+            boundary=tuple(boundary),
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["template_robustness"] = {
+            "available": True,
+            "candidates": stage["candidates"],
+            "protocol_fingerprint": stage["protocol"].get("template_robustness_code_sha256"),
+        }
+    except Exception:  # noqa: BLE001 -- robustness probe must not fail the run
+        result["template_robustness"] = {
+            "available": False,
+            "detail": "template_robustness_unavailable",
         }
 
 
@@ -2176,6 +2229,20 @@ def main(argv: list[str] | None = None) -> int:
                         backend=backend,
                         search_fixtures=tuple(split.search),
                         max_new_tokens=args.max_new_tokens,
+                    )
+                # Per-template surface-noise robustness (cycle 166):
+                # verdict preservation rate per candidate under
+                # presentation-level noise on user content. Informational
+                # only -- never changes selection. Never fails the run.
+                if args.template_robustness:
+                    _run_template_robustness_probe(
+                        result,
+                        formats,
+                        backend=backend,
+                        search_fixtures=tuple(split.search),
+                        boundary=args.boundary_ids,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
                     )
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each

@@ -1583,3 +1583,604 @@ def run_surface_noise(args: Any, parser: Any) -> int:
     if status == "unavailable":
         return 3
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Template surface-noise robustness (cycle 166)
+#
+# Per-candidate measurement: for each chat template, how well does it preserve
+# correct verdicts when surface noise hits user-supplied content? The template
+# is the independent variable; weights, fixtures, backend, and protocol are
+# fixed. Design: docs/TEMPLATE_ROBUSTNESS_DESIGN.md (v2, red-team reviewed).
+# ---------------------------------------------------------------------------
+
+TEMPLATE_ROBUSTNESS_PROBE_NAME = "template-surface-noise-robustness"
+TEMPLATE_ROBUSTNESS_PROBE_VERSION = "1.0.0"
+
+# Presentation-level operators ONLY (F1): these perturb presentation without
+# changing the task's correct answer. Excluded: typo ("cat"->"car") and
+# punctuation_strip ("2.5"->"25") can change the correct answer while
+# `expected` stays pinned -- the R6 inversion the probe was built to avoid.
+# Results are conditional on this frozen set; the set is part of the protocol.
+TEMPLATE_ROBUSTNESS_OPERATORS: tuple[str, ...] = (
+    "case_flip",
+    "whitespace",
+    "unicode_variant",
+)
+
+# Verdict type reused from the probe.
+_TEMPLATE_VERDICT = str  # "pass" | "fail" | "abstain"
+
+
+def frozen_template_search_plan() -> dict[str, Any]:
+    """The frozen variant plan for template robustness (v2: F9d)."""
+    return {
+        "case_flip": {"seeds": list(SEARCH_PLAN_SEEDS), "exact": False},
+        "whitespace": {"modes": list(WHITESPACE_MODES), "exact": True},
+        "unicode_variant": {"seeds": list(SEARCH_PLAN_SEEDS), "exact": False},
+    }
+
+
+def _template_robustness_code_hash() -> str:
+    """sha256 of this file: pins the scorer implementation (F9a)."""
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def template_renderer_hash(fmt: Any) -> str:
+    """Hash a Format's defining fields (N3: pins the renderer).
+
+    Per-candidate context recorded in the report: if the template's
+    fields change, the hash changes and cross-run comparisons are
+    invalidated.
+    """
+    material = json.dumps(
+        {
+            "name": fmt.name,
+            "bos": fmt.bos,
+            "user_prefix": fmt.user_prefix,
+            "assistant_prefix": fmt.assistant_prefix,
+            "turn_end": fmt.turn_end,
+            "repeat_bos": fmt.repeat_bos,
+            "user_turn_end": fmt.user_turn_end,
+            "assistant_turn_end": fmt.assistant_turn_end,
+            "open_suffix": getattr(fmt, "open_suffix", None),
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def freeze_template_robustness_protocol(
+    backend_fingerprint: str,
+    fixtures: tuple[Fixture, ...],
+) -> dict[str, Any]:
+    """Publish the frozen measurement protocol *before* any scoring (F9).
+
+    Mirrors ``freeze_surface_noise_protocol`` for the template-robustness
+    setting: operator set, code hashes (perturbation + scorer), the frozen
+    search plan verbatim, flip predicate, denominator definitions, backend
+    fingerprint, and fixture hashes. The probe refuses to run against a
+    tampered or mismatched protocol.
+    """
+    if type(backend_fingerprint) is not str or not backend_fingerprint:
+        raise ValueError("backend_fingerprint must be a nonempty string")
+    fixtures = _check_fixtures(fixtures)
+    return {
+        "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
+        "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
+        "perturbation_operators": list(TEMPLATE_ROBUSTNESS_OPERATORS),
+        "perturbation_code_sha256": perturbation_code_hash(),
+        "search_plan": frozen_template_search_plan(),
+        "subject_span": (
+            "Perturbation applies to user-role message contents only; roles, "
+            "message order, and non-user messages are byte-identical. "
+            "Operators are presentation-level (whitespace, case_flip, "
+            "unicode_variant) and cannot change the task's correct answer; "
+            "typo and punctuation_strip are excluded for exactly that reason."
+        ),
+        "rendering": (
+            "Each evaluation renders the fixture's messages through the "
+            "candidate template under test; the template is the independent "
+            "variable."
+        ),
+        "flip_predicate": (
+            "A variant flips when its verdict differs from the baseline "
+            "verdict on a mutually-evaluable (fixture, variant) pair "
+            "(both non-abstain); a change in either direction counts."
+        ),
+        "denominator": (
+            "The headline preservation rate is baseline-conditioned: only "
+            "pass-baseline fixtures enter the denominator (N1). Variants "
+            "whose perturbed content is token-identical to the original are "
+            "no-ops: listed, never counted. Pairs with zero mutually-"
+            "evaluable variants are unevaluable: excluded, never counted "
+            "as preserved."
+        ),
+        "distance": (
+            "Normalized token indel-edit rate d = indel/(n+m) in [0,1] on "
+            "the message-content span (pre-render) tokenized with the "
+            "backend tokenizer; template-invariant by construction. "
+            "Reported per operator only; never blended across operators."
+        ),
+        "scope_limits": (
+            "The number is a template x backend-tokenizer interaction, not "
+            "a backend-independent template property. Rankings are valid "
+            "only within identical (fixtures, backend, protocol-fingerprint) "
+            "triples. The nearest observed flip is an upper bound over the "
+            "searched subset (d_obs >= d*), never a guarantee."
+        ),
+        "backend_fingerprint": backend_fingerprint,
+        "fixture_ids": [case.id for case in fixtures],
+        "fixture_sha256": _fixture_hash(fixtures),
+        "template_robustness_code_sha256": _template_robustness_code_hash(),
+        "frozen_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def verify_template_robustness_protocol(
+    protocol: Any,
+    *,
+    backend_fingerprint: str,
+    fixtures: tuple[Fixture, ...] | None = None,
+) -> dict[str, Any]:
+    """Fail-closed protocol check; returns the protocol on success (F9b).
+
+    When ``fixtures`` is provided, their hash must match the protocol's
+    ``fixture_sha256`` — the probe refuses to score a fixture set different
+    from the one the protocol was frozen for.
+    """
+    if type(protocol) is not dict:
+        raise ValueError("protocol must be the dict from freeze_template_robustness_protocol")
+    if type(backend_fingerprint) is not str or not backend_fingerprint:
+        raise ValueError("backend_fingerprint must be a nonempty string")
+    if protocol.get("instrument") != TEMPLATE_ROBUSTNESS_PROBE_NAME:
+        raise ValueError("protocol is not a template-robustness protocol")
+    if protocol.get("protocol_version") != TEMPLATE_ROBUSTNESS_PROBE_VERSION:
+        raise ValueError(
+            "protocol version "
+            f"{protocol.get('protocol_version')!r} != {TEMPLATE_ROBUSTNESS_PROBE_VERSION!r}"
+        )
+    if protocol.get("perturbation_code_sha256") != perturbation_code_hash():
+        raise ValueError("perturbation.py changed since the protocol was frozen")
+    if protocol.get("template_robustness_code_sha256") != _template_robustness_code_hash():
+        raise ValueError("template-robustness scorer changed since the protocol was frozen")
+    if protocol.get("search_plan") != frozen_template_search_plan():
+        raise ValueError("search plan differs from the frozen protocol")
+    if protocol.get("perturbation_operators") != list(TEMPLATE_ROBUSTNESS_OPERATORS):
+        raise ValueError("operator set differs from the frozen protocol")
+    if protocol.get("backend_fingerprint") != backend_fingerprint:
+        raise ValueError("backend fingerprint differs from the frozen protocol")
+    if fixtures is not None and _fixture_hash(fixtures) != protocol.get("fixture_sha256"):
+        raise ValueError("fixtures differ from the frozen protocol's fixture set")
+    return protocol
+
+
+def _perturb_fixture_contents(
+    case: Fixture,
+    operator: str,
+    seed: int,
+) -> tuple[str, ...]:
+    """Perturbed user contents for one fixture (F10: user-role only)."""
+    out: list[str] = []
+    for m in case.messages:
+        if m.role == "user":
+            out.append(perturb_text(m.content, operator, seed=seed))
+        else:
+            out.append(m.content)
+    return tuple(out)
+
+
+def _whitespace_fixture_contents(
+    case: Fixture,
+    mode_index: int,
+) -> tuple[str, ...]:
+    """Whitespace variant: mode_index-th mode per user message (cycling).
+
+    Each user message gets its (mode_index mod n_modes)-th whitespace mode;
+    messages without whitespace are unchanged. Deterministic and bounded:
+    the variant count is the max mode count across user messages.
+    """
+    out: list[str] = []
+    for m in case.messages:
+        if m.role != "user":
+            out.append(m.content)
+            continue
+        modes = _whitespace_mode_pairs(m.content)
+        if not modes:
+            out.append(m.content)
+        else:
+            out.append(modes[mode_index % len(modes)][1])
+    return tuple(out)
+
+
+def _enumerate_template_variants(
+    case: Fixture,
+) -> list[tuple[str, str, dict[str, Any], tuple[str, ...]]]:
+    """All (variant_id, operator, detail, perturbed_user_contents).
+
+    Variant IDs are fixture-independent: ``case_flip/seed={s}``,
+    ``unicode_variant/seed={s}``, ``whitespace/mode_index={j}``.
+    """
+    variants: list[tuple[str, str, dict[str, Any], tuple[str, ...]]] = []
+    for operator in ("case_flip", "unicode_variant"):
+        for s in SEARCH_PLAN_SEEDS:
+            variants.append(
+                (
+                    f"{operator}/seed={s}",
+                    operator,
+                    {"seed": s},
+                    _perturb_fixture_contents(case, operator, s),
+                )
+            )
+    n_ws_modes = 0
+    for m in case.messages:
+        if m.role == "user":
+            n_ws_modes = max(n_ws_modes, len(_whitespace_mode_pairs(m.content)))
+    for j in range(n_ws_modes):
+        variants.append(
+            (
+                f"whitespace/mode_index={j}",
+                "whitespace",
+                {"mode_index": j},
+                _whitespace_fixture_contents(case, j),
+            )
+        )
+    return variants
+
+
+def _content_span_ids(backend: Backend, contents: tuple[str, ...]) -> tuple[int, ...]:
+    """Token IDs of the joined user-content span (F4: no-op filter basis)."""
+    return tuple(backend.encode("\n".join(contents)))
+
+
+def _evaluate_template_case(
+    render: Any,
+    messages: tuple[Message, ...],
+    expected: str,
+    case_id: str,
+    backend: Backend,
+    boundary: tuple[int, ...],
+    max_new_tokens: int,
+    seed: int,
+    event: threading.Event,
+    variant_id: str = "",
+    hasher: Any = None,
+) -> str:
+    """Score one (template-rendered) fixture: pass / fail / abstain.
+
+    Fail-closed: any backend or rendering failure abstains, never crashes.
+    Mirrors ``_evaluate_one``'s contract for the template-rendered setting.
+    When ``hasher`` is given, the rendered input is fed to it (N3: pins the
+    rendered base and perturbed inputs).
+    """
+    try:
+        text = render(messages)
+    except Exception:  # noqa: BLE001 -- render boundary; abstain, never crash
+        return "abstain"
+    if type(text) is not str:
+        return "abstain"
+    if hasher is not None:
+        hasher.update(text.encode("utf-8", errors="surrogatepass"))
+    try:
+        input_ids = backend.encode(text)
+    except Exception:  # noqa: BLE001 -- backend boundary; abstain, never crash
+        return "abstain"
+    if not _valid_ids(input_ids):
+        return "abstain"
+    try:
+        gen = backend.generate(
+            input_ids,
+            max_new_tokens=max_new_tokens,
+            seed=_request_seed(seed, case_id + "\0" + variant_id),
+            cancel=event,
+        )
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:  # noqa: BLE001 -- backend boundary; abstain, never crash
+        return "abstain"
+    if gen.reason == "cancelled" or event.is_set() or gen.reason == "error":
+        return "abstain"
+    if not _valid_ids(gen.token_ids):
+        return "abstain"
+    cut = first_boundary(gen.token_ids, boundary)
+    answer_ids = gen.token_ids if cut is None else gen.token_ids[:cut]
+    try:
+        answer = backend.decode(answer_ids)
+    except Exception:  # noqa: BLE001 -- backend boundary; abstain, never crash
+        return "abstain"
+    if type(answer) is not str:
+        return "abstain"
+    return "pass" if answer == expected else "fail"
+
+
+def _with_perturbed_contents(case: Fixture, perturbed: tuple[str, ...]) -> tuple[Message, ...]:
+    """Rebuild messages with perturbed user contents (order/roles fixed)."""
+    out: list[Message] = []
+    pi = 0
+    for m in case.messages:
+        if m.role == "user":
+            out.append(Message(role=m.role, content=perturbed[pi]))
+            pi += 1
+        else:
+            out.append(m)
+    return tuple(out)
+
+
+def probe_template_robustness(
+    render: Any,
+    template_name: str,
+    fixtures: tuple[Fixture, ...],
+    backend: Backend,
+    protocol: dict[str, Any],
+    *,
+    boundary: tuple[int, ...],
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: threading.Event | None = None,
+) -> dict[str, Any]:
+    """Measure one template's verdict-preservation under surface noise.
+
+    For each fixture, the baseline verdict uses the template-rendered
+    messages; each variant perturbs user-role message contents (presentation-
+    level operators only) and re-renders. The headline metric is the
+    **verdict preservation rate**: the fraction of pass-baseline fixtures
+    with no pass->fail flip over mutually-evaluable variants (N1). Never
+    raises for measurement failures: per-variant errors abstain; only
+    stage-level failure yields ``status: "unavailable"`` (F8).
+
+    ``render``: callable ``(tuple[Message, ...]) -> str`` (the candidate's
+    ``Format.render``). ``template_name``: recorded in the report.
+    """
+    if not callable(render):
+        raise ValueError("render must be callable")
+    if type(template_name) is not str or not template_name:
+        raise ValueError("template_name must be a nonempty string")
+    fixtures = _check_fixtures(fixtures)
+    boundary = _check_boundary(boundary)
+    max_new_tokens = _check_max_new_tokens(max_new_tokens)
+    seed = _check_seed(seed)
+    if cancel is not None and not isinstance(cancel, threading.Event):
+        raise ValueError("cancel must be a threading.Event")
+    protocol = verify_template_robustness_protocol(
+        protocol, backend_fingerprint=backend.fingerprint, fixtures=fixtures
+    )
+    event = cancel if cancel is not None else threading.Event()
+
+    def _cancelled(reason: str) -> dict[str, Any]:
+        return {
+            "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
+            "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
+            "status": "cancelled",
+            "reason": reason,
+            "template_name": template_name,
+            "protocol": protocol,
+        }
+
+    def _unavailable(reason: str) -> dict[str, Any]:
+        return {
+            "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
+            "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
+            "status": "unavailable",
+            "reason": reason,
+            "template_name": template_name,
+            "protocol": protocol,
+        }
+
+    if event.is_set():
+        return _cancelled("cancelled_before_baseline")
+
+    # N3: hash the rendered base and perturbed inputs per candidate.
+    render_hasher = hashlib.sha256()
+
+    # Baseline verdicts (one per fixture).
+    baseline: dict[str, str] = {}
+    for case in fixtures:
+        if event.is_set():
+            return _cancelled("cancelled_during_baseline")
+        baseline[case.id] = _evaluate_template_case(
+            render,
+            case.messages,
+            case.expected,
+            case.id,
+            backend,
+            boundary,
+            max_new_tokens,
+            seed,
+            event,
+            hasher=render_hasher,
+        )
+    n_base_abstain = sum(1 for v in baseline.values() if v == "abstain")
+    if n_base_abstain == len(fixtures):
+        return _unavailable("baseline_all_abstained")
+
+    operators: dict[str, Any] = {
+        op: {
+            "n_denominator": 0,
+            "n_preserved": 0,
+            "n_unevaluable": 0,
+            "preservation_rate": None,
+            "nearest_flips": [],
+        }
+        for op in TEMPLATE_ROBUSTNESS_OPERATORS
+    }
+    n_preserved = 0
+    n_preservation_denominator = 0
+    n_unevaluable = 0
+    n_noise_repairs = 0
+    n_repair_denominator = 0
+    no_ops: list[str] = []
+    per_fixture: list[dict[str, Any]] = []
+
+    for case in fixtures:
+        if event.is_set():
+            return _cancelled("cancelled_during_sweep")
+        base_v = baseline[case.id]
+        user_contents = tuple(m.content for m in case.messages if m.role == "user")
+        if not user_contents:
+            per_fixture.append(
+                {"id": case.id, "baseline": base_v, "detail": "no_user_messages_excluded"}
+            )
+            continue
+        try:
+            base_span_ids = _content_span_ids(backend, user_contents)
+        except Exception:  # noqa: BLE001 -- encode boundary; fixture unevaluable
+            per_fixture.append(
+                {"id": case.id, "baseline": base_v, "detail": "content_encode_failed"}
+            )
+            if base_v == "pass":
+                n_unevaluable += 1
+            continue
+        if not _valid_ids(base_span_ids):
+            per_fixture.append(
+                {"id": case.id, "baseline": base_v, "detail": "content_encode_invalid"}
+            )
+            if base_v == "pass":
+                n_unevaluable += 1
+            continue
+
+        variants = _enumerate_template_variants(case)
+        # Per-variant verdicts (fail-closed: exceptions -> abstain inside).
+        variant_verdicts: dict[str, str] = {}
+        variant_distances: dict[str, float] = {}
+        for variant_id, _operator, _detail, perturbed in variants:
+            if event.is_set():
+                return _cancelled("cancelled_during_sweep")
+            try:
+                pert_span_ids = _content_span_ids(backend, perturbed)
+            except Exception:  # noqa: BLE001 -- encode boundary; abstain variant
+                variant_verdicts[variant_id] = "abstain"
+                continue
+            if tuple(pert_span_ids) == tuple(base_span_ids):
+                no_ops.append(f"{case.id}:{variant_id}")
+                continue
+            n, m_len = len(base_span_ids), len(pert_span_ids)
+            denom = n + m_len
+            distance = (
+                token_edit_distance(tuple(base_span_ids), tuple(pert_span_ids)) / denom
+                if denom
+                else 0.0
+            )
+            variant_distances[variant_id] = distance
+            variant_verdicts[variant_id] = _evaluate_template_case(
+                render,
+                _with_perturbed_contents(case, perturbed),
+                case.expected,
+                case.id,
+                backend,
+                boundary,
+                max_new_tokens,
+                seed,
+                event,
+                hasher=render_hasher,
+                variant_id=variant_id,
+            )
+
+        if base_v == "pass":
+            # Preservation: no pass->fail flip over mutually-evaluable variants.
+            evaluable = [vid for vid, v in variant_verdicts.items() if v != "abstain"]
+            if not evaluable:
+                n_unevaluable += 1
+                per_fixture.append({"id": case.id, "baseline": base_v, "detail": "unevaluable"})
+            else:
+                preserved = all(variant_verdicts[vid] == "pass" for vid in evaluable)
+                n_preservation_denominator += 1
+                if preserved:
+                    n_preserved += 1
+                per_fixture.append(
+                    {
+                        "id": case.id,
+                        "baseline": base_v,
+                        "preserved": preserved,
+                        "n_variants": len(evaluable),
+                    }
+                )
+            # Per-operator preservation vectors (F5: never blended).
+            for operator in TEMPLATE_ROBUSTNESS_OPERATORS:
+                op_vids = [
+                    vid
+                    for vid in variant_verdicts
+                    if vid.split("/")[0] == operator and variant_verdicts[vid] != "abstain"
+                ]
+                if not op_vids:
+                    operators[operator]["n_unevaluable"] += 1
+                    continue
+                operators[operator]["n_denominator"] += 1
+                if all(variant_verdicts[vid] == "pass" for vid in op_vids):
+                    operators[operator]["n_preserved"] += 1
+        elif base_v == "fail":
+            # Noise repairs (informational only, never blended).
+            evaluable = [vid for vid, v in variant_verdicts.items() if v != "abstain"]
+            if evaluable:
+                n_repair_denominator += 1
+                if any(variant_verdicts[vid] == "pass" for vid in evaluable):
+                    n_noise_repairs += 1
+            per_fixture.append({"id": case.id, "baseline": base_v, "detail": "fail_baseline"})
+        else:
+            per_fixture.append({"id": case.id, "baseline": base_v, "detail": "abstain_baseline"})
+
+        # Nearest observed flip per operator per fixture (F5: per-operator only).
+        for operator in TEMPLATE_ROBUSTNESS_OPERATORS:
+            best: tuple[float, str] | None = None
+            for vid in variant_verdicts:
+                if not vid.startswith(operator + "/"):
+                    continue
+                v = variant_verdicts[vid]
+                if v == "abstain" or v == base_v:
+                    continue
+                d = variant_distances[vid]
+                if best is None or d < best[0]:
+                    best = (d, vid)
+            if best is not None:
+                operators[operator]["nearest_flips"].append(
+                    {
+                        "fixture_id": case.id,
+                        "baseline": base_v,
+                        "flipped_to": variant_verdicts[best[1]],
+                        "distance": best[0],
+                        "variant_id": best[1],
+                    }
+                )
+
+    preservation_rate = (
+        n_preserved / n_preservation_denominator if n_preservation_denominator else None
+    )
+    for op_data in operators.values():
+        denom = op_data["n_denominator"]
+        op_data["preservation_rate"] = op_data["n_preserved"] / denom if denom else None
+
+    return {
+        "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
+        "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
+        "status": "ok",
+        "template_name": template_name,
+        "protocol": protocol,
+        "n_fixtures": len(fixtures),
+        "n_pass_baseline": sum(1 for v in baseline.values() if v == "pass"),
+        "n_fail_baseline": sum(1 for v in baseline.values() if v == "fail"),
+        "n_base_abstain": n_base_abstain,
+        "rendered_inputs_sha256": render_hasher.hexdigest(),
+        "preservation_rate": preservation_rate,
+        "n_preserved": n_preserved,
+        "n_preservation_denominator": n_preservation_denominator,
+        "n_unevaluable": n_unevaluable,
+        "preservation_note": (
+            None
+            if n_preservation_denominator
+            else "no pass-baseline fixtures with mutually-evaluable variants; "
+            "no preservation rate reported (not 0.0, not 1.0)"
+        ),
+        "noise_repair_rate": (
+            n_noise_repairs / n_repair_denominator if n_repair_denominator else None
+        ),
+        "n_noise_repairs": n_noise_repairs,
+        "n_repair_denominator": n_repair_denominator,
+        "operators": operators,
+        "no_ops": no_ops,
+        "per_fixture": per_fixture,
+        "scope_note": (
+            "Template x backend-tokenizer interaction; rankings valid only "
+            "within identical (fixtures, backend, protocol-fingerprint) "
+            "triples. Nearest observed flips are upper bounds (d_obs >= d*)."
+        ),
+    }
