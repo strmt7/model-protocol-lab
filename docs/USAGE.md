@@ -1652,3 +1652,45 @@ strip the observations, so observation-dependent checks report
 The JSON report goes to stdout; a human-readable summary goes to
 stderr. Exit 0 when every applicable check passes, 2 when any check
 fails, 1 for unreadable or invalid input.
+
+## 14. Surface-noise self-consistency probe (`surface-noise`)
+
+Monday-morning use: you rewrote a prompt over the weekend — the probe
+tells you whether a typo, case change, or whitespace shuffle would flip
+its answers, before you ship it.
+
+The probe perturbs the *prompt text only* (never the fixtures) with a
+frozen set of surface-noise operators — typo, case flip, unicode
+variant, whitespace modes, punctuation strip — and re-scores the prompt
+on your fixtures with your backend. It reports a **per-operator
+stability vector** (never a single score) plus the nearest observed flip
+per operator: the smallest token-edit distance at which the verdict
+vector changed.
+
+```sh
+python -m model_protocol_lab surface-noise probe \
+    --prompt prompt.txt --fixtures fixtures.json --boundary-ids 7 \
+    --output probe-out/
+python -m model_protocol_lab surface-noise diff probe-out/probe.json probe-out2/probe.json
+python -m model_protocol_lab surface-noise protocol
+```
+
+`probe` writes `probe.json` and a self-contained `dashboard.html`
+(inline SVG stability bars, minimal-flip counterfactuals, the static
+lint panel) into a new output directory. `diff` compares two probe runs
+— the improve-then-re-probe loop. `protocol` prints the frozen
+instrument descriptor so you can inspect what the probe does before
+trusting it. `--backend selftest` exercises the whole loop without a
+checkpoint; `--backend local-hf --model PATH` scores against a real
+checkpoint.
+
+Read the scope statement on the dashboard first — it is the first thing
+on the page. The probe measures stability of task success under a frozen
+set of surface-form perturbations, nothing more: the reported "nearest
+observed flip" is an **upper bound** over the searched subset (it errs
+toward false confidence, never a guarantee), and scores are comparable
+only under identical fixtures, backend, and protocol fingerprint. It
+says nothing about semantic paraphrase, prompt injection, hierarchy
+attacks, or tool-call adherence under noise. An MCP server
+(`tools/surface_noise_mcp_server.py`, stdlib-only) exposes the same
+instrument to agents.

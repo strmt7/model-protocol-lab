@@ -202,6 +202,7 @@ class TopLevelSurfaceTests(unittest.TestCase):
                 "fixtures",
                 "inspect",
                 "run",
+                "surface-noise",
                 "verify",
             ],
         )

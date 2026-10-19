@@ -61,7 +61,7 @@ class CatalogCountTest(unittest.TestCase):
 
 
 class SubcommandSurfaceTest(unittest.TestCase):
-    def test_nine_subcommands(self) -> None:
+    def test_ten_subcommands(self) -> None:
         parser = build_parser()
         actions = list(parser._subparsers._group_actions)
         names = sorted(actions[0].choices.keys())
@@ -76,6 +76,7 @@ class SubcommandSurfaceTest(unittest.TestCase):
                 "fixtures",
                 "inspect",
                 "run",
+                "surface-noise",
                 "verify",
             ],
         )

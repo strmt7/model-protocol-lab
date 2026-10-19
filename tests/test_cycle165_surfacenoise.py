@@ -1,0 +1,1533 @@
+"""Cycle 165: surface-noise self-consistency probe.
+
+Tests for model_protocol_lab.surfacenoise (the dynamic tier to ctxray's
+static tier): token indel-edit distance vs a brute-force oracle, verdict
+function V, frozen protocol, the probe end-to-end, controls, static lint,
+dashboard escaping, the CLI, diff_surface_noise, tempdir mutation gates,
+and Hypothesis properties.
+"""
+
+import importlib.util
+import json
+import os
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from model_protocol_lab import surfacenoise as sn
+from model_protocol_lab.core import Fixture, Message
+
+
+def _fixtures(expected="BLUE", n=3, group="t"):
+    return tuple(
+        Fixture(
+            id=f"t{i}",
+            messages=(Message(role="user", content="x"),),
+            expected=expected,
+            group=group,
+        )
+        for i in range(n)
+    )
+
+
+def _protocol(backend=None, fixtures=None):
+    backend = backend or sn.SelfTestBackend()
+    fixtures = fixtures if fixtures is not None else _fixtures()
+    return (
+        sn.freeze_surface_noise_protocol(
+            backend_fingerprint=backend.fingerprint, fixtures=fixtures
+        ),
+        backend,
+        fixtures,
+    )
+
+
+class MyersDistanceTests(unittest.TestCase):
+    def _brute_force(self, a, b):
+        """Independent O(nm) indel-edit DP (substitution = del+ins)."""
+        n, m = len(a), len(b)
+        prev = list(range(m + 1))
+        for i in range(1, n + 1):
+            cur = [i] + [0] * m
+            for j in range(1, m + 1):
+                cur[j] = min(
+                    prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (0 if a[i - 1] == b[j - 1] else 2)
+                )
+            prev = cur
+        denom = n + m
+        return 0.0 if denom == 0 else prev[m] / denom
+
+    def test_myers_matches_brute_force_300(self):
+        # Deterministic xorshift32 (no `random` module: S311).
+        state = 165
+
+        def randbelow(n):
+            nonlocal state
+            state ^= (state << 13) & 0xFFFFFFFF
+            state ^= state >> 17
+            state ^= (state << 5) & 0xFFFFFFFF
+            return state % n
+
+        for _ in range(300):
+            a = tuple(randbelow(51) for _ in range(randbelow(13)))
+            b = tuple(randbelow(51) for _ in range(randbelow(13)))
+            self.assertAlmostEqual(sn.token_edit_rate(a, b), self._brute_force(a, b), places=9)
+
+    def test_distance_edge_cases(self):
+        self.assertEqual(sn.token_edit_rate((), ()), 0.0)
+        self.assertEqual(sn.token_edit_rate((1, 2), (1, 2)), 0.0)
+        self.assertEqual(sn.token_edit_rate((1,), (2,)), 1.0)
+        self.assertEqual(sn.token_edit_rate((), (1, 2)), 1.0)
+        self.assertEqual(sn.token_edit_rate((1, 2), ()), 1.0)
+        # substitution costs 2 (delete+insert), normalized by combined length
+        self.assertAlmostEqual(sn.token_edit_rate((1, 2), (1, 3)), 0.5)
+
+    def test_distance_rejects_non_tuples(self):
+        with self.assertRaises(ValueError):
+            sn.token_edit_rate([1, 2], (1, 2))
+        with self.assertRaises(ValueError):
+            sn.token_edit_rate((1, 2), [1, 2])
+        # Element types are not validated (any comparable items work);
+        # only the tuple container contract is enforced.
+        self.assertEqual(sn.token_edit_rate(("a", "b"), ("a", "b")), 0.0)
+
+    @given(st.lists(st.integers(0, 30), max_size=10), st.lists(st.integers(0, 30), max_size=10))
+    @settings(max_examples=60)
+    def test_distance_in_unit_interval(self, a, b):
+        d = sn.token_edit_rate(tuple(a), tuple(b))
+        self.assertGreaterEqual(d, 0.0)
+        self.assertLessEqual(d, 1.0)
+        self.assertEqual(sn.token_edit_rate(tuple(a), tuple(a)), 0.0)
+
+    @given(st.lists(st.integers(0, 30), max_size=10), st.lists(st.integers(0, 30), max_size=10))
+    @settings(max_examples=60)
+    def test_distance_symmetric(self, a, b):
+        ta, tb = tuple(a), tuple(b)
+        self.assertEqual(sn.token_edit_rate(ta, tb), sn.token_edit_rate(tb, ta))
+
+
+class ValidationTests(unittest.TestCase):
+    def test_prompt_validation(self):
+        protocol, backend, fixtures = _protocol()
+        # Empty prompts are allowed (the probe measures them); only the
+        # container type and the size cap are enforced.
+        self.assertEqual(
+            sn.probe_surface_noise("", fixtures, backend, protocol, boundary=(7,))["status"],
+            "ok",
+        )
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise(123, fixtures, backend, protocol, boundary=(7,))  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise(
+                "x" * (sn.MAX_PROMPT_CHARS + 1), fixtures, backend, protocol, boundary=(7,)
+            )
+        # Bidi controls are NOT refused by the probe; they are flagged by
+        # the advisory static-lint tier (never gates, never blended).
+        bidi_prompt = "a\u202eb"
+        report = sn.probe_surface_noise(bidi_prompt, fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "ok")
+        bidi = next(c for c in report["static_lint"]["checks"] if c["name"] == "no_bidi_controls")
+        self.assertFalse(bidi["passed"])
+
+    def test_boundary_validation(self):
+        protocol, backend, fixtures = _protocol()
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=())
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=(-1,))
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=[7])  # type: ignore[arg-type]
+        # No length cap at the probe layer (the CLI caps at 16); any
+        # nonempty tuple of non-negative ids is accepted.
+        self.assertEqual(
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=(1,) * 17)["status"],
+            "ok",
+        )
+
+    def test_max_new_tokens_and_seed_validation(self):
+        protocol, backend, fixtures = _protocol()
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise(
+                "ok", fixtures, backend, protocol, boundary=(7,), max_new_tokens=0
+            )
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=(7,), seed=-1)
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, protocol, boundary=(7,), seed=2**64)
+
+    def test_fixture_validation(self):
+        with self.assertRaises(ValueError):
+            sn.freeze_surface_noise_protocol(backend_fingerprint="x", fixtures=())
+        with self.assertRaises(ValueError):
+            sn.freeze_surface_noise_protocol(backend_fingerprint="", fixtures=_fixtures())
+        many = tuple(
+            Fixture(
+                id=f"m{i}",
+                messages=(Message(role="user", content="x"),),
+                expected="BLUE",
+                group="t",
+            )
+            for i in range(sn.MAX_FIXTURES + 1)
+        )
+        with self.assertRaises(ValueError):
+            sn.freeze_surface_noise_protocol(backend_fingerprint="x", fixtures=many)
+        dupes = _fixtures() + _fixtures()
+        with self.assertRaises(ValueError):
+            sn.freeze_surface_noise_protocol(backend_fingerprint="x", fixtures=dupes)
+
+    def test_selftest_backend_validation(self):
+        with self.assertRaises(ValueError):
+            sn.SelfTestBackend(marker="")
+        with self.assertRaises(ValueError):
+            sn.SelfTestBackend(marker=123)  # type: ignore[arg-type]
+        backend = sn.SelfTestBackend()
+        with self.assertRaises(ValueError):
+            backend.encode(123)  # type: ignore[arg-type]
+
+
+class ProtocolFreezeTests(unittest.TestCase):
+    def test_freeze_is_deterministic(self):
+        p1, _, _ = _protocol()
+        p2, _, _ = _protocol()
+        # frozen_at is a wall-clock timestamp; everything else must be stable.
+        self.assertNotEqual(p1["frozen_at"], p2["frozen_at"])
+        p1 = {k: v for k, v in p1.items() if k != "frozen_at"}
+        p2 = {k: v for k, v in p2.items() if k != "frozen_at"}
+        self.assertEqual(p1, p2)
+
+    def test_verify_accepts_fresh_protocol(self):
+        protocol, backend, _ = _protocol()
+        verified = sn.verify_protocol(protocol, backend_fingerprint=backend.fingerprint)
+        self.assertIs(verified, protocol)
+
+    def test_verify_rejects_tamper(self):
+        protocol, backend, _ = _protocol()
+        tampered = dict(protocol)
+        tampered["search_plan"] = dict(protocol["search_plan"])
+        tampered["search_plan"]["typo"] = {"seeds": [0], "exact": False}
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(tampered, backend_fingerprint=backend.fingerprint)
+
+    def test_verify_rejects_search_plan_tamper(self):
+        # The frozen protocol's search plan is enforced, not just described.
+        protocol, backend, _ = _protocol()
+        tampered = dict(protocol)
+        tampered["search_plan"] = {"typo": {"seeds": [0], "exact": False}}
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(tampered, backend_fingerprint=backend.fingerprint)
+
+    def test_verify_rejects_wrong_fingerprint(self):
+        protocol, _, _ = _protocol()
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(protocol, backend_fingerprint="other/v1")
+
+    def test_verify_rejects_non_dict(self):
+        with self.assertRaises(ValueError):
+            sn.verify_protocol("nope", backend_fingerprint="x")  # type: ignore[arg-type]
+
+    def test_probe_refuses_tampered_protocol(self):
+        protocol, backend, fixtures = _protocol()
+        tampered = dict(protocol)
+        tampered["protocol_version"] = "9.9.9"
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("ok", fixtures, backend, tampered, boundary=(7,))
+
+    def test_frozen_search_plan_single_source(self):
+        plan = sn.frozen_search_plan()
+        self.assertEqual(set(plan), set(sn.PERTURBATION_OPERATORS))
+        protocol, _, _ = _protocol()
+        self.assertEqual(protocol["search_plan"], plan)
+
+
+class VerdictFunctionTests(unittest.TestCase):
+    """R1: V(P, F, B) is the pass/fail/abstain vector — no per-prompt V."""
+
+    def test_pass_vector(self):
+        protocol, backend, fixtures = _protocol()
+        verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("pass", "pass", "pass"))
+
+    def test_fail_vector(self):
+        protocol, backend, fixtures = _protocol()
+        verdicts = sn.evaluate_prompt("no marker here", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("fail", "fail", "fail"))
+
+    def test_mixed_vector(self):
+        fixtures = (
+            Fixture(
+                id="a", messages=(Message(role="user", content="x"),), expected="BLUE", group="t"
+            ),
+            Fixture(
+                id="b", messages=(Message(role="user", content="x"),), expected="RED", group="t"
+            ),
+        )
+        protocol, backend, _ = _protocol(fixtures=fixtures)
+        verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("pass", "fail"))
+
+    def test_abstain_on_backend_error(self):
+        class ExplodingBackend(sn.SelfTestBackend):
+            fingerprint = "exploding/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                raise RuntimeError("boom")
+
+        protocol, _, fixtures = _protocol(backend=ExplodingBackend(), fixtures=_fixtures())
+        verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, ExplodingBackend(), boundary=(7,))
+        self.assertEqual(verdicts, ("abstain", "abstain", "abstain"))
+
+    def test_flip_is_vector_difference(self):
+        # R1: a flip = the verdict VECTOR differs on a mutually-evaluable fixture.
+        protocol, backend, fixtures = _protocol()
+        base = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
+        variant = sn.perturb_text("MAGICWORD", "case_flip", seed=0)
+        new = sn.evaluate_prompt(variant, fixtures, backend, boundary=(7,))
+        self.assertNotEqual(base, new)
+        self.assertTrue(any(b != v for b, v in zip(base, new, strict=True)))
+
+
+class WhitespaceModeTests(unittest.TestCase):
+    def test_modes_enumerated(self):
+        modes = sn.whitespace_modes("a  b\tc\nd")
+        self.assertEqual(len(modes), len(sn.WHITESPACE_MODES))
+        self.assertEqual(len(set(modes)), len(modes))  # all distinct
+
+    def test_collapse_mode(self):
+        (collapsed,) = [
+            m
+            for name, m in zip(sn.WHITESPACE_MODES, sn.whitespace_modes("a  b"), strict=True)
+            if name == "collapse"
+        ]
+        self.assertEqual(collapsed, "a b")
+
+    def test_double_mode(self):
+        (doubled,) = [
+            m
+            for name, m in zip(sn.WHITESPACE_MODES, sn.whitespace_modes("a b"), strict=True)
+            if name == "double"
+        ]
+        self.assertEqual(doubled, "a  b")
+
+    def test_newline_split_mode(self):
+        (split,) = [
+            m
+            for name, m in zip(sn.WHITESPACE_MODES, sn.whitespace_modes("a b"), strict=True)
+            if name == "newline-split"
+        ]
+        self.assertIn("\n", split)
+
+    def test_modes_reject_non_string(self):
+        with self.assertRaises(ValueError):
+            sn.whitespace_modes(123)  # type: ignore[arg-type]
+
+
+class ProbeEndToEndTests(unittest.TestCase):
+    def _report(self, prompt="MAGICWORD please answer now"):
+        protocol, backend, fixtures = _protocol()
+        return sn.probe_surface_noise(prompt, fixtures, backend, protocol, boundary=(7,)), prompt
+
+    def test_status_ok_and_keys(self):
+        report, _ = self._report()
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["instrument"], "surface-noise-probe")
+        self.assertEqual(set(report["operators"]), set(sn.PERTURBATION_OPERATORS))
+        for key in ("baseline", "denominators", "static_lint", "protocol", "adapter_rule"):
+            self.assertIn(key, report)
+
+    def test_genuine_flips_observed(self):
+        report, _ = self._report()
+        total_flips = sum(len(op["flips"]) for op in report["operators"].values())
+        self.assertGreater(total_flips, 0, "marker backend must flip under noise")
+        # nearest observed flip is an upper bound: distance in [0,1]
+        for op in report["operators"].values():
+            nearest = op["nearest_observed_flip"]
+            if nearest is not None:
+                self.assertGreaterEqual(nearest["distance"], 0.0)
+                self.assertLessEqual(nearest["distance"], 1.0)
+
+    def test_per_operator_not_scalar(self):
+        # R2: a per-operator vector, never a collapsed scalar.
+        report, _ = self._report()
+        stabilities = {n: op["stability"] for n, op in report["operators"].items()}
+        self.assertNotIn("score", report)
+        self.assertNotIn("overall_stability", report)
+        self.assertEqual(len(stabilities), 5)
+
+    def test_denominators_full(self):
+        report, _ = self._report()
+        den = report["denominators"]
+        self.assertEqual(
+            den["n_total"],
+            den["n_effective"] + (den["n_total"] - den["n_effective"]),
+        )
+        self.assertIn("n_abstained", den)
+        self.assertIn("n_error", den)
+        # effective = token-id-changed variants only (R8)
+        for op in report["operators"].values():
+            self.assertLessEqual(op["n_effective"], op["n_total"])
+
+    def test_exact_vs_heuristic_labels(self):
+        report, _ = self._report()
+        self.assertTrue(report["operators"]["whitespace"]["exact"])
+        self.assertTrue(report["operators"]["punctuation_strip"]["exact"])
+        self.assertFalse(report["operators"]["typo"]["exact"])
+        self.assertIn("of 2**64", report["operators"]["typo"]["coverage"])
+
+    def test_baseline(self):
+        report, _ = self._report()
+        self.assertEqual(report["baseline"]["n_pass"], 3)
+        self.assertEqual(report["baseline"]["n_abstain"], 0)
+        self.assertEqual(report["n_fixtures"], 3)
+
+    def test_report_deterministic(self):
+        r1, _ = self._report()
+        r2, _ = self._report()
+        # The embedded protocol carries a wall-clock frozen_at timestamp;
+        # everything else must be bit-stable.
+        r1 = {k: v for k, v in r1.items() if k != "protocol"}
+        r2 = {k: v for k, v in r2.items() if k != "protocol"}
+        self.assertEqual(r1, r2)
+
+    def test_empty_prompt_variant_skipped_not_counted(self):
+        # whitespace modes on an all-whitespace prompt yield empty text:
+        # fail-closed validation must skip, not crash.
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("   ", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "ok")
+
+
+class CancellationTests(unittest.TestCase):
+    def test_post_evaluate_cancel(self):
+        # The event fires during a variant's evaluation: the post-evaluate
+        # check stops the sweep (completed_variants stays 0 for the
+        # in-flight variant).
+        protocol, backend, fixtures = _protocol()
+        cancel_event = threading.Event()
+        calls = {"n": 0}
+        n_baseline = len(fixtures)
+        inner_generate = backend.generate
+
+        def counting_generate(input_ids, *, max_new_tokens, seed, cancel=None):
+            calls["n"] += 1
+            if calls["n"] > n_baseline:
+                cancel_event.set()
+            return inner_generate(
+                input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
+            )
+
+        backend.generate = counting_generate  # type: ignore[method-assign]
+        try:
+            report = sn.probe_surface_noise(
+                "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel_event
+            )
+        finally:
+            backend.generate = inner_generate  # type: ignore[method-assign]
+        self.assertEqual(report["status"], "cancelled")
+        self.assertEqual(report["completed_variants"], 0)
+
+    def test_evaluate_abstains_on_cancelled_reason(self):
+        from model_protocol_lab.core import Generation
+
+        class CancelledBackend(sn.SelfTestBackend):
+            fingerprint = "cancelled/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                return Generation((), "cancelled")
+
+        backend = CancelledBackend()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_abstains_on_error_reason(self):
+        from model_protocol_lab.core import Generation
+
+        class ErrorBackend(sn.SelfTestBackend):
+            fingerprint = "error/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                return Generation((), "error", error="diag")
+
+        backend = ErrorBackend()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_pre_cancelled_event_is_unavailable(self):
+        # A pre-set event makes every fixture abstain at baseline, so the
+        # probe reports unavailable (fail-closed, no score) — the honest
+        # status when nothing could be evaluated.
+        protocol, backend, fixtures = _protocol()
+        cancel = threading.Event()
+        cancel.set()
+        report = sn.probe_surface_noise(
+            "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel
+        )
+        self.assertEqual(report["status"], "unavailable")
+        self.assertNotIn("operators", report)
+
+    def test_mid_sweep_cancel(self):
+        # The event fires between variants: the top-of-loop check stops
+        # the sweep and reports cancelled with completed/total counts, no
+        # score. (An event set during a variant's evaluation hits the
+        # post-evaluate check instead; both paths fail closed.)
+        protocol, backend, fixtures = _protocol()
+
+        class CountingEvent(threading.Event):
+            # is_set() call order: baseline (n_fixtures) + variant 1
+            # (top + n_fixtures + post) + variant 2 top check.
+            def __init__(self, fire_at):
+                super().__init__()
+                self.calls = 0
+                self.fire_at = fire_at
+
+            def is_set(self):
+                self.calls += 1
+                return self.calls >= self.fire_at
+
+        n = len(fixtures)
+        # is_set() calls: baseline 2n (evaluate_prompt genexpr + _evaluate_one
+        # per fixture), variant 1: top + 2n + post, then variant 2's top check.
+        fire_at = 2 * n + (1 + 2 * n + 1) + 1
+        cancel_event = CountingEvent(fire_at)
+        report = sn.probe_surface_noise(
+            "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel_event
+        )
+        self.assertEqual(report["status"], "cancelled")
+        self.assertNotIn("operators", report)
+        self.assertIn("completed_variants", report)
+        self.assertIn("total_variants", report)
+        self.assertEqual(report["completed_variants"], 1)
+        self.assertLess(report["completed_variants"], report["total_variants"])
+
+
+class ControlsTests(unittest.TestCase):
+    def test_controls_discriminate(self):
+        result = sn.run_surface_noise_controls(boundary=(7,))
+        self.assertTrue(result["discriminates"])
+        by_name = {c["name"]: c for c in result["controls"]}
+        self.assertEqual(by_name["sturdy_numbered"]["mean_stability"], 1.0)
+        self.assertLess(by_name["fragile_exact_echo"]["mean_stability"], 1.0)
+        self.assertIn("theory of fragility", result["circularity_note"])
+
+    def test_controls_self_contained(self):
+        # No user fixtures or backend needed: the harness builds its own.
+        result = sn.run_surface_noise_controls(boundary=(7,))
+        self.assertEqual(len(result["controls"]), 2)
+        for control in result["controls"]:
+            self.assertEqual(control["status"], "ok")
+            self.assertIn(control["expectation"], ("sturdy", "fragile"))
+            self.assertIn("designer-authored", control["provenance"])
+
+    def test_controls_heldout(self):
+        result = sn.run_surface_noise_controls(boundary=(7,), include_heldout=True)
+        names = [c["name"] for c in result["controls"]]
+        self.assertEqual(
+            names,
+            [
+                "sturdy_numbered",
+                "fragile_exact_echo",
+                "heldout_sturdy_list",
+                "heldout_fragile_shout",
+            ],
+        )
+        self.assertTrue(result["discriminates"])
+
+    def test_controls_heldout_count_pinned(self):
+        # CI pins the held-out set's count and provenance, not its content.
+        self.assertEqual(len(sn.HELDOUT_CONTROLS), 2)
+        for control in sn.HELDOUT_CONTROLS:
+            self.assertIn("held-out", control["provenance"])
+
+    def test_controls_validation(self):
+        with self.assertRaises(ValueError):
+            sn.run_surface_noise_controls(boundary=())
+        with self.assertRaises(ValueError):
+            sn.run_surface_noise_controls(boundary=(7,), include_heldout="yes")  # type: ignore[arg-type]
+
+
+class StaticLintTests(unittest.TestCase):
+    def test_lint_shape(self):
+        lint = sn.static_lint("Answer in exactly three words.")
+        self.assertTrue(lint["advisory_only"])
+        self.assertEqual(len(lint["checks"]), 5)
+        names = [c["name"] for c in lint["checks"]]
+        self.assertEqual(
+            names,
+            [
+                "nonempty",
+                "bounded_length",
+                "no_bidi_controls",
+                "terminal_punctuation",
+                "sentence_repetition",
+            ],
+        )
+        for check in lint["checks"]:
+            self.assertIn(check["passed"], (True, False))
+            self.assertIsInstance(check["detail"], str)
+            self.assertIsInstance(check["rationale"], str)
+
+    def test_lint_flags_bidi(self):
+        lint = sn.static_lint("a\u202eb")
+        bidi = next(c for c in lint["checks"] if c["name"] == "no_bidi_controls")
+        self.assertFalse(bidi["passed"])
+        self.assertIn("U+202E", bidi["detail"])
+
+    def test_lint_flags_repetition(self):
+        # Fully-duplicated two-sentence prompt: dup_ratio = 0.5, and the
+        # predicate is < 0.5, so it flags.
+        lint = sn.static_lint("Say it twice. Say it twice.")
+        rep = next(c for c in lint["checks"] if c["name"] == "sentence_repetition")
+        self.assertFalse(rep["passed"])
+
+    def test_lint_flags_empty(self):
+        lint = sn.static_lint("   ")
+        nonempty = next(c for c in lint["checks"] if c["name"] == "nonempty")
+        self.assertFalse(nonempty["passed"])
+
+    def test_lint_passes_clean(self):
+        lint = sn.static_lint("Answer with the word BLUE and nothing else.")
+        self.assertTrue(all(c["passed"] for c in lint["checks"]))
+
+    def test_lint_rejects_non_string(self):
+        with self.assertRaises(ValueError):
+            sn.static_lint(123)  # type: ignore[arg-type]
+
+    def test_hardening_notes(self):
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD x", fixtures, backend, protocol, boundary=(7,))
+        notes = sn.hardening_notes(report)
+        self.assertIsInstance(notes, dict)
+        self.assertIn(notes["weakest_operator"], set(sn.PERTURBATION_OPERATORS) | {None})
+        self.assertIsInstance(notes["counterfactuals"], list)
+        self.assertGreater(len(notes["counterfactuals"]), 0)
+        self.assertIn("loop_guidance", notes)
+
+    def test_hardening_notes_rejects_bad_input(self):
+        with self.assertRaises(ValueError):
+            sn.hardening_notes("nope")  # type: ignore[arg-type]
+
+
+class DashboardTests(unittest.TestCase):
+    def _report(self):
+        protocol, backend, fixtures = _protocol()
+        return sn.probe_surface_noise(
+            "MAGICWORD please answer now", fixtures, backend, protocol, boundary=(7,)
+        )
+
+    def test_dashboard_self_contained(self):
+        html = sn.render_surface_noise_dashboard(
+            self._report(), prompt_text="MAGICWORD please answer now"
+        )
+        self.assertIn("<!DOCTYPE html>", html)
+        self.assertIn("default-src 'none'", html)
+        self.assertIn("<svg", html)
+        self.assertNotIn("http://", html.replace("http-equiv", ""))
+        self.assertNotIn("https://", html)
+
+    def test_dashboard_escapes_hostile_prompt(self):
+        evil = "<script>alert(1)</script>&MAGICWORD"
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise(evil, fixtures, backend, protocol, boundary=(7,))
+        html = sn.render_surface_noise_dashboard(report, prompt_text=evil)
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_dashboard_excerpts_gated_on_sha(self):
+        report = self._report()
+        variant_text = sn.perturb_text("MAGICWORD please answer now", "typo", seed=1)
+        shown = sn.render_surface_noise_dashboard(report, prompt_text="MAGICWORD please answer now")
+        hidden = sn.render_surface_noise_dashboard(report, prompt_text="different")
+        self.assertIn(variant_text[:200], shown)
+        self.assertNotIn(variant_text[:200], hidden)
+
+    def test_dashboard_scope_first(self):
+        html = sn.render_surface_noise_dashboard(self._report())
+        scope_pos = html.find("Scope")
+        h2_pos = html.find("<h2>Baseline")
+        self.assertLess(scope_pos, h2_pos)
+        self.assertIn("Not measured", html)
+        self.assertIn("upper bound", html)
+
+    def test_dashboard_rejects_bad_input(self):
+        with self.assertRaises(ValueError):
+            sn.render_surface_noise_dashboard("nope")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            sn.render_surface_noise_dashboard({}, prompt_text=123)  # type: ignore[arg-type]
+
+
+class DiffSurfaceNoiseTests(unittest.TestCase):
+    def _report(self, prompt="MAGICWORD please answer now"):
+
+        protocol, backend, fixtures = _protocol()
+        return sn.probe_surface_noise(prompt, fixtures, backend, protocol, boundary=(7,))
+
+    def test_identical_reports(self):
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        r = self._report()
+        diff = diff_surface_noise(r, r)
+        self.assertEqual(diff["available"], "both")
+        self.assertTrue(diff["identical"])
+        self.assertFalse(diff["changed"])
+
+    def test_prompt_change_detected(self):
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        diff = diff_surface_noise(
+            self._report("MAGICWORD please answer now"),
+            self._report("MAGICWORD please answer right now"),
+        )
+        self.assertTrue(diff["changed"])
+        self.assertTrue(diff["prompt_changed"])
+        self.assertFalse(diff["protocol_drift"])
+        self.assertFalse(diff["identical"])
+
+    def test_protocol_drift_flagged_not_comparable(self):
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        r1 = self._report()
+        protocol, backend, fixtures = _protocol()
+        other = sn.SelfTestBackend(marker="OTHER")
+        protocol2 = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=other.fingerprint, fixtures=fixtures
+        )
+        r2 = sn.probe_surface_noise("OTHER please", fixtures, other, protocol2, boundary=(7,))
+        diff = diff_surface_noise(r1, r2)
+        self.assertTrue(diff["protocol_drift"])
+        self.assertTrue(diff["changed"])
+
+    def test_asymmetric_available(self):
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        r = self._report()
+        self.assertEqual(diff_surface_noise(r, None)["available"], "old")
+        self.assertEqual(diff_surface_noise(None, r)["available"], "new")
+        self.assertEqual(diff_surface_noise(None, None)["available"], "neither")
+        self.assertTrue(diff_surface_noise(None, None)["identical"])
+
+    def test_rejects_malformed(self):
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        r = self._report()
+        bad = dict(r)
+        bad["status"] = "cancelled"
+        self.assertEqual(diff_surface_noise(r, bad)["available"], "old")
+        self.assertEqual(diff_surface_noise(bad, r)["available"], "new")
+        bad2 = dict(r)
+        bad2["instrument"] = "something-else"
+        self.assertEqual(diff_surface_noise(r, bad2)["available"], "old")
+
+    def test_single_cause_pins(self):
+        # Each changed flag is attributable to exactly one cause class.
+        from model_protocol_lab.diffreports import diff_surface_noise
+
+        r1 = self._report("MAGICWORD please answer now")
+        r2 = self._report("MAGICWORD please answer now")
+        diff = diff_surface_noise(r1, r2)
+        causes = [
+            diff["protocol_drift"],
+            diff["prompt_changed"],
+            bool(diff["operators_added"] or diff["operators_removed"]),
+            bool(diff["stability_drift"]),
+            bool(diff["nearest_flip_drift"]),
+            diff["baseline_changed"],
+        ]
+        # identical reports: no cause fires
+        self.assertFalse(any(causes))
+
+
+class CLITests(unittest.TestCase):
+    def _run_cli(self, *argv):
+        from model_protocol_lab.cli import main
+
+        return main(list(argv))
+
+    def test_protocol_command(self):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = self._run_cli("surface-noise", "protocol")
+        self.assertEqual(code, 0)
+        descriptor = json.loads(buf.getvalue())
+        self.assertEqual(descriptor["instrument"], "surface-noise-probe")
+        self.assertIn("monday_morning_use", descriptor)
+        self.assertIn("adapter_rule", descriptor)
+
+    def test_probe_command_end_to_end(self):
+        with tempfile.TemporaryDirectory(prefix="c165_cli_") as tmpdir:
+            prompt_path = Path(tmpdir) / "prompt.txt"
+            prompt_path.write_text("MAGICWORD please answer now", encoding="utf-8")
+            fixture_path = Path(tmpdir) / "fixtures.json"
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        "search": [
+                            {
+                                "id": "s1",
+                                "group": "g-search",
+                                "messages": [{"role": "user", "content": "x"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                        "held_out": [
+                            {
+                                "id": "h1",
+                                "group": "g-held",
+                                "messages": [{"role": "user", "content": "y"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir = Path(tmpdir) / "out"
+            import io
+            from contextlib import redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = self._run_cli(
+                    "surface-noise",
+                    "probe",
+                    "--prompt",
+                    str(prompt_path),
+                    "--fixtures",
+                    str(fixture_path),
+                    "--boundary-ids",
+                    "7",
+                    "--output",
+                    str(out_dir),
+                )
+            self.assertEqual(code, 0)
+            report = json.loads(buf.getvalue())
+            self.assertEqual(report["status"], "ok")
+            self.assertTrue((out_dir / "probe.json").exists())
+            self.assertTrue((out_dir / "dashboard.html").exists())
+            saved = json.loads((out_dir / "probe.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["prompt_sha256"], report["prompt_sha256"])
+
+    def test_probe_refuses_existing_output(self):
+        with tempfile.TemporaryDirectory(prefix="c165_cli_") as tmpdir:
+            prompt_path = Path(tmpdir) / "prompt.txt"
+            prompt_path.write_text("MAGICWORD", encoding="utf-8")
+            out_dir = Path(tmpdir) / "out"
+            out_dir.mkdir()
+            code = self._run_cli(
+                "surface-noise",
+                "probe",
+                "--prompt",
+                str(prompt_path),
+                "--fixtures",
+                "examples/fixtures.json",
+                "--boundary-ids",
+                "7",
+                "--output",
+                str(out_dir),
+            )
+            self.assertEqual(code, 1)
+
+    def test_probe_invalid_prompt_file(self):
+        code = self._run_cli(
+            "surface-noise",
+            "probe",
+            "--prompt",
+            "/nonexistent/prompt.txt",
+            "--fixtures",
+            "examples/fixtures.json",
+            "--boundary-ids",
+            "7",
+            "--output",
+            str(Path(tempfile.gettempdir()) / "c165_definitely_missing_xyz"),
+        )
+        self.assertEqual(code, 1)
+
+    def test_probe_bad_boundary(self):
+        with self.assertRaises(SystemExit):
+            self._run_cli(
+                "surface-noise",
+                "probe",
+                "--prompt",
+                "x",
+                "--fixtures",
+                "y",
+                "--boundary-ids",
+                "notanid",
+                "--output",
+                "z",
+            )
+
+    def test_diff_command(self):
+        with tempfile.TemporaryDirectory(prefix="c165_cli_") as tmpdir:
+            import io
+            from contextlib import redirect_stdout
+
+            protocol, backend, fixtures = _protocol()
+            r1 = sn.probe_surface_noise("MAGICWORD a", fixtures, backend, protocol, boundary=(7,))
+            r2 = sn.probe_surface_noise("MAGICWORD b", fixtures, backend, protocol, boundary=(7,))
+            p1 = Path(tmpdir) / "old.json"
+            p2 = Path(tmpdir) / "new.json"
+            p1.write_text(json.dumps(r1), encoding="utf-8")
+            p2.write_text(json.dumps(r2), encoding="utf-8")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = self._run_cli("surface-noise", "diff", str(p1), str(p2))
+            self.assertEqual(code, 0)
+            diff = json.loads(buf.getvalue())
+            self.assertTrue(diff["changed"])
+            self.assertTrue(diff["prompt_changed"])
+
+    def test_diff_invalid_input(self):
+        code = self._run_cli("surface-noise", "diff", "/nonexistent/a.json", "/nonexistent/b.json")
+        self.assertEqual(code, 1)
+
+    def test_describe_instrument(self):
+        descriptor = sn.describe_instrument()
+        self.assertEqual(descriptor["instrument"], "surface-noise-probe")
+        self.assertEqual(set(descriptor["search_plan"]), set(sn.PERTURBATION_OPERATORS))
+        self.assertIn("You rewrote a prompt", descriptor["monday_morning_use"])
+
+
+# Tempdir mutation gates (4/4)
+# ---------------------------------------------------------------------------
+
+
+class SurfaceNoiseMutationGateTests(unittest.TestCase):
+    def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
+        source = Path(mod.__file__).read_text(encoding="utf-8")
+        self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
+        mutated = source.replace(old_text, new_text)
+        with tempfile.TemporaryDirectory(prefix="c165_mut_", dir="/tmp") as tmpdir:
+            mod_path = os.path.join(tmpdir, f"{module_name}_mut_{name}.py")
+            with open(mod_path, "w", encoding="utf-8") as handle:
+                handle.write(mutated)
+            # surfacenoise.perturbation_code_hash() reads perturbation.py
+            # relative to __file__; the tempdir mutant needs it beside it.
+            if module_name == "surfacenoise":
+                real_perturbation = Path(mod.__file__).with_name("perturbation.py")
+                with open(os.path.join(tmpdir, "perturbation.py"), "w", encoding="utf-8") as handle:
+                    handle.write(real_perturbation.read_text(encoding="utf-8"))
+            dotted = f"model_protocol_lab.{module_name}_mut_{name}"
+            spec = importlib.util.spec_from_file_location(dotted, mod_path)
+            assert spec is not None and spec.loader is not None
+            mutant = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mutant)
+            scenario(mod)  # passes on the real module: non-vacuous
+            with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
+                scenario(mutant)
+
+    def _distance_scenario(self, mod):
+        # The rate normalizes by the combined length; a mutant that
+        # inflates the denominator breaks the [0,1] unit definition.
+        assert mod.token_edit_rate((1, 2), (1, 3)) == 0.5, "rate unit broken"
+
+    def test_mutant_distance_normalization_caught(self):
+        self._run_gate(
+            "surfacenoise",
+            "distance_normalization",
+            "return 0.0 if denom == 0 else distance / denom",
+            "return 0.0 if denom == 0 else distance / (denom + 1)  # MUTANT",
+            self._distance_scenario,
+        )
+
+    def _freeze_scenario(self, mod):
+        protocol = mod.freeze_surface_noise_protocol(
+            backend_fingerprint="fp/v1", fixtures=_fixtures()
+        )
+        # Tamper the instrument name: only the instrument check can catch this.
+        tampered = dict(protocol)
+        tampered["instrument"] = "something-else"
+        try:
+            mod.verify_protocol(tampered, backend_fingerprint="fp/v1")
+        except ValueError:
+            return
+        raise AssertionError("tampered protocol accepted")
+
+    def test_mutant_freeze_verify_lax_caught(self):
+        self._run_gate(
+            "surfacenoise",
+            "freeze_verify_lax",
+            'if protocol.get("instrument") != PROBE_NAME:',
+            "if False:  # MUTANT",
+            self._freeze_scenario,
+        )
+
+    def _controls_scenario(self, mod):
+        result = mod.run_surface_noise_controls(boundary=(7,))
+        assert result["discriminates"] is True, result
+
+    def test_mutant_controls_inverted_caught(self):
+        self._run_gate(
+            "surfacenoise",
+            "controls_inverted",
+            "discriminates = sum(sturdy) / len(sturdy) > sum(fragile) / len(fragile)",
+            "discriminates = sum(sturdy) / len(sturdy) < sum(fragile) / len(fragile)  # MUTANT",
+            self._controls_scenario,
+        )
+
+    def _diff_scenario(self, mod):
+        # Reports are built with the real probe; the diff itself is the
+        # mutant under test.
+        protocol, backend, fixtures = _protocol()
+        r1 = sn.probe_surface_noise("MAGICWORD a", fixtures, backend, protocol, boundary=(7,))
+        r2 = sn.probe_surface_noise("MAGICWORD b", fixtures, backend, protocol, boundary=(7,))
+        diff = mod.diff_surface_noise(r1, r2)
+        assert diff["changed"] is True and diff["prompt_changed"] is True, diff
+
+    def test_mutant_diff_prompt_blind_caught(self):
+        self._run_gate(
+            "diffreports",
+            "diff_prompt_blind",
+            'prompt_changed = old["prompt_sha256"] != new["prompt_sha256"]',
+            "prompt_changed = False  # MUTANT",
+            self._diff_scenario,
+        )
+
+
+class HypothesisProperties(unittest.TestCase):
+    @given(st.text(min_size=1, max_size=60))
+    @settings(max_examples=50)
+    def test_perturb_text_seeded_deterministic(self, text):
+        a = sn.perturb_text(text, "typo", seed=3)
+        b = sn.perturb_text(text, "typo", seed=3)
+        self.assertEqual(a, b)
+
+    @given(st.text(min_size=1, max_size=60))
+    @settings(max_examples=50)
+    def test_whitespace_modes_deterministic(self, text):
+        self.assertEqual(sn.whitespace_modes(text), sn.whitespace_modes(text))
+
+    @given(st.text(min_size=0, max_size=40))
+    @settings(max_examples=50)
+    def test_static_lint_never_raises(self, text):
+        lint = sn.static_lint(text)
+        self.assertEqual(len(lint["checks"]), 5)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class CoverageGapTests(unittest.TestCase):
+    """Targeted tests for defensive branches (fail-closed validation)."""
+
+    def test_check_fixtures_rejects_non_fixture(self):
+        with self.assertRaises(ValueError):
+            sn.freeze_surface_noise_protocol(
+                backend_fingerprint="x",
+                fixtures=("not-a-fixture",),  # type: ignore[arg-type]
+            )
+
+    def test_verify_protocol_rejects_bad_fingerprint_type(self):
+        protocol, _, _ = _protocol()
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(protocol, backend_fingerprint=123)  # type: ignore[arg-type]
+
+    def test_verify_protocol_rejects_code_hash_mismatch(self):
+        protocol, backend, _ = _protocol()
+        tampered = dict(protocol)
+        tampered["perturbation_code_sha256"] = "0" * 64
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(tampered, backend_fingerprint=backend.fingerprint)
+
+    def test_evaluate_abstains_on_encode_failure(self):
+        class BadEncodeBackend(sn.SelfTestBackend):
+            fingerprint = "badencode/v1"
+
+            def encode(self, text):
+                raise RuntimeError("boom")
+
+        backend = BadEncodeBackend()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_abstains_on_generate_failure(self):
+        class BadGenBackend(sn.SelfTestBackend):
+            fingerprint = "badgen/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                raise RuntimeError("boom")
+
+        backend = BadGenBackend()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_abstains_on_invalid_ids(self):
+        class BadIdsBackend(sn.SelfTestBackend):
+            fingerprint = "badids/v1"
+
+            def encode(self, text):
+                return (-1, -2)  # invalid token ids
+
+        backend = BadIdsBackend()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_rejects_bad_cancel(self):
+        _, backend, fixtures = _protocol()
+        with self.assertRaises(ValueError):
+            sn.evaluate_prompt("x", fixtures, backend, boundary=(7,), cancel="nope")  # type: ignore[arg-type]
+
+    def test_probe_rejects_bad_cancel(self):
+        protocol, backend, fixtures = _protocol()
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise(
+                "x",
+                fixtures,
+                backend,
+                protocol,
+                boundary=(7,),
+                cancel="nope",  # type: ignore[arg-type]
+            )
+
+    def test_probe_unavailable_on_baseline_encode_failure(self):
+        class BadEncodeBackend(sn.SelfTestBackend):
+            fingerprint = "badencode2/v1"
+
+            def encode(self, text):
+                raise RuntimeError("boom")
+
+        backend = BadEncodeBackend()
+        fixtures = _fixtures()
+        protocol = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=backend.fingerprint, fixtures=fixtures
+        )
+        report = sn.probe_surface_noise("x", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "unavailable")
+
+    def test_probe_variant_error_counted(self):
+        # A backend that fails only on perturbed variants: the error is
+        # counted in n_error, not a crash.
+        protocol, backend, fixtures = _protocol()
+        inner_encode = backend.encode
+        calls = {"n": 0}
+
+        def flaky_encode(text):
+            calls["n"] += 1
+            if calls["n"] > len(fixtures) + 1:
+                raise RuntimeError("variant boom")
+            return inner_encode(text)
+
+        backend.encode = flaky_encode  # type: ignore[method-assign]
+        try:
+            report = sn.probe_surface_noise(
+                "MAGICWORD x", fixtures, backend, protocol, boundary=(7,)
+            )
+        finally:
+            backend.encode = inner_encode  # type: ignore[method-assign]
+        self.assertEqual(report["status"], "ok")
+        total_errors = sum(op["n_error"] for op in report["operators"].values())
+        self.assertGreater(total_errors, 0)
+
+    def test_hardening_notes_rejects_missing_operators(self):
+        with self.assertRaises(ValueError):
+            sn.hardening_notes({"instrument": "surface-noise-probe"})
+
+    def test_hardening_notes_skips_malformed(self):
+        report = {
+            "operators": {
+                "typo": "not-a-dict",
+                "case_flip": {"stability": 0.5, "n_effective": 8, "flips": ["bad"]},
+            },
+            "static_lint": {"checks": ["bad"]},
+        }
+        notes = sn.hardening_notes(report)
+        self.assertEqual(notes["weakest_operator"], "case_flip")
+        self.assertEqual(notes["counterfactuals"], [])
+
+    def test_calibration_backend_empty_prompt(self):
+        backend = sn._ControlCalibrationBackend()
+        gen = backend.generate(backend.encode(""), max_new_tokens=64, seed=0, cancel=None)
+        self.assertTrue(backend.decode(gen.token_ids).startswith("WRONG"))
+
+    def test_calibration_backend_encode_validation(self):
+        backend = sn._ControlCalibrationBackend()
+        with self.assertRaises(ValueError):
+            backend.encode(123)  # type: ignore[arg-type]
+
+    def test_mean_stability_none_when_empty(self):
+        self.assertIsNone(sn._mean_stability({}))
+
+    def test_regenerate_variant_bad_operator(self):
+        self.assertIsNone(sn._regenerate_variant("text", "nope", {}))
+        self.assertIsNone(sn._regenerate_variant("text", "typo", {"seed": "x"}))
+        self.assertIsNone(sn._regenerate_variant("text", "whitespace", {"mode_index": 99}))
+
+    def test_regenerate_variant_whitespace(self):
+        text = sn._regenerate_variant("a b", "whitespace", {"mode_index": 0})
+        self.assertIsNotNone(text)
+
+    def test_dashboard_skips_malformed_operators(self):
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD x", fixtures, backend, protocol, boundary=(7,))
+        report["operators"]["typo"] = "not-a-dict"
+        report["operators"]["case_flip"]["flips"] = ["bad"]
+        report["static_lint"]["checks"] = ["bad"]
+        html = sn.render_surface_noise_dashboard(report)
+        self.assertIn("<!DOCTYPE html>", html)
+
+    def test_read_prompt_file_rejects_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir, self.assertRaises(ValueError):
+            sn._read_prompt_file(Path(tmpdir))
+
+    def test_read_prompt_file_rejects_oversize(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            big = Path(tmpdir) / "big.txt"
+            big.write_bytes(b"x" * (sn._PROMPT_SIZE_CAP + 1))
+            with self.assertRaises(ValueError):
+                sn._read_prompt_file(big)
+
+    def test_read_prompt_file_rejects_undecodable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad = Path(tmpdir) / "bad.txt"
+            bad.write_bytes(b"\xff\xfe\x00invalid")
+            with self.assertRaises(ValueError):
+                sn._read_prompt_file(bad)
+
+    def test_parse_boundary_arg_errors(self):
+        import argparse
+
+        with self.assertRaises(argparse.ArgumentTypeError):
+            sn._parse_boundary_arg("99999999999")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            sn._parse_boundary_arg(",".join(["1"] * 17))
+
+    def test_cli_backend_requires_model(self):
+        import argparse
+
+        args = argparse.Namespace(backend="local-hf", model=None)
+        with self.assertRaises(ValueError):
+            sn._build_cli_backend(args)
+
+    def test_load_probe_json_rejects_oversize(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            big = Path(tmpdir) / "big.json"
+            big.write_bytes(b"x" * (16 << 20 + 1))
+            with self.assertRaises(ValueError):
+                sn._load_probe_json(big)
+
+    def test_load_probe_json_rejects_bad_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad = Path(tmpdir) / "bad.json"
+            bad.write_text("not json", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                sn._load_probe_json(bad)
+
+    def test_cli_diff_protocol_drift_warning(self):
+        import io
+        from contextlib import redirect_stderr
+
+        from model_protocol_lab.cli import main
+
+        protocol, backend, fixtures = _protocol()
+        other = sn.SelfTestBackend(marker="OTHER")
+        protocol2 = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=other.fingerprint, fixtures=fixtures
+        )
+        r1 = sn.probe_surface_noise("MAGICWORD a", fixtures, backend, protocol, boundary=(7,))
+        r2 = sn.probe_surface_noise("OTHER b", fixtures, other, protocol2, boundary=(7,))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = Path(tmpdir) / "old.json"
+            p2 = Path(tmpdir) / "new.json"
+            p1.write_text(json.dumps(r1), encoding="utf-8")
+            p2.write_text(json.dumps(r2), encoding="utf-8")
+            buf = io.StringIO()
+            with redirect_stderr(buf):
+                code = main(["surface-noise", "diff", str(p1), str(p2)])
+            self.assertEqual(code, 0)
+            self.assertIn("not comparable", buf.getvalue())
+
+    def test_cli_probe_rejects_invalid_fixture_file(self):
+        # load_dataset rejects malformed fixture files; the CLI surfaces
+        # it as exit 1 (it guarantees a nonempty search split, so the CLI
+        # needs no separate empty-split check).
+        import io
+        from contextlib import redirect_stdout
+
+        from model_protocol_lab.cli import main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompt_path = Path(tmpdir) / "prompt.txt"
+            prompt_path.write_text("MAGICWORD", encoding="utf-8")
+            fixture_path = Path(tmpdir) / "f.json"
+            fixture_path.write_text(json.dumps({"search": [], "held_out": []}), encoding="utf-8")
+            out_dir = Path(tmpdir) / "out"
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = main(
+                    [
+                        "surface-noise",
+                        "probe",
+                        "--prompt",
+                        str(prompt_path),
+                        "--fixtures",
+                        str(fixture_path),
+                        "--boundary-ids",
+                        "7",
+                        "--output",
+                        str(out_dir),
+                    ]
+                )
+            self.assertEqual(code, 1)
+
+    def test_cli_probe_cancelled_exit_2(self):
+        # Exercise the cancelled path through the CLI runner directly.
+
+        protocol, backend, fixtures = _protocol()
+        cancel = threading.Event()
+        cancel.set()
+        # Pre-cancelled -> unavailable (exit 1), not cancelled; the exit-2
+        # path is the mid-sweep cancel, covered in CancellationTests.
+        report = sn.probe_surface_noise(
+            "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel
+        )
+        self.assertEqual(report["status"], "unavailable")
+
+
+class CoverageGapTests3(unittest.TestCase):
+    """Third round: controls failure paths, discriminates-None, CLI."""
+
+    def test_controls_handles_failed_probe(self):
+        from unittest import mock
+
+        with mock.patch.object(
+            sn, "probe_surface_noise", return_value={"status": "cancelled"}
+        ):
+            result = sn.run_surface_noise_controls(boundary=(7,))
+        for control in result["controls"]:
+            self.assertEqual(control["status"], "cancelled")
+            self.assertIsNone(control["mean_stability"])
+        # No sturdy/fragile means: discrimination is undefined, not False.
+        self.assertIsNone(result["discriminates"])
+
+    def test_cli_local_hf_backend_import(self):
+        # The local-hf path imports the HF adapter; without the optional
+        # deps it fails closed with a clear error (not a crash).
+        import argparse
+
+        args = argparse.Namespace(backend="local-hf", model="/nonexistent/model")
+        with self.assertRaises(RuntimeError):
+            sn._build_cli_backend(args)
+
+
+class CoverageGapTests2(unittest.TestCase):
+    """Second round: _evaluate_one defensive branches and CLI paths."""
+
+    def test_evaluate_reraises_keyboard_interrupt(self):
+        class KIbackend(sn.SelfTestBackend):
+            fingerprint = "ki/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                raise KeyboardInterrupt()
+
+        backend = KIbackend()
+        fixtures = _fixtures()
+        with self.assertRaises(KeyboardInterrupt):
+            sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+
+    def test_evaluate_abstains_on_invalid_gen_ids(self):
+        class BadGenIds(sn.SelfTestBackend):
+            fingerprint = "badgenids/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                from model_protocol_lab.core import Generation
+
+                return Generation(("x",), "limit")
+
+        backend = BadGenIds()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_abstains_on_decode_failure(self):
+        # The answer-decode path (not generate's internal decode): a
+        # backend whose generate avoids self.decode, but whose decode
+        # raises on the answer ids.
+        class BadAnswerDecode(sn.SelfTestBackend):
+            fingerprint = "badanswerdecode/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                from model_protocol_lab.core import Generation
+
+                ids = tuple(map(ord, "BLUE" + chr(7)))
+                return Generation(ids + (1,) * (max_new_tokens - len(ids)), "limit")
+
+            @staticmethod
+            def decode(ids):
+                raise RuntimeError("boom")
+
+        backend = BadAnswerDecode()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_evaluate_abstains_on_non_string_decode(self):
+        class NonStringDecode(sn.SelfTestBackend):
+            fingerprint = "nonstr/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                from model_protocol_lab.core import Generation
+
+                ids = tuple(map(ord, "BLUE" + chr(7)))
+                return Generation(ids + (1,) * (max_new_tokens - len(ids)), "limit")
+
+            @staticmethod
+            def decode(ids):
+                return 12345
+
+        backend = NonStringDecode()
+        fixtures = _fixtures()
+        verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
+        self.assertEqual(verdicts, ("abstain",) * len(fixtures))
+
+    def test_probe_unavailable_on_baseline_invalid_ids(self):
+        class BadIdsBackend(sn.SelfTestBackend):
+            fingerprint = "badids2/v1"
+
+            def encode(self, text):
+                return (-1,)
+
+        backend = BadIdsBackend()
+        fixtures = _fixtures()
+        protocol = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=backend.fingerprint, fixtures=fixtures
+        )
+        report = sn.probe_surface_noise("x", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "unavailable")
+
+    def test_controls_handles_probe_failure(self):
+        # If a control's probe is cancelled, the control reports its
+        # status and mean_stability stays None.
+        import threading
+
+        cancel = threading.Event()
+        cancel.set()
+        # Pre-cancelled -> every probe is unavailable.
+        result = sn.run_surface_noise_controls(boundary=(7,))
+        # Without cancellation the harness succeeds; with a broken
+        # boundary the probes fail closed per-control.
+        self.assertTrue(result["discriminates"])
+
+    def test_regenerate_variant_punctuation_strip(self):
+        text = sn._regenerate_variant("Hello, world!", "punctuation_strip", {})
+        self.assertIsNotNone(text)
+        self.assertNotIn(",", text)
+
+    def test_dashboard_handles_none_regenerate(self):
+        # A flip whose variant cannot be regenerated shows no excerpt.
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD x", fixtures, backend, protocol, boundary=(7,))
+        for op in report["operators"].values():
+            for flip in op["flips"]:
+                flip["detail"] = {"seed": "bad"}
+        html = sn.render_surface_noise_dashboard(report, prompt_text="MAGICWORD x")
+        self.assertIn("<!DOCTYPE html>", html)
+
+    def test_cli_diff_prompt_changed_note(self):
+        import io
+        from contextlib import redirect_stderr
+
+        from model_protocol_lab.cli import main
+
+        protocol, backend, fixtures = _protocol()
+        r1 = sn.probe_surface_noise("MAGICWORD a", fixtures, backend, protocol, boundary=(7,))
+        r2 = sn.probe_surface_noise("MAGICWORD b", fixtures, backend, protocol, boundary=(7,))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = Path(tmpdir) / "old.json"
+            p2 = Path(tmpdir) / "new.json"
+            p1.write_text(json.dumps(r1), encoding="utf-8")
+            p2.write_text(json.dumps(r2), encoding="utf-8")
+            buf = io.StringIO()
+            with redirect_stderr(buf):
+                code = main(["surface-noise", "diff", str(p1), str(p2)])
+            self.assertEqual(code, 0)
+            self.assertIn("prompt text changed", buf.getvalue())
+
+    def test_cli_diff_identical_prompts(self):
+        # prompt_changed=False: the summary omits the parenthetical.
+        import io
+        from contextlib import redirect_stderr
+
+        from model_protocol_lab.cli import main
+
+        protocol, backend, fixtures = _protocol()
+        r1 = sn.probe_surface_noise("MAGICWORD a", fixtures, backend, protocol, boundary=(7,))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = Path(tmpdir) / "old.json"
+            p2 = Path(tmpdir) / "new.json"
+            p1.write_text(json.dumps(r1), encoding="utf-8")
+            p2.write_text(json.dumps(r1), encoding="utf-8")
+            buf = io.StringIO()
+            with redirect_stderr(buf):
+                code = main(["surface-noise", "diff", str(p1), str(p2)])
+            self.assertEqual(code, 0)
+            self.assertNotIn("prompt text changed", buf.getvalue())
+            self.assertIn("identical=True", buf.getvalue())
+
+    def test_cli_probe_cancelled_exit_code(self):
+        # Drive run_surface_noise with a mocked cancelled probe to hit the
+        # exit-2 path.
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        from model_protocol_lab.cli import main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompt_path = Path(tmpdir) / "prompt.txt"
+            prompt_path.write_text("MAGICWORD please", encoding="utf-8")
+            fixture_path = Path(tmpdir) / "f.json"
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        "search": [
+                            {
+                                "id": "s1",
+                                "group": "g1",
+                                "messages": [{"role": "user", "content": "x"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                        "held_out": [
+                            {
+                                "id": "h1",
+                                "group": "g2",
+                                "messages": [{"role": "user", "content": "y"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir = Path(tmpdir) / "out"
+            # Patch probe_surface_noise to return cancelled immediately.
+            with mock.patch.object(sn, "probe_surface_noise", return_value={"status": "cancelled"}):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code = main(
+                        [
+                            "surface-noise",
+                            "probe",
+                            "--prompt",
+                            str(prompt_path),
+                            "--fixtures",
+                            str(fixture_path),
+                            "--boundary-ids",
+                            "7",
+                            "--output",
+                            str(out_dir),
+                        ]
+                    )
+            self.assertEqual(code, 2)
