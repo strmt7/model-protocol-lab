@@ -19,6 +19,12 @@ from model_protocol_lab.core import Generation
 from model_protocol_lab.datasets import load_dataset
 from model_protocol_lab.experiments import run_experiment
 from model_protocol_lab.reporting import save_report
+from model_protocol_lab.structured import (
+    STRUCTURED_SPECS,
+    build_structured_fixtures,
+    schema_map,
+    validate_structured_specs,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BOUNDARY = (124,)  # ord("|")
@@ -252,6 +258,45 @@ class WsDemoBackend(DemoBackend):
                 keyword = "7" if marker == "numeral 7" else marker
                 break
         answer = keyword if keyword is not None and len(input_ids) % 2 == 0 else "WRONG"
+        text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
+class StructuredDemoBackend(DemoBackend):
+    """Scripted JSON-adherence policy for the structured exercise.
+
+    The base candidate (identified by WINNER_PREFIX/WINNER_SUFFIX like
+    DemoBackend) emits the fixture's canonical JSON answer -- fully
+    adherent. Mutated candidates emit broken JSON: unparsable text on
+    even-indexed fixtures, schema-violating JSON on odd-indexed ones --
+    so the committed sample report exercises the structured section
+    with genuine adherence variation. Deterministic.
+    """
+
+    _SPECS = validate_structured_specs(STRUCTURED_SPECS)
+    _EXPECTED = {fixture.id: fixture.expected for fixture in build_structured_fixtures(_SPECS)}
+    _ORDERED_IDS = tuple(sorted(_EXPECTED))
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        is_base = (
+            prompt.startswith(WINNER_PREFIX)
+            and prompt.count("<|begin_of_text|>") == 1
+            and prompt.endswith(WINNER_SUFFIX)
+        )
+        fixture_id = None
+        for fid in self._ORDERED_IDS:
+            if f"(ref: {fid})" in prompt:
+                fixture_id = fid
+                break
+        if fixture_id is None:
+            answer = "WRONG"
+        elif is_base:
+            answer = self._EXPECTED[fixture_id]
+        elif self._ORDERED_IDS.index(fixture_id) % 2 == 0:
+            answer = "not json at all"
+        else:
+            answer = '{"wrong": "shape"}'
         text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
@@ -821,6 +866,42 @@ def build_sample_report(output_dir: Path) -> dict:
         result["ws_canonical"] = {
             "available": False,
             "detail": "ws_unavailable",
+        }
+    # Structured-output adherence probe: run the real structured stage
+    # against the scripted JSON-adherence backend, so the committed
+    # sample report exercises the structured section with genuine
+    # adherence variation (the base candidate is fully adherent, the
+    # mutated candidates emit broken JSON). The structured fixtures'
+    # canonical answers exceed the script's 16-token budget, so the
+    # stage runs with a larger max_new_tokens. Degrades to an
+    # "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            structured_adherence,
+            structured_stage,
+        )
+
+        _st_specs = validate_structured_specs(STRUCTURED_SPECS)
+        _st_fixtures = build_structured_fixtures(_st_specs)
+        _st_schemas = schema_map(_st_specs)
+        _st_fmts = candidates("llama3", mutate=True)
+        _st_stage = structured_stage(
+            StructuredDemoBackend(),
+            _st_fmts,
+            _st_fixtures,
+            schemas=_st_schemas,
+            boundary=BOUNDARY,
+            max_new_tokens=128,
+            seed=20261012,
+        )
+        result["structured"] = structured_adherence(
+            tuple(f.name for f in _st_fmts),
+            _st_stage,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["structured"] = {
+            "available": False,
+            "detail": "structured_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

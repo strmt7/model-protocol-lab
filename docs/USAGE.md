@@ -983,6 +983,38 @@ a newly fragile candidate after a template or tokenizer change is the
 regression signal. Roughly 9x search compute; the stage never fails the
 run.
 
+### 8.25 Structured-output adherence (`structured`)
+
+Prompt-only JSON-mode adherence: the lab cannot constrain a decoder, so
+the honest baseline measures what the template + prompt actually elicit.
+`model-protocol-lab run --structured` probes each search candidate with
+9 synthetic fixtures across 3 shapes (extraction, classification,
+routing), each carrying a flat hand-rolled JSON schema (no runtime
+dependencies) and a fixture-identity marker `(ref: structured/<id>)` so
+scripted backends can key policy per fixture. Each decoded response is
+classified independently of the strict `exact_match` verdict:
+`parse_ok` / `parse_failed` / `not_text`, then `schema_ok` /
+`schema_failed` / `schema_invalid` against the schema (a hand-rolled
+validator -- string/integer/number/boolean/null fields, enum, finite
+minimum/maximum bounds -- with a 200-case seeded brute-force oracle
+differential in the test suite). Per-candidate aggregation reports
+parse/schema/adherent rates with the invariant `adherent_rate <=
+parse_rate`; `not_text` responses are fail-closed exclusions.
+
+The pre-registered falsifiable claim (in `structured.py`) is that the
+template change produces a measurably positive adherence gap
+(max-minus-min adherent rate across candidates) rather than ~0.
+`results.json` carries `structured` with per-candidate cells,
+`weakest_candidates`, `adherence_gap`, and the `uniform`
+null-hypothesis flag. The report's "Structured-output adherence"
+section renders the rate table. `diff-reports` compares per-candidate
+rate drift, gap drift, weakest-set changes, and added/removed
+candidates (`diff_structured`; `structured_changed` /
+`structured_asymmetric` feed `identical`) -- a newly non-adherent
+candidate after a template change is the regression signal. The stage
+runs no new generations beyond its own fixtures and never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

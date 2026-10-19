@@ -4107,6 +4107,71 @@
     ],
     "excluded_candidates": []
   },
+  "structured": {
+    "available": true,
+    "n_fixtures": 9,
+    "per_candidate": {
+      "llama3": {
+        "n": 9,
+        "n_evaluable": 9,
+        "parse_ok": 9,
+        "schema_ok": 9,
+        "adherent": 9,
+        "parse_rate": 1.0,
+        "schema_rate": 1.0,
+        "adherent_rate": 1.0
+      },
+      "llama3/toggle-bos": {
+        "n": 9,
+        "n_evaluable": 9,
+        "parse_ok": 4,
+        "schema_ok": 0,
+        "adherent": 0,
+        "parse_rate": 0.4444444444444444,
+        "schema_rate": 0.0,
+        "adherent_rate": 0.0
+      },
+      "llama3/no-bos": {
+        "n": 9,
+        "n_evaluable": 9,
+        "parse_ok": 4,
+        "schema_ok": 0,
+        "adherent": 0,
+        "parse_rate": 0.4444444444444444,
+        "schema_rate": 0.0,
+        "adherent_rate": 0.0
+      },
+      "llama3/prefix-newline": {
+        "n": 9,
+        "n_evaluable": 9,
+        "parse_ok": 4,
+        "schema_ok": 0,
+        "adherent": 0,
+        "parse_rate": 0.4444444444444444,
+        "schema_rate": 0.0,
+        "adherent_rate": 0.0
+      },
+      "llama3/prefix-trim": {
+        "n": 9,
+        "n_evaluable": 9,
+        "parse_ok": 4,
+        "schema_ok": 0,
+        "adherent": 0,
+        "parse_rate": 0.4444444444444444,
+        "schema_rate": 0.0,
+        "adherent_rate": 0.0
+      }
+    },
+    "weakest_candidates": [
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "excluded_candidates": [],
+    "adherence_gap": 1.0,
+    "uniform": false
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

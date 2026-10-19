@@ -79,6 +79,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "position",
     "stop_cause",
     "ws_canonical",
+    "structured",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

@@ -249,6 +249,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "position": {"available": "neither", "changed": False},
         "stop_cause": {"available": "neither", "changed": False},
         "ws_canonical": {"available": "neither", "changed": False},
+        "structured": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -297,6 +298,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "stop_cause_asymmetric": False,
             "ws_canonical_changed": False,
             "ws_canonical_asymmetric": False,
+            "structured_changed": False,
+            "structured_asymmetric": False,
             "identical": True,
         },
     }
@@ -1953,6 +1956,104 @@ def _o_ws_canonical(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_structured_valid(value: Any) -> bool:
+    """Oracle structured validator: mirrors diffreports._valid_structured."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    n_fixtures = value.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("parse_rate", "schema_rate", "adherent_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+    weakest = value.get("weakest_candidates")
+    if type(weakest) is not list or not all(type(w) is str for w in weakest):
+        return False
+    gap = value.get("adherence_gap")
+    if gap is None:
+        return True
+    return type(gap) in (int, float) and 0.0 <= gap <= 1.0
+
+
+def _o_structured(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle structured section: rate/gap drift and weakest-set changes.
+
+    Independent reimplementation: set-driven comparison rather than
+    the implementation's nested accumulation loops.
+    """
+    old_ok = _o_structured_valid(old)
+    new_ok = _o_structured_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _rates(entry: Any) -> dict[str, Any]:
+        entry = entry or {}
+        return {
+            metric: entry.get(metric) for metric in ("parse_rate", "schema_rate", "adherent_rate")
+        }
+
+    old_cands = {name: _rates(entry) for name, entry in (old.get("per_candidate") or {}).items()}
+    new_cands = {name: _rates(entry) for name, entry in (new.get("per_candidate") or {}).items()}
+    candidates_added = sorted(set(new_cands) - set(old_cands))
+    candidates_removed = sorted(set(old_cands) - set(new_cands))
+    metrics = ("parse_rate", "schema_rate", "adherent_rate")
+    rate_drift = [
+        {
+            "candidate": name,
+            "metric": metric,
+            "old": old_cands[name][metric],
+            "new": new_cands[name][metric],
+        }
+        for name in sorted(set(old_cands) & set(new_cands))
+        for metric in metrics
+        if old_cands[name][metric] != new_cands[name][metric]
+    ]
+    gap_drift = []
+    if old.get("adherence_gap") != new.get("adherence_gap"):
+        gap_drift.append({"old": old.get("adherence_gap"), "new": new.get("adherence_gap")})
+    weakest_added = sorted(
+        set(new.get("weakest_candidates") or []) - set(old.get("weakest_candidates") or [])
+    )
+    weakest_removed = sorted(
+        set(old.get("weakest_candidates") or []) - set(new.get("weakest_candidates") or [])
+    )
+    diff["rate_drift"] = rate_drift
+    diff["gap_drift"] = gap_drift
+    diff["weakest_added"] = weakest_added
+    diff["weakest_removed"] = weakest_removed
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    changed = bool(
+        rate_drift
+        or gap_drift
+        or weakest_added
+        or weakest_removed
+        or candidates_added
+        or candidates_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2309,6 +2410,9 @@ def _oracle_diff(
     o_ws, o_ws_changed, o_ws_asymmetric = _o_ws_canonical(
         old.get("ws_canonical"), new.get("ws_canonical")
     )
+    o_st, o_st_changed, o_st_asymmetric = _o_structured(
+        old.get("structured"), new.get("structured")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -2348,6 +2452,8 @@ def _oracle_diff(
         and not o_sc_asymmetric
         and not o_ws_changed
         and not o_ws_asymmetric
+        and not o_st_changed
+        and not o_st_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2371,6 +2477,7 @@ def _oracle_diff(
         "position": o_pos,
         "stop_cause": o_sc,
         "ws_canonical": o_ws,
+        "structured": o_st,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2415,6 +2522,8 @@ def _oracle_diff(
             "stop_cause_asymmetric": o_sc_asymmetric,
             "ws_canonical_changed": o_ws_changed,
             "ws_canonical_asymmetric": o_ws_asymmetric,
+            "structured_changed": o_st_changed,
+            "structured_asymmetric": o_st_asymmetric,
             "identical": identical,
         },
     }
@@ -2570,6 +2679,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "stop_cause_asymmetric": False,
                 "ws_canonical_changed": False,
                 "ws_canonical_asymmetric": False,
+                "structured_changed": False,
+                "structured_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3795,8 +3906,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
     # portfolio, synthhistory, batch_invariance, position, stop_cause,
-    # ws_canonical): emitted often enough that the differential fuzz
-    # exercises them, not just the legacy axes.
+    # ws_canonical, structured): emitted often enough that the
+    # differential fuzz exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -3823,6 +3934,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["stop_cause"] = _fuzz_stop_cause_section(rng)
     if rng.random() < 0.45:
         report["ws_canonical"] = _fuzz_ws_canonical_section(rng)
+    if rng.random() < 0.45:
+        report["structured"] = _fuzz_structured_section(rng)
     return report
 
 
@@ -3891,6 +4004,35 @@ def _fuzz_stop_cause_section(rng: random.Random) -> dict[str, Any]:
         "max_new_tokens": rng.choice([16, 64]),
         "per_candidate": per_candidate,
         "overall": {"cause_rates": {"eos_id": 0.5}},
+    }
+
+
+def _fuzz_structured_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        per_candidate[name] = {
+            "n": 9,
+            "n_evaluable": rng.randint(0, 9),
+            "parse_ok": rng.randint(0, 9),
+            "schema_ok": rng.randint(0, 9),
+            "adherent": rng.randint(0, 9),
+            "parse_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "schema_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "adherent_rate": rng.choice([0.0, 0.5, 1.0, None]),
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"parse_rate": 1.0}
+    return {
+        "available": True,
+        "n_fixtures": 9,
+        "per_candidate": per_candidate,
+        "weakest_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+        "excluded_candidates": [],
+        "adherence_gap": rng.choice([0.0, 0.5, 1.0, None]),
+        "uniform": rng.choice([True, False, None]),
     }
 
 
@@ -4174,6 +4316,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not stopcause_asymmetric\n"
             '        and not wscan_diff["changed"]\n'
             "        and not wscan_asymmetric\n"
+            '        and not structured_diff["changed"]\n'
+            "        and not structured_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -4210,6 +4354,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or stopcause_asymmetric\n"
             '        or wscan_diff["changed"]\n'
             "        or wscan_asymmetric\n"
+            '        or structured_diff["changed"]\n'
+            "        or structured_asymmetric\n"
             "    )\n",
             scenario,
         )

@@ -40,6 +40,7 @@ from .prefill import (
     validate_prefill_specs,
 )
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
+from .structured import candidate_adherence, classify_response
 from .synthhistory import (
     CONDITIONS,
     DELIMITER_LABELS,
@@ -4043,4 +4044,188 @@ def ws_canonicalization(
         "per_candidate": per_candidate,
         "fragile_candidates": sorted(fragile),
         "excluded_candidates": sorted(excluded),
+    }
+
+
+def structured_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    structured_fixtures: tuple[Fixture, ...],
+    *,
+    schemas: dict[str, dict[str, Any]],
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate on synthetic structured-output fixtures.
+
+    For every search candidate, the synthetic JSON fixtures (see
+    :mod:`structured`) are evaluated with ``core.evaluate()`` unchanged;
+    each completed observation's decoded ``answer`` is then classified
+    against the fixture's schema by :func:`structured.classify_response`
+    into ``adherent`` / ``parse_failed`` / ``schema_failed`` /
+    ``not_text`` and aggregated by :func:`structured.candidate_adherence`.
+    Greedy, exact. No constrained decoding: the stage measures what the
+    template alone elicits.
+
+    Any backend construction or evaluation failure records None for that
+    candidate cell -- fail-closed, never silently skipped. ``schemas``
+    maps every fixture id to its schema definition (see
+    :func:`structured.schema_map`).
+
+    Returns ``{"n_fixtures": ..., "per_candidate": {name:
+    {"n", "n_evaluable", "parse_ok", "schema_ok", "adherent",
+    "parse_rate", "schema_rate", "adherent_rate"} | None}}``. Raises
+    ``ValueError`` on caller-contract violations (None backend, bad
+    formats/fixtures/schemas/boundary), never on backend data.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(structured_fixtures) is not tuple or not structured_fixtures:
+        raise ValueError("structured_fixtures must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in structured_fixtures):
+        raise ValueError("structured_fixtures must contain Fixture values")
+    if type(schemas) is not dict or not all(
+        type(key) is str and type(value) is dict for key, value in schemas.items()
+    ):
+        raise ValueError("schemas must be a dict of fixture id to schema dict")
+    for case in structured_fixtures:
+        if case.id not in schemas:
+            raise ValueError(f"no schema registered for fixture {case.id!r}")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        try:
+            report = evaluate(
+                backend,
+                fmt,
+                structured_fixtures,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        if not report.aggregate_eligible:
+            per_candidate[fmt.name] = None
+            continue
+        outcomes: list[str] = []
+        for obs in report.observations:
+            if obs.status == "completed":
+                outcomes.append(classify_response(obs.answer, schemas[obs.fixture])["outcome"])
+        per_candidate[fmt.name] = candidate_adherence(outcomes)
+    return {
+        "n_fixtures": len(structured_fixtures),
+        "per_candidate": per_candidate,
+    }
+
+
+def _structured_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of a structured stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    for key in (
+        "n",
+        "n_evaluable",
+        "parse_ok",
+        "schema_ok",
+        "adherent",
+    ):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    if entry["n_evaluable"] > entry["n"]:
+        return False
+    for key in ("parse_rate", "schema_rate", "adherent_rate"):
+        rate = entry.get(key)
+        if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+            return False
+    if entry["n_evaluable"] != 0:
+        return True
+    return not any(
+        entry.get(key) is not None for key in ("parse_rate", "schema_rate", "adherent_rate")
+    )
+
+
+def structured_adherence(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze structured-output adherence across candidates (pure post-hoc).
+
+    Answers "does the template change JSON adherence?": reports the
+    per-candidate adherence rates from the stage, the weakest
+    candidates (minimum adherent rate), and the max-minus-min
+    ``adherence_gap`` -- the pre-registered falsifiable claim (see
+    :mod:`structured`) is that the gap is measurably positive rather
+    than ~0; ``uniform`` reports the null hypothesis (all evaluable
+    candidates identical), never asserts it.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    n_fixtures = stage.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _structured_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+    evaluable: dict[str, float] = {}
+    excluded: list[str] = []
+    for cand in candidates:
+        entry = per_candidate.get(cand)
+        if entry is None:
+            excluded.append(cand)
+            continue
+        if type(entry) is not dict or entry.get("n_evaluable", 0) == 0:
+            excluded.append(cand)
+            continue
+        rate = entry.get("adherent_rate")
+        if type(rate) is int or type(rate) is float:
+            evaluable[cand] = float(rate)
+        else:
+            excluded.append(cand)
+            continue
+    if evaluable:
+        min_rate = min(evaluable.values())
+        max_rate = max(evaluable.values())
+        weakest = sorted(name for name, rate in evaluable.items() if rate == min_rate)
+        gap: float | None = max_rate - min_rate
+        uniform: bool | None = all(rate == min_rate for rate in evaluable.values())
+    else:
+        weakest = []
+        gap = None
+        uniform = None
+    return {
+        "available": True,
+        "n_fixtures": n_fixtures,
+        "per_candidate": {cand: per_candidate.get(cand) for cand in candidates},
+        "weakest_candidates": weakest,
+        "excluded_candidates": sorted(excluded),
+        "adherence_gap": gap,
+        "uniform": uniform,
     }
