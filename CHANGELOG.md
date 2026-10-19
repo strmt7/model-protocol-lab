@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 161 — mandatory dev-tool integration: cocoindex-code, caveman, crawl4ai, 2026-10-19)
+
+- Mandatory development-tool integration, ported from strmt7/FlitzZip and made
+  obligatory the same way (AGENTS.md prose + `tools/agent_context.py` startup
+  fail-closed gate + contract tests; no CI enforcement, per the adversarial
+  cross-check verdict in `~/workspace/agents_out/xcheck/VERDICT.md`):
+  `.agents/skills/caveman/SKILL.md` (lite compression for internal AI
+  communication only, never in persisted text), `.agents/skills/cocoindex-code-search/SKILL.md`
+  (mandatory semantic code navigation before opening many files, exact `rg`
+  stays authoritative), and the self-hosted Crawl4AI research route
+  (`docs/crawl4ai.md`, `tools/crawl4ai_tool.py` with install/doctor/crawl/qualify/check-lock,
+  version-pinned `tools/requirements/crawl4ai.txt`, 32-site qualification manifest).
+  `tools/agent_context.py` is a byte-faithful port (bounded reads, provenance-aware
+  notes, startup gate); `tools/cocoindex_agent_search.py` ports the external-mirror
+  semantic search wrapper (pinned CocoIndex Code 0.2.41, CPU embeddings, telemetry
+  off, stale-index refusal, query-hash receipts). FlitzZip-specific machinery
+  (Windows process-ownership contracts, NLTK/repaired-wheel source builds) is
+  intentionally not ported. README carries the three upstream badges. 33 new
+  contract tests (all offline, no network/model downloads).
+
 ### Added (cycle 160 — few-shot × template, wave-4 research idea #2, 2026-10-19)
 
 - `mpl run --few-shot`: few-shot demonstration gain × template family

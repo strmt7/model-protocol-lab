@@ -58,6 +58,10 @@ select = ["E", "F", "I", "B", "C4", "S", "SIM", "BLE", "UP"]
 # S603: test_e2e.py invokes the CLI via subprocess with fixed argv lists and
 #   shell disabled; no untrusted input reaches the shell.
 "tests/*" = ["S101", "S105", "S106", "S603"]
+# S603/S607: tools/ are developer CLIs whose purpose is running subprocesses
+#   (venv creation, pip installs, the pinned ccc/Crawl4AI CLIs) with fixed argv
+#   lists and shell disabled; no untrusted input reaches the shell.
+"tools/*" = ["S603", "S607"]
 
 [tool.ruff.format]
 quote-style = "double"
