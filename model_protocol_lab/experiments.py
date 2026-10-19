@@ -93,6 +93,7 @@ from .synthhistory import (
 )
 from .toolcall import candidate_adherence as toolcall_candidate_adherence
 from .toolcall import classify_tool_call
+from .verbosity import candidate_verbosity, is_brevity_ideal
 from .wscanonical import (
     MUTATIONS,
     WsScanBackend,
@@ -5623,4 +5624,263 @@ def toolcall_adherence(
         "excluded_candidates": sorted(excluded),
         **gaps,
         "uniform": uniform,
+    }
+
+
+def _verbosity_minimal_tokens(
+    backend: Backend, expected_by_fixture: dict[str, Any]
+) -> dict[str, int]:
+    """Exact minimal-sufficient token counts per brevity-ideal fixture.
+
+    Tokenizes the stripped expected answer with the backend's own
+    tokenizer (no implicit BOS/EOS per the Backend contract). Raises
+    ``ValueError`` when the backend cannot tokenize (fail-fast: a
+    backend that cannot encode cannot supply the baseline).
+    """
+    encode = getattr(backend, "encode", None)
+    if not callable(encode):
+        raise ValueError("backend must expose a callable encode(text)")
+    minimal: dict[str, int] = {}
+    for fixture_id, expected in expected_by_fixture.items():
+        if not is_brevity_ideal(expected):
+            continue
+        try:
+            token_ids = encode(str(expected).strip())
+        except Exception as exc:
+            raise ValueError(f"backend failed to encode {fixture_id!r}: {exc}") from exc
+        if type(token_ids) is not tuple or any(type(t) is not int or t < 0 for t in token_ids):
+            raise ValueError(f"backend.encode({fixture_id!r}) did not return token ids")
+        minimal[fixture_id] = len(token_ids)
+    return minimal
+
+
+def verbosity_stage(
+    *,
+    observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    expected_by_fixture: dict[str, Any],
+    backend: Backend,
+    max_new_tokens: int,
+) -> dict[str, Any]:
+    """Measure per-candidate response verbosity post-hoc over observations.
+
+    Purely post-hoc: no model calls. For every observation of a
+    brevity-ideal fixture (see :mod:`verbosity`), the generated token
+    count is ``len(output_ids)`` and the excess over the minimal
+    answer is computed by :func:`verbosity.excess_tokens`. Each
+    candidate's excess distribution plus its budget-saturation share
+    (fraction of evaluable observations that reached ``max_new_tokens``;
+    a saturated generation's measured length is a lower bound on true
+    verbosity -- the cycle-155 stop-cause confound, reported not
+    hidden) is aggregated by :func:`verbosity.candidate_verbosity`.
+
+    ``observations`` are flat observation dicts (as produced by
+    ``asdict(Observation)``); ``expected_by_fixture`` maps fixture id
+    to the fixture's expected answer text. Malformed observations are
+    excluded from the evaluable set (fail-closed: visible via ``n`` vs
+    ``n_evaluable``, never crashing the stage). Raises ``ValueError``
+    on caller-contract violations (bad container types, unusable
+    backend, bad ``max_new_tokens``), never on observation data.
+
+    Returns ``{"n_observations", "n_fixtures", "n_brevity_fixtures",
+    "per_candidate": {name: cell}}`` where each cell is the
+    :func:`verbosity.candidate_verbosity` dict.
+    """
+    if type(observations) is not tuple and type(observations) is not list:
+        raise ValueError("observations must be a tuple or list of observation dicts")
+    if type(expected_by_fixture) is not dict or not all(
+        type(key) is str for key in expected_by_fixture
+    ):
+        raise ValueError("expected_by_fixture must be a dict with string keys")
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    minimal = _verbosity_minimal_tokens(backend, expected_by_fixture)
+    records: dict[str, list[tuple[int, int, bool]]] = {}
+    seen: dict[str, int] = {}
+    n_observations = 0
+    for obs in observations:
+        if type(obs) is not dict:
+            continue
+        candidate = obs.get("candidate")
+        if type(candidate) is not str or not candidate:
+            continue
+        n_observations += 1
+        seen[candidate] = seen.get(candidate, 0) + 1
+        fixture_id = obs.get("fixture")
+        status = obs.get("status")
+        output_ids = obs.get("output_ids")
+        if (
+            status != "completed"
+            or type(fixture_id) is not str
+            or fixture_id not in minimal
+            or not isinstance(output_ids, (tuple, list))
+            or not all(type(t) is int and t >= 0 for t in output_ids)
+        ):
+            # Fail-closed: the observation stays visible via the
+            # candidate's n vs n_evaluable, never counted and never
+            # crashing the stage.
+            continue
+        generated = len(output_ids)
+        records.setdefault(candidate, []).append(
+            (generated, minimal[fixture_id], generated >= max_new_tokens)
+        )
+    per_candidate: dict[str, dict[str, Any]] = {}
+    for candidate, n_seen in seen.items():
+        cell = candidate_verbosity(records.get(candidate, []))
+        # n counts every observation seen for the candidate, including
+        # the fail-closed exclusions above; n_evaluable counts only the
+        # measured ones.
+        cell["n"] = n_seen
+        per_candidate[candidate] = cell
+    return {
+        "n_observations": n_observations,
+        "n_fixtures": len(expected_by_fixture),
+        "n_brevity_fixtures": len(minimal),
+        "per_candidate": per_candidate,
+    }
+
+
+def _verbosity_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of a verbosity stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    for key in ("n", "n_evaluable"):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    if entry["n_evaluable"] > entry["n"]:
+        return False
+    for key in (
+        "median_excess",
+        "p25_excess",
+        "p75_excess",
+        "iqr_excess",
+        "mean_excess",
+    ):
+        value = entry.get(key)
+        if value is not None and not (type(value) in (int, float) and value >= 0):
+            return False
+    max_excess = entry.get("max_excess")
+    if max_excess is not None and (type(max_excess) is not int or max_excess < 0):
+        return False
+    capped_share = entry.get("capped_share")
+    if capped_share is not None and not (
+        type(capped_share) in (int, float) and 0.0 <= capped_share <= 1.0
+    ):
+        return False
+    stats = ("median_excess", "p25_excess", "p75_excess", "iqr_excess", "mean_excess", "max_excess")
+    if entry["n_evaluable"] == 0:
+        return all(entry.get(key) is None for key in stats) and entry.get("capped_share") is None
+    median = entry.get("median_excess")
+    p25 = entry.get("p25_excess")
+    p75 = entry.get("p75_excess")
+    # isinstance narrows for mypy where type() in (...) does not; bools
+    # were already rejected by the per-key loop above, so no bool can
+    # reach this comparison.
+    return (
+        isinstance(p25, (int, float))
+        and isinstance(median, (int, float))
+        and isinstance(p75, (int, float))
+        and p25 <= median <= p75
+    )
+
+
+def verbosity_profile(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze response verbosity across candidates (pure post-hoc).
+
+    Answers "does the template change verbosity?": reports the
+    per-candidate excess distributions from the stage, the
+    max-minus-min median-excess gap -- the pre-registered falsifiable
+    claim (see :mod:`verbosity`) is that the gap is measurably
+    positive rather than ~0; ``uniform`` reports the null hypothesis
+    (all evaluable candidates identical on the distribution shape),
+    never asserts it. ``most_verbose`` / ``least_verbose`` are behavior
+    labels for the cost profile, never quality judgments (shorter is
+    not better). ``capped_candidates`` names every candidate with a
+    nonzero budget-saturation share: their measured lengths are lower
+    bounds, unconfounding this experiment from the stop-cause audit.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    n_fixtures = stage.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return {"available": False, "detail": "stage_invalid"}
+    n_brevity = stage.get("n_brevity_fixtures")
+    if type(n_brevity) is not int or n_brevity < 0 or n_brevity > n_fixtures:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _verbosity_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+    evaluable: dict[str, float] = {}
+    capped: list[str] = []
+    excluded: list[str] = []
+    for cand in candidates:
+        entry = per_candidate.get(cand)
+        if (
+            type(entry) is not dict
+            or entry.get("n_evaluable", 0) == 0
+            or type(entry.get("median_excess")) not in (int, float)
+        ):
+            excluded.append(cand)
+            continue
+        evaluable[cand] = float(entry["median_excess"])
+        share = entry.get("capped_share")
+        # isinstance narrows for mypy; the cell validator already
+        # excluded bools, so no bool reaches the comparison.
+        if isinstance(share, (int, float)) and share > 0:
+            capped.append(cand)
+    median_excess_gap: float | None = None
+    most_verbose: list[str] = []
+    least_verbose: list[str] = []
+    uniform: bool | None = None
+    if evaluable:
+        values = list(evaluable.values())
+        median_excess_gap = max(values) - min(values)
+        top = max(values)
+        bottom = min(values)
+        most_verbose = sorted(name for name, value in evaluable.items() if value == top)
+        least_verbose = sorted(name for name, value in evaluable.items() if value == bottom)
+        shape_keys = (
+            "median_excess",
+            "p25_excess",
+            "p75_excess",
+            "iqr_excess",
+            "mean_excess",
+            "max_excess",
+        )
+        first = per_candidate[next(iter(evaluable))]
+        uniform = all(
+            all(per_candidate[name].get(key) == first.get(key) for name in evaluable)
+            for key in shape_keys
+        )
+    return {
+        "available": True,
+        "n_fixtures": n_fixtures,
+        "n_brevity_fixtures": n_brevity,
+        "per_candidate": {cand: per_candidate.get(cand) for cand in candidates},
+        "most_verbose": most_verbose,
+        "least_verbose": least_verbose,
+        "median_excess_gap": median_excess_gap,
+        "uniform": uniform,
+        "capped_candidates": sorted(capped),
+        "excluded_candidates": sorted(excluded),
     }

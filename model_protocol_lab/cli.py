@@ -361,6 +361,18 @@ def build_parser() -> argparse.ArgumentParser:
         "fixtures; the stage never fails the run.",
     )
     run.add_argument(
+        "--verbosity",
+        action="store_true",
+        help="Response verbosity profile (research wave-4 idea 5): "
+        "measure, per template family, the distribution of excess "
+        "generated tokens over brevity-ideal fixtures (short stable "
+        "answers) -- post-hoc over the main run's observations, zero "
+        "extra model calls. Reports median/IQR excess per family and "
+        "the budget-saturation share (capped generations are lower "
+        "bounds on true verbosity). Behavior/cost profile only -- "
+        "shorter is not better. The stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -996,6 +1008,54 @@ def _run_toolcall_probe(
         result["toolcall"] = {
             "available": False,
             "detail": "toolcall_unavailable",
+        }
+
+
+def _run_verbosity_probe(
+    result: Any,
+    formats: Any,
+    *,
+    backend: Any,
+    search_fixtures: Any,
+    max_new_tokens: int,
+) -> None:
+    """Run the response-verbosity profile probe; never raises.
+
+    Post-hoc over the main run's observations (zero extra model
+    calls): for every brevity-ideal search fixture, the generated
+    token count (``len(output_ids)``) is measured against the exact
+    tokenization of the expected answer, and the per-candidate excess
+    distributions plus budget-saturation shares are stored as the
+    ``verbosity`` profile on ``result``. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import verbosity_profile, verbosity_stage
+
+        entries = result.get("search")
+        if type(entries) is not list:
+            raise ValueError("result has no search entries")
+        observations: list[dict[str, Any]] = []
+        for entry in entries:
+            if type(entry) is not dict:
+                continue
+            entry_obs = entry.get("observations")
+            if type(entry_obs) is not list:
+                continue
+            observations.extend(o for o in entry_obs if type(o) is dict)
+        expected_by_fixture = {f.id: f.expected for f in search_fixtures}
+        candidates = tuple(fmt.name for fmt in formats)
+        stage = verbosity_stage(
+            observations=observations,
+            expected_by_fixture=expected_by_fixture,
+            backend=backend,
+            max_new_tokens=max_new_tokens,
+        )
+        result["verbosity"] = verbosity_profile(candidates, stage)
+    except Exception:  # noqa: BLE001 -- verbosity probe must not fail the run
+        result["verbosity"] = {
+            "available": False,
+            "detail": "verbosity_unavailable",
         }
 
 
@@ -2096,6 +2156,19 @@ def main(argv: list[str] | None = None) -> int:
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
+                    )
+                # Response verbosity profile (research wave-4 idea 5):
+                # per-family excess-token distribution on brevity-ideal
+                # fixtures, post-hoc over the main run's observations
+                # (zero extra model calls). Behavior/cost profile only.
+                # Never fails the run.
+                if args.verbosity:
+                    _run_verbosity_probe(
+                        result,
+                        formats,
+                        backend=backend,
+                        search_fixtures=tuple(split.search),
+                        max_new_tokens=args.max_new_tokens,
                     )
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each

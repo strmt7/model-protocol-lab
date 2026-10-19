@@ -1308,6 +1308,79 @@ def oracle_diff_reports(
     else:
         _o_tc_available = "neither"
     _o_tc_asymmetric = _o_tc_available not in ("both", "neither")
+
+    def _or_verbosity_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_verbosity exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        n_fixtures = value.get("n_fixtures")
+        if type(n_fixtures) is not int or n_fixtures < 0:
+            return False
+        n_brevity = value.get("n_brevity_fixtures")
+        if type(n_brevity) is not int or n_brevity < 0 or n_brevity > n_fixtures:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("n", "n_evaluable"):
+                count = entry.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+            if entry["n_evaluable"] > entry["n"]:
+                return False
+            for key in (
+                "median_excess",
+                "p25_excess",
+                "p75_excess",
+                "iqr_excess",
+                "mean_excess",
+            ):
+                stat = entry.get(key)
+                if stat is not None and not (type(stat) in (int, float) and stat >= 0):
+                    return False
+            max_excess = entry.get("max_excess")
+            if max_excess is not None and (type(max_excess) is not int or max_excess < 0):
+                return False
+            capped_share = entry.get("capped_share")
+            if capped_share is not None and not (
+                type(capped_share) in (int, float) and 0.0 <= capped_share <= 1.0
+            ):
+                return False
+            p25 = entry.get("p25_excess")
+            median = entry.get("median_excess")
+            p75 = entry.get("p75_excess")
+            if (
+                entry["n_evaluable"] > 0
+                and type(p25) in (int, float)
+                and type(median) in (int, float)
+                and type(p75) in (int, float)
+                and not p25 <= median <= p75
+            ):
+                return False
+        for key in ("most_verbose", "least_verbose", "capped_candidates", "excluded_candidates"):
+            value_list = value.get(key)
+            if type(value_list) is not list or not all(type(c) is str for c in value_list):
+                return False
+        return True
+
+    _vb_old_ok = _or_verbosity_valid(old.get("verbosity"))
+    _vb_new_ok = _or_verbosity_valid(new.get("verbosity"))
+    if _vb_old_ok and _vb_new_ok:
+        _o_vb_available = "both"
+    elif _vb_old_ok:
+        _o_vb_available = "old"
+    elif _vb_new_ok:
+        _o_vb_available = "new"
+    else:
+        _o_vb_available = "neither"
+    _o_vb_asymmetric = _o_vb_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1336,6 +1409,7 @@ def oracle_diff_reports(
         and not _o_fs_asymmetric
         and not _o_ft_asymmetric
         and not _o_tc_asymmetric
+        and not _o_vb_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1386,6 +1460,8 @@ def oracle_diff_reports(
         "faketurn_asymmetric": _o_ft_asymmetric,
         "toolcall_changed": False,
         "toolcall_asymmetric": _o_tc_asymmetric,
+        "verbosity_changed": False,
+        "verbosity_asymmetric": _o_vb_asymmetric,
         "identical": identical,
     }
     return {
@@ -1415,6 +1491,7 @@ def oracle_diff_reports(
         "fewshot": {"available": _o_fs_available, "changed": False},
         "faketurn": {"available": _o_ft_available, "changed": False},
         "toolcall": {"available": _o_tc_available, "changed": False},
+        "verbosity": {"available": _o_vb_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

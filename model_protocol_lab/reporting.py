@@ -4699,6 +4699,155 @@ def _toolcall_section(result: dict[str, Any]) -> str:
     )
 
 
+def _verbosity_section(result: dict[str, Any]) -> str:
+    """Response verbosity profile per template family.
+
+    Renders the ``verbosity`` payload (see
+    experiments.verbosity_profile) as a per-candidate table of excess
+    token distributions: for every brevity-ideal fixture (short stable
+    expected answer), excess = generated tokens minus the exact
+    tokenization of the expected answer, clamped at zero. Median, IQR,
+    mean and max excess travel together so a gap cannot hide behind a
+    long-tailed family looking typical at the median; the
+    budget-saturation share marks candidates whose measured lengths
+    are lower bounds (generations hit the token budget -- the
+    stop-cause confound, reported not hidden). This is a cost/behavior
+    profile: shorter is not better, and the section says so. Every
+    interpolation is escaped at this boundary.
+    """
+    audit: Any = result.get("verbosity")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _num(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1f}"
+        return "n/a"
+
+    def _share(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + " / "
+            + escape(str(entry.get("n")))
+            + "</td><td>"
+            + escape(_num(entry.get("median_excess")))
+            + "</td><td>"
+            + escape(_num(entry.get("p25_excess")))
+            + "–"
+            + escape(_num(entry.get("p75_excess")))
+            + "</td><td>"
+            + escape(_num(entry.get("iqr_excess")))
+            + "</td><td>"
+            + escape(_num(entry.get("mean_excess")))
+            + "</td><td>"
+            + escape(_num(entry.get("max_excess")))
+            + "</td><td>"
+            + escape(_share(entry.get("capped_share")))
+            + "</td></tr>"
+        )
+    gap = audit.get("median_excess_gap")
+    gap_line = ""
+    if type(gap) in (int, float):
+        gap_line = (
+            "<p>Max-minus-min median excess over evaluable candidates: "
+            "<strong>" + escape(f"{gap:+.1f}") + " tokens</strong>.</p>"
+        )
+    extremes_line = ""
+    most = audit.get("most_verbose")
+    least = audit.get("least_verbose")
+    if type(most) is list and most and type(least) is list and least:
+        extremes_line = (
+            "<p>Most verbose (highest median excess): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in most
+                if type(name) is str
+            )
+            + "; least verbose: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in least
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    capped = audit.get("capped_candidates")
+    capped_line = ""
+    if type(capped) is list and capped:
+        capped_line = (
+            "<p>Candidates with budget-saturated generations (measured "
+            "lengths are <em>lower bounds</em> on true verbosity): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in capped
+                if type(name) is str
+            )
+            + ". See the stop-cause audit for the exact max-length "
+            "termination classification.</p>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates with no evaluable verbosity observation: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    n_brevity = audit.get("n_brevity_fixtures")
+    return (
+        '<section class="card" id="verbosity">'
+        "<h2>Response verbosity profile</h2>"
+        "<p>For each fixture with a short stable expected answer "
+        "(brevity-ideal: at most 32 characters, single line), excess = "
+        "generated tokens minus the exact tokenization of the expected "
+        "answer, clamped at zero. The question is whether the "
+        "<em>template</em> -- not the model or the prompt -- decides how "
+        "much the model generates, with direct inference-cost "
+        "consequences. This is a behavior/cost profile, <strong>not a "
+        "quality judgment</strong>: shorter is not better.</p>"
+        "<p>Brevity-ideal fixtures measured: "
+        + escape(str(n_brevity))
+        + ".</p>"
+        + gap_line
+        + extremes_line
+        + capped_line
+        + (
+            '<div class="table-wrap"><table>'
+            "<caption>Excess generated tokens per candidate (tokens).</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable</th><th scope="col">Median</th>'
+            '<th scope="col">P25–P75</th><th scope="col">IQR</th>'
+            '<th scope="col">Mean</th><th scope="col">Max</th>'
+            '<th scope="col">Capped</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -5621,6 +5770,7 @@ def render_html(result: dict[str, Any]) -> str:
     fewshot_html = _fewshot_section(result)
     faketurn_html = _faketurn_section(result)
     toolcall_html = _toolcall_section(result)
+    verbosity_html = _verbosity_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5719,6 +5869,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Prompt-only tool-call adherence",
                 toolcall_html,
             ),
+            (
+                "verbosity",
+                "Response verbosity profile",
+                verbosity_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5776,6 +5931,7 @@ def render_html(result: dict[str, Any]) -> str:
         + fewshot_html
         + faketurn_html
         + toolcall_html
+        + verbosity_html
         + sweep_html
         + logprob_html
         + held_out_html

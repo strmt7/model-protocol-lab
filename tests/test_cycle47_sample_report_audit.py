@@ -84,6 +84,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "fewshot",
     "faketurn",
     "toolcall",
+    "verbosity",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",
