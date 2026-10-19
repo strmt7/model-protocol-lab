@@ -182,6 +182,11 @@ class TestAuditSearchObservations(unittest.TestCase):
         audit = audit_search_observations(entries, _seam_merging_encode, _identity_decode)
         self.assertEqual(audit["overall_rate"], 1.0)
         self.assertEqual(audit["n_problem"], 1)
+        # Mutation-gate pin: the per-candidate rate must reflect the
+        # planted problem too (the `"rate": 0.0` mutant survived on the
+        # overall rate alone).
+        self.assertEqual(audit["per_candidate"]["chatml"]["rate"], 1.0)
+        self.assertEqual(audit["per_candidate"]["chatml"]["n_problem"], 1)
 
     def test_empty_entries_unavailable(self) -> None:
         audit = audit_search_observations([], _identity_encode, _identity_decode)
@@ -465,7 +470,27 @@ class TestMutationGate(unittest.TestCase):
             self.SOURCE.write_text(source.replace(original, mutant, 1))
             try:
                 proc = subprocess.run(
-                    [sys.executable, "-m", "pytest", __file__, "-q", "-p", "no:cacheprovider"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        __file__,
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                        # Exclude the gate itself from the subprocess run:
+                        # without this, the subprocess re-runs this very
+                        # test, stacking one more mutant per nesting level
+                        # (cycle-125's 22-site anchor fanned out to 184
+                        # processes). -k is used instead of --deselect
+                        # because __file__ is absolute under unittest
+                        # discovery while pytest normalizes node IDs to
+                        # relative paths, so an absolute --deselect never
+                        # matches. The kill verdict must come from the
+                        # audit tests alone.
+                        "-k",
+                        "not TestMutationGate",
+                    ],
                     capture_output=True,
                     text=True,
                     cwd=_REPO_ROOT,

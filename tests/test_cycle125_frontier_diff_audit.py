@@ -16,7 +16,12 @@ import sys
 import unittest
 from pathlib import Path
 
-from model_protocol_lab.diffreports import diff_frontiers, diff_reports, render_summary
+from model_protocol_lab.diffreports import (
+    _diff_spans,
+    diff_frontiers,
+    diff_reports,
+    render_summary,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -103,6 +108,22 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertEqual(
             diff["winner_flips"],
             [[4, 5, "alpha", None]],
+        )
+
+    def test_adjacent_spans_merge(self) -> None:
+        # Mutation-gate pin: _diff_spans must merge adjacent differing
+        # spans whose (old, new) values agree. The `budget - 2` mutant
+        # breaks the adjacency check, leaving two spans [2, 2] and
+        # [3, 3] instead of the merged [2, 3].
+        def old_at(budget: int) -> str:
+            return "a"
+
+        def new_at(budget: int) -> str:
+            return "b" if budget in (2, 3) else "a"
+
+        self.assertEqual(
+            _diff_spans(old_at, new_at, [1, 2, 3, 4], 4),
+            [[2, 3, "a", "b"]],
         )
 
     def test_sweep_range_drift_and_common_prefix(self) -> None:
@@ -273,7 +294,27 @@ class TestMutationGate(unittest.TestCase):
             self.SOURCE.write_text(source.replace(original, mutant, 1))
             try:
                 proc = subprocess.run(
-                    [sys.executable, "-m", "pytest", __file__, "-q", "-p", "no:cacheprovider"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        __file__,
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                        # Exclude the gate itself from the subprocess run:
+                        # without this, the subprocess re-runs this very
+                        # test, stacking one more mutant per nesting level
+                        # (this gate's 22-site anchor fanned out to 184
+                        # processes). -k is used instead of --deselect
+                        # because __file__ is absolute under unittest
+                        # discovery while pytest normalizes node IDs to
+                        # relative paths, so an absolute --deselect never
+                        # matches. The kill verdict must come from the
+                        # audit tests alone.
+                        "-k",
+                        "not TestMutationGate",
+                    ],
                     capture_output=True,
                     text=True,
                     cwd=_REPO_ROOT,

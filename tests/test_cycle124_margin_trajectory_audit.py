@@ -234,7 +234,27 @@ class TestMutationGate(unittest.TestCase):
             self.SOURCE.write_text(source.replace(original, mutant, 1))
             try:
                 proc = subprocess.run(
-                    [sys.executable, "-m", "pytest", __file__, "-q", "-p", "no:cacheprovider"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        __file__,
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                        # Exclude the gate itself from the subprocess run:
+                        # without this, the subprocess re-runs this very
+                        # test, stacking one more mutant per nesting level
+                        # (cycle-125's 22-site anchor fanned out to 184
+                        # processes). -k is used instead of --deselect
+                        # because __file__ is absolute under unittest
+                        # discovery while pytest normalizes node IDs to
+                        # relative paths, so an absolute --deselect never
+                        # matches. The kill verdict must come from the
+                        # audit tests alone.
+                        "-k",
+                        "not TestMutationGate",
+                    ],
                     capture_output=True,
                     text=True,
                     cwd=_REPO_ROOT,
