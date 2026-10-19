@@ -6,6 +6,52 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 158 — wave-4 red-team fix-ups, 2026-10-19)
+
+- B1 [moderate, honest-measurement correction]: cycle 156 documented
+  that a flipped verdict on *identical* ids is a backend-determinism
+  anomaly (`n_same_ids_verdict_flips`), never whitespace fragility —
+  but the shipped aggregation counted same-ids flips in every fragility
+  surface (`fragile`, `n_fragile_mutations`, `fragile_candidates`,
+  `whitespace_robust`). The aggregation now implements the documented
+  split: fragility counts only divergent-ids flips
+  (`n_fragile_flips = n_verdict_flips - n_same_ids_verdict_flips`, a new
+  exposed per-mutation field), `aggregate_mutation_records` rejects
+  records where `n_same_ids_verdict_flips > n_verdict_flips`, and the
+  docstrings/RESEARCH_LOG/USAGE text now match the shipped behavior.
+  Regression tests plus tempdir-module mutation gates pin the exclusion.
+- F1 [moderate, latent]: non-finite floats (`NaN`, `±Infinity`) were
+  classified `adherent` for `number` fields with minimum-only/no bounds
+  (RFC 8259 §6: not JSON numbers, though `json.loads` accepts them as a
+  Python extension) — reachable through the real pipeline via a backend
+  emitting the 3-character text `NaN`. The number branch of
+  `_field_value_ok` now requires finiteness (with in-module
+  `_is_finite_number` precedent); `validate_structured_specs` rejects
+  non-finite answers, `build_structured_fixtures`' `_canonical_json`
+  runs with `allow_nan=False`, and non-finite enum members are rejected
+  at spec validation. The independent oracle shared the blind spot —
+  it was fixed too, and the brute-force value pool now generates
+  non-finite floats so the differential covers the hole.
+- F2 [low]: `structured_stage` silently absorbed malformed schema dicts
+  (every response classifying `not_text`, indistinguishable from
+  backend non-text) despite its docstring promising `ValueError` on bad
+  schemas. The stage now validates every schema with
+  `validate_schema_def` up front; the `OUTCOMES` docstring now states
+  that `not_text` marks a non-string response *or* a malformed schema
+  against which nothing can be evaluated.
+- F3 [low]: `layout_options` silently shortened layouts on duplicate
+  options; duplicates are now rejected `ValueError` (fail-closed, per
+  the module's style and the docstring's "Raises ValueError on bad
+  input").
+- F4 [low]: `minimum`/`maximum` were accepted (and carried) on
+  non-numeric field types, producing unsatisfiable schemas that fail
+  every response with a green validation. Bounds are now rejected on
+  non-`integer`/`number` fields, matching the docstring.
+- F5 [low]: `_valid_structured` accepted self-contradictory cells
+  (`adherent_rate > parse_rate`); it now enforces the producer
+  invariants documented by `candidate_adherence`
+  (`adherent_rate <= parse_rate`, `schema_rate <= parse_rate`).
+
 ### Added (cycle 157 — structured-output / JSON-mode adherence, wave-3 research idea #5, 2026-10-19)
 
 - New `mpl run --structured` experiment measuring prompt-only JSON

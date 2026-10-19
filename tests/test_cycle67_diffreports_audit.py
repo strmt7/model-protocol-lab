@@ -1971,10 +1971,17 @@ def _o_structured_valid(value: Any) -> bool:
             continue
         if type(entry) is not dict:
             return False
+        rates: dict[str, Any] = {}
         for key in ("parse_rate", "schema_rate", "adherent_rate"):
             rate = entry.get(key)
             if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
                 return False
+            rates[key] = rate
+        parse_rate = rates["parse_rate"]
+        if parse_rate is not None:
+            for key in ("schema_rate", "adherent_rate"):
+                if rates[key] is not None and rates[key] > parse_rate:
+                    return False
     weakest = value.get("weakest_candidates")
     if type(weakest) is not list or not all(type(w) is str for w in weakest):
         return False

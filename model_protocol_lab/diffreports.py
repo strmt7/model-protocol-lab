@@ -2101,7 +2101,12 @@ def _valid_structured(payload: Any) -> bool:
 
     Enforces the wave-2 C3 lesson at the value level: compared rate
     fields must be numbers/None in [0, 1] so the renderers never hit a
-    TypeError on a hostile payload, and map keys must be strings.
+    TypeError on a hostile payload, and map keys must be strings. Also
+    enforces the producer invariants documented by
+    :func:`structured.candidate_adherence` -- ``adherent`` implies
+    parse-valid and schema-valid, so ``adherent_rate <= parse_rate`` and
+    ``schema_rate <= parse_rate`` -- so a hand-corrupted payload never
+    renders a self-contradictory table.
     """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
@@ -2116,10 +2121,18 @@ def _valid_structured(payload: Any) -> bool:
             continue
         if type(entry) is not dict:
             return False
+        rates: dict[str, float | None] = {}
         for key in ("parse_rate", "schema_rate", "adherent_rate"):
             rate = entry.get(key)
             if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
                 return False
+            rates[key] = float(rate) if rate is not None else None
+        parse_rate = rates["parse_rate"]
+        if parse_rate is not None:
+            for key in ("schema_rate", "adherent_rate"):
+                other = rates[key]
+                if other is not None and other > parse_rate:
+                    return False
     weakest = payload.get("weakest_candidates")
     if type(weakest) is not list or not all(type(w) is str for w in weakest):
         return False

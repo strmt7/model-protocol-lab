@@ -62,8 +62,9 @@ SHAPES = ("extraction", "classification", "routing")
 FIELD_TYPES = ("string", "integer", "number", "boolean", "null")
 
 #: Response outcome vocabulary. ``not_text`` marks a non-string response
-#: (fail-closed: excluded from rates); ``schema_invalid`` marks a
-#: malformed schema definition (never a phantom adherent).
+#: or a malformed schema definition against which nothing can be
+#: evaluated (fail-closed: excluded from rates); ``schema_invalid`` marks
+#: a malformed schema definition (never a phantom adherent).
 OUTCOMES = ("adherent", "parse_failed", "schema_failed", "not_text")
 
 #: Synthetic structured-output fixture specifications. Each spec is a
@@ -257,10 +258,16 @@ def validate_field_def(field: object, *, where: str) -> dict[str, Any]:
         for member in enum:
             if type(member) not in (str, int, float, bool) and member is not None:
                 raise ValueError(f"{where}: enum members must be JSON scalars")
+            if type(member) is float and not _is_finite_number(member):
+                raise ValueError(
+                    f"{where}: enum members must be finite (NaN/±Infinity are not JSON)"
+                )
         normalized["enum"] = list(enum)
     for bound in ("minimum", "maximum"):
         value = field.get(bound)
         if value is not None:
+            if field_type not in ("integer", "number"):
+                raise ValueError(f"{where}: {bound} is only meaningful for integer/number fields")
             if not _is_finite_number(value):
                 raise ValueError(f"{where}: {bound} must be a finite number")
             if field_type == "integer" and int(value) != value:
@@ -327,8 +334,13 @@ def validate_schema_def(schema: object) -> dict[str, Any]:
 
 
 def _canonical_json(document: object) -> str:
-    """Canonical JSON rendering: sorted keys, fixed separators."""
-    return json.dumps(document, sort_keys=True, separators=(", ", ": "))
+    """Canonical JSON rendering: sorted keys, fixed separators.
+
+    ``allow_nan`` is disabled: NaN/±Infinity are not JSON (RFC 8259 §6)
+    and any attempt to serialize them fails closed with ``ValueError``
+    rather than emitting the invalid literals ``NaN``/``Infinity``.
+    """
+    return json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
 def validate_structured_specs(specs: object) -> tuple[dict[str, object], ...]:
@@ -522,7 +534,12 @@ def _field_value_ok(value: object, field: dict[str, Any]) -> bool:
     elif field_type == "integer":
         ok = type(value) is int and not isinstance(value, bool)
     elif field_type == "number":
-        ok = type(value) in (int, float) and not isinstance(value, bool)
+        # Non-finite floats (NaN, ±Infinity) are not JSON numbers
+        # (RFC 8259 §6) even though json.loads accepts them as a Python
+        # extension -- they can never satisfy a ``number`` field.
+        ok = (
+            type(value) in (int, float) and not isinstance(value, bool) and _is_finite_number(value)
+        )
     elif field_type == "boolean":
         ok = type(value) is bool
     elif field_type == "null":
