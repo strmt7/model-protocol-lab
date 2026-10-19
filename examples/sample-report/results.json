@@ -4674,6 +4674,204 @@
     "excluded_candidates": [],
     "max_authority_gap": 1.0
   },
+  "fewshot": {
+    "available": true,
+    "k": 2,
+    "demo_ids": [
+      "search-latest-green",
+      "search-copy-blue"
+    ],
+    "n_eval": 2,
+    "primary_winner": "llama3",
+    "primary_decision": "compatible_on_fixture_set",
+    "per_candidate": {
+      "llama3": {
+        "gain": 1.0,
+        "order_sensitivity": 0.0,
+        "n_evaluable": 2,
+        "per_order": {
+          "order_a": {
+            "change_rate": 1.0,
+            "n_changed": 2,
+            "n_evaluable": 2
+          },
+          "order_b": {
+            "change_rate": 1.0,
+            "n_changed": 2,
+            "n_evaluable": 2
+          }
+        }
+      },
+      "llama3/toggle-bos": {
+        "gain": 0.0,
+        "order_sensitivity": 0.0,
+        "n_evaluable": 2,
+        "per_order": {
+          "order_a": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          },
+          "order_b": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          }
+        }
+      },
+      "llama3/no-bos": {
+        "gain": 0.0,
+        "order_sensitivity": 0.0,
+        "n_evaluable": 2,
+        "per_order": {
+          "order_a": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          },
+          "order_b": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          }
+        }
+      },
+      "llama3/prefix-newline": {
+        "gain": 0.0,
+        "order_sensitivity": 0.0,
+        "n_evaluable": 2,
+        "per_order": {
+          "order_a": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          },
+          "order_b": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          }
+        }
+      },
+      "llama3/prefix-trim": {
+        "gain": 0.0,
+        "order_sensitivity": 0.0,
+        "n_evaluable": 2,
+        "per_order": {
+          "order_a": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          },
+          "order_b": {
+            "change_rate": 0.0,
+            "n_changed": 0,
+            "n_evaluable": 2
+          }
+        }
+      }
+    },
+    "excluded_candidates": [],
+    "per_arm": {
+      "baseline": {
+        "decision": "selected",
+        "winner": "llama3",
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "pass": true,
+            "pass_rate": 1.0
+          },
+          "llama3/toggle-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/no-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-newline": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-trim": {
+            "pass": false,
+            "pass_rate": 0.0
+          }
+        }
+      },
+      "order_a": {
+        "decision": "no_candidate",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/toggle-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/no-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-newline": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-trim": {
+            "pass": false,
+            "pass_rate": 0.0
+          }
+        }
+      },
+      "order_b": {
+        "decision": "no_candidate",
+        "winner": null,
+        "n_evaluable": 5,
+        "per_candidate": {
+          "llama3": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/toggle-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/no-bos": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-newline": {
+            "pass": false,
+            "pass_rate": 0.0
+          },
+          "llama3/prefix-trim": {
+            "pass": false,
+            "pass_rate": 0.0
+          }
+        }
+      }
+    },
+    "flips": [
+      {
+        "arm": "order_a",
+        "decision_from": "selected",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      },
+      {
+        "arm": "order_b",
+        "decision_from": "selected",
+        "decision_to": "no_candidate",
+        "winner_from": "llama3",
+        "winner_to": null
+      }
+    ]
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

@@ -1140,6 +1140,71 @@ def oracle_diff_reports(
     else:
         _o_dl_available = "neither"
     _o_dl_asymmetric = _o_dl_available not in ("both", "neither")
+
+    def _or_fewshot_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_fewshot exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        demo_ids = value.get("demo_ids")
+        if type(demo_ids) is not list or not demo_ids or not all(type(d) is str for d in demo_ids):
+            return False
+        if type(value.get("k")) is not int or type(value.get("n_eval")) is not int:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if type(entry) is not dict:
+                return False
+            gain = entry.get("gain")
+            if gain is not None and not (type(gain) in (int, float) and 0.0 <= gain <= 1.0):
+                return False
+            sensitivity = entry.get("order_sensitivity")
+            if sensitivity is not None and not (
+                type(sensitivity) in (int, float) and 0.0 <= sensitivity <= 0.5
+            ):
+                return False
+            per_order = entry.get("per_order")
+            if type(per_order) is not dict:
+                return False
+            for order in per_order.values():
+                if type(order) is not dict:
+                    return False
+                rate = order.get("change_rate")
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+                for key in ("n_changed", "n_evaluable"):
+                    count = order.get(key)
+                    if type(count) is not int or count < 0:
+                        return False
+        per_arm = value.get("per_arm")
+        if type(per_arm) is not dict:
+            return False
+        for arm in per_arm.values():
+            if type(arm) is not dict or type(arm.get("decision")) is not str:
+                return False
+            winner = arm.get("winner")
+            if winner is not None and type(winner) is not str:
+                return False
+        flips = value.get("flips")
+        if type(flips) is not list or any(type(f) is not dict for f in flips):
+            return False
+        excluded = value.get("excluded_candidates")
+        return type(excluded) is list and all(type(c) is str for c in excluded)
+
+    _fs_old_ok = _or_fewshot_valid(old.get("fewshot"))
+    _fs_new_ok = _or_fewshot_valid(new.get("fewshot"))
+    if _fs_old_ok and _fs_new_ok:
+        _o_fs_available = "both"
+    elif _fs_old_ok:
+        _o_fs_available = "old"
+    elif _fs_new_ok:
+        _o_fs_available = "new"
+    else:
+        _o_fs_available = "neither"
+    _o_fs_asymmetric = _o_fs_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1165,6 +1230,7 @@ def oracle_diff_reports(
         and not _o_ws_asymmetric
         and not _o_st_asymmetric
         and not _o_dl_asymmetric
+        and not _o_fs_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1209,6 +1275,8 @@ def oracle_diff_reports(
         "structured_asymmetric": _o_st_asymmetric,
         "deliforge_changed": False,
         "deliforge_asymmetric": _o_dl_asymmetric,
+        "fewshot_changed": False,
+        "fewshot_asymmetric": _o_fs_asymmetric,
         "identical": identical,
     }
     return {
@@ -1235,6 +1303,7 @@ def oracle_diff_reports(
         "ws_canonical": {"available": _o_ws_available, "changed": False},
         "structured": {"available": _o_st_available, "changed": False},
         "deliforge": {"available": _o_dl_available, "changed": False},
+        "fewshot": {"available": _o_fs_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

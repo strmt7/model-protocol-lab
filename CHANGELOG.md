@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 160 — few-shot × template, wave-4 research idea #2, 2026-10-19)
+
+- `mpl run --few-shot`: few-shot demonstration gain × template family
+  (arXiv:2511.09700). Two demos are sampled (seeded, v1 k=2, the
+  two-orders design) from the search split — never held-out — and every
+  candidate is evaluated 0-shot and with both demo orders on the
+  held-out fixtures, demos prepended as real user/assistant turns so
+  each family renders them through its own template. Per candidate:
+  `gain` (mean over the two orders of the 0-shot → k-shot
+  verdict-change rate, in [0, 1]) and `order_sensitivity` (population
+  std of the two per-order rates, in [0, 0.5]); the selection rule is
+  re-applied per arm (baseline / order_a / order_b) with
+  winner-vs-primary flips. New pure `fewshot.py` (100% line+branch
+  coverage), `results.json` `fewshot` payload, TOC-anchored HTML
+  section, and `diff_fewshot` (`fewshot_changed` /
+  `fewshot_asymmetric` feed `identical`). Gain is a verdict-change
+  rate, never a quality judgment. 85 new tests, 4/4 tempdir-module
+  mutation gates, 200-case brute-force oracle differential, both diff
+  oracles extended; USAGE §8.27 documents the method and its honest
+  framing.
+
 ### Added (cycle 159 — delimiter authority, wave-4 research idea #1, 2026-10-19)
 
 - `mpl run --deliforge`: reserved-token vs subword delimiter authority

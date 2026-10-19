@@ -257,6 +257,18 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--few-shot",
+        action="store_true",
+        help="Few-shot demonstration gain x template experiment: sample 2 "
+        "demonstration fixtures from the search split (seeded; never "
+        "held-out), evaluate every candidate 0-shot and with both demo "
+        "orders on the held-out fixtures, and report per-candidate gain "
+        "(zero-shot -> k-shot verdict-change rate), order sensitivity "
+        "(per-order rate dispersion), and per-arm (baseline/order_a/order_b) "
+        "winner-vs-primary flips. Roughly triples held-out compute; the "
+        "stage never fails the run.",
+    )
+    run.add_argument(
         "--batch-invariance",
         action="store_true",
         help="Batch-invariance audit: re-run every search fixture's exact "
@@ -958,6 +970,52 @@ def _run_synthhistory_probe(
         result["synthhistory"] = {
             "available": False,
             "detail": "synthhistory_unavailable",
+        }
+
+
+def _run_fewshot_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    demo_cases: Any,
+    eval_cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the few-shot x template experiment; never raises.
+
+    Samples 2 demonstration fixtures from the search split (seeded),
+    re-runs every candidate 0-shot and with both demo orders on the
+    held-out fixtures, and stores the ``fewshot`` analysis payload on
+    ``result``. Any failure degrades to an "unavailable" marker instead
+    of failing the run.
+    """
+    try:
+        from .experiments import fewshot_gain, fewshot_stage
+
+        stage = fewshot_stage(
+            backend,
+            formats,
+            tuple(demo_cases),
+            tuple(eval_cases),
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["fewshot"] = fewshot_gain(
+            result.get("selected_candidate"),
+            result["decision"],
+            tuple(fmt.name for fmt in formats),
+            stage,
+        )
+    except Exception:  # noqa: BLE001 -- fewshot must not fail the run
+        result["fewshot"] = {
+            "available": False,
+            "detail": "fewshot_unavailable",
         }
 
 
@@ -1755,6 +1813,30 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Few-shot demonstration gain x template experiment
+                # (research wave-4 idea 2): sample 2 demo fixtures from
+                # the search split (seeded; never held-out), evaluate
+                # every candidate 0-shot and with both demo orders on
+                # the held-out fixtures, then report per-candidate gain
+                # (0-shot -> k-shot verdict-change rate), order
+                # sensitivity, and per-arm winner-vs-primary flips.
+                # Answers "does in-context learning work the same under
+                # every template, or does the template determine whether
+                # demos help?" Demos are context, never the answer; a
+                # failed stage degrades to "unavailable" and never fails
+                # the run.
+                if args.few_shot:
+                    _run_fewshot_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        tuple(split.held_out),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,

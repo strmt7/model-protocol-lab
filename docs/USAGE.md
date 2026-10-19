@@ -1062,6 +1062,49 @@ top-gap drift, added/removed candidates, and excluded-set changes
 regression signal. Roughly 16x search compute (2 payloads x 4 markers
 x 2 arms); the stage never fails the run.
 
+### 8.27 Few-shot x template (`fewshot`)
+
+Does in-context learning work the same under every chat template? For a
+fixed demo set, `model-protocol-lab run --few-shot` measures the
+zero-shot -> k-shot verdict-change rate (**gain**) and the demo-order
+sensitivity per candidate on held-out fixtures, with model, demos, task
+and decoder fixed -- the template is the only independent variable.
+The ICL literature (arXiv:2511.09700 "Order Matters", Nov 2025) varies
+demo order on one fixed prompt format per study; nobody varies the chat
+template as the independent variable. The lab's 29 families x exact
+token sequences is the missing instrument.
+
+The v1 protocol pins k=2 with the two-orders design (the minimal
+order-sensitivity probe): 2 demos are sampled (seeded; the pool is
+id-sorted first so the set is input-order independent) from the
+**search** split only, and every candidate is evaluated 0-shot and with
+both demo orders on the **held-out** fixtures. Demos are prepended as
+real user/assistant turns (each demo's question plus its answer under
+`A:`, followed by an assistant turn confirming the answer), so every
+candidate renders them through its own template; each fixture's
+`expected` is unchanged, so the pipeline's `exact_match` grades every
+arm unchanged. A demo fixture can never evaluate itself -- the demo
+pool is the search split, the measurement set is the held-out split
+(the contamination guard). Per candidate, `gain` is the mean over the
+two orders of the per-fixture verdict-change rate (k-shot vs 0-shot)
+in [0, 1], and `order_sensitivity` is the population standard
+deviation of the two per-order change rates in [0, 0.5]; only fixtures
+with a verdict on both sides are evaluable (missing verdicts are
+excluded, never counted as unchanged). The selection rule is
+re-applied per arm (baseline / order_a / order_b) and each arm's
+(decision, winner) is compared against the primary run. The
+pre-registered falsifiable claim (in `fewshot.py`) is a gain of ~0 and
+order sensitivity of ~0 uniform across families; family differences are
+the finding. Honest framing: gain is a verdict-*change* rate, never a
+quality judgment -- a high gain means the demos moved the verdicts, not
+that they helped. `results.json` carries `fewshot` with per-candidate
+gain/sensitivity/per-order rates, per-arm (decision, winner), and
+flips. `diff-reports` compares per-candidate gain drift, sensitivity
+drift, per-arm drift, added/removed candidates, and excluded-set
+changes (`diff_fewshot`; `fewshot_changed` / `fewshot_asymmetric` feed
+`identical`). Roughly triples held-out compute; the stage never fails
+the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

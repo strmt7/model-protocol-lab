@@ -48,6 +48,18 @@ from .deliforge import (
     validate_marker_index,
     validate_payload,
 )
+from .fewshot import (
+    ARMS as FEWSHOT_ARMS,
+)
+from .fewshot import (
+    DETAIL_INSUFFICIENT_DEMO_POOL,
+    FEWSHOT_K,
+    build_demo_fixtures,
+    change_rate,
+    demo_permutations,
+    order_sensitivity,
+    sample_demos,
+)
 from .hierarchy import POSITIONS, family_of, system_treatment
 from .perturbation import PERTURBATION_OPERATORS, perturb_fixtures, variant_plan
 from .portfolio import greedy_cover, oracle_rates, per_fixture_oracle_winners
@@ -2049,6 +2061,337 @@ def synthhistory_stability(
         "per_condition": per_condition,
         "flips": flips,
         "group_pass_rates": group_pass_rates,
+    }
+
+
+def fewshot_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    demo_cases: tuple[Fixture, ...],
+    eval_cases: tuple[Fixture, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate 0-shot and with both demo orders.
+
+    Demos are sampled (seeded, v1 k=2) from ``demo_cases`` -- the search
+    split -- and every arm is measured on ``eval_cases`` -- the held-out
+    split -- so a demo fixture can never evaluate itself (the
+    contamination guard). Three arms per candidate: ``baseline`` (0-shot),
+    ``order_a`` and ``order_b`` (the two demo orders, see
+    :mod:`fewshot`). Greedy, exact; the pipeline's ``exact_match``
+    grades every arm unchanged because demo prepending leaves each
+    fixture's ``expected`` untouched.
+
+    A candidate cell degrades to None on backend/evaluation failure --
+    fail-closed, never a phantom gain. Raises ``ValueError`` on
+    caller-contract violations (None backend, bad formats/demo/eval
+    cases, bad boundary). A demo pool smaller than the v1 k returns the
+    fail-closed ``{"available": False, "detail":
+    "insufficient_demo_pool"}`` payload instead of raising: a data
+    condition, not a caller bug.
+
+    Returns ``{"available": True, "k", "demo_ids", "n_eval", "arms",
+    "per_candidate": {name: {"n_eval", "verdicts": {fid: {arm:
+    bool|None}}} | None}}``.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(demo_cases) is not tuple or not demo_cases:
+        raise ValueError("demo_cases must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in demo_cases):
+        raise ValueError("demo_cases must contain Fixture values")
+    if type(eval_cases) is not tuple or not eval_cases:
+        raise ValueError("eval_cases must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in eval_cases):
+        raise ValueError("eval_cases must contain Fixture values")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    if len(demo_cases) < FEWSHOT_K:
+        return {
+            "available": False,
+            "detail": DETAIL_INSUFFICIENT_DEMO_POOL,
+            "k": FEWSHOT_K,
+            "n_demo_pool": len(demo_cases),
+        }
+    demos = sample_demos(tuple(demo_cases))
+    perms = demo_permutations(demos)
+    arms: dict[str, tuple[Fixture, ...]] = {"baseline": tuple(eval_cases)}
+    for position, perm in enumerate(perms):
+        arms[f"order_{'a' if position == 0 else 'b'}"] = build_demo_fixtures(
+            tuple(eval_cases), perm, perm_index=position
+        )
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    eval_ids = tuple(case.id for case in eval_cases)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        cell: dict[str, dict[str, bool | None]] = {}
+        try:
+            for arm in FEWSHOT_ARMS:
+                report = evaluate(
+                    backend,
+                    fmt,
+                    arms[arm],
+                    boundary=boundaries[fmt.name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                )
+                if not report.aggregate_eligible:
+                    raise RuntimeError("arm not aggregate-eligible")
+                arm_verdicts = {
+                    obs.fixture: (
+                        (obs.exact_match and obs.boundary_found)
+                        if obs.status == "completed"
+                        else None
+                    )
+                    for obs in report.observations
+                }
+                for fid in eval_ids:
+                    if arm == "baseline":
+                        namespaced = fid
+                    else:
+                        perm_index = FEWSHOT_ARMS.index(arm) - 1
+                        namespaced = f"fewshot/perm{perm_index}/{fid}"
+                    cell.setdefault(fid, {})[arm] = arm_verdicts.get(namespaced)
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        per_candidate[fmt.name] = {"n_eval": len(eval_ids), "verdicts": cell}
+    return {
+        "available": True,
+        "k": FEWSHOT_K,
+        "demo_ids": [case.id for case in demos],
+        "n_eval": len(eval_ids),
+        "arms": list(FEWSHOT_ARMS),
+        "per_candidate": per_candidate,
+    }
+
+
+def _fewshot_entry_valid(entry: Any, n_eval: int) -> bool:
+    """Structural check for one candidate cell of a fewshot stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    if entry.get("n_eval") != n_eval:
+        return False
+    verdicts = entry.get("verdicts")
+    if type(verdicts) is not dict or not all(type(fid) is str for fid in verdicts):
+        return False
+    for per_arm in verdicts.values():
+        if type(per_arm) is not dict:
+            return False
+        for arm in FEWSHOT_ARMS:
+            verdict = per_arm.get(arm)
+            if verdict is not None and type(verdict) is not bool:
+                return False
+    return True
+
+
+def _fewshot_arm_verdict(
+    per_candidate: dict[str, Any], candidates: tuple[str, ...]
+) -> tuple[str, str | None, dict[str, dict[str, Any] | None]]:
+    """Re-apply the selection rule to one fewshot arm (pure).
+
+    A candidate is evaluable for the arm when every eval fixture has a
+    non-None verdict; it passes on the conservative all-pass rule.
+    Exactly one passing candidate wins; ties and failures abstain; an
+    arm with no evaluable candidate is "unavailable", never a phantom
+    "no_candidate".
+    """
+    rates: dict[str, dict[str, Any] | None] = {}
+    for name in candidates:
+        entry = per_candidate.get(name)
+        if type(entry) is not dict:
+            rates[name] = None
+            continue
+        verdicts = entry.get("verdicts") or {}
+        arm_values = [verdicts.get(fid) for fid in verdicts]
+        if not arm_values or any(type(v) is not bool for v in arm_values):
+            rates[name] = None
+            continue
+        passed = sum(1 for v in arm_values if v)
+        rates[name] = {"pass": passed == len(arm_values), "pass_rate": passed / len(arm_values)}
+    evaluable = [name for name in candidates if rates[name] is not None]
+    winners = [name for name in evaluable if rates[name]["pass"]]  # type: ignore[index]
+    if not evaluable:
+        return "unavailable", None, rates
+    if len(winners) == 1:
+        return "selected", winners[0], rates
+    if winners:
+        return "ambiguous", None, rates
+    return "no_candidate", None, rates
+
+
+def fewshot_gain(
+    primary_winner: str | None,
+    primary_decision: str,
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze few-shot demonstration gain x template family (pure post-hoc).
+
+    Answers "do demos move verdicts, and does the demo order matter,
+    differently per template?": per candidate, ``gain`` (mean over the
+    two demo orders of the k-shot vs 0-shot verdict-change rate) and
+    ``order_sensitivity`` (population std of the two per-order rates).
+    The selection rule is re-applied per arm (baseline, order_a,
+    order_b) and each arm's (decision, winner) is compared against the
+    primary run.
+
+    The pre-registered falsifiable claim (see :mod:`fewshot`) is that
+    gain and order_sensitivity are identical across families; family
+    differences are the finding. "Gain" is a verdict-change rate, never
+    a quality judgment.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if primary_winner is not None and (
+        type(primary_winner) is not str or primary_winner not in candidates
+    ):
+        return {"available": False, "detail": "primary_winner_unknown"}
+    if type(primary_decision) is not str or not primary_decision:
+        return {"available": False, "detail": "primary_decision_invalid"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    if stage.get("available") is not True:
+        return {
+            "available": False,
+            "detail": str(stage.get("detail") or "fewshot_unavailable"),
+        }
+    n_eval = stage.get("n_eval")
+    demo_ids = stage.get("demo_ids")
+    per_candidate = stage.get("per_candidate")
+    if (
+        type(n_eval) is not int
+        or n_eval <= 0
+        or type(demo_ids) is not list
+        or not demo_ids
+        or not all(type(d) is str for d in demo_ids)
+        or type(per_candidate) is not dict
+        or not all(type(k) is str for k in per_candidate)
+    ):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _fewshot_entry_valid(entry, n_eval):
+            return {"available": False, "detail": "stage_invalid"}
+
+    results: dict[str, dict[str, Any]] = {}
+    excluded: list[str] = []
+    for name in candidates:
+        entry = per_candidate.get(name)
+        if type(entry) is not dict:
+            excluded.append(name)
+            continue
+        verdicts = entry["verdicts"]
+        n_full = sum(
+            1
+            for per_arm in verdicts.values()
+            if all(per_arm.get(arm) is not None for arm in FEWSHOT_ARMS)
+        )
+        if n_full == 0:
+            excluded.append(name)
+            continue
+        baseline = {fid: per_arm["baseline"] for fid, per_arm in verdicts.items()}
+        order_rates: dict[str, dict[str, Any]] = {}
+        rate_values: list[float | None] = []
+        for arm in ("order_a", "order_b"):
+            arm_verdicts = {fid: per_arm[arm] for fid, per_arm in verdicts.items()}
+            # _fewshot_entry_valid guarantees the verdict maps, so
+            # change_rate cannot raise here.
+            computed = change_rate(baseline, arm_verdicts)
+            order_rates[arm] = {
+                "change_rate": computed["rate"],
+                "n_changed": computed["n_changed"],
+                "n_evaluable": computed["n_evaluable"],
+            }
+            rate_values.append(computed["rate"])
+        # change_rate only yields floats in [0, 1] or None, so
+        # order_sensitivity cannot raise here either.
+        sensitivity = order_sensitivity(tuple(rate_values))
+        # Both orders always contribute a rate here: n_full >= 1 (checked
+        # above) guarantees each (baseline, order) pair at least one
+        # evaluable fixture, so the filter below is provably nonempty
+        # (documented, not defended: a defensive fallback would be dead
+        # code and an uncoverable line).
+        valid_rates = [rate for rate in rate_values if rate is not None]
+        gain = sum(valid_rates) / len(valid_rates)
+        results[name] = {
+            "gain": gain,
+            "order_sensitivity": sensitivity,
+            "n_evaluable": n_full,
+            "per_order": order_rates,
+        }
+
+    per_arm: dict[str, dict[str, Any]] = {}
+    for arm in FEWSHOT_ARMS:
+        arm_cells: dict[str, dict[str, Any] | None] = {}
+        for name in candidates:
+            stage_entry = per_candidate.get(name)
+            if type(stage_entry) is dict:
+                arm_cells[name] = {
+                    "n_eval": stage_entry.get("n_eval"),
+                    "verdicts": {
+                        fid: per_arm[arm]
+                        for fid, per_arm in stage_entry.get("verdicts", {}).items()
+                    },
+                }
+            else:
+                arm_cells[name] = None
+        decision, winner, rates = _fewshot_arm_verdict(arm_cells, candidates)
+        per_arm[arm] = {
+            "decision": decision,
+            "winner": winner,
+            "n_evaluable": sum(1 for r in rates.values() if r is not None),
+            "per_candidate": rates,
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        primary_verdict = ("selected", primary_winner)
+    else:
+        primary_verdict = (primary_decision, primary_winner)
+    flips = []
+    for arm in FEWSHOT_ARMS:
+        verdict = per_arm[arm]
+        if verdict["decision"] == "unavailable":
+            continue
+        if (verdict["decision"], verdict["winner"]) != primary_verdict:
+            flips.append(
+                {
+                    "arm": arm,
+                    "decision_from": primary_verdict[0],
+                    "decision_to": verdict["decision"],
+                    "winner_from": primary_verdict[1],
+                    "winner_to": verdict["winner"],
+                }
+            )
+    return {
+        "available": True,
+        "k": stage.get("k"),
+        "demo_ids": list(demo_ids),
+        "n_eval": n_eval,
+        "primary_winner": primary_winner,
+        "primary_decision": primary_decision,
+        "per_candidate": results,
+        "excluded_candidates": sorted(excluded),
+        "per_arm": per_arm,
+        "flips": flips,
     }
 
 

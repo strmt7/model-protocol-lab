@@ -4457,6 +4457,171 @@ def _deliforge_section(result: dict[str, Any]) -> str:
     )
 
 
+def _fewshot_section(result: dict[str, Any]) -> str:
+    """Few-shot demonstration gain x template family.
+
+    Renders the ``fewshot`` payload (see experiments.fewshot_gain): the
+    zero-shot -> 2-shot verdict-change rate (gain) and the demo-order
+    sensitivity per candidate, measured on held-out fixtures with the
+    demos sampled from the search split only. The pre-registered
+    falsifiable claim is a gain of ~0 and order sensitivity of ~0
+    uniform across families; family differences are the finding. Gain is
+    a verdict-change rate, never a quality judgment. Every
+    interpolation is escaped at this boundary.
+    """
+    audit: Any = result.get("fewshot")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.2f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        raw_per_order = entry.get("per_order")
+        per_order: dict[str, Any] = raw_per_order if type(raw_per_order) is dict else {}
+        order_cells = []
+        for arm in ("order_a", "order_b"):
+            raw_cell = per_order.get(arm)
+            cell: dict[str, Any] = raw_cell if type(raw_cell) is dict else {}
+            order_cells.append(
+                escape(_rate(cell.get("change_rate")))
+                + " ("
+                + escape(str(cell.get("n_changed")))
+                + "/"
+                + escape(str(cell.get("n_evaluable")))
+                + ")"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + "</td><td>"
+            + escape(_rate(entry.get("gain")))
+            + "</td><td>"
+            + escape(_rate(entry.get("order_sensitivity")))
+            + "</td><td>"
+            + " | ".join(order_cells)
+            + "</td></tr>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates with no fully evaluable fixture (a cell failed, "
+            "or some arm verdict was missing): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    per_arm = audit.get("per_arm")
+    arm_rows = []
+    if type(per_arm) is dict:
+        for arm in ("baseline", "order_a", "order_b"):
+            arm_cell = per_arm.get(arm)
+            if type(arm_cell) is not dict:
+                continue
+            winner = arm_cell.get("winner")
+            arm_rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(arm))
+                + "</span></td><td>"
+                + escape(str(cell.get("decision")))
+                + "</td><td>"
+                + (
+                    '<span class="mono">' + escape(str(winner)) + "</span>"
+                    if type(winner) is str
+                    else "n/a"
+                )
+                + "</td><td>"
+                + escape(str(cell.get("n_evaluable")))
+                + "</td></tr>"
+            )
+    flips = audit.get("flips")
+    flips_line = ""
+    if type(flips) is list and flips:
+        flip_parts = []
+        for flip in flips:
+            if type(flip) is not dict:
+                continue
+            flip_parts.append(
+                '<span class="mono">'
+                + escape(str(flip.get("arm")))
+                + "</span>: "
+                + escape(str(flip.get("decision_from")))
+                + " \u2192 "
+                + escape(str(flip.get("decision_to")))
+            )
+        if flip_parts:
+            flips_line = (
+                "<p>Selection-rule flips vs the primary run: " + "; ".join(flip_parts) + ".</p>"
+            )
+    demo_ids = audit.get("demo_ids")
+    demo_line = ""
+    if type(demo_ids) is list and demo_ids:
+        demo_line = (
+            "<p>Demonstration fixtures (search split, seeded sample, shown in "
+            "sampled order): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(d)) + "</span>"
+                for d in demo_ids
+                if type(d) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="few-shot">'
+        "<h2>Few-shot \u00d7 template</h2>"
+        "<p>Two demonstration fixtures were sampled (seeded) from the search "
+        "split and prepended as real user/assistant turns to every held-out "
+        "fixture, in both demo orders; every search candidate was evaluated "
+        "0-shot and with both orders. <strong>Gain</strong> is the mean "
+        "over the two orders of the k-shot vs 0-shot verdict-change rate, "
+        "in [0, 1]; <strong>order sensitivity</strong> is the population "
+        "standard deviation of the two per-order change rates, in [0, 0.5]. "
+        "Gain is a verdict-<em>change</em> rate, never a quality judgment: "
+        "a high gain means the demos moved the verdicts, not that they "
+        "helped. A demo fixture can never evaluate itself -- demos come "
+        "from the search split only, measurement runs on held-out.</p>"
+        + demo_line
+        + (
+            '<div class="table-wrap"><table><caption>Gain and order sensitivity '
+            "per candidate.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable fixtures</th><th scope="col">Gain</th>'
+            '<th scope="col">Order sensitivity</th>'
+            '<th scope="col">Per-order change rate (changed/evaluable)</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + (
+            '<div class="table-wrap"><table><caption>Selection rule re-applied per arm.</caption>'
+            '<thead><tr><th scope="col">Arm</th><th scope="col">Decision</th>'
+            '<th scope="col">Winner</th><th scope="col">Evaluable candidates</th>'
+            "</tr></thead><tbody>" + "".join(arm_rows) + "</tbody></table></div>"
+            if arm_rows
+            else ""
+        )
+        + flips_line
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -5211,6 +5376,7 @@ def render_html(result: dict[str, Any]) -> str:
     wscanonical_html = _wscanonical_section(result)
     structured_html = _structured_section(result)
     deliforge_html = _deliforge_section(result)
+    fewshot_html = _fewshot_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5294,6 +5460,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Delimiter authority",
                 deliforge_html,
             ),
+            (
+                "few-shot",
+                "Few-shot \u00d7 template",
+                fewshot_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5348,6 +5519,7 @@ def render_html(result: dict[str, Any]) -> str:
         + wscanonical_html
         + structured_html
         + deliforge_html
+        + fewshot_html
         + sweep_html
         + logprob_html
         + held_out_html
