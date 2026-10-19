@@ -340,9 +340,10 @@ class ValidationConfigFileTests(unittest.TestCase):
 
     def test_readme_codecov_badge_exact(self):
         # The badge URL must be byte-exact: a wrong org/repo slug would
-        # silently point at someone else's coverage.
+        # silently point at someone else's coverage. Owner instruction
+        # 2026-10-19: alt text is "Codecov" (capital C); preserve verbatim.
         badge = (
-            "[![codecov](https://codecov.io/gh/strmt7/model-protocol-lab/graph/badge.svg)]"
+            "[![Codecov](https://codecov.io/gh/strmt7/model-protocol-lab/graph/badge.svg)]"
             "(https://codecov.io/gh/strmt7/model-protocol-lab)"
         )
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
