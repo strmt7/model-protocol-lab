@@ -254,6 +254,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "fewshot": {"available": "neither", "changed": False},
         "faketurn": {"available": "neither", "changed": False},
         "toolcall": {"available": "neither", "changed": False},
+        "verbosity": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -312,6 +313,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "faketurn_asymmetric": False,
             "toolcall_changed": False,
             "toolcall_asymmetric": False,
+            "verbosity_changed": False,
+            "verbosity_asymmetric": False,
             "identical": True,
         },
     }
@@ -1143,6 +1146,156 @@ def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or candidates_removed
         or index_drift
         or mean_index_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_verbosity_valid(value: Any) -> bool:
+    """Oracle verbosity validator: mirrors diffreports._valid_verbosity."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    n_fixtures = value.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    n_brevity = value.get("n_brevity_fixtures")
+    if type(n_brevity) is not int or n_brevity < 0 or n_brevity > n_fixtures:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable"):
+            count = entry.get(key)
+            if type(count) is not int or count < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in (
+            "median_excess",
+            "p25_excess",
+            "p75_excess",
+            "iqr_excess",
+            "mean_excess",
+        ):
+            stat = entry.get(key)
+            if stat is not None and not (type(stat) in (int, float) and stat >= 0):
+                return False
+        max_excess = entry.get("max_excess")
+        if max_excess is not None and (type(max_excess) is not int or max_excess < 0):
+            return False
+        capped_share = entry.get("capped_share")
+        if capped_share is not None and not (
+            type(capped_share) in (int, float) and 0.0 <= capped_share <= 1.0
+        ):
+            return False
+        p25 = entry.get("p25_excess")
+        median = entry.get("median_excess")
+        p75 = entry.get("p75_excess")
+        if (
+            entry["n_evaluable"] > 0
+            and type(p25) in (int, float)
+            and type(median) in (int, float)
+            and type(p75) in (int, float)
+            and not p25 <= median <= p75
+        ):
+            return False
+    for key in ("most_verbose", "least_verbose", "capped_candidates", "excluded_candidates"):
+        value_list = value.get(key)
+        if type(value_list) is not list or not all(type(c) is str for c in value_list):
+            return False
+    return True
+
+
+def _o_verbosity(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle verbosity section: median/iqr/capped-share drift.
+
+    Independent reimplementation: dict-comprehension views rather
+    than the implementation's accumulation loops, with the drift
+    buckets filled in the implementation's per-candidate field order.
+    """
+    old_ok = _o_verbosity_valid(old)
+    new_ok = _o_verbosity_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        # Mirrors the implementation: a None cell (candidate missing
+        # from the stage) counts as excluded, exactly like the
+        # profile's excluded_candidates semantics.
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            if entry is None:
+                out[name] = {
+                    "median_excess": None,
+                    "iqr_excess": None,
+                    "capped_share": None,
+                    "excluded": True,
+                }
+            else:
+                out[name] = {
+                    "median_excess": entry.get("median_excess"),
+                    "iqr_excess": entry.get("iqr_excess"),
+                    "capped_share": entry.get("capped_share"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    # Same per-candidate field order as the implementation's loop.
+    median_drift: list[dict[str, Any]] = []
+    iqr_drift: list[dict[str, Any]] = []
+    capped_share_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        for field, bucket in (
+            ("median_excess", median_drift),
+            ("iqr_excess", iqr_drift),
+            ("capped_share", capped_share_drift),
+        ):
+            if old_view[name][field] != new_view[name][field]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_view[name][field],
+                        "new": new_view[name][field],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    diff["median_drift"] = median_drift
+    diff["iqr_drift"] = iqr_drift
+    diff["capped_share_drift"] = capped_share_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        median_drift
+        or iqr_drift
+        or capped_share_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
     )
     diff["changed"] = changed
     return diff, changed, asymmetric
@@ -2575,15 +2728,25 @@ def _o_toolcall(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        # A None cell (candidate missing from the stage) counts as
+        # excluded, mirroring the implementation and the profile's
+        # excluded_candidates semantics.
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
-            entry = entry or {}
-            out[name] = {
-                "selection_rate": entry.get("selection_rate"),
-                "args_rate": entry.get("args_rate"),
-                "relevance_rate": entry.get("relevance_rate"),
-                "excluded": name in set(payload.get("excluded_candidates") or []),
-            }
+            if entry is None:
+                out[name] = {
+                    "selection_rate": None,
+                    "args_rate": None,
+                    "relevance_rate": None,
+                    "excluded": True,
+                }
+            else:
+                out[name] = {
+                    "selection_rate": entry.get("selection_rate"),
+                    "args_rate": entry.get("args_rate"),
+                    "relevance_rate": entry.get("relevance_rate"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
         return out
 
     old_view = _view(old)
@@ -2995,6 +3158,7 @@ def _oracle_diff(
     o_fs, o_fs_changed, o_fs_asymmetric = _o_fewshot(old.get("fewshot"), new.get("fewshot"))
     o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
     o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
+    o_vb, o_vb_changed, o_vb_asymmetric = _o_verbosity(old.get("verbosity"), new.get("verbosity"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -3044,6 +3208,8 @@ def _oracle_diff(
         and not o_ft_asymmetric
         and not o_tc_changed
         and not o_tc_asymmetric
+        and not o_vb_changed
+        and not o_vb_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -3072,6 +3238,7 @@ def _oracle_diff(
         "fewshot": o_fs,
         "faketurn": o_ft,
         "toolcall": o_tc,
+        "verbosity": o_vb,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3126,6 +3293,8 @@ def _oracle_diff(
             "faketurn_asymmetric": o_ft_asymmetric,
             "toolcall_changed": o_tc_changed,
             "toolcall_asymmetric": o_tc_asymmetric,
+            "verbosity_changed": o_vb_changed,
+            "verbosity_asymmetric": o_vb_asymmetric,
             "identical": identical,
         },
     }
@@ -3291,6 +3460,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "faketurn_asymmetric": False,
                 "toolcall_changed": False,
                 "toolcall_asymmetric": False,
+                "verbosity_changed": False,
+                "verbosity_asymmetric": False,
                 "identical": False,
             },
         )
@@ -4555,6 +4726,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["faketurn"] = _fuzz_faketurn_section(rng)
     if rng.random() < 0.45:
         report["toolcall"] = _fuzz_toolcall_section(rng)
+    if rng.random() < 0.45:
+        report["verbosity"] = _fuzz_verbosity_section(rng)
     return report
 
 
@@ -4849,6 +5022,48 @@ def _fuzz_toolcall_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_verbosity_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        n_evaluable = rng.randint(0, 9)
+        median = rng.choice([0.0, 2.5, 11.5, None, "huge"])
+        p25 = rng.choice([0.0, 1.0, None])
+        p75 = rng.choice([3.0, 12.0, None])
+        entry = {
+            "n": 9,
+            "n_evaluable": n_evaluable,
+            "median_excess": median,
+            "p25_excess": p25,
+            "p75_excess": p75,
+            "iqr_excess": rng.choice([0.0, 2.0, 9.5, None]),
+            "mean_excess": rng.choice([0.0, 5.0, None]),
+            "max_excess": rng.choice([0, 5, 20, None]),
+            "capped_share": rng.choice([0.0, 0.5, 1.0, None, 1.5]),
+        }
+        if rng.random() < 0.1:
+            entry["median_excess"] = -1.0  # hostile: negative excess
+        if rng.random() < 0.1:
+            entry["p25_excess"] = 99.0  # hostile: quartile ordering violated
+        if rng.random() < 0.1:
+            entry[rng.choice(["n", 7])] = -1  # hostile: negative / bad key
+        per_candidate[name] = entry
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"n": 1}  # hostile: non-string key
+    return {
+        "available": True,
+        "n_fixtures": 9,
+        "n_brevity_fixtures": rng.choice([0, 2, 9, 10]),
+        "per_candidate": per_candidate,
+        "most_verbose": rng.choice([[], ["alpha"], ["beta"], [7]]),
+        "least_verbose": rng.choice([[], ["alpha"]]),
+        "capped_candidates": rng.choice([[], ["beta"]]),
+        "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+    }
+
+
 def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
     mutations = ["trailing_space", "leading_space", "trailing_newline"]
     if rng.random() < 0.3:
@@ -5139,6 +5354,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not faketurn_asymmetric\n"
             '        and not toolcall_diff["changed"]\n'
             "        and not toolcall_asymmetric\n"
+            '        and not verbosity_diff["changed"]\n'
+            "        and not verbosity_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -5185,6 +5402,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or faketurn_asymmetric\n"
             '        or toolcall_diff["changed"]\n'
             "        or toolcall_asymmetric\n"
+            '        or verbosity_diff["changed"]\n'
+            "        or verbosity_asymmetric\n"
             "    )\n",
             scenario,
         )

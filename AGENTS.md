@@ -23,6 +23,34 @@ Run `tools/agent_context.py startup` at a new context boundary to load both
 mandatory skills. The startup gate fails closed if this file stops declaring
 the mandates above.
 
+## Product direction (standing owner directive, 2026-10-19)
+
+- Sharp direction, real utility, verified uniqueness. Every piece of
+  the repo — code, CLI, tools, MCP, docs — must communicate a clear
+  and direct purpose within seconds of looking at it.
+- Uniqueness is verified, never asserted. Before building any new
+  capability, run a real web-research pass (LM Eval Harness, HELM,
+  PromptPerfect, OpenAI evals, DSPy, and neighbors); write the
+  findings with sources into `docs/RESEARCH_LOG.md`. If it exists,
+  don't build it — or build the deterministically-verifiable
+  differentiator and say exactly what that is. Never claim "first"
+  or "unique" without cited evidence.
+- Utility test for every feature: "who uses this on Monday morning
+  and for what decision?" in one sentence, in its docs and CLI help.
+  If you can't write that sentence, don't build it.
+- The top of `README.md` states in plain non-technical language what
+  the repo is for and who it's for, before any architecture.
+- `docs/USAGE.md`, `docs/FAQ.md`, and CLI help tell the same story
+  with the same terms — no three-names-for-one-concept drift.
+- Write like a human. Audit README/docs/CLI help for AI-generated
+  tells — repetitive sentence shapes, empty intensifiers ("robust",
+  "seamless", "leverage"), sections that say nothing — and rewrite
+  them in a human voice with judgment. Code comments explain WHY, not
+  WHAT. Study how genuinely popular, high-quality repos orient
+  (README voice, docs organization, commit messages, issue/PR
+  templates, teaching examples) — read-only; never write to anything
+  outside model-protocol-lab.
+
 ## Working rules
 
 - Preserve unrelated working-tree changes. Stage only intentional source/docs/config.

@@ -11,13 +11,15 @@
 
 **Is a local language model failing because of its weights, or because its conversations are formatted incorrectly?**
 
+**Who it's for:** developers shipping prompts to local LLMs, and researchers studying how chat formatting changes model behavior. If you need to know whether a bad answer comes from the model or from how you talked to it — and prove the answer with numbers, not vibes — this is the tool.
+
 Model Protocol Lab answers that question with measurements, not guesses. It renders chat-format hypotheses — a 29-family catalog (ChatML; Llama 3 and 4; Gemma 2, 3 and 4; Qwen3 and 3.8; DeepSeek V3/R1 and V4.1; Mistral v0.3 and Large; Phi-4; GLM-4, 4.5 and 5.3; Kimi K2 and K3; Kolibri-1; LFM2.5; Nemotron 3.5; Muse Glimmer; Muse Spark; Laguna 2.1; Ling-3.1; K2-Horizon; Hy4; MiniMax-M3; Nanbeige 4.2), plus bounded BOS, prefix and thinking-mode mutations — as exact token sequences, sends them to a local checkpoint, and compares task answers and response boundaries token-for-token. A strict search/held-out fixture discipline selects a single winning format or abstains; nothing is ranked, nothing is downloaded, and every result ships as a byte-deterministic local report.
 
 What sets it apart: it measures checkpoints on token sequences their own chat templates would never produce; it detects response boundaries as token-ID subsequences rather than string stop-sequences; it generates exactly N tokens with no implicit EOS stop; and it abstains on ties instead of crowning a leaderboard winner. The differences are verifiable design decisions, documented with sources in [How this differs](#how-this-differs-from-nearby-tools) — not marketing claims.
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (5880 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (5949 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 

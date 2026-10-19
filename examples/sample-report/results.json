@@ -5303,6 +5303,86 @@
     "adherent_rate_gap": 1.0,
     "uniform": false
   },
+  "verbosity": {
+    "available": true,
+    "n_fixtures": 2,
+    "n_brevity_fixtures": 2,
+    "per_candidate": {
+      "llama3": {
+        "n": 2,
+        "median_excess": 0.0,
+        "p25_excess": 0.0,
+        "p75_excess": 0.0,
+        "iqr_excess": 0.0,
+        "mean_excess": 0.0,
+        "max_excess": 0,
+        "n_evaluable": 2,
+        "capped_share": 0.0
+      },
+      "llama3/toggle-bos": {
+        "n": 2,
+        "median_excess": 11.5,
+        "p25_excess": 11.25,
+        "p75_excess": 11.75,
+        "iqr_excess": 0.5,
+        "mean_excess": 11.5,
+        "max_excess": 12,
+        "n_evaluable": 2,
+        "capped_share": 1.0
+      },
+      "llama3/no-bos": {
+        "n": 2,
+        "median_excess": 11.5,
+        "p25_excess": 11.25,
+        "p75_excess": 11.75,
+        "iqr_excess": 0.5,
+        "mean_excess": 11.5,
+        "max_excess": 12,
+        "n_evaluable": 2,
+        "capped_share": 1.0
+      },
+      "llama3/prefix-newline": {
+        "n": 2,
+        "median_excess": 11.5,
+        "p25_excess": 11.25,
+        "p75_excess": 11.75,
+        "iqr_excess": 0.5,
+        "mean_excess": 11.5,
+        "max_excess": 12,
+        "n_evaluable": 2,
+        "capped_share": 1.0
+      },
+      "llama3/prefix-trim": {
+        "n": 2,
+        "median_excess": 11.5,
+        "p25_excess": 11.25,
+        "p75_excess": 11.75,
+        "iqr_excess": 0.5,
+        "mean_excess": 11.5,
+        "max_excess": 12,
+        "n_evaluable": 2,
+        "capped_share": 1.0
+      }
+    },
+    "most_verbose": [
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "least_verbose": [
+      "llama3"
+    ],
+    "median_excess_gap": 11.5,
+    "uniform": false,
+    "capped_candidates": [
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "excluded_candidates": []
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

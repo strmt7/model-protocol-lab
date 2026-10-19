@@ -583,6 +583,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    verbosity_diff = diff_verbosity(old.get("verbosity"), new.get("verbosity"))
+    verbosity_asymmetric = verbosity_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -632,6 +637,8 @@ def diff_reports(
         and not faketurn_asymmetric
         and not toolcall_diff["changed"]
         and not toolcall_asymmetric
+        and not verbosity_diff["changed"]
+        and not verbosity_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -682,6 +689,8 @@ def diff_reports(
         "faketurn_asymmetric": faketurn_asymmetric,
         "toolcall_changed": toolcall_diff["changed"],
         "toolcall_asymmetric": toolcall_asymmetric,
+        "verbosity_changed": verbosity_diff["changed"],
+        "verbosity_asymmetric": verbosity_asymmetric,
         "identical": identical,
     }
     return {
@@ -711,6 +720,7 @@ def diff_reports(
         "fewshot": fewshot_diff,
         "faketurn": faketurn_diff,
         "toolcall": toolcall_diff,
+        "verbosity": verbosity_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2876,6 +2886,171 @@ def diff_toolcall(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_verbosity(payload: Any) -> bool:
+    """Structural check for a ``verbosity`` profile payload.
+
+    Enforces the wave-2 C3 lesson at the value level: excess
+    statistics must be numbers/None and non-negative, the capped
+    share a number/None in [0, 1], quartiles ordered, and map keys
+    strings, so the renderers never hit a TypeError on a hostile
+    payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    n_fixtures = payload.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    n_brevity = payload.get("n_brevity_fixtures")
+    if type(n_brevity) is not int or n_brevity < 0 or n_brevity > n_fixtures:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable"):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in (
+            "median_excess",
+            "p25_excess",
+            "p75_excess",
+            "iqr_excess",
+            "mean_excess",
+        ):
+            value = entry.get(key)
+            if value is not None and not (type(value) in (int, float) and value >= 0):
+                return False
+        max_excess = entry.get("max_excess")
+        if max_excess is not None and (type(max_excess) is not int or max_excess < 0):
+            return False
+        capped_share = entry.get("capped_share")
+        if capped_share is not None and not (
+            type(capped_share) in (int, float) and 0.0 <= capped_share <= 1.0
+        ):
+            return False
+        p25 = entry.get("p25_excess")
+        median = entry.get("median_excess")
+        p75 = entry.get("p75_excess")
+        # isinstance narrows for mypy where type() in (...) does not;
+        # bools were already rejected by the per-key loop above.
+        if (
+            entry["n_evaluable"] > 0
+            and isinstance(p25, (int, float))
+            and isinstance(median, (int, float))
+            and isinstance(p75, (int, float))
+            and not p25 <= median <= p75
+        ):
+            return False
+    for key in ("most_verbose", "least_verbose", "capped_candidates", "excluded_candidates"):
+        value = payload.get(key)
+        if type(value) is not list or not all(type(c) is str for c in value):
+            return False
+    return True
+
+
+def diff_verbosity(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``verbosity`` profile payloads; deterministic.
+
+    Answers "did the verbosity story change between runs?":
+    per-candidate median-excess drift, IQR drift, and
+    budget-saturation-share drift, plus added/removed candidates and
+    changes in the excluded set. A newly positive median-excess gap
+    after a template change is the regression signal -- the template
+    deciding how much the model generates. A side without a recorded
+    probe is reported plainly. No model, no network.
+    """
+    old_ok = _valid_verbosity(old)
+    new_ok = _valid_verbosity(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_verbosity guarantees str keys and dict/None
+            # entries, so no defensive skip is needed here (it would
+            # be dead code and an uncoverable line).
+            if entry is None:
+                view[name] = {
+                    "median_excess": None,
+                    "iqr_excess": None,
+                    "capped_share": None,
+                    "excluded": True,
+                }
+            else:
+                view[name] = {
+                    "median_excess": entry.get("median_excess"),
+                    "iqr_excess": entry.get("iqr_excess"),
+                    "capped_share": entry.get("capped_share"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    verbosity_candidates_added = sorted(set(new_view) - set(old_view))
+    verbosity_candidates_removed = sorted(set(old_view) - set(new_view))
+    verbosity_median_drift: list[dict[str, Any]] = []
+    verbosity_iqr_drift: list[dict[str, Any]] = []
+    verbosity_capped_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        for rate_key, bucket in (
+            ("median_excess", verbosity_median_drift),
+            ("iqr_excess", verbosity_iqr_drift),
+            ("capped_share", verbosity_capped_drift),
+        ):
+            if old_entry[rate_key] != new_entry[rate_key]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_entry[rate_key],
+                        "new": new_entry[rate_key],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    verbosity_excluded_added = sorted(new_excluded - old_excluded)
+    verbosity_excluded_removed = sorted(old_excluded - new_excluded)
+    result["median_drift"] = verbosity_median_drift
+    result["iqr_drift"] = verbosity_iqr_drift
+    result["capped_share_drift"] = verbosity_capped_drift
+    result["candidates_added"] = verbosity_candidates_added
+    result["candidates_removed"] = verbosity_candidates_removed
+    result["excluded_added"] = verbosity_excluded_added
+    result["excluded_removed"] = verbosity_excluded_removed
+    # NOTE: verbosity-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        verbosity_median_drift
+        or verbosity_iqr_drift
+        or verbosity_capped_drift
+        or verbosity_candidates_added
+        or verbosity_candidates_removed
+        or verbosity_excluded_added
+        or verbosity_excluded_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -4450,6 +4625,61 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str]:
+    """Verbosity profile comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson). Excess values are token counts, rendered with
+    one decimal.
+    """
+    if type(verbosity_diff) is not dict:
+        return []
+    available = verbosity_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Verbosity comparison unavailable: {missing} run did not record the verbosity probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_tokens(value: Any) -> str:
+        return f"{value:.1f}" if type(value) in (int, float) else "(none)"
+
+    for drift_key, label in (
+        ("median_drift", "median-excess"),
+        ("iqr_drift", "iqr-excess"),
+        ("capped_share_drift", "capped-share"),
+    ):
+        drift = verbosity_diff.get(drift_key) or []
+        for entry in drift[:3]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"Verbosity {label} drift ({_display_id(entry.get('candidate'))}): "
+                f"{_fmt_tokens(entry.get('old'))} -> {_fmt_tokens(entry.get('new'))}"
+            )
+        if len(drift) > 3:
+            lines.append(f"  ... and {len(drift) - 3} more {label} drifts")
+    added = verbosity_diff.get("candidates_added") or []
+    removed = verbosity_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Verbosity candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Verbosity candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    excl_added = verbosity_diff.get("excluded_added") or []
+    excl_removed = verbosity_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(f"Verbosity newly excluded: {', '.join(_display_id(c) for c in excl_added)}")
+    if excl_removed:
+        lines.append(
+            f"Verbosity no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -4877,6 +5107,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_fewshot_summary(diff.get("fewshot")))
     lines.extend(_render_faketurn_summary(diff.get("faketurn")))
     lines.extend(_render_toolcall_summary(diff.get("toolcall")))
+    lines.extend(_render_verbosity_summary(diff.get("verbosity")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

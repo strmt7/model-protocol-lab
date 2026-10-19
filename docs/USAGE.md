@@ -1184,6 +1184,44 @@ probe floors the token budget at 128 (the longest canonical call is
 calls into `parse_failed`. 9 synthetic fixtures; the stage never
 fails the run.
 
+### 8.30 Response verbosity profile (`verbosity`)
+
+Do some chat templates make the model yap more than others?
+`model-protocol-lab run --verbosity` measures, per template family,
+the distribution of *excess generated tokens* on brevity-ideal
+fixtures -- prompts with short stable expected answers (a pinned
+rule: stripped, single-line, at most 32 characters). Excess =
+generated tokens minus the exact tokenization of the expected
+answer, clamped at zero; per family the report shows median, P25/P75,
+IQR, mean, and max excess. The measurement is purely post-hoc over
+the main run's observations -- zero extra model calls -- which is
+exactly the point: arXiv:2601.00624 ("Do Chatbot LLMs Talk Too Much?
+The YapBench Benchmark") finds an order-of-magnitude spread in median
+excess length across 76 *models* on fixed prompts, but nobody varies
+the *chat template* as the independent variable for verbosity. The
+lab already records exact generated token counts, so the template
+becomes the IV for free. The pre-registered falsifiable claim (in
+`verbosity.py`) is a max-minus-min median-excess gap of ~0 uniform
+across families; a measurably positive gap means the template, not
+the model or the prompt, decides how much gets generated -- with
+direct inference-cost consequences. Two honesty pins: (1) verbosity
+is a cost/behavior profile, never a quality judgment -- the report
+states explicitly that shorter is not better; (2) the per-candidate
+budget-saturation share marks generations that hit the token budget,
+whose measured lengths are *lower bounds* on true verbosity --
+unconfounding this experiment from the cycle-155 stop-cause audit
+(over-generation vs max-length termination are otherwise confounded
+channels). `results.json` carries `verbosity` with per-candidate
+distributions, most/least verbose behavior labels, the median gap,
+and the capped-candidate list. `diff-reports` compares
+per-candidate median-excess, IQR, and capped-share drift,
+added/removed candidates, and excluded-set changes
+(`diff_verbosity`; `verbosity_changed` / `verbosity_asymmetric` feed
+`identical`). Monday-morning use: a developer budgeting inference
+spend checks which template families systematically over-generate on
+short-answer tasks before choosing a serving template. The stage
+never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

@@ -237,6 +237,28 @@ class ToolcallDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class VerbosityDemoBackend(DemoBackend):
+    """Scripted length policy for the verbosity exercise.
+
+    Ord codec like DemoBackend. The backend emits a single-token
+    answer padded to the *requested* budget: the exercise runs the
+    base candidate with a 4-token budget (minimal verbosity) and the
+    mutated candidates with the 16-token budget (maximal verbosity).
+    ``reason="limit"`` always carries exactly the requested budget, so
+    every observation is valid per the core contract. For the llama3
+    sample candidates this yields genuine signal: base median excess
+    0.0 tokens and uncapped, mutated variants at 11.5 with
+    capped_share 1.0 (their measured lengths are honestly reported as
+    lower bounds). Deterministic.
+    """
+
+    fingerprint = "synthetic-verbosity-demo-v1-not-a-model"
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        text = "A".ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 class BatchDemoBackend(DemoBackend):
     """Scripted batch-capable backend for the batch-invariance exercise.
 
@@ -1230,6 +1252,51 @@ def build_sample_report(output_dir: Path) -> dict:
         result["toolcall"] = {
             "available": False,
             "detail": "toolcall_unavailable",
+        }
+    # Response verbosity profile (research wave-4 idea 5): run the
+    # real verbosity stage post-hoc over scripted observations with
+    # genuine signal -- the base candidate emits one token per fixture
+    # (median excess 0.0) while the mutated candidates pad to the
+    # budget (capped_share 1.0, honestly reported as lower bounds).
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from dataclasses import asdict
+
+        from model_protocol_lab.core import evaluate
+        from model_protocol_lab.experiments import verbosity_profile, verbosity_stage
+
+        _v_backend = VerbosityDemoBackend()
+        _v_fmts = candidates("llama3", mutate=True)
+        _v_names = tuple(f.name for f in _v_fmts)
+        _v_expected = {f.id: f.expected for f in split.search}
+        _v_observations: list = []
+        # Per-candidate budgets synthesize the length variation the
+        # probe measures: the base candidate runs under a 4-token
+        # budget (terse), the mutated variants under the 16-token
+        # budget (saturated). The stage itself just sees observations;
+        # MAX_NEW_TOKENS is the nominal budget for the capped share.
+        for _v_fmt in _v_fmts:
+            _v_budget = 4 if _v_fmt.name == "llama3" else MAX_NEW_TOKENS
+            _v_report = evaluate(
+                _v_backend,
+                _v_fmt,
+                tuple(split.search),
+                boundary=BOUNDARY,
+                max_new_tokens=_v_budget,
+                seed=20261012,
+            )
+            _v_observations.extend(asdict(o) for o in _v_report.observations)
+        _v_stage = verbosity_stage(
+            observations=_v_observations,
+            expected_by_fixture=_v_expected,
+            backend=_v_backend,
+            max_new_tokens=MAX_NEW_TOKENS,
+        )
+        result["verbosity"] = verbosity_profile(_v_names, _v_stage)
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["verbosity"] = {
+            "available": False,
+            "detail": "verbosity_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
