@@ -252,6 +252,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "structured": {"available": "neither", "changed": False},
         "deliforge": {"available": "neither", "changed": False},
         "fewshot": {"available": "neither", "changed": False},
+        "faketurn": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -306,6 +307,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "deliforge_asymmetric": False,
             "fewshot_changed": False,
             "fewshot_asymmetric": False,
+            "faketurn_changed": False,
+            "faketurn_asymmetric": False,
             "identical": True,
         },
     }
@@ -2342,6 +2345,178 @@ def _o_fewshot(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_faketurn_valid(value: Any) -> bool:
+    """Oracle faketurn validator: mirrors diffreports._valid_faketurn."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    payloads = value.get("payloads")
+    if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+        return False
+    marker_indexes = value.get("marker_indexes")
+    if (
+        type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+    ):
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        cells = entry.get("cells")
+        if type(cells) is not dict or not all(type(k) is str for k in cells):
+            return False
+        for cell in cells.values():
+            if type(cell) is not dict or cell.get("supported") is not True:
+                continue
+            if cell.get("token_source") not in ("same", "cross"):
+                return False
+            n_evaluable = cell.get("n_evaluable")
+            if type(n_evaluable) is not int or n_evaluable < 0:
+                return False
+            rate = cell.get("flip_rate")
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+        for key in ("same_flip_rate", "cross_flip_rate", "max_flip_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+        gap = entry.get("transfer_gap")
+        if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+            return False
+    excluded = value.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def _o_faketurn(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle faketurn section: flip-rate, provenance, and gap drift.
+
+    Independent reimplementation: comprehension-built views rather
+    than the implementation's accumulation loops.
+    """
+    old_ok = _o_faketurn_valid(old)
+    new_ok = _o_faketurn_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            cells = {
+                key: (
+                    {"flip_rate": cell.get("flip_rate"), "token_source": cell.get("token_source")}
+                    if type(cell) is dict and cell.get("supported") is True
+                    else None
+                )
+                for key, cell in (entry.get("cells") or {}).items()
+            }
+            out[name] = {
+                "cells": cells,
+                "transfer_gap": entry.get("transfer_gap"),
+                "max_flip_rate": entry.get("max_flip_rate"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    # Single pass in the implementation's (name, key) iteration order:
+    # supportedness flips and token-source changes interleave exactly
+    # as diffreports.diff_faketurn appends them.
+    cell_drift: list[dict[str, Any]] = []
+    source_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        for key in sorted(set(old_view[name]["cells"]) & set(new_view[name]["cells"])):
+            old_cell = old_view[name]["cells"][key]
+            new_cell = new_view[name]["cells"][key]
+            if old_cell is None or new_cell is None:
+                if old_cell != new_cell:
+                    source_drift.append(
+                        {
+                            "candidate": name,
+                            "cell": key,
+                            "old": "supported" if old_cell is not None else "unsupported",
+                            "new": "supported" if new_cell is not None else "unsupported",
+                        }
+                    )
+                continue
+            if old_cell["flip_rate"] != new_cell["flip_rate"]:
+                cell_drift.append(
+                    {
+                        "candidate": name,
+                        "cell": key,
+                        "old": old_cell["flip_rate"],
+                        "new": new_cell["flip_rate"],
+                    }
+                )
+            if old_cell["token_source"] != new_cell["token_source"]:
+                source_drift.append(
+                    {
+                        "candidate": name,
+                        "cell": key,
+                        "old": old_cell["token_source"],
+                        "new": new_cell["token_source"],
+                    }
+                )
+    gap_drift = [
+        {
+            "candidate": name,
+            "old": old_view[name]["transfer_gap"],
+            "new": new_view[name]["transfer_gap"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["transfer_gap"] != new_view[name]["transfer_gap"]
+    ]
+    top_rate_drift = [
+        {
+            "candidate": name,
+            "old": old_view[name]["max_flip_rate"],
+            "new": new_view[name]["max_flip_rate"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["max_flip_rate"] != new_view[name]["max_flip_rate"]
+    ]
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    diff["cell_drift"] = cell_drift
+    diff["gap_drift"] = gap_drift
+    diff["top_rate_drift"] = top_rate_drift
+    diff["source_drift"] = source_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        cell_drift
+        or gap_drift
+        or top_rate_drift
+        or source_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2703,6 +2878,7 @@ def _oracle_diff(
     )
     o_dl, o_dl_changed, o_dl_asymmetric = _o_deliforge(old.get("deliforge"), new.get("deliforge"))
     o_fs, o_fs_changed, o_fs_asymmetric = _o_fewshot(old.get("fewshot"), new.get("fewshot"))
+    o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -2748,6 +2924,8 @@ def _oracle_diff(
         and not o_dl_asymmetric
         and not o_fs_changed
         and not o_fs_asymmetric
+        and not o_ft_changed
+        and not o_ft_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2774,6 +2952,7 @@ def _oracle_diff(
         "structured": o_st,
         "deliforge": o_dl,
         "fewshot": o_fs,
+        "faketurn": o_ft,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2824,6 +3003,8 @@ def _oracle_diff(
             "deliforge_asymmetric": o_dl_asymmetric,
             "fewshot_changed": o_fs_changed,
             "fewshot_asymmetric": o_fs_asymmetric,
+            "faketurn_changed": o_ft_changed,
+            "faketurn_asymmetric": o_ft_asymmetric,
             "identical": identical,
         },
     }
@@ -2985,6 +3166,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "deliforge_asymmetric": False,
                 "fewshot_changed": False,
                 "fewshot_asymmetric": False,
+                "faketurn_changed": False,
+                "faketurn_asymmetric": False,
                 "identical": False,
             },
         )
@@ -4210,8 +4393,9 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
     # portfolio, synthhistory, batch_invariance, position, stop_cause,
-    # ws_canonical, structured, deliforge, fewshot): emitted often enough
-    # that the differential fuzz exercises them, not just the legacy axes.
+    # ws_canonical, structured, deliforge, fewshot, faketurn): emitted
+    # often enough that the differential fuzz exercises them, not just
+    # the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -4244,6 +4428,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["deliforge"] = _fuzz_deliforge_section(rng)
     if rng.random() < 0.45:
         report["fewshot"] = _fuzz_fewshot_section(rng)
+    if rng.random() < 0.45:
+        report["faketurn"] = _fuzz_faketurn_section(rng)
     return report
 
 
@@ -4444,6 +4630,62 @@ def _fuzz_fewshot_section(rng: random.Random) -> dict[str, Any]:
         "excluded_candidates": rng.choice([[], ["alpha"], [1]]),
         "per_arm": per_arm,
         "flips": rng.choice([[], [{"arm": "order_a"}]]),
+    }
+
+
+def _fuzz_faketurn_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        cells = {}
+        for payload in ("fake_assistant", "fake_system"):
+            for marker_index in (0, 1):
+                key = f"{payload}/{marker_index}"
+                roll = rng.random()
+                if roll < 0.15:
+                    cells[key] = None
+                elif roll < 0.30:
+                    cells[key] = {
+                        "supported": False,
+                        "detail": rng.choice(
+                            ["no_provenance", "ref_missing", "marker_count_mismatch", 7]
+                        ),
+                    }
+                else:
+                    n_evaluable = rng.randint(0, 4)
+                    cells[key] = {
+                        "supported": True,
+                        "n_evaluable": n_evaluable,
+                        "n_flips": rng.randint(0, n_evaluable),
+                        "flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                        "token_source": rng.choice(["same", "cross"]),
+                    }
+                    if rng.random() < 0.1:
+                        cells[key]["token_source"] = "native"  # hostile
+        if rng.random() < 0.15:
+            cells[rng.choice(["mystery", 7])] = {"supported": True}
+        per_candidate[name] = {
+            "cells": cells,
+            "n_cells": len(cells),
+            "n_evaluable_cells": rng.randint(0, 2),
+            "same_flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "cross_flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
+            "transfer_gap": rng.choice([-1.0, -0.5, 0.0, 0.5, 1.0, None]),
+            "mean_flip_rate": rng.choice([0.0, 0.5, None]),
+            "max_flip_rate": rng.choice([0.0, 1.0, None]),
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"cells": {}}
+    return {
+        "available": True,
+        "payloads": rng.choice([["fake_assistant"], ["fake_assistant", "fake_system"]]),
+        "marker_indexes": rng.choice([[0], [0, 1]]),
+        "per_candidate": per_candidate,
+        "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+        "max_transfer_gap": rng.choice([-1.0, 0.0, 1.0, None]),
+        "max_flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
     }
 
 
@@ -4733,6 +4975,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not deliforge_asymmetric\n"
             '        and not fewshot_diff["changed"]\n'
             "        and not fewshot_asymmetric\n"
+            '        and not faketurn_diff["changed"]\n'
+            "        and not faketurn_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"

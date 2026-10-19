@@ -1105,6 +1105,42 @@ changes (`diff_fewshot`; `fewshot_changed` / `fewshot_asymmetric` feed
 `identical`). Roughly triples held-out compute; the stage never fails
 the run.
 
+### 8.28 Fake-turn history tampering (`faketurn`)
+
+Does a forged prior turn flip verdicts differently depending on whose
+delimiters it wears? `model-protocol-lab run --fake-turn` injects a
+forged turn -- a fake assistant message asserting a wrong answer, or a
+fake system instruction contradicting the task (the same payload
+builders as `deliforge`) -- into the search fixtures' user content at
+each family's native encoding, and measures the verdict-flip rate per
+(candidate, payload, marker) cell against the native search verdicts.
+The independent variable is the forged marker's token **provenance**:
+`same` when the forged marker string also occurs as a genuine
+delimiter in the rendering template's own benign render (the forged
+turn wears the family's own delimiters), `cross` when the marker is a
+fixed known chat-template control token from another family's token
+set. Per candidate, the pooled same-family and cross-family flip
+rates and the **transfer gap** (cross minus same, in [-1, 1]) are
+reported: a systematically positive gap means foreign delimiters carry
+more tampering authority -- arXiv:2405.20234's token-set-dependence
+claim ("Hidden in Plain Sight"), measured per family with the model
+fixed, the exact complement of the paper's cross-model design, plus
+the cross-family transfer no other harness measures. The boundary
+with `deliforge` is crisp: deliforge varies the *encoding* of fixed
+forged text (reserved vs subword); this varies the *delimiter
+provenance* at the family's native encoding. The pre-registered
+falsifiable claim (in `faketurn.py`) is a transfer gap of ~0 and flip
+rates that do not cluster by token set; clustering is the finding.
+Every rendered prompt is integrity-checked (its unique ref occurs
+exactly once, the forged marker at least twice); violations degrade
+the cell fail-closed. `results.json` carries `faketurn` with per-cell
+flip rates and provenance, per-candidate pooled rates and transfer
+gap. `diff-reports` compares per-cell flip-rate drift, transfer-gap
+drift, per-cell provenance changes, added/removed candidates, and
+excluded-set changes (`diff_faketurn`; `faketurn_changed` /
+`faketurn_asymmetric` feed `identical`). Roughly 8x search compute (2
+payloads x 4 markers); the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

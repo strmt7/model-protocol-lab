@@ -82,6 +82,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "structured",
     "deliforge",
     "fewshot",
+    "faketurn",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

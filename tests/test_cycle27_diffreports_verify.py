@@ -1205,6 +1205,64 @@ def oracle_diff_reports(
     else:
         _o_fs_available = "neither"
     _o_fs_asymmetric = _o_fs_available not in ("both", "neither")
+
+    def _or_faketurn_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_faketurn exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        payloads = value.get("payloads")
+        if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+            return False
+        marker_indexes = value.get("marker_indexes")
+        if (
+            type(marker_indexes) is not list
+            or not marker_indexes
+            or not all(type(i) is int for i in marker_indexes)
+        ):
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if type(entry) is not dict:
+                return False
+            cells = entry.get("cells")
+            if type(cells) is not dict or not all(type(k) is str for k in cells):
+                return False
+            for cell in cells.values():
+                if type(cell) is not dict or cell.get("supported") is not True:
+                    continue
+                if cell.get("token_source") not in ("same", "cross"):
+                    return False
+                n_evaluable = cell.get("n_evaluable")
+                if type(n_evaluable) is not int or n_evaluable < 0:
+                    return False
+                rate = cell.get("flip_rate")
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+            for key in ("same_flip_rate", "cross_flip_rate", "max_flip_rate"):
+                rate = entry.get(key)
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+            gap = entry.get("transfer_gap")
+            if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+                return False
+        excluded = value.get("excluded_candidates")
+        return type(excluded) is list and all(type(c) is str for c in excluded)
+
+    _ft_old_ok = _or_faketurn_valid(old.get("faketurn"))
+    _ft_new_ok = _or_faketurn_valid(new.get("faketurn"))
+    if _ft_old_ok and _ft_new_ok:
+        _o_ft_available = "both"
+    elif _ft_old_ok:
+        _o_ft_available = "old"
+    elif _ft_new_ok:
+        _o_ft_available = "new"
+    else:
+        _o_ft_available = "neither"
+    _o_ft_asymmetric = _o_ft_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1231,6 +1289,7 @@ def oracle_diff_reports(
         and not _o_st_asymmetric
         and not _o_dl_asymmetric
         and not _o_fs_asymmetric
+        and not _o_ft_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1277,6 +1336,8 @@ def oracle_diff_reports(
         "deliforge_asymmetric": _o_dl_asymmetric,
         "fewshot_changed": False,
         "fewshot_asymmetric": _o_fs_asymmetric,
+        "faketurn_changed": False,
+        "faketurn_asymmetric": _o_ft_asymmetric,
         "identical": identical,
     }
     return {
@@ -1304,6 +1365,7 @@ def oracle_diff_reports(
         "structured": {"available": _o_st_available, "changed": False},
         "deliforge": {"available": _o_dl_available, "changed": False},
         "fewshot": {"available": _o_fs_available, "changed": False},
+        "faketurn": {"available": _o_ft_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

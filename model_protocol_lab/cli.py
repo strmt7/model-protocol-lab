@@ -337,6 +337,19 @@ def build_parser() -> argparse.ArgumentParser:
         "fails the run.",
     )
     run.add_argument(
+        "--fake-turn",
+        action="store_true",
+        help="Fake-turn history-tampering probe (research wave-4 idea 3): "
+        "forge prior turns (fake assistant asserting a wrong answer, "
+        "fake system contradicting the task) into user content at the "
+        "family's native encoding, and measure the verdict-flip rate "
+        "per template family with the forged delimiters wearing the "
+        "family's own token set (same) vs another family's token set "
+        "(cross), testing arXiv:2405.20234's token-set-dependent "
+        "tampering claim across all families. Roughly 8x search "
+        "compute (2 payloads x 4 markers); the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -873,6 +886,52 @@ def _run_deliforge_probe(
         result["deliforge"] = {
             "available": False,
             "detail": "deliforge_unavailable",
+        }
+
+
+def _run_faketurn_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the fake-turn history-tampering probe; never raises.
+
+    Forges prior turns (fake assistant asserting a wrong answer, fake
+    system contradicting the task) into the search fixtures' user
+    content at each family's native encoding, classifies each forged
+    marker's token provenance (same-family vs cross-family
+    delimiters), and stores the ``faketurn`` robustness analysis on
+    ``result``. Any failure degrades to an "unavailable" marker
+    instead of failing the run.
+    """
+    try:
+        from .experiments import faketurn_robustness, faketurn_stage, native_search_outcomes
+
+        candidates = tuple(fmt.name for fmt in formats)
+        stage = faketurn_stage(
+            backend,
+            formats,
+            tuple(cases),
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["faketurn"] = faketurn_robustness(
+            native_search_outcomes(result.get("search") or [], candidates),
+            stage,
+            candidates,
+        )
+    except Exception:  # noqa: BLE001 -- faketurn probe must not fail the run
+        result["faketurn"] = {
+            "available": False,
+            "detail": "faketurn_unavailable",
         }
 
 
@@ -1934,6 +1993,23 @@ def main(argv: list[str] | None = None) -> int:
                 # Never fails the run.
                 if args.deliforge:
                     _run_deliforge_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Fake-turn history-tampering probe (research wave-4
+                # idea 3): forged prior turns in user content, encoded
+                # at the family's native form, with the forged
+                # delimiters' provenance (same-family vs cross-family
+                # token set) as the independent variable. Never fails
+                # the run.
+                if args.fake_turn:
+                    _run_faketurn_probe(
                         backend,
                         formats,
                         result,
