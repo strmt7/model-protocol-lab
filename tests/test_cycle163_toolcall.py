@@ -650,6 +650,48 @@ class ToolcallStageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             toolcall_stage(backend, (_format("a"),), fixtures, calls=calls, boundary=())
 
+    def test_stage_rejects_bad_fixtures_and_calls(self):
+        queries = _queries()
+        fixtures = build_toolcall_fixtures(queries)
+        calls = query_calls(queries)
+        backend = ToolcallScriptedBackend({})
+        fmts = (_format("a"),)
+        # Empty fixtures
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, (), calls=calls, boundary=(124,))
+        # Non-Fixture values
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, ("not-a-fixture",), calls=calls, boundary=(124,))
+        # Calls not a dict
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls=[], boundary=(124,))
+        # Calls with non-string key
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls={123: None}, boundary=(124,))
+        # Calls with bad value type
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls={"toolcall/x": "nope"}, boundary=(124,))
+        # Call with empty name
+        bad_calls = dict(calls)
+        bad_calls["toolcall/weather-paris"] = {"name": "", "arguments": {}}
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls=bad_calls, boundary=(124,))
+        # Call with non-dict arguments
+        bad_calls = dict(calls)
+        bad_calls["toolcall/weather-paris"] = {"name": "get_weather", "arguments": []}
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls=bad_calls, boundary=(124,))
+        # Invalid max_new_tokens
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls=calls, boundary=(124,), max_new_tokens=0)
+        with self.assertRaises(ValueError):
+            toolcall_stage(
+                backend, fmts, fixtures, calls=calls, boundary=(124,), max_new_tokens=5000
+            )
+        # Invalid seed
+        with self.assertRaises(ValueError):
+            toolcall_stage(backend, fmts, fixtures, calls=calls, boundary=(124,), seed=-1)
+
     def test_backend_failure_cell_degrades_to_none(self):
         class BoomBackend(ToolcallScriptedBackend):
             def generate(self, input_ids, *, max_new_tokens, seed, cancel):
@@ -672,6 +714,33 @@ class ToolcallStageTests(unittest.TestCase):
     def test_adherence_invalid_input_unavailable(self):
         self.assertEqual(toolcall_adherence(("a",), {"available": True})["detail"], "stage_invalid")
         self.assertEqual(toolcall_adherence([], {})["detail"], "invalid_candidates")
+        # Non-dict stage
+        self.assertEqual(toolcall_adherence(("a",), [])["detail"], "stage_invalid")
+        # Bad n_fixtures
+        self.assertEqual(
+            toolcall_adherence(("a",), {"n_fixtures": "9", "per_candidate": {}})["detail"],
+            "stage_invalid",
+        )
+        self.assertEqual(
+            toolcall_adherence(("a",), {"n_fixtures": -1, "per_candidate": {}})["detail"],
+            "stage_invalid",
+        )
+        # Bad per_candidate
+        self.assertEqual(
+            toolcall_adherence(("a",), {"n_fixtures": 9, "per_candidate": []})["detail"],
+            "stage_invalid",
+        )
+        self.assertEqual(
+            toolcall_adherence(("a",), {"n_fixtures": 9, "per_candidate": {1: None}})["detail"],
+            "stage_invalid",
+        )
+        # Invalid cell entry
+        self.assertEqual(
+            toolcall_adherence(("a",), {"n_fixtures": 9, "per_candidate": {"a": {"bad": "cell"}}})[
+                "detail"
+            ],
+            "stage_invalid",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1172,6 +1241,23 @@ class ToolcallCliTests(unittest.TestCase):
         self.assertTrue(result["toolcall"]["available"])
         self.assertIsNone(result["toolcall"]["per_candidate"]["a"])
         self.assertEqual(result["toolcall"]["excluded_candidates"], ["a"])
+
+    def test_probe_degrades_on_invalid_formats(self):
+        from model_protocol_lab import cli
+
+        result: dict = {}
+        # None formats -> TypeError in the probe -> unavailable marker, never raises.
+        cli._run_toolcall_probe(
+            ToolcallScriptedBackend({}),
+            None,
+            result,
+            boundary=(124,),
+            boundary_map=None,
+            max_new_tokens=128,
+            seed=1,
+        )
+        self.assertFalse(result["toolcall"]["available"])
+        self.assertEqual(result["toolcall"]["detail"], "toolcall_unavailable")
 
     def test_probe_records_available(self):
         from model_protocol_lab import cli
