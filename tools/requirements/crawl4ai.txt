@@ -1,0 +1,13 @@
+# Pinned Crawl4AI installation lock for model-protocol-lab.
+#
+# The crawler is installed from this lock by tools/crawl4ai_tool.py into an
+# isolated external cache (never into the repo or the lab's runtime).
+# Version pin reviewed: 2026-10-19. Upstream: https://github.com/unclecode/crawl4ai
+#
+# Adaptation note: FlitzZip hash-locks every transitive wheel and builds two
+# repaired wheels from source (their Windows/NTLK-specific security posture).
+# This repo pins the upstream release version; tools/crawl4ai_tool.py verifies
+# the installed version matches before use.
+
+crawl4ai==0.9.4
+playwright==1.55.0

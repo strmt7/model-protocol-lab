@@ -31,3 +31,4 @@ results/
 *.zip
 .DS_Store
 Thumbs.db
+out/

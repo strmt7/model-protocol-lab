@@ -115,6 +115,7 @@ def _module_level_third_party_imports() -> dict[str, set[str]]:
                 roots.add(node.module.split(".")[0])
         third_party = set()
         pkg_dir = (ROOT / "model_protocol_lab").resolve()
+        tools_dir = (ROOT / "tools").resolve()
         for root in roots:
             if root in stdlib:
                 continue
@@ -122,6 +123,7 @@ def _module_level_third_party_imports() -> dict[str, set[str]]:
             # (tests/) into sys.path, so `import test_core` resolves there;
             # `import tests` / `from tests import ...` resolves to the tests
             # package itself.
+            # The tools/ namespace package (dev CLIs) is also repo-local.
             sibling = TESTS_DIR / root
             if (
                 (TESTS_DIR / f"{root}.py").exists()
@@ -130,12 +132,19 @@ def _module_level_third_party_imports() -> dict[str, set[str]]:
             ):
                 continue
             spec = importlib.util.find_spec(root)
-            if spec is not None and spec.origin is not None:
-                origin = Path(spec.origin).resolve()
-                # The package itself. (The repo .venv lives under ROOT too,
-                # so match the package directory specifically, not ROOT.)
-                if pkg_dir in origin.parents:
-                    continue
+            if spec is not None:
+                if spec.origin is not None:
+                    origin = Path(spec.origin).resolve()
+                    # The package itself. (The repo .venv lives under ROOT too,
+                    # so match the package directory specifically, not ROOT.)
+                    if pkg_dir in origin.parents:
+                        continue
+                elif spec.submodule_search_locations:
+                    # Namespace package (e.g. tools/ with no __init__.py):
+                    # local if its locations resolve under the repo.
+                    locations = [Path(p).resolve() for p in spec.submodule_search_locations]
+                    if any(tools_dir == loc or tools_dir in loc.parents for loc in locations):
+                        continue
             third_party.add(root)
         found[path.name] = third_party
     return found
