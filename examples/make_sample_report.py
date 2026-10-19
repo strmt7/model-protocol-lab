@@ -231,6 +231,31 @@ class PositionDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class WsDemoBackend(DemoBackend):
+    """Scripted whitespace-sensitive policy for the ws-scan exercise.
+
+    Answers the keyword embedded in the prompt (GREEN/BLUE/7/SOUTH, read
+    from the fixture text like DemoBackend does) iff the prompt's token
+    count is even, else WRONG. The ord-based codec makes every one-char
+    whitespace mutation flip the verdict on passing fixtures, while
+    strip_trailing_space and collapse_double_space leave the sample
+    renders byte-identical -- the committed sample report therefore
+    exercises the whitespace section with genuine id divergence and
+    verdict flips alongside identical-id controls. Deterministic.
+    """
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        keyword = None
+        for marker in ("GREEN", "BLUE", "numeral 7", "SOUTH"):
+            if marker in prompt:
+                keyword = "7" if marker == "numeral 7" else marker
+                break
+        answer = keyword if keyword is not None and len(input_ids) % 2 == 0 else "WRONG"
+        text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 class StopDemoBackend(DemoBackend):
     """Scripted end-of-turn-emitting backend for the stop-cause exercise.
 
@@ -749,6 +774,53 @@ def build_sample_report(output_dir: Path) -> dict:
         result["stop_cause"] = {
             "available": False,
             "detail": "stop_unavailable",
+        }
+    # Whitespace-canonicalization scan: run the real ws stage (all 8
+    # mutations) against the scripted parity policy backend, so the
+    # committed sample report exercises the whitespace section with
+    # genuine id divergence and verdict flips (one-char mutations flip
+    # the parity verdict; strip/collapse are identical-id controls).
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            native_search_input_ids,
+            native_search_outcomes,
+            ws_canonicalization,
+            ws_stage,
+        )
+        from model_protocol_lab.wscanonical import MUTATIONS
+
+        _w_backend = WsDemoBackend()
+        _w_fmts = candidates("llama3", mutate=True)
+        _w_cases = tuple(split.search)
+        _w_base = run_experiment(
+            _w_backend,
+            _w_fmts,
+            split,
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        _w_stage = ws_stage(
+            _w_backend,
+            _w_fmts,
+            _w_cases,
+            mutations=MUTATIONS,
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        _w_names = tuple(f.name for f in _w_fmts)
+        result["ws_canonical"] = ws_canonicalization(
+            native_search_outcomes(_w_base.get("search") or [], _w_names),
+            native_search_input_ids(_w_base.get("search") or [], _w_names),
+            _w_stage,
+            _w_names,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["ws_canonical"] = {
+            "available": False,
+            "detail": "ws_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

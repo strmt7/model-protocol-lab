@@ -991,6 +991,58 @@ def oracle_diff_reports(
     else:
         _o_sc_available = "neither"
     _o_sc_asymmetric = _o_sc_available not in ("both", "neither")
+
+    def _or_ws_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_ws_canonical exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        mutations = value.get("mutations")
+        if (
+            type(mutations) is not list
+            or not mutations
+            or not all(type(m) is str for m in mutations)
+        ):
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if type(entry) is not dict:
+                return False
+            robust = entry.get("whitespace_robust")
+            if robust is not None and type(robust) is not bool:
+                return False
+            cells = entry.get("per_mutation")
+            if type(cells) is not dict:
+                return False
+            for mutation, cell in cells.items():
+                if type(mutation) is not str or type(cell) is not dict:
+                    return False
+                for key in ("ids_divergence_rate", "verdict_flip_rate"):
+                    rate_value = cell.get(key)
+                    if rate_value is not None and type(rate_value) not in (int, float):
+                        return False
+                for key in ("n_ids_divergent", "n_verdict_flips", "n_same_ids_verdict_flips"):
+                    count_value = cell.get(key)
+                    if count_value is not None and type(count_value) is not int:
+                        return False
+                if cell.get("fragile") is not None and type(cell.get("fragile")) is not bool:
+                    return False
+        return True
+
+    _ws_old_ok = _or_ws_valid(old.get("ws_canonical"))
+    _ws_new_ok = _or_ws_valid(new.get("ws_canonical"))
+    if _ws_old_ok and _ws_new_ok:
+        _o_ws_available = "both"
+    elif _ws_old_ok:
+        _o_ws_available = "old"
+    elif _ws_new_ok:
+        _o_ws_available = "new"
+    else:
+        _o_ws_available = "neither"
+    _o_ws_asymmetric = _o_ws_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1013,6 +1065,7 @@ def oracle_diff_reports(
         and not _o_bi_asymmetric
         and not _o_pos_asymmetric
         and not _o_sc_asymmetric
+        and not _o_ws_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1051,6 +1104,8 @@ def oracle_diff_reports(
         "position_asymmetric": _o_pos_asymmetric,
         "stop_cause_changed": False,
         "stop_cause_asymmetric": _o_sc_asymmetric,
+        "ws_canonical_changed": False,
+        "ws_canonical_asymmetric": _o_ws_asymmetric,
         "identical": identical,
     }
     return {
@@ -1074,6 +1129,7 @@ def oracle_diff_reports(
         "batch_invariance": {"available": _o_bi_available, "changed": False},
         "position": {"available": _o_pos_available, "changed": False},
         "stop_cause": {"available": _o_sc_available, "changed": False},
+        "ws_canonical": {"available": _o_ws_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

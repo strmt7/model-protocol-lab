@@ -4128,6 +4128,138 @@ def _stopcause_section(result: dict[str, Any]) -> str:
     )
 
 
+#: Whitespace mutations mirrored from wscanonical.MUTATIONS (kept local
+#: so the renderer stays import-light; pinned equal by test).
+_WSCAN_MUTATIONS = (
+    "trailing_space",
+    "double_trailing_space",
+    "trailing_newline",
+    "trailing_tab",
+    "leading_space",
+    "leading_newline",
+    "strip_trailing_space",
+    "collapse_double_space",
+)
+
+
+def _wscanonical_section(result: dict[str, Any]) -> str:
+    """Whitespace canonicalization: are prompts whitespace-fragile?
+
+    Every search candidate's rendered prompts are re-encoded under
+    whitespace mutations of the render string (trailing/leading space,
+    newline, tab, stripping, collapsing); id sequences are compared
+    exactly and fixtures on divergent variants are re-run to measure
+    verdict flips. Reports per-candidate per-mutation id divergence and
+    verdict-flip rates plus the whitespace-robust verdict. A flipped
+    verdict on identical ids is a backend-determinism anomaly, not
+    whitespace fragility, and is reported as such. Renders nothing when
+    the whitespace scan did not run.
+    """
+    audit: Any = result.get("ws_canonical")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    def _bool(value: Any) -> str:
+        if value is True:
+            return "yes"
+        if value is False:
+            return "no"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        cells = []
+        mutations = entry.get("per_mutation")
+        if type(mutations) is not dict:
+            mutations = {}
+        for mutation in _WSCAN_MUTATIONS:
+            cell = mutations.get(mutation)
+            if type(cell) is not dict or not cell.get("evaluable"):
+                cells.append("<td>n/a</td>")
+                continue
+            div = _rate(cell.get("ids_divergence_rate"))
+            flip = _rate(cell.get("verdict_flip_rate"))
+            marker = "F" if cell.get("fragile") else ("D" if cell.get("n_ids_divergent") else "=")
+            cells.append(
+                '<td><span class="mono">'
+                + escape(marker)
+                + "</span> "
+                + escape(div)
+                + " / "
+                + escape(flip)
+                + "</td>"
+            )
+        aggregate = entry.get("aggregate")
+        if type(aggregate) is not dict:
+            aggregate = {}
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td>"
+            + "".join(cells)
+            + "<td>"
+            + escape(_rate(aggregate.get("max_ids_divergence_rate")))
+            + "</td>"
+            + "<td>"
+            + escape(_rate(aggregate.get("max_verdict_flip_rate")))
+            + "</td>"
+            + "<td>"
+            + escape(_bool(entry.get("whitespace_robust")))
+            + "</td></tr>"
+        )
+    fragile = audit.get("fragile_candidates")
+    fragile_line = ""
+    if type(fragile) is list and fragile:
+        fragile_line = (
+            "<p>Whitespace-fragile candidates: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in fragile
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="whitespace-canonicalization">'
+        "<h2>Whitespace canonicalization</h2>"
+        "<p>Each rendered prompt re-encoded under whitespace mutations "
+        "of the render string; id sequences compared exactly; fixtures "
+        "on divergent variants re-run to measure verdict flips. Cell "
+        "legend: <strong>=</strong> identical ids and verdicts, "
+        "<strong>D</strong> divergent ids without a verdict flip, "
+        "<strong>F</strong> at least one verdict flip (shown as "
+        "id-divergence rate / verdict-flip rate).</p>"
+        + fragile_line
+        + (
+            '<div class="table-wrap"><table><caption>Id-divergence / '
+            "verdict-flip rates per candidate and mutation.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            + "".join(
+                '<th scope="col">' + escape(mutation.replace("_", " ")) + "</th>"
+                for mutation in _WSCAN_MUTATIONS
+            )
+            + '<th scope="col">Max id-div.</th>'
+            '<th scope="col">Max flip</th><th scope="col">Robust</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -4879,6 +5011,7 @@ def render_html(result: dict[str, Any]) -> str:
     batchinv_html = _batchinv_section(result)
     position_html = _position_section(result)
     stopcause_html = _stopcause_section(result)
+    wscanonical_html = _wscanonical_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -4947,6 +5080,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Stop-cause termination audit",
                 stopcause_html,
             ),
+            (
+                "whitespace-canonicalization",
+                "Whitespace canonicalization",
+                wscanonical_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -4998,6 +5136,7 @@ def render_html(result: dict[str, Any]) -> str:
         + batchinv_html
         + position_html
         + stopcause_html
+        + wscanonical_html
         + sweep_html
         + logprob_html
         + held_out_html
