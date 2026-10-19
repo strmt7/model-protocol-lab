@@ -214,12 +214,12 @@ corrected on port).
 
 ## 14. CLI and dashboard
 
-`mpl surface-noise probe --prompt F --fixtures F.json --boundary-ids 7
+`model-protocol-lab surface-noise probe --prompt F --fixtures F.json --boundary-ids 7
 --backend selftest|local-hf [--model P] --output DIR [--max-new-tokens N]
 [--seed S]` — writes `probe.json` + `dashboard.html` (refuses to
-overwrite an existing path). `mpl surface-noise diff OLD.json NEW.json`
+overwrite an existing path). `model-protocol-lab surface-noise diff OLD.json NEW.json`
 — compares two probe.json files (before/after a prompt edit).
-`mpl surface-noise protocol` — prints the frozen instrument descriptor
+`model-protocol-lab surface-noise protocol` — prints the frozen instrument descriptor
 (no scoring). Monday-morning use is printed in `--help` and the descriptor.
 
 The dashboard is self-contained HTML (inline CSS+SVG, no external
@@ -240,7 +240,7 @@ fingerprint change (any protocol drift flags the pair not-comparable).
 
 Intentionally NOT wired into the results.json dispatcher: the probe is a
 per-prompt instrument producing standalone probe.json files, not a
-per-candidate experiment. Forcing it into `mpl run` would conflate two
+per-candidate experiment. Forcing it into `model-protocol-lab run` would conflate two
 workflows; the improve-then-re-probe loop is `probe → edit → probe → diff`.
 
 `tools/surface_noise_mcp_server.py`, stdlib-only (json, sys, threading —

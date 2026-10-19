@@ -245,6 +245,7 @@ class TestParserContract(unittest.TestCase):
                 "diff-backends",
                 "debug",
                 "verify",
+                "surface-noise",
             },
         )
 
