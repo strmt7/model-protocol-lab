@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 156 — whitespace canonicalization, wave-3 research idea #4, 2026-10-19)
+
+- New `mpl run --ws-scan` experiment auditing whitespace at template
+  boundaries per family (aicassindra "Tokenization, in depth" production
+  case study; arXiv:2405.17067 "Tokenization Matters!"): every search
+  candidate's rendered prompts are re-encoded under 8 whitespace
+  mutations of the render string (`trailing_space`,
+  `double_trailing_space`, `trailing_newline`, `trailing_tab`,
+  `leading_space`, `leading_newline`, `strip_trailing_space`,
+  `collapse_double_space`), id sequences are compared exactly, and
+  fixtures on divergent variants are re-run through the normal
+  `core.evaluate()` pipeline via an encode-time backend wrapper
+  (`WsScanBackend`, mirroring `PrefillBackend`) to measure verdict
+  flips. New pure `model_protocol_lab/wscanonical.py` (100% line
+  coverage: the mutation table, exact id-sequence comparison,
+  per-mutation aggregation with the `whitespace_robust` verdict);
+  `experiments.ws_stage` / `ws_canonicalization` (fail-closed per
+  candidate x mutation cell); `results.json` `ws_canonical` section;
+  HTML "Whitespace canonicalization" section with TOC anchor
+  (id-divergence / verdict-flip rate matrix with `=` / `D` / `F`
+  cells); `diffreports.diff_ws_canonical`
+  (`ws_canonical_changed` / `ws_canonical_asymmetric` feed
+  `identical`); sample-report exercise with a scripted
+  whitespace-sensitive parity backend showing genuine id divergence
+  and verdict flips. Honest split: divergent ids + flipped verdict is
+  whitespace fragility; a flipped verdict on identical ids is recorded
+  separately as a backend-determinism anomaly, never as fragility.
+  122 new tests (4/4 mutation gates, 200-case brute-force oracles,
+  Hypothesis properties, 8 single-cause `changed`-disjunct pins);
+  both diff oracles extended.
+
 ### Added (cycle 155 — stop-cause termination audit, wave-3 research idea #3, 2026-10-19)
 
 - New `mpl run --stop-cause` experiment classifying every search

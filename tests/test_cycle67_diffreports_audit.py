@@ -248,6 +248,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "batch_invariance": {"available": "neither", "changed": False},
         "position": {"available": "neither", "changed": False},
         "stop_cause": {"available": "neither", "changed": False},
+        "ws_canonical": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -294,6 +295,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "position_asymmetric": False,
             "stop_cause_changed": False,
             "stop_cause_asymmetric": False,
+            "ws_canonical_changed": False,
+            "ws_canonical_asymmetric": False,
             "identical": True,
         },
     }
@@ -1816,6 +1819,140 @@ def _o_stop_cause(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_ws_canonical_valid(value: Any) -> bool:
+    """Oracle ws_canonical validator: mirrors diffreports._valid_ws_canonical."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    mutations = value.get("mutations")
+    if type(mutations) is not list or not mutations or not all(type(m) is str for m in mutations):
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        robust = entry.get("whitespace_robust")
+        if robust is not None and type(robust) is not bool:
+            return False
+        cells = entry.get("per_mutation")
+        if type(cells) is not dict:
+            return False
+        for mutation, cell in cells.items():
+            if type(mutation) is not str or type(cell) is not dict:
+                return False
+            for key in ("ids_divergence_rate", "verdict_flip_rate"):
+                rate_value = cell.get(key)
+                if rate_value is not None and type(rate_value) not in (int, float):
+                    return False
+            for key in ("n_ids_divergent", "n_verdict_flips", "n_same_ids_verdict_flips"):
+                count_value = cell.get(key)
+                if count_value is not None and type(count_value) is not int:
+                    return False
+            fragile = cell.get("fragile")
+            if fragile is not None and type(fragile) is not bool:
+                return False
+    return True
+
+
+def _o_ws_canonical(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle ws_canonical section: id/flip drift and robust flips.
+
+    Independent reimplementation: set-driven comparison rather than
+    the implementation's nested accumulation loops.
+    """
+    old_ok = _o_ws_canonical_valid(old)
+    new_ok = _o_ws_canonical_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _cells(entry: Any) -> dict[str, dict[str, Any]]:
+        raw = (entry or {}).get("per_mutation") or {}
+        return {
+            mutation: {
+                "ids_divergence_rate": (cell or {}).get("ids_divergence_rate"),
+                "verdict_flip_rate": (cell or {}).get("verdict_flip_rate"),
+                "n_same_ids_verdict_flips": (cell or {}).get("n_same_ids_verdict_flips"),
+                "fragile": (cell or {}).get("fragile"),
+            }
+            for mutation, cell in raw.items()
+            if type(mutation) is str
+        }
+
+    old_cands = {
+        name: {"whitespace_robust": (entry or {}).get("whitespace_robust"), "cells": _cells(entry)}
+        for name, entry in (old.get("per_candidate") or {}).items()
+    }
+    new_cands = {
+        name: {"whitespace_robust": (entry or {}).get("whitespace_robust"), "cells": _cells(entry)}
+        for name, entry in (new.get("per_candidate") or {}).items()
+    }
+    candidates_added = sorted(set(new_cands) - set(old_cands))
+    candidates_removed = sorted(set(old_cands) - set(new_cands))
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    old_muts = sorted({m for m in (old.get("mutations") or []) if type(m) is str})
+    new_muts = sorted({m for m in (new.get("mutations") or []) if type(m) is str})
+    diff["mutations_added"] = sorted(set(new_muts) - set(old_muts))
+    diff["mutations_removed"] = sorted(set(old_muts) - set(new_muts))
+    metrics = (
+        "ids_divergence_rate",
+        "verdict_flip_rate",
+        "n_same_ids_verdict_flips",
+        "fragile",
+    )
+    rate_drift = [
+        {
+            "candidate": name,
+            "mutation": mutation,
+            "metric": metric,
+            "old": old_cands[name]["cells"][mutation][metric],
+            "new": new_cands[name]["cells"][mutation][metric],
+        }
+        for name in sorted(set(old_cands) & set(new_cands))
+        for mutation in sorted(set(old_cands[name]["cells"]) & set(new_cands[name]["cells"]))
+        for metric in metrics
+        if old_cands[name]["cells"][mutation][metric] != new_cands[name]["cells"][mutation][metric]
+    ]
+    robust_flips = [
+        {
+            "candidate": name,
+            "old_robust": old_cands[name]["whitespace_robust"],
+            "new_robust": new_cands[name]["whitespace_robust"],
+        }
+        for name in sorted(set(old_cands) & set(new_cands))
+        if old_cands[name]["whitespace_robust"] != new_cands[name]["whitespace_robust"]
+    ]
+    fragile_old = set(old.get("fragile_candidates") or [])
+    fragile_new = set(new.get("fragile_candidates") or [])
+    diff["rate_drift"] = rate_drift
+    diff["robust_flips"] = robust_flips
+    diff["fragile_added"] = sorted(fragile_new - fragile_old)
+    diff["fragile_removed"] = sorted(fragile_old - fragile_new)
+    changed = bool(
+        rate_drift
+        or robust_flips
+        or diff["fragile_added"]
+        or diff["fragile_removed"]
+        or candidates_added
+        or candidates_removed
+        or diff["mutations_added"]
+        or diff["mutations_removed"]
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2169,6 +2306,9 @@ def _oracle_diff(
     o_sc, o_sc_changed, o_sc_asymmetric = _o_stop_cause(
         old.get("stop_cause"), new.get("stop_cause")
     )
+    o_ws, o_ws_changed, o_ws_asymmetric = _o_ws_canonical(
+        old.get("ws_canonical"), new.get("ws_canonical")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -2206,6 +2346,8 @@ def _oracle_diff(
         and not o_pos_asymmetric
         and not o_sc_changed
         and not o_sc_asymmetric
+        and not o_ws_changed
+        and not o_ws_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2228,6 +2370,7 @@ def _oracle_diff(
         "batch_invariance": o_bi,
         "position": o_pos,
         "stop_cause": o_sc,
+        "ws_canonical": o_ws,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2270,6 +2413,8 @@ def _oracle_diff(
             "position_asymmetric": o_pos_asymmetric,
             "stop_cause_changed": o_sc_changed,
             "stop_cause_asymmetric": o_sc_asymmetric,
+            "ws_canonical_changed": o_ws_changed,
+            "ws_canonical_asymmetric": o_ws_asymmetric,
             "identical": identical,
         },
     }
@@ -2423,6 +2568,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "position_asymmetric": False,
                 "stop_cause_changed": False,
                 "stop_cause_asymmetric": False,
+                "ws_canonical_changed": False,
+                "ws_canonical_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3647,9 +3794,9 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["unknown_key"] = {"nested": [1, 2, {"three": None}]}
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
-    # portfolio, synthhistory, batch_invariance, position): emitted often
-    # enough that the differential fuzz exercises them, not just the
-    # legacy axes.
+    # portfolio, synthhistory, batch_invariance, position, stop_cause,
+    # ws_canonical): emitted often enough that the differential fuzz
+    # exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -3674,6 +3821,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["position"] = _fuzz_position_section(rng)
     if rng.random() < 0.45:
         report["stop_cause"] = _fuzz_stop_cause_section(rng)
+    if rng.random() < 0.45:
+        report["ws_canonical"] = _fuzz_ws_canonical_section(rng)
     return report
 
 
@@ -3742,6 +3891,45 @@ def _fuzz_stop_cause_section(rng: random.Random) -> dict[str, Any]:
         "max_new_tokens": rng.choice([16, 64]),
         "per_candidate": per_candidate,
         "overall": {"cause_rates": {"eos_id": 0.5}},
+    }
+
+
+def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
+    mutations = ["trailing_space", "leading_space", "trailing_newline"]
+    if rng.random() < 0.3:
+        mutations.append("strip_trailing_space")
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        cells = {}
+        for mutation in mutations:
+            cells[mutation] = {
+                "evaluable": rng.choice([True, True, False]),
+                "n_fixtures": rng.randint(1, 4),
+                "n_evaluable": rng.randint(0, 3),
+                "n_ids_divergent": rng.randint(0, 3),
+                "ids_divergence_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "n_verdict_flips": rng.randint(0, 2),
+                "verdict_flip_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                "n_same_ids_verdict_flips": rng.randint(0, 1),
+                "flips": rng.choice([[], ["f0"]]),
+                "fragile": rng.choice([True, False, None]),
+            }
+        if rng.random() < 0.15:
+            cells[rng.choice(["mystery", 7])] = {"ids_divergence_rate": 0.5}
+        per_candidate[name] = {
+            "per_mutation": cells,
+            "aggregate": {"n_fragile_mutations": rng.randint(0, 2)},
+            "whitespace_robust": rng.choice([True, False, None]),
+            "detail": None,
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"per_mutation": {}}
+    return {
+        "available": True,
+        "mutations": mutations,
+        "per_candidate": per_candidate,
+        "fragile_candidates": rng.choice([[], ["alpha"], ["alpha", "beta"]]),
+        "excluded_candidates": [],
     }
 
 
@@ -3984,6 +4172,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not position_asymmetric\n"
             '        and not stopcause_diff["changed"]\n'
             "        and not stopcause_asymmetric\n"
+            '        and not wscan_diff["changed"]\n'
+            "        and not wscan_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -4018,6 +4208,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or position_asymmetric\n"
             '        or stopcause_diff["changed"]\n'
             "        or stopcause_asymmetric\n"
+            '        or wscan_diff["changed"]\n'
+            "        or wscan_asymmetric\n"
             "    )\n",
             scenario,
         )

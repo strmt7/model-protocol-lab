@@ -3059,6 +3059,1054 @@
       "max_length_rate": 0.0
     }
   },
+  "ws_canonical": {
+    "available": true,
+    "mutations": [
+      "trailing_space",
+      "double_trailing_space",
+      "trailing_newline",
+      "trailing_tab",
+      "leading_space",
+      "leading_newline",
+      "strip_trailing_space",
+      "collapse_double_space"
+    ],
+    "per_candidate": {
+      "llama3": {
+        "per_mutation": {
+          "trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "double_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "trailing_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "trailing_tab": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "strip_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "collapse_double_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          }
+        },
+        "aggregate": {
+          "per_mutation": {
+            "trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "double_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "trailing_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "trailing_tab": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "strip_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "collapse_double_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            }
+          },
+          "n_fragile_mutations": 5,
+          "max_ids_divergence_rate": 1.0,
+          "max_verdict_flip_rate": 1.0,
+          "whitespace_robust": false
+        },
+        "whitespace_robust": false,
+        "detail": null
+      },
+      "llama3/toggle-bos": {
+        "per_mutation": {
+          "trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "double_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "trailing_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "trailing_tab": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "strip_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "collapse_double_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          }
+        },
+        "aggregate": {
+          "per_mutation": {
+            "trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "double_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "trailing_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "trailing_tab": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "strip_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "collapse_double_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            }
+          },
+          "n_fragile_mutations": 5,
+          "max_ids_divergence_rate": 1.0,
+          "max_verdict_flip_rate": 1.0,
+          "whitespace_robust": false
+        },
+        "whitespace_robust": false,
+        "detail": null
+      },
+      "llama3/no-bos": {
+        "per_mutation": {
+          "trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "double_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "trailing_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "trailing_tab": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "strip_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "collapse_double_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          }
+        },
+        "aggregate": {
+          "per_mutation": {
+            "trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "double_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "trailing_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "trailing_tab": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "strip_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "collapse_double_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            }
+          },
+          "n_fragile_mutations": 5,
+          "max_ids_divergence_rate": 1.0,
+          "max_verdict_flip_rate": 1.0,
+          "whitespace_robust": false
+        },
+        "whitespace_robust": false,
+        "detail": null
+      },
+      "llama3/prefix-newline": {
+        "per_mutation": {
+          "trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "double_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "trailing_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "trailing_tab": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "strip_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "collapse_double_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          }
+        },
+        "aggregate": {
+          "per_mutation": {
+            "trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "double_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "trailing_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "trailing_tab": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "strip_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "collapse_double_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            }
+          },
+          "n_fragile_mutations": 5,
+          "max_ids_divergence_rate": 1.0,
+          "max_verdict_flip_rate": 1.0,
+          "whitespace_robust": false
+        },
+        "whitespace_robust": false,
+        "detail": null
+      },
+      "llama3/prefix-trim": {
+        "per_mutation": {
+          "trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "double_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "trailing_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "trailing_tab": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "leading_newline": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 2,
+            "ids_divergence_rate": 1.0,
+            "n_verdict_flips": 2,
+            "verdict_flip_rate": 1.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [
+              "search-copy-blue",
+              "search-latest-green"
+            ],
+            "fragile": true
+          },
+          "strip_trailing_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          },
+          "collapse_double_space": {
+            "evaluable": true,
+            "n_fixtures": 2,
+            "n_evaluable": 2,
+            "n_ids_divergent": 0,
+            "ids_divergence_rate": 0.0,
+            "n_verdict_flips": 0,
+            "verdict_flip_rate": 0.0,
+            "n_same_ids_verdict_flips": 0,
+            "flips": [],
+            "fragile": false
+          }
+        },
+        "aggregate": {
+          "per_mutation": {
+            "trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "double_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "trailing_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "trailing_tab": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "leading_newline": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 2,
+              "ids_divergence_rate": 1.0,
+              "n_verdict_flips": 2,
+              "verdict_flip_rate": 1.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": true
+            },
+            "strip_trailing_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            },
+            "collapse_double_space": {
+              "n_fixtures": 2,
+              "n_evaluable": 2,
+              "n_ids_divergent": 0,
+              "ids_divergence_rate": 0.0,
+              "n_verdict_flips": 0,
+              "verdict_flip_rate": 0.0,
+              "n_same_ids_verdict_flips": 0,
+              "fragile": false
+            }
+          },
+          "n_fragile_mutations": 5,
+          "max_ids_divergence_rate": 1.0,
+          "max_verdict_flip_rate": 1.0,
+          "whitespace_robust": false
+        },
+        "whitespace_robust": false,
+        "detail": null
+      }
+    },
+    "fragile_candidates": [
+      "llama3",
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "excluded_candidates": []
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

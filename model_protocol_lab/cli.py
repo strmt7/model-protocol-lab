@@ -290,6 +290,17 @@ def build_parser() -> argparse.ArgumentParser:
         "stage never fails the run.",
     )
     run.add_argument(
+        "--ws-scan",
+        action="store_true",
+        help="Whitespace-canonicalization scan: re-encode every search "
+        "candidate's rendered prompts under 8 whitespace mutations of "
+        "the render string (trailing/leading space, newline, tab, "
+        "stripping, collapsing), compare id sequences exactly, and "
+        "re-run fixtures on divergent variants to measure verdict "
+        "flips. Reports per-family whitespace fragility. Roughly 9x "
+        "search compute; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -678,6 +689,59 @@ def _run_stop_probe(
         result["stop_cause"] = {
             "available": False,
             "detail": "stop_unavailable",
+        }
+
+
+def _run_ws_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the whitespace-canonicalization scan; never raises.
+
+    Re-encodes every search candidate's rendered prompts under the 8
+    whitespace mutations of ``wscanonical.MUTATIONS``, compares id
+    sequences exactly, re-runs fixtures on divergent variants through
+    the normal evaluate pipeline, and stores the ``ws_canonical``
+    analysis payload on ``result``. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import (
+            native_search_input_ids,
+            native_search_outcomes,
+            ws_canonicalization,
+            ws_stage,
+        )
+        from .wscanonical import MUTATIONS
+
+        candidates = tuple(fmt.name for fmt in formats)
+        stage = ws_stage(
+            backend,
+            formats,
+            tuple(cases),
+            mutations=MUTATIONS,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["ws_canonical"] = ws_canonicalization(
+            native_search_outcomes(result.get("search") or [], candidates),
+            native_search_input_ids(result.get("search") or [], candidates),
+            stage,
+            candidates,
+        )
+    except Exception:  # noqa: BLE001 -- ws-scan probe must not fail the run
+        result["ws_canonical"] = {
+            "available": False,
+            "detail": "ws_scan_unavailable",
         }
 
 
@@ -1631,6 +1695,23 @@ def main(argv: list[str] | None = None) -> int:
                         boundary_map=boundary_map,
                         eos_id=eos_id,
                         token_bytes=token_bytes,
+                    )
+                # Whitespace-canonicalization scan (research wave-3
+                # idea 4): re-encode every search candidate's rendered
+                # prompts under whitespace mutations of the render
+                # string, compare id sequences exactly, and re-run
+                # fixtures on divergent variants to measure verdict
+                # flips. Never fails the run.
+                if args.ws_scan:
+                    _run_ws_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
                     )
                 # Teacher-forced log-likelihood diagnostic (opt-in: one extra
                 # forward pass per candidate x fixture). Scores each

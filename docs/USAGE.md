@@ -178,7 +178,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
 
@@ -944,6 +944,44 @@ rate drift, and added/removed candidates (`diff_stop_cause`;
 newly eos-emitting candidate after a checkpoint or fixture update is
 the termination-behavior regression signal. The stage runs no new
 generations and never fails the run.
+
+### 8.24 Whitespace canonicalization (`ws_canonical`)
+
+Whitespace at template boundaries has caused real production bugs: a
+training template ending in a lone space token, a serving template with
+a trailing space changing the first generated token, an evaluator
+disagreeing on leading-space outputs (aicassindra, "Tokenization, in
+depth"), and adversarial tokenization degrading LLMs on purpose-built
+cases (arXiv:2405.17067, "Tokenization Matters!").
+`model-protocol-lab run --ws-scan` audits this per template family:
+every search candidate's rendered prompts are re-encoded under 8
+whitespace mutations of the render string (`trailing_space`,
+`double_trailing_space`, `trailing_newline`, `trailing_tab`,
+`leading_space`, `leading_newline`, `strip_trailing_space`,
+`collapse_double_space`), the id sequences are compared exactly, and
+fixtures on divergent variants are re-run through the normal
+`core.evaluate()` pipeline via an encode-time backend wrapper
+(`WsScanBackend`, mirroring `PrefillBackend`) to measure verdict flips.
+
+The pre-registered falsifiable claim (in `wscanonical.py`) is that
+whitespace variants of the same rendering tokenize to identical id
+sequences and produce identical task verdicts. A mutation that diverges
+in ids *and* flips a verdict makes the candidate whitespace-fragile;
+a mutation that diverges in ids without flipping is reported as
+divergent-but-stable (the per-mutation table marks `=` / `D` / `F`
+cells). A flipped verdict on *identical* ids is recorded separately as
+a backend-determinism anomaly -- it cannot be whitespace fragility, and
+counting it as such would be dishonest. `results.json` carries
+`ws_canonical` with the per-candidate per-mutation records and the
+`whitespace_robust` verdict. The report's "Whitespace
+canonicalization" section renders the id-divergence / verdict-flip rate
+matrix. `diff-reports` compares per-candidate per-mutation rate drift,
+robust-verdict flips, fragile-candidate set changes, and added/removed
+candidates or mutations (`diff_ws_canonical`;
+`ws_canonical_changed` / `ws_canonical_asymmetric` feed `identical`) --
+a newly fragile candidate after a template or tokenizer change is the
+regression signal. Roughly 9x search compute; the stage never fails the
+run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

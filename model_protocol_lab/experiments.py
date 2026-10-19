@@ -46,6 +46,13 @@ from .synthhistory import (
     TURN_COUNTS,
     candidate_delimiter_label,
 )
+from .wscanonical import (
+    MUTATIONS,
+    WsScanBackend,
+    aggregate_mutation_records,
+    compare_id_sequences,
+    validate_mutations,
+)
 
 FAILURE_MODES = (
     "no-boundary-in-N",
@@ -3724,4 +3731,316 @@ def stop_stage(
         "per_candidate": per_candidate,
         "excluded_candidates": sorted(excluded),
         "overall": aggregate_cause_records(all_records),
+    }
+
+
+def native_search_input_ids(
+    search_entries: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    candidates: tuple[str, ...],
+) -> dict[str, dict[str, list[int]] | None]:
+    """Per-candidate per-fixture input id lists from the search section.
+
+    Pure post-hoc helper: for each candidate, ``{fixture_id: [ids]}``
+    with the exact token ids the native run sent, or None when the
+    candidate has no usable observations. Never raises on malformed
+    entries: they degrade to None.
+    """
+    by_name: dict[str, dict[str, Any]] = {}
+    entries = list(search_entries) if type(search_entries) in (list, tuple) else []
+    for entry in entries:
+        if type(entry) is not dict:
+            continue
+        fmt = entry.get("format")
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(name) is str and name:
+            by_name[name] = entry
+    result: dict[str, dict[str, list[int]] | None] = {}
+    for cand in candidates:
+        cand_entry = by_name.get(cand)
+        observations = cand_entry.get("observations") if type(cand_entry) is dict else None
+        if type(observations) is not list or not observations:
+            result[cand] = None
+            continue
+        per_fixture: dict[str, list[int]] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict:
+                usable = False
+                break
+            fid = obs.get("fixture")
+            if type(fid) is not str or not fid:
+                usable = False
+                break
+            # In-memory results carry tuples (asdict of Observation);
+            # results.json carries lists. Accept both, store lists.
+            raw_ids = obs.get("input_ids")
+            if type(raw_ids) is list:
+                id_items: list[object] = list(raw_ids)
+            elif type(raw_ids) is tuple:
+                id_items = list(raw_ids)
+            else:
+                usable = False
+                break
+            checked: list[int] = []
+            for token in id_items:
+                if type(token) is not int or token < 0:
+                    usable = False
+                    break
+                checked.append(token)
+            if not usable:
+                break
+            per_fixture[fid] = checked
+        result[cand] = per_fixture if usable else None
+    return result
+
+
+def ws_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    mutations: tuple[str, ...] = MUTATIONS,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate under whitespace mutations of the render.
+
+    For each whitespace mutation (see :mod:`wscanonical`), every search
+    candidate is re-evaluated with ``core.evaluate()`` on the search
+    fixtures through a :class:`WsScanBackend` that applies the mutation
+    to the rendered prompt text at encode time. Greedy, exact. The
+    mutation is text-level (applied *before* encoding), so the audited
+    id sequence is exactly what the tokenizer produces for the mutated
+    string.
+
+    Each candidate x mutation cell records per-fixture verdicts
+    (exact answer and explicit boundary) and the variant input id
+    lists; a cell degrades to None on any backend/evaluation failure --
+    fail-closed, never a phantom "robust". ``pass`` is the conservative
+    per-cell verdict: every fixture exact-matched with its boundary
+    found (mirrors the position stage's all-pass rule), so
+    :func:`ws_canonicalization` can compare verdicts against the native
+    run.
+
+    Returns ``{"mutations": [...], "per_mutation": {mutation:
+    {"per_candidate": {name: {"n", "n_completed", "pass", "verdicts",
+    "input_ids"} | None}}}}``. Raises ``ValueError`` on caller-contract
+    violations (None backend, bad formats/cases/mutations/boundary),
+    never on backend data.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases or any(type(case) is not Fixture for case in cases):
+        raise ValueError("cases must be a nonempty tuple of Fixture")
+    mutation_names = validate_mutations(mutations)
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_mutation: dict[str, dict[str, Any]] = {}
+    for mutation in mutation_names:
+        per_candidate: dict[str, dict[str, Any] | None] = {}
+        for fmt in formats:
+            try:
+                wrapped = WsScanBackend(backend, mutation)
+                report = evaluate(
+                    wrapped,
+                    fmt,
+                    cases,
+                    boundary=boundaries[fmt.name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                )
+            except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                per_candidate[fmt.name] = None
+                continue
+            if not report.aggregate_eligible:
+                per_candidate[fmt.name] = None
+                continue
+            verdicts: dict[str, bool] = {}
+            input_ids: dict[str, list[int]] = {}
+            n_completed = 0
+            for obs in report.observations:
+                input_ids[obs.fixture] = list(obs.input_ids)
+                if obs.status == "completed":
+                    n_completed += 1
+                    verdicts[obs.fixture] = bool(obs.exact_match and obs.boundary_found)
+            per_candidate[fmt.name] = {
+                "n": len(cases),
+                "n_completed": n_completed,
+                "pass": n_completed == len(cases)
+                and all(verdicts.get(case.id) is True for case in cases),
+                "verdicts": verdicts,
+                "input_ids": input_ids,
+            }
+        per_mutation[mutation] = {"per_candidate": per_candidate}
+    return {"mutations": list(mutation_names), "per_mutation": per_mutation}
+
+
+def ws_canonicalization(
+    native_outcomes: dict[str, dict[str, Any]],
+    native_input_ids: dict[str, dict[str, list[int]] | None],
+    ws_result: dict[str, Any],
+    candidates: tuple[str, ...],
+) -> dict[str, Any]:
+    """Compare whitespace-variant runs against the native search outcomes.
+
+    For every candidate and mutation: count id-sequence divergences
+    (variant input ids vs the ids the native run actually sent) and
+    verdict flips (variant exact-and-boundary verdict vs the native
+    per-fixture verdict). A flipped verdict on *identical* ids is
+    recorded separately as a determinism anomaly
+    (``n_same_ids_verdict_flips``) -- it cannot be whitespace
+    fragility, and counting it as such would be dishonest.
+
+    Fail-closed: a candidate with no native outcomes, no native input
+    ids, or a None variant cell degrades to ``whitespace_robust: None``
+    with a ``detail`` code, never a phantom robust/​fragile verdict.
+    Never raises on malformed data: returns ``{"available": False}``
+    with a ``detail`` code.
+
+    Returns ``{"available": True, "mutations": [...],
+    "per_candidate": {name: {"per_mutation": ..., "aggregate": ...,
+    "whitespace_robust": bool | None, "detail": str | None}},
+    "fragile_candidates": [...], "excluded_candidates": [...]}``.
+    """
+    if type(native_outcomes) is not dict or type(native_input_ids) is not dict:
+        return {"available": False, "detail": "native_data_malformed"}
+    if type(ws_result) is not dict:
+        return {"available": False, "detail": "ws_result_malformed"}
+    mutations = ws_result.get("mutations")
+    per_mutation = ws_result.get("per_mutation")
+    if (
+        type(mutations) is not list
+        or not mutations
+        or not all(type(m) is str for m in mutations)
+        or type(per_mutation) is not dict
+    ):
+        return {"available": False, "detail": "ws_result_malformed"}
+    per_candidate: dict[str, dict[str, Any]] = {}
+    excluded: list[str] = []
+    fragile: list[str] = []
+    for cand in candidates:
+        outcome = native_outcomes.get(cand)
+        base_ids = native_input_ids.get(cand)
+        if (
+            type(outcome) is not dict
+            or type(base_ids) is not dict
+            or type(outcome.get("per_fixture")) is not dict
+        ):
+            excluded.append(cand)
+            continue
+        base_verdicts = outcome["per_fixture"]
+        cell_records: list[dict[str, object]] = []
+        mutation_cells: dict[str, dict[str, Any]] = {}
+        detail: str | None = None
+        for mutation in mutations:
+            section = per_mutation.get(mutation)
+            cell = section.get("per_candidate", {}).get(cand) if type(section) is dict else None
+            if type(cell) is not dict:
+                detail = "variant_cell_unavailable"
+                mutation_cells[mutation] = {
+                    "evaluable": False,
+                    "detail": "variant_cell_unavailable",
+                }
+                continue
+            variant_verdicts = cell.get("verdicts")
+            variant_ids = cell.get("input_ids")
+            if type(variant_verdicts) is not dict or type(variant_ids) is not dict:
+                detail = "variant_cell_malformed"
+                mutation_cells[mutation] = {
+                    "evaluable": False,
+                    "detail": "variant_cell_malformed",
+                }
+                continue
+            fixture_ids = [fid for fid in base_verdicts if type(fid) is str]
+            n_ids_divergent = 0
+            n_verdict_flips = 0
+            n_same_ids_flips = 0
+            n_evaluable = 0
+            flips: list[str] = []
+            for fid in fixture_ids:
+                old_ids = base_ids.get(fid)
+                new_ids = variant_ids.get(fid)
+                if type(old_ids) is not list or type(new_ids) is not list:
+                    continue
+                # Both sides validated as nonneg-int lists above; the
+                # pure comparison keeps one id-equality semantic.
+                ids_diverged = not compare_id_sequences(tuple(old_ids), tuple(new_ids))
+                if ids_diverged:
+                    n_ids_divergent += 1
+                new_verdict = variant_verdicts.get(fid)
+                old_verdict = base_verdicts.get(fid)
+                if type(new_verdict) is not bool or type(old_verdict) is not bool:
+                    continue
+                n_evaluable += 1
+                if new_verdict != old_verdict:
+                    n_verdict_flips += 1
+                    flips.append(fid)
+                    if not ids_diverged:
+                        # Same ids, different verdict: the backend is
+                        # nondeterministic across runs -- a determinism
+                        # finding, not whitespace fragility.
+                        n_same_ids_flips += 1
+            cell_records.append(
+                {
+                    "mutation": mutation,
+                    "n_fixtures": len(fixture_ids),
+                    "n_evaluable": n_evaluable,
+                    "n_ids_divergent": n_ids_divergent,
+                    "n_verdict_flips": n_verdict_flips,
+                    "n_same_ids_verdict_flips": n_same_ids_flips,
+                }
+            )
+            mutation_cells[mutation] = {
+                "evaluable": True,
+                "n_fixtures": len(fixture_ids),
+                "n_evaluable": n_evaluable,
+                "n_ids_divergent": n_ids_divergent,
+                "ids_divergence_rate": (n_ids_divergent / len(fixture_ids)) if fixture_ids else 0.0,
+                "n_verdict_flips": n_verdict_flips,
+                "verdict_flip_rate": (n_verdict_flips / n_evaluable) if n_evaluable else 0.0,
+                "n_same_ids_verdict_flips": n_same_ids_flips,
+                "flips": sorted(flips),
+                "fragile": n_verdict_flips > 0,
+            }
+        try:
+            aggregate = aggregate_mutation_records(cell_records)
+        except ValueError:
+            return {"available": False, "detail": "aggregation_failed"}
+        if detail is not None:
+            per_candidate[cand] = {
+                "per_mutation": mutation_cells,
+                "aggregate": aggregate,
+                "whitespace_robust": None,
+                "detail": detail,
+            }
+            excluded.append(cand)
+            continue
+        robust = bool(aggregate["whitespace_robust"])
+        per_candidate[cand] = {
+            "per_mutation": mutation_cells,
+            "aggregate": aggregate,
+            "whitespace_robust": robust,
+            "detail": None,
+        }
+        # Fragile means a verdict actually flipped -- divergent ids with
+        # stable verdicts are reported per mutation but are not fragility.
+        if aggregate["n_fragile_mutations"]:
+            fragile.append(cand)
+    if not per_candidate:
+        return {"available": False, "detail": "no_evaluable_candidates"}
+    return {
+        "available": True,
+        "mutations": list(mutations),
+        "per_candidate": per_candidate,
+        "fragile_candidates": sorted(fragile),
+        "excluded_candidates": sorted(excluded),
     }

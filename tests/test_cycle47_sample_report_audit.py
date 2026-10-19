@@ -78,6 +78,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "batch_invariance",
     "position",
     "stop_cause",
+    "ws_canonical",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

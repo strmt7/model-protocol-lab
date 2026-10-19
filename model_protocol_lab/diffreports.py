@@ -553,6 +553,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    wscan_diff = diff_ws_canonical(old.get("ws_canonical"), new.get("ws_canonical"))
+    wscan_asymmetric = wscan_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -590,6 +595,8 @@ def diff_reports(
         and not position_asymmetric
         and not stopcause_diff["changed"]
         and not stopcause_asymmetric
+        and not wscan_diff["changed"]
+        and not wscan_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -628,6 +635,8 @@ def diff_reports(
         "position_asymmetric": position_asymmetric,
         "stop_cause_changed": stopcause_diff["changed"],
         "stop_cause_asymmetric": stopcause_asymmetric,
+        "ws_canonical_changed": wscan_diff["changed"],
+        "ws_canonical_asymmetric": wscan_asymmetric,
         "identical": identical,
     }
     return {
@@ -651,6 +660,7 @@ def diff_reports(
         "batch_invariance": batchinv_diff,
         "position": position_diff,
         "stop_cause": stopcause_diff,
+        "ws_canonical": wscan_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -1909,6 +1919,173 @@ def diff_stop_cause(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+#: Whitespace mutations mirrored from wscanonical.MUTATIONS (kept local
+#: so the differ stays import-light; pinned equal by test).
+_WSCAN_MUTATIONS = (
+    "trailing_space",
+    "double_trailing_space",
+    "trailing_newline",
+    "trailing_tab",
+    "leading_space",
+    "leading_newline",
+    "strip_trailing_space",
+    "collapse_double_space",
+)
+
+
+def _valid_ws_canonical(payload: Any) -> bool:
+    """Structural check for a ``ws_canonical`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: the compared
+    fields must be bools/strings/None/numbers so the renderers never
+    hit a TypeError on a hostile payload, and map keys must be
+    strings. A malformed side degrades to asymmetric instead of
+    raising.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    mutations = payload.get("mutations")
+    if type(mutations) is not list or not mutations or not all(type(m) is str for m in mutations):
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        robust = entry.get("whitespace_robust")
+        if robust is not None and type(robust) is not bool:
+            return False
+        cells = entry.get("per_mutation")
+        if type(cells) is not dict:
+            return False
+        for mutation, cell in cells.items():
+            if type(mutation) is not str or type(cell) is not dict:
+                return False
+            for key in ("ids_divergence_rate", "verdict_flip_rate"):
+                value = cell.get(key)
+                if value is not None and type(value) not in (int, float):
+                    return False
+            for key in ("n_ids_divergent", "n_verdict_flips", "n_same_ids_verdict_flips"):
+                value = cell.get(key)
+                if value is not None and type(value) is not int:
+                    return False
+            if cell.get("fragile") is not None and type(cell.get("fragile")) is not bool:
+                return False
+    return True
+
+
+def diff_ws_canonical(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``ws_canonical`` payloads; deterministic.
+
+    Answers "did the whitespace-fragility story change between runs?":
+    per-candidate per-mutation id-divergence-rate and verdict-flip-rate
+    drift, whitespace-robust verdict flips, fragile-candidate set
+    changes, and added/removed candidates or mutations. A newly fragile
+    candidate after a template or tokenizer change is the regression
+    signal. A side without a recorded whitespace scan is reported
+    plainly. No model, no network.
+    """
+    old_ok = _valid_ws_canonical(old)
+    new_ok = _valid_ws_canonical(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            cells = {}
+            for mutation, cell in (entry.get("per_mutation") or {}).items():
+                # _valid_ws_canonical guarantees str keys and dict cells,
+                # so no defensive skip is needed here (it would be dead
+                # code and an uncoverable line).
+                cell = cell or {}
+                cells[mutation] = {
+                    "ids_divergence_rate": cell.get("ids_divergence_rate"),
+                    "verdict_flip_rate": cell.get("verdict_flip_rate"),
+                    "n_same_ids_verdict_flips": cell.get("n_same_ids_verdict_flips"),
+                    "fragile": cell.get("fragile"),
+                }
+            view[name] = {
+                "whitespace_robust": entry.get("whitespace_robust"),
+                "cells": cells,
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    old_mutations = [m for m in (old.get("mutations") or []) if type(m) is str]
+    new_mutations = [m for m in (new.get("mutations") or []) if type(m) is str]
+    mutations_added = sorted(set(new_mutations) - set(old_mutations))
+    mutations_removed = sorted(set(old_mutations) - set(new_mutations))
+    rate_drift: list[dict[str, Any]] = []
+    robust_flips: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_robust = old_view[name]["whitespace_robust"]
+        new_robust = new_view[name]["whitespace_robust"]
+        if old_robust != new_robust:
+            robust_flips.append(
+                {"candidate": name, "old_robust": old_robust, "new_robust": new_robust}
+            )
+        for mutation in sorted(set(old_view[name]["cells"]) & set(new_view[name]["cells"])):
+            for metric in (
+                "ids_divergence_rate",
+                "verdict_flip_rate",
+                "n_same_ids_verdict_flips",
+                "fragile",
+            ):
+                old_value = old_view[name]["cells"][mutation][metric]
+                new_value = new_view[name]["cells"][mutation][metric]
+                if old_value != new_value:
+                    rate_drift.append(
+                        {
+                            "candidate": name,
+                            "mutation": mutation,
+                            "metric": metric,
+                            "old": old_value,
+                            "new": new_value,
+                        }
+                    )
+    fragile_old = set(old.get("fragile_candidates") or [])
+    fragile_new = set(new.get("fragile_candidates") or [])
+    fragile_added = sorted(fragile_new - fragile_old)
+    fragile_removed = sorted(fragile_old - fragile_new)
+    result["rate_drift"] = rate_drift
+    result["robust_flips"] = robust_flips
+    result["fragile_added"] = fragile_added
+    result["fragile_removed"] = fragile_removed
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    result["mutations_added"] = mutations_added
+    result["mutations_removed"] = mutations_removed
+    # NOTE: ws-canonical-specific disjunct names keep this line
+    # textually distinct from every other diff section's ``changed``
+    # anchor (mutation-gate uniqueness).
+    result["changed"] = bool(
+        rate_drift
+        or robust_flips
+        or fragile_added
+        or fragile_removed
+        or candidates_added
+        or candidates_removed
+        or mutations_added
+        or mutations_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -3104,6 +3281,67 @@ def _render_stop_cause_summary(stopcause_diff: dict[str, Any] | None) -> list[st
     return lines
 
 
+def _render_ws_canonical_summary(wscan_diff: dict[str, Any] | None) -> list[str]:
+    """Whitespace-canonicalization comparison lines for the stderr summary."""
+    if type(wscan_diff) is not dict:
+        return []
+    available = wscan_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Whitespace-canonicalization comparison unavailable: "
+            f"{missing} run did not record the whitespace scan."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+
+    drift = wscan_diff.get("rate_drift") or []
+    if drift:
+        lines.append(f"Whitespace id/flip drift ({len(drift)}):")
+        for entry in drift[:5]:
+            metric = _display_id(entry.get("metric"))
+            old = entry.get("old")
+            new = entry.get("new")
+            if metric in ("ids_divergence_rate", "verdict_flip_rate"):
+                change = f"{_fmt_rate(old)} -> {_fmt_rate(new)}"
+            else:
+                change = f"{_display_id(old)} -> {_display_id(new)}"
+            lines.append(
+                f"  {_display_id(entry['candidate'])}/{_display_id(entry.get('mutation'))}"
+                f"/{metric}: {change}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    robust = wscan_diff.get("robust_flips") or []
+    for entry in robust[:5]:
+        lines.append(
+            f"Whitespace-robust flip {_display_id(entry['candidate'])}: "
+            f"{_display_id(entry.get('old_robust'))} -> {_display_id(entry.get('new_robust'))}"
+        )
+    for key, label in (
+        ("fragile_added", "newly fragile"),
+        ("fragile_removed", "no longer fragile"),
+    ):
+        names = wscan_diff.get(key) or []
+        if names:
+            lines.append(f"Whitespace {label}: {', '.join(_display_id(c) for c in names)}")
+    added = wscan_diff.get("candidates_added") or []
+    removed = wscan_diff.get("candidates_removed") or []
+    if added:
+        lines.append(
+            f"Whitespace-scan candidates added: {', '.join(_display_id(c) for c in added)}"
+        )
+    if removed:
+        lines.append(
+            f"Whitespace-scan candidates removed: {', '.join(_display_id(c) for c in removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -3525,6 +3763,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_batchinv_summary(diff.get("batch_invariance")))
     lines.extend(_render_position_summary(diff.get("position")))
     lines.extend(_render_stop_cause_summary(diff.get("stop_cause")))
+    lines.extend(_render_ws_canonical_summary(diff.get("ws_canonical")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
