@@ -1,7 +1,7 @@
 # Model Protocol Lab
 
 [![CI](https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/strmt7/model-protocol-lab/graph/badge.svg)](https://codecov.io/gh/strmt7/model-protocol-lab)
+[![Codecov](https://codecov.io/gh/strmt7/model-protocol-lab/graph/badge.svg)](https://codecov.io/gh/strmt7/model-protocol-lab)
 [![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
 [![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)
