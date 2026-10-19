@@ -1301,9 +1301,7 @@ class CoverageGapTests3(unittest.TestCase):
     def test_controls_handles_failed_probe(self):
         from unittest import mock
 
-        with mock.patch.object(
-            sn, "probe_surface_noise", return_value={"status": "cancelled"}
-        ):
+        with mock.patch.object(sn, "probe_surface_noise", return_value={"status": "cancelled"}):
             result = sn.run_surface_noise_controls(boundary=(7,))
         for control in result["controls"]:
             self.assertEqual(control["status"], "cancelled")
