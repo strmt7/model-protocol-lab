@@ -40,7 +40,7 @@ from .prefill import (
     validate_prefill_specs,
 )
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
-from .structured import candidate_adherence, classify_response
+from .structured import candidate_adherence, classify_response, validate_schema_def
 from .synthhistory import (
     CONDITIONS,
     DELIMITER_LABELS,
@@ -4009,8 +4009,13 @@ def ws_canonicalization(
                 "n_verdict_flips": n_verdict_flips,
                 "verdict_flip_rate": (n_verdict_flips / n_evaluable) if n_evaluable else 0.0,
                 "n_same_ids_verdict_flips": n_same_ids_flips,
+                "n_fragile_flips": n_verdict_flips - n_same_ids_flips,
                 "flips": sorted(flips),
-                "fragile": n_verdict_flips > 0,
+                # Fragile means a verdict flipped on *divergent* ids.
+                # Same-ids flips are a backend-determinism finding and
+                # must never count as whitespace fragility (see the
+                # docstring's honest split).
+                "fragile": (n_verdict_flips - n_same_ids_flips) > 0,
             }
         try:
             aggregate = aggregate_mutation_records(cell_records)
@@ -4032,8 +4037,10 @@ def ws_canonicalization(
             "whitespace_robust": robust,
             "detail": None,
         }
-        # Fragile means a verdict actually flipped -- divergent ids with
-        # stable verdicts are reported per mutation but are not fragility.
+        # Fragile means a verdict flipped on divergent ids --
+        # divergent ids with stable verdicts, and same-ids flips
+        # (a determinism finding), are reported per mutation but are
+        # not fragility.
         if aggregate["n_fragile_mutations"]:
             fragile.append(cand)
     if not per_candidate:
@@ -4092,6 +4099,13 @@ def structured_stage(
         type(key) is str and type(value) is dict for key, value in schemas.items()
     ):
         raise ValueError("schemas must be a dict of fixture id to schema dict")
+    for fixture_id, schema in schemas.items():
+        try:
+            validate_schema_def(schema)
+        except ValueError as exc:
+            raise ValueError(
+                f"schemas[{fixture_id!r}] is not a valid schema definition: {exc}"
+            ) from exc
     for case in structured_fixtures:
         if case.id not in schemas:
             raise ValueError(f"no schema registered for fixture {case.id!r}")

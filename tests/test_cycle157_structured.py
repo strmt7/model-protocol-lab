@@ -359,6 +359,11 @@ def _oracle_field_ok(value, field):
         case "number":
             if type(value) not in (int, float) or isinstance(value, bool):
                 return False
+            # Non-finite floats are not JSON numbers (RFC 8259 §6); the
+            # oracle must share the implementation's rejection, not the
+            # shared blind spot that let F1 through.
+            if value != value or abs(value) == float("inf"):
+                return False
         case "boolean":
             if type(value) is not bool:
                 return False
@@ -435,7 +440,9 @@ def _random_doc(rng, schema):
         elif choice < 0.5:
             doc[name] = rng.randint(-2, 9)
         elif choice < 0.65:
-            doc[name] = rng.choice([1.5, 2.5])
+            # Include non-finite floats: the F1 hole was invisible here
+            # because the pool never generated them.
+            doc[name] = rng.choice([1.5, 2.5, float("nan"), float("inf"), float("-inf")])
         elif choice < 0.8:
             doc[name] = rng.choice([True, False])
         elif choice < 0.9:
@@ -901,11 +908,16 @@ class DiffStructuredTests(unittest.TestCase):
     def test_parse_rate_drift_only(self):
         old = _structured_payload()
         new = _structured_payload()
-        new["per_candidate"]["alpha"]["parse_rate"] = 0.5
+        # A consistent cell: a parse-rate drop drags schema/adherent with
+        # it (adherent_rate <= parse_rate is a producer invariant). The
+        # pin is that the rate-drift disjunct alone fires.
+        new["per_candidate"]["alpha"].update(parse_rate=0.5, schema_rate=0.5, adherent_rate=0.5)
         diff = diff_structured(old, new)
         self.assertTrue(diff["changed"])
-        self.assertEqual(len(diff["rate_drift"]), 1)
-        self.assertEqual(diff["rate_drift"][0]["metric"], "parse_rate")
+        self.assertEqual(
+            {entry["metric"] for entry in diff["rate_drift"]},
+            {"parse_rate", "schema_rate", "adherent_rate"},
+        )
         self.assertEqual(diff["gap_drift"], [])
         self.assertEqual(diff["weakest_added"], [])
         self.assertEqual(diff["candidates_added"], [])
@@ -1100,7 +1112,7 @@ class StructuredMutationGateTests(unittest.TestCase):
     def _rate_drift_scenario(self, mod):
         old = _structured_payload()
         new = _structured_payload()
-        new["per_candidate"]["alpha"]["parse_rate"] = 0.5
+        new["per_candidate"]["alpha"].update(parse_rate=0.5, schema_rate=0.5, adherent_rate=0.5)
         assert mod.diff_structured(old, new)["changed"] is True
 
     def test_mutant_dropped_rate_drift_caught(self):
@@ -1188,7 +1200,7 @@ class StructuredHypothesisTests(unittest.TestCase):
         st.integers(),
         st.booleans(),
         st.none(),
-        st.floats(allow_nan=False, allow_infinity=False),
+        st.floats(),
     )
     @settings(max_examples=100)
     def test_check_schema_total_on_scalars(self, value, _b, _n, _f):

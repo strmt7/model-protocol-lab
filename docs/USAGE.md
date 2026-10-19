@@ -997,7 +997,10 @@ classified independently of the strict `exact_match` verdict:
 `schema_failed` / `schema_invalid` against the schema (a hand-rolled
 validator -- string/integer/number/boolean/null fields, enum, finite
 minimum/maximum bounds -- with a 200-case seeded brute-force oracle
-differential in the test suite). Per-candidate aggregation reports
+differential in the test suite). Non-finite floats (`NaN`, `±Infinity`)
+are not JSON numbers (RFC 8259 §6) and can never satisfy a `number`
+field, even though `json.loads` parses them as a Python extension.
+Per-candidate aggregation reports
 parse/schema/adherent rates with the invariant `adherent_rate <=
 parse_rate`; `not_text` responses are fail-closed exclusions.
 

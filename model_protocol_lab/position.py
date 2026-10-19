@@ -168,12 +168,16 @@ def layout_options(
     (``correct_first``), ``len // 2`` (``correct_middle``), or
     ``len - 1`` (``correct_last``). The correct placement is invariant
     under the distractor shuffle -- the shuffle only reorders the other
-    options. Raises ``ValueError`` on bad input.
+    options. Options must be distinct strings: duplicates would silently
+    shorten the layout (the distractor filter removes every copy), so
+    they are rejected fail-closed. Raises ``ValueError`` on bad input.
     """
     if type(options) is not tuple or not options:
         raise ValueError("options must be a nonempty tuple")
     if any(type(opt) is not str for opt in options):
         raise ValueError("options must contain only strings")
+    if len(set(options)) != len(options):
+        raise ValueError("options must be distinct strings")
     if type(correct) is not str or correct not in options:
         raise ValueError("correct must be one of the options")
     if condition not in CONDITIONS:

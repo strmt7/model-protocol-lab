@@ -471,6 +471,9 @@ class WscanonicalHypothesisTests(unittest.TestCase):
             record["n_evaluable"] = min(record["n_evaluable"], record["n_fixtures"])
             record["n_ids_divergent"] = min(record["n_ids_divergent"], record["n_fixtures"])
             record["n_verdict_flips"] = min(record["n_verdict_flips"], record["n_evaluable"])
+            record["n_same_ids_verdict_flips"] = min(
+                record["n_same_ids_verdict_flips"], record["n_verdict_flips"]
+            )
             clean.append(record)
         agg = aggregate_mutation_records(clean)
         for cell in agg["per_mutation"].values():

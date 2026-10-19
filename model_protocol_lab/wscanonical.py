@@ -38,7 +38,8 @@ Pre-registered claims (falsifiable):
    whitespace fragility.
 3. ``aggregate_mutation_records`` rates stay in [0, 1]; a candidate is
    ``whitespace_robust`` only when every mutation produced zero id
-   divergence and zero verdict flips (pinned by Hypothesis).
+   divergence and zero verdict flips on divergent ids (same-ids flips
+   are a determinism finding, never fragility -- pinned by Hypothesis).
 
 Everything here is pure: text mutation, id-sequence comparison, and
 rate aggregation need no model. Tokenizer interaction enters only
@@ -150,13 +151,20 @@ def aggregate_mutation_records(records: list[dict[str, object]]) -> dict[str, ob
 
     Each record is ``{"mutation": str, "n_fixtures": int,
     "n_evaluable": int, "n_ids_divergent": int, "n_verdict_flips": int,
-    "n_same_ids_verdict_flips": int}``. Returns ``{"per_mutation": ...,
-    "n_fragile_mutations": int, "max_ids_divergence_rate": float,
-    "max_verdict_flip_rate": float, "whitespace_robust": bool}`` where a
-    mutation is fragile when it flipped at least one verdict, and a
-    candidate is whitespace-robust only when no mutation diverged in ids
-    and no mutation flipped a verdict. Rates are 0.0 on empty
-    denominators. Raises ``ValueError`` on malformed records.
+    "n_same_ids_verdict_flips": int}``. ``n_verdict_flips`` counts every
+    flip; ``n_same_ids_verdict_flips`` is the subset that flipped on
+    *identical* ids (a backend-determinism finding). Returns
+    ``{"per_mutation": ..., "n_fragile_mutations": int,
+    "max_ids_divergence_rate": float, "max_verdict_flip_rate": float,
+    "whitespace_robust": bool}`` where a mutation is fragile only when a
+    verdict flipped on *divergent* ids (``n_fragile_flips =
+    n_verdict_flips - n_same_ids_verdict_flips``), and a candidate is
+    whitespace-robust only when no mutation diverged in ids and no
+    mutation is fragile. Same-ids flips are reported under
+    ``n_same_ids_verdict_flips`` and never count as fragility -- counting
+    backend nondeterminism as whitespace fragility would be dishonest.
+    Rates are 0.0 on empty denominators. Raises ``ValueError`` on
+    malformed records.
     """
     if type(records) is not list:
         raise ValueError("records must be a list")
@@ -189,8 +197,11 @@ def aggregate_mutation_records(records: list[dict[str, object]]) -> dict[str, ob
             raise ValueError("n_ids_divergent cannot exceed n_fixtures")
         if counts["n_verdict_flips"] > counts["n_evaluable"]:
             raise ValueError("n_verdict_flips cannot exceed n_evaluable")
+        if counts["n_same_ids_verdict_flips"] > counts["n_verdict_flips"]:
+            raise ValueError("n_same_ids_verdict_flips cannot exceed n_verdict_flips")
         n_fixtures = counts["n_fixtures"]
         n_evaluable = counts["n_evaluable"]
+        n_fragile_flips = counts["n_verdict_flips"] - counts["n_same_ids_verdict_flips"]
         ids_divergence_rate = counts["n_ids_divergent"] / n_fixtures if n_fixtures else 0.0
         verdict_flip_rate = counts["n_verdict_flips"] / n_evaluable if n_evaluable else 0.0
         per_mutation[mutation] = {
@@ -201,7 +212,8 @@ def aggregate_mutation_records(records: list[dict[str, object]]) -> dict[str, ob
             "n_verdict_flips": counts["n_verdict_flips"],
             "verdict_flip_rate": verdict_flip_rate,
             "n_same_ids_verdict_flips": counts["n_same_ids_verdict_flips"],
-            "fragile": counts["n_verdict_flips"] > 0,
+            "n_fragile_flips": n_fragile_flips,
+            "fragile": n_fragile_flips > 0,
         }
         if ids_divergence_rate > max_ids_divergence_rate:
             max_ids_divergence_rate = ids_divergence_rate
@@ -215,7 +227,7 @@ def aggregate_mutation_records(records: list[dict[str, object]]) -> dict[str, ob
         "max_verdict_flip_rate": max_verdict_flip_rate,
         "whitespace_robust": bool(per_mutation)
         and all(
-            entry["n_ids_divergent"] == 0 and entry["n_verdict_flips"] == 0
+            entry["n_ids_divergent"] == 0 and entry["fragile"] is False
             for entry in per_mutation.values()
         ),
     }
