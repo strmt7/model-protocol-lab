@@ -19,7 +19,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (5950 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (6086 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -124,6 +124,7 @@ raw prompts or generations.
 - `debug`: an interactive, offline protocol-debugger REPL over one dataset and one hypothesis — render with a per-segment char-span (and token-ID) map, step response-boundary detection one token at a time, and audit fixtures for special-token literals; `--model` attaches a checkpoint tokenizer only, weights never loaded. Try `python -m model_protocol_lab debug --dataset examples/fixtures.json`, then `.render`.
 - `diff-backends`: differential testing of emulated backend stop semantics (HF StopStringCriteria, vLLM detokenizer strip/keep, EOS-appended) on one recorded token sequence — prints a JSON verdict (`agree`/`diverge`) with the per-semantic cells and any divergence findings, so a surprising run verdict can be checked against backend stop behavior. Try `python -m model_protocol_lab diff-backends --model path/to/checkpoint --prompt-text "the answer is" --output-text "42 STOP" --stops "STOP"`.
 - `verify`: N-version independent results-integrity replay — re-derives the decision, winner, frontier, and held-out floor from a stored `results.json` through independent code paths, so a corrupted or hand-edited result file is caught instead of trusted. Try `python -m model_protocol_lab verify OLD_RESULTS/results.json`.
+- `surface-noise`: a self-consistency probe for a single prompt — perturbs the prompt text with a frozen set of surface-noise operators (typo, case flip, unicode variant, whitespace modes, punctuation strip), re-scores on your fixtures, and reports a per-operator stability vector with minimal-flip counterfactuals plus a self-contained HTML dashboard. Monday-morning use: you rewrote a prompt over the weekend — the probe tells you whether a typo would flip its answers, before you ship it. The reported "nearest observed flip" is an upper bound over the searched subset, never a guarantee; scores compare only under identical fixtures, backend, and protocol fingerprint. An stdlib-only MCP server (`tools/surface_noise_mcp_server.py`) exposes the same instrument to agents. Try `python -m model_protocol_lab surface-noise protocol` to inspect the instrument before using it.
 - `diff-reports`: deterministic comparison of two experiment result directories for the iterate-and-compare operator loop— reports the decision flip, winner change, per-candidate verdict flips on search and held-out, per-fixture outcome diffs (changed-only by default), the token-budget frontier comparison (exact budget spans where the post-hoc decision, winner, or per-budget leader differ, per-flip-span attribution, and the safe budget floor), the held-out verification-floor comparison, the prompt-boundary audit comparison, the stop-semantics selection-robustness comparison (per-semantic verdict drift and flip pattern), the cross-checkpoint transfer comparison (verdict, per-checkpoint and per-cell drift), the contamination comparison (worst-tier drift, pair changes, tier escalations), the fixture-perturbation comparison (stability drift, per-variant drift), the token-healing comparison (healed-verdict drift, per-candidate (native, healed) drift, falsification drift), the instruction-hierarchy comparison (per-position verdict drift, flip pattern, adherence drift, group-rate drift), the assistant-prefill comparison (per-prefill verdict drift, flip pattern, honoring drift, think-channel group drift), the protocol-portfolio comparison (gap drift, solvable-set drift, membership drift, per-fixture oracle-winner drift, per-member cover drift), the synthetic-history comparison (condition verdict drift, flip pattern, pass-rate drift, delimiter-group drift), the batch-invariance comparison (verdict drift, divergence-rate drift, diverged-prompt sets), the position-sensitivity comparison (condition verdict drift, flip pattern, correct-rate drift, primacy-index drift), the stop-cause comparison (cause-rate drift, aggregate-rate drift, candidate changes), the whitespace-canonicalization comparison (id-divergence / verdict-flip rate drift, robust-verdict flips, fragile-candidate changes), and a loud config-drift warning when the runs used different candidates, boundaries, or fixture sets. Try `python -m model_protocol_lab diff-reports OLD_RESULTS NEW_RESULTS`.
 - Local JSON output and a static, color-coded HTML comparison report with no external assets.
 - A committed synthetic sample report that regenerates byte-identically.
@@ -170,6 +171,18 @@ fixture is selected and frozen before held-out evaluation; ties and failures
 abstain and the held-out set is never used to break them. No counterpart to
 this selection rule was found in lm-eval's evaluator; there is no leaderboard
 here.
+
+**Dynamic prompt probing next to static prompt scoring.** ctxray
+([github.com/ctxray/ctxray](https://github.com/ctxray/ctxray), MIT, checked
+2026-10-19) scores prompts deterministically from 30+ static features in
+<50ms with zero LLM calls — the static tier. This lab's `surface-noise`
+probe is the dynamic tier: it *executes* the prompt under a frozen set of
+surface-noise perturbations and reports a per-operator verdict-stability
+vector with minimal-flip counterfactuals — a measurement ctxray explicitly
+does not do. The reported "nearest observed flip" is an upper bound over
+the searched subset, never a guarantee; the academic precedent is the
+CoIPO/NoisyPromptBench "decoding radius" (arXiv:2603.03314) and the 2026
+PCE minimal-flip counterfactuals work, both cited, not claimed over.
 
 **What this lab does not do:** benchmark general model quality, recover a
 model's training template, serve inference, or train anything. The bundled

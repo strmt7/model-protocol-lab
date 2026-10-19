@@ -5196,3 +5196,165 @@ def run_diff_reports(args: argparse.Namespace, parser: argparse.ArgumentParser) 
     print(json.dumps(diff, indent=2, ensure_ascii=True, sort_keys=True))
     print(render_summary(diff), file=sys.stderr)
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Surface-noise probe diff (standalone probe.json pairs; deterministic)
+# ---------------------------------------------------------------------------
+
+SURFACE_NOISE_INSTRUMENT = "surface-noise-probe"
+
+
+def _valid_surface_noise(payload: Any) -> bool:
+    """Structural check for a ``probe.json`` surface-noise payload.
+
+    The probe is a per-prompt instrument, so its diff lives outside the
+    results.json dispatcher: it compares two standalone probe.json files
+    (before/after a prompt edit), not two experiment runs.
+    """
+    if type(payload) is not dict:
+        return False
+    if payload.get("instrument") != SURFACE_NOISE_INSTRUMENT:
+        return False
+    if payload.get("status") != "ok":
+        return False
+    operators = payload.get("operators")
+    if type(operators) is not dict or not all(type(k) is str for k in operators):
+        return False
+    for entry in operators.values():
+        if type(entry) is not dict:
+            return False
+        stability = entry.get("stability")
+        if stability is not None and (
+            type(stability) not in (int, float) or isinstance(stability, bool)
+        ):
+            return False
+        for key in ("n_effective", "n_total"):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+        nearest = entry.get("nearest_observed_flip")
+        if nearest is not None and type(nearest) is not dict:
+            return False
+    if type(payload.get("prompt_sha256")) is not str:
+        return False
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return False
+    return type(protocol.get("backend_fingerprint")) is str
+
+
+def _operator_view(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Extract the comparable per-operator numbers from a probe payload."""
+    view: dict[str, dict[str, Any]] = {}
+    for name, entry in payload["operators"].items():
+        nearest = entry.get("nearest_observed_flip") or {}
+        view[name] = {
+            "stability": entry.get("stability"),
+            "n_effective": entry.get("n_effective"),
+            "nearest_flip_distance": (nearest.get("distance") if type(nearest) is dict else None),
+            "nearest_flip_variant": (nearest.get("variant_id") if type(nearest) is dict else None),
+        }
+    return view
+
+
+def diff_surface_noise(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two surface-noise probe.json payloads; deterministic.
+
+    Answers "did the probe's story change between the two prompts?":
+    per-operator stability drift and nearest-flip drift, baseline
+    pass-count change, and — most importantly for the comparability rule
+    — whether the prompt text or the protocol fingerprint changed at all.
+    A side without a recorded probe is reported plainly. No model, no
+    network.
+    """
+    old_ok = _valid_surface_noise(old)
+    new_ok = _valid_surface_noise(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {
+        "available": available,
+        "changed": False,
+        "identical": available == "neither",
+    }
+    if available != "both":
+        return result
+
+    # Comparability first: the probe's contract compares scores only
+    # under identical (fixtures, backend, protocol-fingerprint) triples.
+    protocol_drift = (
+        old["protocol"].get("backend_fingerprint") != new["protocol"].get("backend_fingerprint")
+        or old["protocol"].get("search_plan") != new["protocol"].get("search_plan")
+        or old["protocol"].get("fixture_sha256") != new["protocol"].get("fixture_sha256")
+    )
+    prompt_changed = old["prompt_sha256"] != new["prompt_sha256"]
+
+    old_view = _operator_view(old)
+    new_view = _operator_view(new)
+    operators_added = sorted(set(new_view) - set(old_view))
+    operators_removed = sorted(set(old_view) - set(new_view))
+    stability_drift: list[dict[str, Any]] = []
+    nearest_flip_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        if old_entry["stability"] != new_entry["stability"]:
+            stability_drift.append(
+                {
+                    "operator": name,
+                    "old_stability": old_entry["stability"],
+                    "new_stability": new_entry["stability"],
+                }
+            )
+        if (
+            old_entry["nearest_flip_distance"] != new_entry["nearest_flip_distance"]
+            or old_entry["nearest_flip_variant"] != new_entry["nearest_flip_variant"]
+        ):
+            nearest_flip_drift.append(
+                {
+                    "operator": name,
+                    "old": (
+                        old_entry["nearest_flip_distance"],
+                        old_entry["nearest_flip_variant"],
+                    ),
+                    "new": (
+                        new_entry["nearest_flip_distance"],
+                        new_entry["nearest_flip_variant"],
+                    ),
+                }
+            )
+
+    old_baseline = (old.get("baseline") or {}).get("n_pass")
+    new_baseline = (new.get("baseline") or {}).get("n_pass")
+    baseline_changed = old_baseline != new_baseline
+
+    changed = bool(
+        protocol_drift
+        or prompt_changed
+        or operators_added
+        or operators_removed
+        or stability_drift
+        or nearest_flip_drift
+        or baseline_changed
+    )
+    result.update(
+        {
+            "changed": changed,
+            "identical": not changed,
+            "protocol_drift": protocol_drift,
+            "prompt_changed": prompt_changed,
+            "baseline_n_pass": {"old": old_baseline, "new": new_baseline},
+            "baseline_changed": baseline_changed,
+            "operators_added": operators_added,
+            "operators_removed": operators_removed,
+            "stability_drift": stability_drift,
+            "nearest_flip_drift": nearest_flip_drift,
+        }
+    )
+    return result

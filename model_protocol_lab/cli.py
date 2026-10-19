@@ -417,6 +417,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="New fixture JSON file; an existing path is never overwritten",
     )
     # ANCHOR: new top-level subparsers are registered here (one block per command).
+    from .surfacenoise import build_surface_noise_parser
+
+    build_surface_noise_parser(sub)
     from .verify import build_verify_parser
 
     build_verify_parser(sub)
@@ -1275,6 +1278,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps([asdict(fmt) for fmt in CATALOG.values()], indent=2))
             return 0
         # ANCHOR: new top-level command dispatch goes here (one block per command).
+        if args.command == "surface-noise":
+            from .surfacenoise import run_surface_noise
+
+            return run_surface_noise(args, parser)
         if args.command == "verify":
             from .verify import run_verify
 
