@@ -91,6 +91,8 @@ from .synthhistory import (
     TURN_COUNTS,
     candidate_delimiter_label,
 )
+from .toolcall import candidate_adherence as toolcall_candidate_adherence
+from .toolcall import classify_tool_call
 from .wscanonical import (
     MUTATIONS,
     WsScanBackend,
@@ -5418,4 +5420,207 @@ def faketurn_robustness(
         "excluded_candidates": sorted(excluded),
         "max_transfer_gap": max(max_gap) if max_gap else None,
         "max_flip_rate": max(max_rate) if max_rate else None,
+    }
+
+
+def toolcall_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    toolcall_fixtures: tuple[Fixture, ...],
+    *,
+    calls: dict[str, dict[str, Any] | None],
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate on synthetic tool-call fixtures.
+
+    For every search candidate, the synthetic tool-call fixtures (see
+    :mod:`toolcall`) are evaluated with ``core.evaluate()`` unchanged;
+    each completed observation's decoded ``answer`` is then classified
+    against the fixture's expected call by
+    :func:`toolcall.classify_tool_call` into ``adherent`` /
+    ``parse_failed`` / ``call_failed`` / ``not_text`` and aggregated by
+    :func:`toolcall.candidate_adherence` into selection/args/relevance
+    rates. Greedy, exact. Prompt-only: no native function-calling APIs --
+    the stage measures what the template alone elicits from prompt text.
+
+    Any backend construction or evaluation failure records None for that
+    candidate cell -- fail-closed, never silently skipped. ``calls``
+    maps every fixture id to its expected call (or ``None`` for the
+    abstain queries); malformed call entries raise ``ValueError``
+    fail-fast.
+
+    Returns ``{"n_fixtures": ..., "per_candidate": {name:
+    {"n", "n_evaluable", "adherent", "parse_failed", "call_failed",
+    "not_text", "selection_rate", "args_rate", "relevance_rate",
+    "adherent_rate"} | None}}``. Raises ``ValueError`` on
+    caller-contract violations (None backend, bad formats/fixtures/
+    calls/boundary), never on backend data.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(toolcall_fixtures) is not tuple or not toolcall_fixtures:
+        raise ValueError("toolcall_fixtures must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in toolcall_fixtures):
+        raise ValueError("toolcall_fixtures must contain Fixture values")
+    if type(calls) is not dict or not all(
+        type(key) is str and (value is None or type(value) is dict) for key, value in calls.items()
+    ):
+        raise ValueError("calls must map fixture ids to call dicts or None")
+    for fixture_id, call in calls.items():
+        if call is None:
+            continue
+        name = call.get("name")
+        arguments = call.get("arguments")
+        if type(name) is not str or not name:
+            raise ValueError(f"calls[{fixture_id!r}] has a bad tool name")
+        if type(arguments) is not dict:
+            raise ValueError(f"calls[{fixture_id!r}] has bad arguments")
+    for case in toolcall_fixtures:
+        if case.id not in calls:
+            raise ValueError(f"no call registered for fixture {case.id!r}")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        try:
+            report = evaluate(
+                backend,
+                fmt,
+                toolcall_fixtures,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            per_candidate[fmt.name] = None
+            continue
+        if not report.aggregate_eligible:
+            per_candidate[fmt.name] = None
+            continue
+        classifications: list[dict[str, Any]] = []
+        for obs in report.observations:
+            if obs.status == "completed":
+                classifications.append(classify_tool_call(obs.answer, calls[obs.fixture]))
+        per_candidate[fmt.name] = toolcall_candidate_adherence(classifications)
+    return {
+        "n_fixtures": len(toolcall_fixtures),
+        "per_candidate": per_candidate,
+    }
+
+
+def _toolcall_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of a toolcall stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    for key in ("n", "n_evaluable", "adherent", "parse_failed", "call_failed", "not_text"):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    if entry["n_evaluable"] > entry["n"]:
+        return False
+    for key in ("selection_rate", "args_rate", "relevance_rate", "adherent_rate"):
+        rate = entry.get(key)
+        if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+            return False
+    if entry["n_evaluable"] != 0:
+        return True
+    return not any(
+        entry.get(key) is not None
+        for key in ("selection_rate", "args_rate", "relevance_rate", "adherent_rate")
+    )
+
+
+def toolcall_adherence(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze tool-call adherence across candidates (pure post-hoc).
+
+    Answers "does the template change tool-call adherence?": reports the
+    per-candidate selection/args/relevance rates from the stage, the
+    weakest candidates (minimum adherent rate), and the max-minus-min
+    gaps per rate -- the pre-registered falsifiable claim (see
+    :mod:`toolcall`) is that the gaps are measurably positive rather
+    than ~0; ``uniform`` reports the null hypothesis (all evaluable
+    candidates identical on every rate), never asserts it.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    n_fixtures = stage.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _toolcall_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+    rate_keys = ("selection_rate", "args_rate", "relevance_rate", "adherent_rate")
+    evaluable: dict[str, dict[str, float]] = {}
+    excluded: list[str] = []
+    for cand in candidates:
+        entry = per_candidate.get(cand)
+        if entry is None:
+            excluded.append(cand)
+            continue
+        if type(entry) is not dict or entry.get("n_evaluable", 0) == 0:
+            excluded.append(cand)
+            continue
+        rates: dict[str, float] = {}
+        for key in rate_keys:
+            rate = entry.get(key)
+            if type(rate) is int or type(rate) is float:
+                rates[key] = float(rate)
+            else:
+                break
+        if len(rates) != len(rate_keys):
+            excluded.append(cand)
+            continue
+        evaluable[cand] = rates
+    gaps: dict[str, float | None] = {}
+    weakest: list[str] = []
+    uniform: bool | None = None
+    if evaluable:
+        for key in rate_keys:
+            values = [rates[key] for rates in evaluable.values()]
+            gaps[f"{key}_gap"] = max(values) - min(values)
+        adherent = {name: rates["adherent_rate"] for name, rates in evaluable.items()}
+        floor = min(adherent.values())
+        weakest = sorted(name for name, rate in adherent.items() if rate == floor)
+        uniform = all(
+            all(rates[key] == first for name, rates in evaluable.items())
+            for key, first in next(iter(evaluable.values())).items()
+        )
+    else:
+        gaps = {f"{key}_gap": None for key in rate_keys}
+    return {
+        "available": True,
+        "n_fixtures": n_fixtures,
+        "per_candidate": {cand: per_candidate.get(cand) for cand in candidates},
+        "weakest_candidates": weakest,
+        "excluded_candidates": sorted(excluded),
+        **gaps,
+        "uniform": uniform,
     }

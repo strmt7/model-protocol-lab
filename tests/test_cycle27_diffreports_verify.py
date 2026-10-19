@@ -1263,6 +1263,51 @@ def oracle_diff_reports(
     else:
         _o_ft_available = "neither"
     _o_ft_asymmetric = _o_ft_available not in ("both", "neither")
+
+    def _or_toolcall_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_toolcall exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        n_fixtures = value.get("n_fixtures")
+        if type(n_fixtures) is not int or n_fixtures < 0:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("n", "n_evaluable", "adherent", "parse_failed", "call_failed", "not_text"):
+                count = entry.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+            if entry["n_evaluable"] > entry["n"]:
+                return False
+            for key in ("selection_rate", "args_rate", "relevance_rate", "adherent_rate"):
+                rate = entry.get(key)
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+        excluded = value.get("excluded_candidates")
+        if type(excluded) is not list or not all(type(c) is str for c in excluded):
+            return False
+        weakest = value.get("weakest_candidates")
+        return type(weakest) is list and all(type(c) is str for c in weakest)
+
+    _tc_old_ok = _or_toolcall_valid(old.get("toolcall"))
+    _tc_new_ok = _or_toolcall_valid(new.get("toolcall"))
+    if _tc_old_ok and _tc_new_ok:
+        _o_tc_available = "both"
+    elif _tc_old_ok:
+        _o_tc_available = "old"
+    elif _tc_new_ok:
+        _o_tc_available = "new"
+    else:
+        _o_tc_available = "neither"
+    _o_tc_asymmetric = _o_tc_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1290,6 +1335,7 @@ def oracle_diff_reports(
         and not _o_dl_asymmetric
         and not _o_fs_asymmetric
         and not _o_ft_asymmetric
+        and not _o_tc_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1338,6 +1384,8 @@ def oracle_diff_reports(
         "fewshot_asymmetric": _o_fs_asymmetric,
         "faketurn_changed": False,
         "faketurn_asymmetric": _o_ft_asymmetric,
+        "toolcall_changed": False,
+        "toolcall_asymmetric": _o_tc_asymmetric,
         "identical": identical,
     }
     return {
@@ -1366,6 +1414,7 @@ def oracle_diff_reports(
         "deliforge": {"available": _o_dl_available, "changed": False},
         "fewshot": {"available": _o_fs_available, "changed": False},
         "faketurn": {"available": _o_ft_available, "changed": False},
+        "toolcall": {"available": _o_tc_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

@@ -1141,6 +1141,49 @@ excluded-set changes (`diff_faketurn`; `faketurn_changed` /
 `faketurn_asymmetric` feed `identical`). Roughly 8x search compute (2
 payloads x 4 markers); the stage never fails the run.
 
+### 8.29 Prompt-only tool-call adherence (`toolcall`)
+
+Do tool-calling pipelines behave the same under every chat template?
+`model-protocol-lab run --tool-call` describes a fixed 4-function tool
+list (`get_weather`, `convert_currency`, `search_docs`, `set_reminder`,
+with typed params, enums, and numeric bounds) in prompt text -- no
+native function-calling APIs -- and asks each family to emit exactly
+one line per query: `CALL <tool_name> <JSON arguments>`, or `NO_CALL`
+when no tool fits. The 9 fixed queries cover the three BFCL-style
+skills the Berkeley Function-Calling Leaderboard scores in prompt
+mode (Databricks, "Beyond the Leaderboard"): **selection** (which
+tool), **argument extraction** (typed parameter values from the
+query), and **relevance detection** (2 queries with no relevant
+function, where the correct answer is `NO_CALL` -- the abstention
+analogue of the lab's conservative selection rule). BFCL varies
+models/providers against fixed prompts and JSONSchemaBench varies
+frameworks; nobody varies the *chat template* while holding model,
+tools, queries, and decoder fixed. The lab's deterministic validator
+is the honest baseline: unparseable lines are `parse_failed` (counted
+as failures on all three rates, never silently dropped), non-string
+responses are `not_text` (excluded from rates), and an unknown tool
+name can never count as correct selection. A correct abstention
+counts as correct selection (of no tool) with vacuously correct
+arguments, so a perfect model scores 1.0 on every rate -- the rates
+never carry a structural ceiling from the abstain queries. The
+pre-registered falsifiable claim (in `toolcall.py`) is a
+max-minus-min adherence gap of ~0 uniform across families, reported
+separately per rate so a composite gap decomposes; a measurably
+positive gap means the template is a first-class variable for
+tool-calling pipelines. Boundary with cycle 157 (structured output):
+157 measures JSON *schema* validity of a free response; this measures
+function selection, argument extraction, and abstention -- different
+task, different failure modes, different claim. `results.json`
+carries `toolcall` with per-candidate selection/args/relevance rates
+and the four gaps. `diff-reports` compares per-candidate
+selection-rate, args-rate, and relevance-rate drift, added/removed
+candidates, and excluded-set changes (`diff_toolcall`;
+`toolcall_changed` / `toolcall_asymmetric` feed `identical`). The
+probe floors the token budget at 128 (the longest canonical call is
+79 characters) so an unrelated budget parameter can never truncate
+calls into `parse_failed`. 9 synthetic fixtures; the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

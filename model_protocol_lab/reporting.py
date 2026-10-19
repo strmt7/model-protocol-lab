@@ -4575,6 +4575,130 @@ def _faketurn_section(result: dict[str, Any]) -> str:
     )
 
 
+def _toolcall_section(result: dict[str, Any]) -> str:
+    """Prompt-only tool-call syntax adherence per template family.
+
+    Renders the ``toolcall`` payload (see experiments.toolcall_adherence)
+    as a per-candidate table of selection / argument / relevance rates:
+    a fixed 4-function tool list described in prompt text (no native
+    function-calling APIs), 7 tool-relevant queries plus 2
+    no-relevant-function queries answered with exactly ``NO_CALL``.
+    The pre-registered falsifiable claim is a max-minus-min adherence
+    gap of ~0 uniform across families; a measurably positive gap means
+    the template is a first-class variable for tool-calling pipelines
+    (the BFCL prompt-mode task, with the chat template as the
+    independent variable). Rates are behavior measurements on fixed
+    fixtures, never quality judgments. Every interpolation is escaped
+    at this boundary.
+    """
+    audit: Any = result.get("toolcall")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.2f}"
+        return "n/a"
+
+    def _gap(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:+.2f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + " / "
+            + escape(str(entry.get("n")))
+            + "</td><td>"
+            + escape(_rate(entry.get("selection_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("args_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("relevance_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("adherent_rate")))
+            + "</td></tr>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates with no evaluable tool-call response: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    gap_lines = ""
+    for rate_key, label in (
+        ("selection_rate_gap", "selection"),
+        ("args_rate_gap", "argument extraction"),
+        ("relevance_rate_gap", "relevance detection"),
+        ("adherent_rate_gap", "overall adherence"),
+    ):
+        gap = audit.get(rate_key)
+        if type(gap) in (int, float):
+            gap_lines += (
+                f"<p>Max-minus-min {label} gap over evaluable candidates: "
+                "<strong>" + escape(_gap(gap)) + "</strong>.</p>"
+            )
+    weakest = audit.get("weakest_candidates")
+    weakest_line = ""
+    if type(weakest) is list and weakest:
+        weakest_line = (
+            "<p>Weakest candidates (lowest overall adherence): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in weakest
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="tool-calls">'
+        "<h2>Prompt-only tool-call adherence</h2>"
+        "<p>A fixed 4-function tool list was described in prompt text -- "
+        "no native function-calling APIs -- and each family rendered the "
+        "same 9 queries through its own template. The model must emit "
+        'exactly one line: <span class="mono">CALL &lt;tool_name&gt; '
+        '&lt;JSON arguments&gt;</span>, or <span class="mono">NO_CALL</span> '
+        "when no tool fits. <strong>Selection</strong> = correct tool "
+        "chosen; <strong>args</strong> = arguments match the expected "
+        "typed values exactly; <strong>relevance</strong> = abstention "
+        "decision correct. Unparseable lines count as failures on all "
+        "three rates.</p>"
+        + gap_lines
+        + weakest_line
+        + (
+            '<div class="table-wrap"><table>'
+            "<caption>Tool-call adherence rates per candidate.</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable</th><th scope="col">Selection</th>'
+            '<th scope="col">Args</th><th scope="col">Relevance</th>'
+            '<th scope="col">Adherent</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -5496,6 +5620,7 @@ def render_html(result: dict[str, Any]) -> str:
     deliforge_html = _deliforge_section(result)
     fewshot_html = _fewshot_section(result)
     faketurn_html = _faketurn_section(result)
+    toolcall_html = _toolcall_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5589,6 +5714,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Fake-turn history tampering",
                 faketurn_html,
             ),
+            (
+                "tool-calls",
+                "Prompt-only tool-call adherence",
+                toolcall_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5645,6 +5775,7 @@ def render_html(result: dict[str, Any]) -> str:
         + deliforge_html
         + fewshot_html
         + faketurn_html
+        + toolcall_html
         + sweep_html
         + logprob_html
         + held_out_html
