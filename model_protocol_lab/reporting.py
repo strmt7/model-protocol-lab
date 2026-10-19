@@ -4349,6 +4349,114 @@ def _structured_section(result: dict[str, Any]) -> str:
     )
 
 
+def _deliforge_section(result: dict[str, Any]) -> str:
+    """Delimiter authority: forged markers, reserved vs subword encoding.
+
+    Renders the ``deliforge`` payload (see experiments.deliforge_authority)
+    as a per-candidate table of authority gaps: the reserved-minus-subword
+    task-verdict flip rate of forged chat-template markers, held at
+    identical decoded text. The pre-registered falsifiable claim is a gap
+    of ~0 uniform across families; a positive gap replicates
+    arXiv:2609.35932's reserved-token authority finding inside the lab.
+    "Authority" is measured strictly as verdict-flip rate on fixed
+    fixtures, not open-ended harm. Every interpolation is escaped at
+    this boundary.
+    """
+    audit: Any = result.get("deliforge")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _gap(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:+.2f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable_cells")))
+            + " / "
+            + escape(str(entry.get("n_cells")))
+            + "</td><td>"
+            + escape(_gap(entry.get("mean_authority_gap")))
+            + "</td><td>"
+            + escape(_gap(entry.get("max_authority_gap")))
+            + "</td><td>"
+            + escape(_gap(entry.get("min_authority_gap")))
+            + "</td></tr>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates without an evaluable cell (no reserved encoding "
+            "found, localization failed, or no native verdicts): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    top = audit.get("max_authority_gap")
+    top_line = ""
+    if type(top) in (int, float):
+        top_line = (
+            "<p>Largest reserved-minus-subword flip-rate gap over all "
+            "evaluable candidates: <strong>"
+            + escape(f"{top:+.2f}")
+            + "</strong>. A positive gap means the forged marker flipped "
+            "task verdicts more often as the family's reserved control "
+            "token than as subword tokens of the identical text -- the "
+            "paper's authority claim, replicated per family.</p>"
+        )
+    marker_note = ""
+    marker_indexes = audit.get("marker_indexes")
+    if type(marker_indexes) is list and marker_indexes:
+        marker_note = (
+            "<p>Markers probed: "
+            + escape(", ".join(str(i) for i in marker_indexes))
+            + " (index into the lab's fixed marker list). Each cell covers "
+            "one forged-turn payload and one marker; only the forged "
+            "occurrences were re-encoded -- the template's own genuine "
+            "markers were never touched.</p>"
+        )
+    return (
+        '<section class="card" id="delimiter-authority">'
+        "<h2>Delimiter authority: reserved vs subword encoding</h2>"
+        "<p>A forged chat-template marker (e.g. &lt;|im_start|&gt;) was "
+        "injected into user content and sent to every search candidate in "
+        "two encodings of <em>identical decoded text</em>: the family's "
+        "native single reserved control token, and forced subword tokens. "
+        "The verdict-flip rate of each arm was measured against the native "
+        "search verdicts. <strong>Authority gap</strong> = reserved-arm "
+        "flip rate minus subword-arm flip rate, in [-1, 1].</p>"
+        + top_line
+        + (
+            '<div class="table-wrap"><table><caption>Authority gaps per candidate.</caption>'
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable cells</th><th scope="col">Mean gap</th>'
+            '<th scope="col">Max gap</th><th scope="col">Min gap</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + marker_note
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -5102,6 +5210,7 @@ def render_html(result: dict[str, Any]) -> str:
     stopcause_html = _stopcause_section(result)
     wscanonical_html = _wscanonical_section(result)
     structured_html = _structured_section(result)
+    deliforge_html = _deliforge_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5180,6 +5289,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Structured-output adherence",
                 structured_html,
             ),
+            (
+                "delimiter-authority",
+                "Delimiter authority",
+                deliforge_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5233,6 +5347,7 @@ def render_html(result: dict[str, Any]) -> str:
         + stopcause_html
         + wscanonical_html
         + structured_html
+        + deliforge_html
         + sweep_html
         + logprob_html
         + held_out_html

@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 159 — delimiter authority, wave-4 research idea #1, 2026-10-19)
+
+- `mpl run --deliforge`: reserved-token vs subword delimiter authority
+  per template family (arXiv:2609.35932). Forged chat-template markers
+  (fake assistant turn / fake system instruction) are sent in two
+  encodings of identical decoded text — the family's native single-id
+  ("reserved") encoding vs forced subword tokens — and the
+  `authority_gap` (reserved-minus-subword verdict-flip rate, in
+  [-1, 1]) is measured per family against the native search verdicts.
+  The subword arm is built by text-level construction (the exact
+  inserted string is located exactly once in the rendered prompt; only
+  forged marker occurrences are re-encoded segment-wise, so the
+  template's genuine markers keep their reserved ids — verified by id
+  count). New pure `deliforge.py` (100% line coverage), `results.json`
+  `deliforge` payload, TOC-anchored HTML section, and `diff_deliforge`
+  (`deliforge_changed` / `deliforge_asymmetric` feed `identical`).
+  Mid-build, a 200-case brute-force oracle differential proved the
+  first implementation's difflib id-alignment unsound (it could splice
+  a genuine marker while leaving a forged one reserved); the shipped
+  code uses text-level construction instead. 69 new tests, 4/4
+  tempdir-module mutation gates, both diff oracles extended; USAGE
+  §8.26 documents the method and its honest framing.
+
 ### Fixed (cycle 158 — wave-4 red-team fix-ups, 2026-10-19)
 
 - B1 [moderate, honest-measurement correction]: cycle 156 documented

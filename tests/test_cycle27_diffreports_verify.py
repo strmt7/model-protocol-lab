@@ -1084,6 +1084,62 @@ def oracle_diff_reports(
     else:
         _o_st_available = "neither"
     _o_st_asymmetric = _o_st_available not in ("both", "neither")
+
+    def _or_deliforge_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_deliforge exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        payloads = value.get("payloads")
+        if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+            return False
+        marker_indexes = value.get("marker_indexes")
+        if (
+            type(marker_indexes) is not list
+            or not marker_indexes
+            or not all(type(i) is int for i in marker_indexes)
+        ):
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if type(entry) is not dict:
+                return False
+            cells = entry.get("cells")
+            if type(cells) is not dict or not all(type(k) is str for k in cells):
+                return False
+            for cell in cells.values():
+                if type(cell) is not dict or cell.get("supported") is not True:
+                    continue
+                n_evaluable = cell.get("n_evaluable")
+                if type(n_evaluable) is not int or n_evaluable < 0:
+                    return False
+                for key in ("flip_rate_reserved", "flip_rate_subword"):
+                    rate = cell.get(key)
+                    if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                        return False
+                gap = cell.get("authority_gap")
+                if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+                    return False
+            top = entry.get("max_authority_gap")
+            if top is not None and not (type(top) in (int, float) and -1.0 <= top <= 1.0):
+                return False
+        excluded = value.get("excluded_candidates")
+        return type(excluded) is list and all(type(c) is str for c in excluded)
+
+    _dl_old_ok = _or_deliforge_valid(old.get("deliforge"))
+    _dl_new_ok = _or_deliforge_valid(new.get("deliforge"))
+    if _dl_old_ok and _dl_new_ok:
+        _o_dl_available = "both"
+    elif _dl_old_ok:
+        _o_dl_available = "old"
+    elif _dl_new_ok:
+        _o_dl_available = "new"
+    else:
+        _o_dl_available = "neither"
+    _o_dl_asymmetric = _o_dl_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1108,6 +1164,7 @@ def oracle_diff_reports(
         and not _o_sc_asymmetric
         and not _o_ws_asymmetric
         and not _o_st_asymmetric
+        and not _o_dl_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1150,6 +1207,8 @@ def oracle_diff_reports(
         "ws_canonical_asymmetric": _o_ws_asymmetric,
         "structured_changed": False,
         "structured_asymmetric": _o_st_asymmetric,
+        "deliforge_changed": False,
+        "deliforge_asymmetric": _o_dl_asymmetric,
         "identical": identical,
     }
     return {
@@ -1175,6 +1234,7 @@ def oracle_diff_reports(
         "stop_cause": {"available": _o_sc_available, "changed": False},
         "ws_canonical": {"available": _o_ws_available, "changed": False},
         "structured": {"available": _o_st_available, "changed": False},
+        "deliforge": {"available": _o_dl_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

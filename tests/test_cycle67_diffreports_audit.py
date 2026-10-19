@@ -250,6 +250,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "stop_cause": {"available": "neither", "changed": False},
         "ws_canonical": {"available": "neither", "changed": False},
         "structured": {"available": "neither", "changed": False},
+        "deliforge": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -300,6 +301,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "ws_canonical_asymmetric": False,
             "structured_changed": False,
             "structured_asymmetric": False,
+            "deliforge_changed": False,
+            "deliforge_asymmetric": False,
             "identical": True,
         },
     }
@@ -2061,6 +2064,135 @@ def _o_structured(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_deliforge_valid(value: Any) -> bool:
+    """Oracle deliforge validator: mirrors diffreports._valid_deliforge."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    payloads = value.get("payloads")
+    if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+        return False
+    marker_indexes = value.get("marker_indexes")
+    if (
+        type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+    ):
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        cells = entry.get("cells")
+        if type(cells) is not dict or not all(type(k) is str for k in cells):
+            return False
+        for cell in cells.values():
+            if type(cell) is not dict or cell.get("supported") is not True:
+                continue
+            n_evaluable = cell.get("n_evaluable")
+            if type(n_evaluable) is not int or n_evaluable < 0:
+                return False
+            for key in ("flip_rate_reserved", "flip_rate_subword"):
+                rate = cell.get(key)
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+            gap = cell.get("authority_gap")
+            if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+                return False
+        top = entry.get("max_authority_gap")
+        if top is not None and not (type(top) in (int, float) and -1.0 <= top <= 1.0):
+            return False
+    excluded = value.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def _o_deliforge(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle deliforge section: per-cell authority-gap drift.
+
+    Independent reimplementation: dict-comprehension views rather than
+    the implementation's nested accumulation loops.
+    """
+    old_ok = _o_deliforge_valid(old)
+    new_ok = _o_deliforge_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            cells = {
+                key: (
+                    cell.get("authority_gap")
+                    if type(cell) is dict and cell.get("supported") is True
+                    else None
+                )
+                for key, cell in (entry.get("cells") or {}).items()
+            }
+            out[name] = {
+                "cells": cells,
+                "max_authority_gap": entry.get("max_authority_gap"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    gap_drift = [
+        {
+            "candidate": name,
+            "cell": key,
+            "old": old_view[name]["cells"][key],
+            "new": new_view[name]["cells"][key],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        for key in sorted(set(old_view[name]["cells"]) & set(new_view[name]["cells"]))
+        if old_view[name]["cells"][key] != new_view[name]["cells"][key]
+    ]
+    top_gap_drift = [
+        {
+            "candidate": name,
+            "old": old_view[name]["max_authority_gap"],
+            "new": new_view[name]["max_authority_gap"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["max_authority_gap"] != new_view[name]["max_authority_gap"]
+    ]
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    diff["gap_drift"] = gap_drift
+    diff["top_gap_drift"] = top_gap_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        gap_drift
+        or top_gap_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2420,6 +2552,7 @@ def _oracle_diff(
     o_st, o_st_changed, o_st_asymmetric = _o_structured(
         old.get("structured"), new.get("structured")
     )
+    o_dl, o_dl_changed, o_dl_asymmetric = _o_deliforge(old.get("deliforge"), new.get("deliforge"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -2461,6 +2594,8 @@ def _oracle_diff(
         and not o_ws_asymmetric
         and not o_st_changed
         and not o_st_asymmetric
+        and not o_dl_changed
+        and not o_dl_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2485,6 +2620,7 @@ def _oracle_diff(
         "stop_cause": o_sc,
         "ws_canonical": o_ws,
         "structured": o_st,
+        "deliforge": o_dl,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2531,6 +2667,8 @@ def _oracle_diff(
             "ws_canonical_asymmetric": o_ws_asymmetric,
             "structured_changed": o_st_changed,
             "structured_asymmetric": o_st_asymmetric,
+            "deliforge_changed": o_dl_changed,
+            "deliforge_asymmetric": o_dl_asymmetric,
             "identical": identical,
         },
     }
@@ -2688,6 +2826,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "ws_canonical_asymmetric": False,
                 "structured_changed": False,
                 "structured_asymmetric": False,
+                "deliforge_changed": False,
+                "deliforge_asymmetric": False,
                 "identical": False,
             },
         )
@@ -3913,7 +4053,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
     # portfolio, synthhistory, batch_invariance, position, stop_cause,
-    # ws_canonical, structured): emitted often enough that the
+    # ws_canonical, structured, deliforge): emitted often enough that the
     # differential fuzz exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
@@ -3943,6 +4083,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["ws_canonical"] = _fuzz_ws_canonical_section(rng)
     if rng.random() < 0.45:
         report["structured"] = _fuzz_structured_section(rng)
+    if rng.random() < 0.45:
+        report["deliforge"] = _fuzz_deliforge_section(rng)
     return report
 
 
@@ -4040,6 +4182,59 @@ def _fuzz_structured_section(rng: random.Random) -> dict[str, Any]:
         "excluded_candidates": [],
         "adherence_gap": rng.choice([0.0, 0.5, 1.0, None]),
         "uniform": rng.choice([True, False, None]),
+    }
+
+
+def _fuzz_deliforge_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        cells = {}
+        for payload in ("fake_assistant", "fake_system"):
+            for marker_index in (0, 1):
+                key = f"{payload}/{marker_index}"
+                roll = rng.random()
+                if roll < 0.15:
+                    cells[key] = None
+                elif roll < 0.30:
+                    cells[key] = {
+                        "supported": False,
+                        "detail": rng.choice(
+                            ["no_encoding_pair", "localization_failed", "decode_mismatch", 7]
+                        ),
+                    }
+                else:
+                    n_evaluable = rng.randint(0, 4)
+                    cells[key] = {
+                        "supported": True,
+                        "n_evaluable": n_evaluable,
+                        "n_flips_reserved": rng.randint(0, n_evaluable),
+                        "n_flips_subword": rng.randint(0, n_evaluable),
+                        "flip_rate_reserved": rng.choice([0.0, 0.5, 1.0, None]),
+                        "flip_rate_subword": rng.choice([0.0, 0.5, 1.0, None]),
+                        "authority_gap": rng.choice([-1.0, -0.5, 0.0, 0.5, 1.0, None]),
+                    }
+        if rng.random() < 0.15:
+            cells[rng.choice(["mystery", 7])] = {"supported": True}
+        per_candidate[name] = {
+            "cells": cells,
+            "n_cells": len(cells),
+            "n_evaluable_cells": rng.randint(0, 2),
+            "mean_authority_gap": rng.choice([0.0, 0.5, None]),
+            "max_authority_gap": rng.choice([0.0, 1.0, None]),
+            "min_authority_gap": rng.choice([0.0, -1.0, None]),
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"cells": {}}
+    return {
+        "available": True,
+        "payloads": rng.choice([["fake_assistant"], ["fake_assistant", "fake_system"]]),
+        "marker_indexes": rng.choice([[0], [0, 1]]),
+        "per_candidate": per_candidate,
+        "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+        "max_authority_gap": rng.choice([0.0, 0.5, 1.0, None]),
     }
 
 
@@ -4325,6 +4520,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not wscan_asymmetric\n"
             '        and not structured_diff["changed"]\n'
             "        and not structured_asymmetric\n"
+            '        and not deliforge_diff["changed"]\n'
+            "        and not deliforge_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -4363,6 +4560,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or wscan_asymmetric\n"
             '        or structured_diff["changed"]\n'
             "        or structured_asymmetric\n"
+            '        or deliforge_diff["changed"]\n'
+            "        or deliforge_asymmetric\n"
             "    )\n",
             scenario,
         )
