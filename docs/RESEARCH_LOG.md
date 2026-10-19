@@ -5775,3 +5775,47 @@ After the infrastructure fix: the wave-5 specialist round.
 **Wave-5 specialist round (2026-10-19, 4/4 briefs in `~/workspace/agents_out/wave5/`):** researcher (positioning re-verified live: ctxray claims CONFIRMED, both academic citations CONFIRMED, zero overclaiming found; minor: add arXiv ID 2601.03156 to README PCE citation), verifier (8/8 claims VERIFIED: 100% coverage, controls discriminate, Myers=oracle, verify rejects tampering, MCP self-test, XSS escaping, CLI protocol, 146 tests pass), red-team A (13 findings: 1 HIGH fixture-binding gap, 6 MEDIUM, 6 LOW — all reproduced), red-team B (cross-check: 11 SURVIVE, 1 DOWNGRADED to LOW [whitespace clarity], 1 REFUTED [operator order drift — no defect]).
 
 **Wave-5 fixes applied (cycle 165, commit 769f1dc5767a):** (1) HIGH — `verify_protocol` now binds fixtures via optional `fixtures` param; `probe_surface_noise` passes them (fail-closed ValueError on mismatch). (2) MEDIUM — all-abstain variants tracked as `n_unevaluable`, excluded from stability denominator (stability None, not 1.0, with explanatory note). (3) LOW — whitespace coverage string clarifies "N of 3 declared modes produced distinct outcomes". (4) MEDIUM — dashboard CSP adds `style-src 'unsafe-inline'` (was rendering unstyled). (5) MEDIUM — 256 KiB per-message fixture content cap in `_check_fixtures` (instrument-wide). (6) MEDIUM — CLI exit 3 for `unavailable`; SIGINT/SIGTERM wired to cancel event. (7) LOW — protocol pins `surfacenoise_code_sha256` (scorer hash, not just perturbation.py). (8) LOW — MCP rejects non-dict `backend` (None still defaults to selftest). (9) LOW — pre-set cancel returns `cancelled` (not misattributed as `unavailable`). (10) LOW — distance type guards in dashboard counterfactual loop and `hardening_notes`. (11) LOW — `SelfTestBackend` and `_ControlCalibrationBackend` honor the cancel event. (12) LOW — removed stale "progress content blocks" claim from MCP docstring and design doc. 10 new tests (Wave5FixesTests + MCP Finding 8). 6096 tests, 95% coverage, all gates green.
+
+## Cycle 166 (2026-10-19) — per-template surface-noise robustness: uniqueness pass
+
+**Question:** does any shipped tool measure per-chat-template robustness to
+surface noise (typos, case flips, whitespace, unicode variants, punctuation
+stripping) deterministically?
+
+**Checked 2026-10-19 (web):**
+- PromptBench (arXiv:2306.04528) / NoisyPromptBench (arXiv:2603.03314): measure
+  *model* robustness to adversarial prompts via the PDR metric
+  (PDR(A,P,fΘ,D) = 1 − ΣM[fΘ([A(P),x]),y] / ΣM[fΘ([P,x]),y]). The independent
+  variable is the model/attack, not the chat template. Not a template instrument.
+- "Understanding the Prompt Sensitivity" (arXiv:2604.18389): studies sensitivity
+  to prompt-template *wording* (typo/orthographic/paraphrase) via hidden-state
+  deltas — a paper, not a tool; not chat templates; not a shipped measurement.
+- "Sensitivity and Robustness of LLMs to Prompt Template in Japanese Text
+  Classification" (PACLIC 2023): compares a handful of hand-written prompt
+  wordings for stability — paper-only, classification-specific, no noise
+  dimension, no tool.
+- ctxray (MIT, re-checked): static per-prompt feature scoring + MCP; no
+  perturbation sweep, no template dimension at all.
+- LM Eval Harness / HELM / OpenAI evals: accuracy harnesses with fixed prompts;
+  no noise-robustness dimension, no template-robustness measurement.
+
+**Verdict:** the combination — frozen-protocol surface-noise sweep with the chat
+template as the independent variable, deterministic, stdlib-only, per-candidate
+stability vectors with upper-bound nearest-flip framing — does not exist as a
+tool. Framed as "the combination", never "first". Related academic work is
+cited (PromptBench PDR, arXiv:2604.18389 prompt-sensitivity), not claimed over.
+
+## Cycle 166 (2026-10-19): template surface-noise robustness — build record
+
+The cycle-166 uniqueness pass above cleared the build. Implementation:
+`surfacenoise.probe_template_robustness` (pure, frozen protocol
+`freeze/verify_template_robustness_protocol`), `experiments.template_robustness_stage`,
+`mpl run --template-robustness` (informational, never touches selection),
+HTML section in `reporting.py`, `diff_template_robustness` in `diffreports.py`.
+Red-team A found 22 findings (1 critical: perturbing fixture content could change
+the correct answer); red-team B cross-check: 21/22 survived, 0 refuted, plus new
+N1 (naive mean stability rewards low-accuracy templates — fixed with
+baseline-conditioned verdict preservation rate). v2 design re-verified by B:
+24/26 resolved, 2 partially (F4 token-ID no-op filter, F6 falsifiability item 3)
+— both fixed before code. 55 tests, 3 tempdir mutation gates, F14 controls
+(determinism + scripted robust-vs-fragile discrimination).

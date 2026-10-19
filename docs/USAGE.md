@@ -1222,6 +1222,37 @@ spend checks which template families systematically over-generate on
 short-answer tasks before choosing a serving template. The stage
 never fails the run.
 
+### 8.31 Template surface-noise robustness (`template_robustness`)
+
+Which chat template should you ship if your users type sloppily?
+`model-protocol-lab run --template-robustness` answers by making the
+template the independent variable: for each candidate, it perturbs
+*user message contents* with presentation-level surface noise --
+whitespace modes, case flips, unicode (fullwidth) variants -- and
+re-renders through the template, keeping weights, fixtures, backend,
+and protocol fixed. The headline is the **verdict preservation rate**:
+the fraction of the template's *correct* fixture verdicts with no
+pass-to-fail flip across the noise variants. Only pass-baseline
+fixtures enter the denominator (a template that gets nothing right
+reports no rate, not 0.0); variants that tokenize identically to the
+original are no-ops, never counted; per-operator preservation vectors
+are reported separately and never blended. Typo and punctuation
+operators are excluded on principle -- they can change the correct
+answer while `expected` stays pinned. Three honesty pins: (1) the
+number is a template-x-backend-tokenizer interaction, valid only
+within identical (fixtures, backend, protocol) triples; (2) nearest
+observed flips are upper bounds over the searched subset, never
+guarantees; (3) the stage is informational -- it never changes winner
+selection. `results.json` carries `template_robustness` with
+per-candidate rates, denominators, per-operator vectors, no-op lists,
+and the frozen protocol fingerprint. `diff-reports` compares
+per-candidate preservation drift and per-operator drift
+(`diff_template_robustness`; feeds `identical`). Monday-morning use: a
+developer choosing a serving template for a sloppy-input user base
+compares which templates hold their correct answers under real-world
+typing noise. Opt-in (about C*F*25 extra generations). The stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

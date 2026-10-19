@@ -5884,3 +5884,64 @@ def verbosity_profile(
         "capped_candidates": sorted(capped),
         "excluded_candidates": sorted(excluded),
     }
+
+
+def template_robustness_stage(
+    formats: tuple[Any, ...],
+    fixtures: tuple[Any, ...],
+    backend: Any,
+    *,
+    boundary: tuple[int, ...],
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Per-candidate surface-noise robustness (cycle 166, informational).
+
+    For each candidate template, probes verdict preservation under
+    presentation-level surface noise applied to user-role message contents.
+    The template is the independent variable; weights, fixtures, backend,
+    and protocol are fixed. One frozen protocol covers all candidates in the
+    run (comparability). Per-candidate measurement failures degrade to
+    ``status: "unavailable"`` markers; the stage never raises.
+
+    Returns ``{"candidates": {name: report}, "protocol": protocol}``.
+    Design: docs/TEMPLATE_ROBUSTNESS_DESIGN.md.
+    """
+    from . import surfacenoise as _sn
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(fixtures) is not tuple or not fixtures:
+        raise ValueError("fixtures must be a nonempty tuple")
+    protocol = _sn.freeze_template_robustness_protocol(backend.fingerprint, fixtures)
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        try:
+            renderer_sha256 = _sn.template_renderer_hash(fmt)
+        except Exception:  # noqa: BLE001 -- hash boundary; None, never crash
+            renderer_sha256 = None
+        try:
+            report = _sn.probe_template_robustness(
+                fmt.render,
+                name,
+                fixtures,
+                backend,
+                protocol,
+                boundary=boundary,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=cancel,
+            )
+        except Exception:  # noqa: BLE001 -- per-candidate fail-closed
+            report = {
+                "instrument": _sn.TEMPLATE_ROBUSTNESS_PROBE_NAME,
+                "status": "unavailable",
+                "reason": "candidate_probe_failed",
+                "template_name": name,
+            }
+        # N3: per-candidate renderer context (Format fields + rendered inputs).
+        report["renderer_sha256"] = renderer_sha256
+        candidates[name] = report
+    return {"candidates": candidates, "protocol": protocol}

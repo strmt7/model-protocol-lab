@@ -584,7 +584,14 @@ def diff_reports(
         "neither",
     )
     verbosity_diff = diff_verbosity(old.get("verbosity"), new.get("verbosity"))
+    template_robustness_diff = diff_template_robustness(
+        old.get("template_robustness"), new.get("template_robustness")
+    )
     verbosity_asymmetric = verbosity_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    template_robustness_asymmetric = template_robustness_diff["available"] not in (
         "both",
         "neither",
     )
@@ -639,6 +646,8 @@ def diff_reports(
         and not toolcall_asymmetric
         and not verbosity_diff["changed"]
         and not verbosity_asymmetric
+        and not template_robustness_diff["changed"]
+        and not template_robustness_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -691,6 +700,8 @@ def diff_reports(
         "toolcall_asymmetric": toolcall_asymmetric,
         "verbosity_changed": verbosity_diff["changed"],
         "verbosity_asymmetric": verbosity_asymmetric,
+        "template_robustness_changed": template_robustness_diff["changed"],
+        "template_robustness_asymmetric": template_robustness_asymmetric,
         "identical": identical,
     }
     return {
@@ -721,6 +732,7 @@ def diff_reports(
         "faketurn": faketurn_diff,
         "toolcall": toolcall_diff,
         "verbosity": verbosity_diff,
+        "template_robustness": template_robustness_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -3051,6 +3063,119 @@ def diff_verbosity(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_template_robustness(payload: Any) -> bool:
+    """Structural check for a ``template_robustness`` payload.
+
+    Preservation rates must be numbers/None, counts ints, candidate keys
+    strings, so the renderers never hit a TypeError on a hostile payload.
+    """
+
+    def _ok_rate(value: Any) -> bool:
+        return value is None or (type(value) in (int, float) and 0.0 <= value <= 1.0)
+
+    def _ok_report(rep: Any) -> bool:
+        if type(rep) is not dict:
+            return False
+        if rep.get("status") != "ok":
+            return True  # unavailable markers pass structurally
+        if not _ok_rate(rep.get("preservation_rate")):
+            return False
+        for key in ("n_preserved", "n_preservation_denominator", "n_unevaluable"):
+            if type(rep.get(key)) is not int:
+                return False
+        return True
+
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    return all(type(k) is str and _ok_report(v) for k, v in candidates.items())
+
+
+def diff_template_robustness(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``template_robustness`` payloads; deterministic.
+
+    Answers "did the robustness story change between runs?": per-candidate
+    preservation-rate drift, per-operator preservation drift, plus
+    added/removed candidates. A newly dropped preservation rate after a
+    template change is the regression signal -- the template losing
+    correct verdicts to sloppy input. A side without a recorded probe is
+    reported plainly. No model, no network.
+    """
+    old_ok = _valid_template_robustness(old)
+    new_ok = _valid_template_robustness(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in payload["candidates"].items():
+            # _valid_template_robustness guarantees str keys and dict
+            # entries, so no defensive skip is needed here (it would be
+            # dead code and an uncoverable line).
+            if entry.get("status") != "ok":
+                view[name] = {"preservation_rate": None, "operators": {}}
+            else:
+                ops = entry.get("operators") or {}
+                view[name] = {
+                    "preservation_rate": entry.get("preservation_rate"),
+                    "operators": {
+                        op: (ops.get(op) or {}).get("preservation_rate")
+                        for op in ("case_flip", "whitespace", "unicode_variant")
+                    },
+                }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    preservation_drift: list[dict[str, Any]] = []
+    operator_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        if old_entry["preservation_rate"] != new_entry["preservation_rate"]:
+            preservation_drift.append(
+                {
+                    "candidate": name,
+                    "old": old_entry["preservation_rate"],
+                    "new": new_entry["preservation_rate"],
+                }
+            )
+        for op in ("case_flip", "whitespace", "unicode_variant"):
+            if old_entry["operators"].get(op) != new_entry["operators"].get(op):
+                operator_drift.append(
+                    {
+                        "candidate": name,
+                        "operator": op,
+                        "old": old_entry["operators"].get(op),
+                        "new": new_entry["operators"].get(op),
+                    }
+                )
+    result["preservation_drift"] = preservation_drift
+    result["operator_drift"] = operator_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    # NOTE: template-robustness-specific disjunct names keep this
+    # ``changed`` line textually distinct from every other diff section's
+    # anchor (mutation-gate uniqueness).
+    result["changed"] = bool(
+        preservation_drift or operator_drift or candidates_added or candidates_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -4625,6 +4750,62 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_template_robustness_summary(
+    tr_diff: dict[str, Any] | None,
+) -> list[str]:
+    """Template-robustness comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson). Rates render with two decimals.
+    """
+    if type(tr_diff) is not dict:
+        return []
+    available = tr_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Template-robustness comparison unavailable: "
+            f"{missing} run did not record the template-robustness probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+
+    drift = tr_diff.get("preservation_drift") or []
+    for entry in drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Robustness preservation drift "
+            f"({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+        )
+    if len(drift) > 3:
+        lines.append(f"  ... and {len(drift) - 3} more preservation drifts")
+    op_drift = tr_diff.get("operator_drift") or []
+    for entry in op_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Robustness operator drift "
+            f"({_display_id(entry.get('candidate'))}/{_display_id(entry.get('operator'))}): "
+            f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+        )
+    if len(op_drift) > 3:
+        lines.append(f"  ... and {len(op_drift) - 3} more operator drifts")
+    added = tr_diff.get("candidates_added") or []
+    removed = tr_diff.get("candidates_removed") or []
+    if added:
+        lines.append("Robustness candidates added: " + ", ".join(_display_id(c) for c in added))
+    if removed:
+        lines.append("Robustness candidates removed: " + ", ".join(_display_id(c) for c in removed))
+    return lines
+
+
 def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str]:
     """Verbosity profile comparison lines for the stderr summary.
 
@@ -5108,6 +5289,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_faketurn_summary(diff.get("faketurn")))
     lines.extend(_render_toolcall_summary(diff.get("toolcall")))
     lines.extend(_render_verbosity_summary(diff.get("verbosity")))
+    lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

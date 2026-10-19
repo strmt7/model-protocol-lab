@@ -4699,6 +4699,96 @@ def _toolcall_section(result: dict[str, Any]) -> str:
     )
 
 
+def _template_robustness_section(result: dict[str, Any]) -> str:
+    """Per-template surface-noise robustness (cycle 166).
+
+    Renders the ``template_robustness`` payload as a per-candidate table:
+    the verdict preservation rate (fraction of pass-baseline fixtures with
+    no pass->fail flip under presentation-level surface noise), per-operator
+    preservation vectors, denominators, and the scope note. Informational
+    only: the section states it never changes winner selection, that the
+    number is a template x backend-tokenizer interaction, and that nearest
+    observed flips are upper bounds. Every interpolation is escaped at this
+    boundary.
+    """
+    import re as _re
+    from html import escape as _escape
+
+    _control_chars = _re.compile(
+        r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+    )
+
+    audit: Any = result.get("template_robustness")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    candidates = audit.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.2f}"
+        return "n/a"
+
+    def _display_id(raw: Any) -> str:
+        # Strip control characters (terminal-escape injection) then HTML-escape.
+        return _escape(_control_chars.sub("", str(raw)))
+
+    rows: list[str] = []
+    for name in sorted(candidates):
+        rep = candidates[name]
+        if type(rep) is not dict:
+            continue
+        if rep.get("status") != "ok":
+            rows.append(
+                "<tr><td>"
+                + _display_id(name)
+                + "</td><td>n/a</td><td>n/a</td><td>"
+                + _display_id(rep.get("status"))
+                + "</td></tr>"
+            )
+            continue
+        ops = rep.get("operators")
+        op_cells: list[str] = []
+        if type(ops) is dict:
+            for op in ("case_flip", "whitespace", "unicode_variant"):
+                op_rep = ops.get(op)
+                if type(op_rep) is dict:
+                    op_cells.append(
+                        _escape(str(op)) + ": " + _rate(op_rep.get("preservation_rate"))
+                    )
+        rows.append(
+            "<tr><td>"
+            + _display_id(name)
+            + "</td><td>"
+            + _rate(rep.get("preservation_rate"))
+            + "</td><td>"
+            + _escape(str(rep.get("n_preserved")))
+            + "/"
+            + _escape(str(rep.get("n_preservation_denominator")))
+            + "</td><td>"
+            + "; ".join(op_cells)
+            + "</td></tr>"
+        )
+    table = (
+        "<table><thead><tr><th>Template</th><th>Preservation rate</th>"
+        "<th>Preserved / denominator</th><th>Per-operator</th></tr></thead>"
+        "<tbody>" + "".join(rows) + "</tbody></table>"
+    )
+    return (
+        '<section class="card" id="template-robustness">'
+        "<h2>Template surface-noise robustness</h2>"
+        "<p>Verdict preservation rate per candidate template: the fraction "
+        "of its <em>correct</em> fixture verdicts with no pass-to-fail flip "
+        "under presentation-level surface noise (whitespace, case, unicode "
+        "variants) applied to user message contents. Informational only -- "
+        "it never changes winner selection. The number is a template x "
+        "backend-tokenizer interaction, valid only within identical "
+        "(fixtures, backend, protocol) triples; nearest observed flips are "
+        "upper bounds, never guarantees.</p>" + table + "</section>"
+    )
+
+
 def _verbosity_section(result: dict[str, Any]) -> str:
     """Response verbosity profile per template family.
 
@@ -5771,6 +5861,7 @@ def render_html(result: dict[str, Any]) -> str:
     faketurn_html = _faketurn_section(result)
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
+    template_robustness_html = _template_robustness_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5873,6 +5964,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "verbosity",
                 "Response verbosity profile",
                 verbosity_html,
+            ),
+            (
+                "template-robustness",
+                "Template surface-noise robustness",
+                template_robustness_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
