@@ -182,7 +182,8 @@ vector with minimal-flip counterfactuals — a measurement ctxray explicitly
 does not do. The reported "nearest observed flip" is an upper bound over
 the searched subset, never a guarantee; the academic precedent is the
 CoIPO/NoisyPromptBench "decoding radius" (arXiv:2603.03314) and the 2026
-PCE minimal-flip counterfactuals work, both cited, not claimed over.
+PCE minimal-flip counterfactuals work (arXiv:2601.03156), both cited, not
+claimed over.
 
 **What this lab does not do:** benchmark general model quality, recover a
 model's training template, serve inference, or train anything. The bundled
