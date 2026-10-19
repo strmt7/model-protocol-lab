@@ -26,6 +26,13 @@ from model_protocol_lab.structured import (
     schema_map,
     validate_structured_specs,
 )
+from model_protocol_lab.toolcall import (
+    TOOLCALL_QUERIES,
+    build_toolcall_fixtures,
+    canonical_call,
+    query_calls,
+    validate_toolcall_queries,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BOUNDARY = (124,)  # ord("|")
@@ -185,6 +192,49 @@ class SynthhistoryDemoBackend(DemoBackend):
             text = echo.ljust(max_new_tokens)[:max_new_tokens]
             return Generation(tuple(map(ord, text)), "limit")
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
+class ToolcallDemoBackend(DemoBackend):
+    """Scripted tool-call policy for the toolcall exercise.
+
+    Ord codec like DemoBackend. Keyed on the ``(ref: toolcall/<id>)``
+    marker: the base candidate (identified by WINNER_PREFIX/WINNER_SUFFIX
+    like DemoBackend) emits the canonical correct call for every
+    fixture -- fully adherent. The mutated candidates emit a wrong
+    tool for the tool-relevant queries (wrong selection) and a spurious
+    call on the abstain queries (wrong relevance) -- systematically
+    non-adherent. For the llama3 sample candidates this yields genuine
+    signal: base 1.0 on every rate, mutated variants 0.0 selection and
+    0.0 relevance. Deterministic.
+    """
+
+    fingerprint = "synthetic-toolcall-demo-v1-not-a-model"
+
+    _WRONG_CALL = 'CALL search_docs {"query": "wrong", "top_k": 1}'
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        match = re.search(r"\(ref: toolcall/([a-z-]+)\)", prompt)
+        if match is None:
+            return super().generate(
+                input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
+            )
+        queries = validate_toolcall_queries(TOOLCALL_QUERIES)
+        calls = query_calls(queries)
+        expected = calls.get(f"toolcall/{match.group(1)}")
+        is_winner = (
+            prompt.startswith(WINNER_PREFIX)
+            and prompt.count("<|begin_of_text|>") == 1
+            and prompt.endswith(WINNER_SUFFIX)
+        )
+        # The base candidate answers every fixture correctly
+        # (canonical_call(None) is "NO_CALL" for the abstain queries);
+        # mutated candidates emit a wrong tool on relevant queries
+        # (wrong selection) and a spurious call on abstain queries
+        # (wrong relevance).
+        answer = canonical_call(expected) if is_winner else self._WRONG_CALL
+        text = (answer + " ").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
 
 
 class BatchDemoBackend(DemoBackend):
@@ -1149,6 +1199,37 @@ def build_sample_report(output_dir: Path) -> dict:
         result["faketurn"] = {
             "available": False,
             "detail": "faketurn_unavailable",
+        }
+    # Prompt-only tool-call adherence probe (research wave-4 idea 4):
+    # run the real toolcall stage against the scripted call-policy
+    # backend, so the committed sample report exercises the tool-call
+    # section with genuine signal (the base candidate is fully
+    # adherent; the mutated candidates select the wrong tool and miss
+    # the abstentions). The token budget is floored at 128: the
+    # longest canonical call is 79 characters and the sample's global
+    # MAX_NEW_TOKENS (16) would truncate calls into parse_failed,
+    # confounding the measurement with the budget. Degrades to an
+    # "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import toolcall_adherence, toolcall_stage
+
+        _c_queries = validate_toolcall_queries(TOOLCALL_QUERIES)
+        _c_fmts = candidates("llama3", mutate=True)
+        _c_names = tuple(f.name for f in _c_fmts)
+        _c_stage = toolcall_stage(
+            ToolcallDemoBackend(),
+            _c_fmts,
+            build_toolcall_fixtures(_c_queries),
+            calls=query_calls(_c_queries),
+            boundary=BOUNDARY,
+            max_new_tokens=128,
+            seed=20261012,
+        )
+        result["toolcall"] = toolcall_adherence(_c_names, _c_stage)
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["toolcall"] = {
+            "available": False,
+            "detail": "toolcall_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
