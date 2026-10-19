@@ -558,6 +558,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    structured_diff = diff_structured(old.get("structured"), new.get("structured"))
+    structured_asymmetric = structured_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -597,6 +602,8 @@ def diff_reports(
         and not stopcause_asymmetric
         and not wscan_diff["changed"]
         and not wscan_asymmetric
+        and not structured_diff["changed"]
+        and not structured_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -637,6 +644,8 @@ def diff_reports(
         "stop_cause_asymmetric": stopcause_asymmetric,
         "ws_canonical_changed": wscan_diff["changed"],
         "ws_canonical_asymmetric": wscan_asymmetric,
+        "structured_changed": structured_diff["changed"],
+        "structured_asymmetric": structured_asymmetric,
         "identical": identical,
     }
     return {
@@ -661,6 +670,7 @@ def diff_reports(
         "position": position_diff,
         "stop_cause": stopcause_diff,
         "ws_canonical": wscan_diff,
+        "structured": structured_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2086,6 +2096,124 @@ def diff_ws_canonical(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_structured(payload: Any) -> bool:
+    """Structural check for a ``structured`` adherence payload.
+
+    Enforces the wave-2 C3 lesson at the value level: compared rate
+    fields must be numbers/None in [0, 1] so the renderers never hit a
+    TypeError on a hostile payload, and map keys must be strings.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    n_fixtures = payload.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 0:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("parse_rate", "schema_rate", "adherent_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+    weakest = payload.get("weakest_candidates")
+    if type(weakest) is not list or not all(type(w) is str for w in weakest):
+        return False
+    gap = payload.get("adherence_gap")
+    if gap is None:
+        return True
+    return type(gap) in (int, float) and 0.0 <= gap <= 1.0
+
+
+def diff_structured(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``structured`` adherence payloads; deterministic.
+
+    Answers "did the structured-output adherence story change between
+    runs?": per-candidate parse/schema/adherent rate drift, adherence-gap
+    drift, weakest-candidate set changes, and added/removed candidates.
+    A newly weak template after a template change is the regression
+    signal. A side without a recorded probe is reported plainly. No
+    model, no network.
+    """
+    old_ok = _valid_structured(old)
+    new_ok = _valid_structured(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_structured guarantees str keys and dict/None cells,
+            # so no defensive skip is needed here (it would be dead
+            # code and an uncoverable line).
+            entry = entry or {}
+            view[name] = {
+                "parse_rate": entry.get("parse_rate"),
+                "schema_rate": entry.get("schema_rate"),
+                "adherent_rate": entry.get("adherent_rate"),
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    structured_candidates_added = sorted(set(new_view) - set(old_view))
+    structured_candidates_removed = sorted(set(old_view) - set(new_view))
+    structured_rate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        for metric in ("parse_rate", "schema_rate", "adherent_rate"):
+            old_value = old_view[name][metric]
+            new_value = new_view[name][metric]
+            if old_value != new_value:
+                structured_rate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    structured_gap_drift: list[dict[str, Any]] = []
+    old_gap = old.get("adherence_gap")
+    new_gap = new.get("adherence_gap")
+    if old_gap != new_gap:
+        structured_gap_drift.append({"old": old_gap, "new": new_gap})
+    old_weakest = set(old.get("weakest_candidates") or [])
+    new_weakest = set(new.get("weakest_candidates") or [])
+    structured_weakest_added = sorted(new_weakest - old_weakest)
+    structured_weakest_removed = sorted(old_weakest - new_weakest)
+    result["rate_drift"] = structured_rate_drift
+    result["gap_drift"] = structured_gap_drift
+    result["weakest_added"] = structured_weakest_added
+    result["weakest_removed"] = structured_weakest_removed
+    result["candidates_added"] = structured_candidates_added
+    result["candidates_removed"] = structured_candidates_removed
+    # NOTE: structured-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        structured_rate_drift
+        or structured_gap_drift
+        or structured_weakest_added
+        or structured_weakest_removed
+        or structured_candidates_added
+        or structured_candidates_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -3342,6 +3470,64 @@ def _render_ws_canonical_summary(wscan_diff: dict[str, Any] | None) -> list[str]
     return lines
 
 
+def _render_structured_summary(structured_diff: dict[str, Any] | None) -> list[str]:
+    """Structured-output adherence comparison lines for the stderr summary."""
+    if type(structured_diff) is not dict:
+        return []
+    available = structured_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Structured-output adherence comparison unavailable: "
+            f"{missing} run did not record the structured probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+
+    drift = structured_diff.get("rate_drift") or []
+    if drift:
+        lines.append(f"Structured adherence drift ({len(drift)}):")
+        for entry in drift[:5]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"  {_display_id(entry.get('candidate'))}/{_display_id(entry.get('metric'))}: "
+                f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    gap_drift = structured_diff.get("gap_drift") or []
+    for entry in gap_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Structured adherence-gap drift: "
+            f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+        )
+    for key, label in (
+        ("weakest_added", "newly weakest"),
+        ("weakest_removed", "no longer weakest"),
+    ):
+        names = structured_diff.get(key) or []
+        if names:
+            lines.append(f"Structured {label}: {', '.join(_display_id(c) for c in names)}")
+    added = structured_diff.get("candidates_added") or []
+    removed = structured_diff.get("candidates_removed") or []
+    if added:
+        lines.append(
+            f"Structured-probe candidates added: {', '.join(_display_id(c) for c in added)}"
+        )
+    if removed:
+        lines.append(
+            f"Structured-probe candidates removed: {', '.join(_display_id(c) for c in removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -3764,6 +3950,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_position_summary(diff.get("position")))
     lines.extend(_render_stop_cause_summary(diff.get("stop_cause")))
     lines.extend(_render_ws_canonical_summary(diff.get("ws_canonical")))
+    lines.extend(_render_structured_summary(diff.get("structured")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

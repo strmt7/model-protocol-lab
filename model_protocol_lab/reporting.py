@@ -4260,6 +4260,95 @@ def _wscanonical_section(result: dict[str, Any]) -> str:
     )
 
 
+def _structured_section(result: dict[str, Any]) -> str:
+    """Structured-output adherence: prompt-only JSON parse/schema rates.
+
+    Renders the ``structured`` payload (see experiments.structured_adherence)
+    as a per-candidate parse-valid / schema-valid / adherent rate table plus
+    the adherence gap between the strongest and weakest templates. Every
+    interpolation is escaped at this boundary.
+    """
+    audit: Any = result.get("structured")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(_rate(entry.get("parse_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("schema_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("adherent_rate")))
+            + "</td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + "</td></tr>"
+        )
+    weakest = audit.get("weakest_candidates")
+    weakest_line = ""
+    if type(weakest) is list and weakest:
+        weakest_line = (
+            "<p>Weakest structured-output candidates: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in weakest
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    gap = audit.get("adherence_gap")
+    gap_line = ""
+    if type(gap) in (int, float):
+        gap_line = (
+            "<p>Adherence gap (strongest minus weakest template): "
+            + escape(f"{gap:.0%}")
+            + ". A positive gap falsifies uniform adherence across templates.</p>"
+        )
+    uniform = audit.get("uniform")
+    uniform_line = ""
+    if uniform is True:
+        uniform_line = "<p>Adherence was uniform across all evaluable candidates.</p>"
+    return (
+        '<section class="card" id="structured-adherence">'
+        "<h2>Structured-output adherence</h2>"
+        "<p>Prompt-only JSON adherence per template: each candidate's decoded "
+        "answers on the synthetic JSON fixtures are parsed and validated "
+        "against the fixture schemas with a deterministic local validator. "
+        "No constrained decoder is used -- this is what the template alone "
+        "elicits. <strong>Parse</strong> = fraction of responses that parsed "
+        "as JSON; <strong>Schema</strong> = fraction satisfying the schema; "
+        "<strong>Adherent</strong> = fraction both parsing and schema-valid.</p>"
+        + weakest_line
+        + gap_line
+        + uniform_line
+        + (
+            '<div class="table-wrap"><table><caption>Adherence rates per candidate.</caption>'
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Parse</th><th scope="col">Schema</th>'
+            '<th scope="col">Adherent</th><th scope="col">Evaluable</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -5012,6 +5101,7 @@ def render_html(result: dict[str, Any]) -> str:
     position_html = _position_section(result)
     stopcause_html = _stopcause_section(result)
     wscanonical_html = _wscanonical_section(result)
+    structured_html = _structured_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5085,6 +5175,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Whitespace canonicalization",
                 wscanonical_html,
             ),
+            (
+                "structured-adherence",
+                "Structured-output adherence",
+                structured_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5137,6 +5232,7 @@ def render_html(result: dict[str, Any]) -> str:
         + position_html
         + stopcause_html
         + wscanonical_html
+        + structured_html
         + sweep_html
         + logprob_html
         + held_out_html

@@ -1043,6 +1043,47 @@ def oracle_diff_reports(
     else:
         _o_ws_available = "neither"
     _o_ws_asymmetric = _o_ws_available not in ("both", "neither")
+
+    def _or_structured_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_structured exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        n_fixtures = value.get("n_fixtures")
+        if type(n_fixtures) is not int or n_fixtures < 0:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("parse_rate", "schema_rate", "adherent_rate"):
+                rate = entry.get(key)
+                if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                    return False
+        weakest = value.get("weakest_candidates")
+        if type(weakest) is not list or not all(type(w) is str for w in weakest):
+            return False
+        gap = value.get("adherence_gap")
+        if gap is None:
+            return True
+        return type(gap) in (int, float) and 0.0 <= gap <= 1.0
+
+    _st_old_ok = _or_structured_valid(old.get("structured"))
+    _st_new_ok = _or_structured_valid(new.get("structured"))
+    if _st_old_ok and _st_new_ok:
+        _o_st_available = "both"
+    elif _st_old_ok:
+        _o_st_available = "old"
+    elif _st_new_ok:
+        _o_st_available = "new"
+    else:
+        _o_st_available = "neither"
+    _o_st_asymmetric = _o_st_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1066,6 +1107,7 @@ def oracle_diff_reports(
         and not _o_pos_asymmetric
         and not _o_sc_asymmetric
         and not _o_ws_asymmetric
+        and not _o_st_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1106,6 +1148,8 @@ def oracle_diff_reports(
         "stop_cause_asymmetric": _o_sc_asymmetric,
         "ws_canonical_changed": False,
         "ws_canonical_asymmetric": _o_ws_asymmetric,
+        "structured_changed": False,
+        "structured_asymmetric": _o_st_asymmetric,
         "identical": identical,
     }
     return {
@@ -1130,6 +1174,7 @@ def oracle_diff_reports(
         "position": {"available": _o_pos_available, "changed": False},
         "stop_cause": {"available": _o_sc_available, "changed": False},
         "ws_canonical": {"available": _o_ws_available, "changed": False},
+        "structured": {"available": _o_st_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

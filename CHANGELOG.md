@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 157 — structured-output / JSON-mode adherence, wave-3 research idea #5, 2026-10-19)
+
+- New `mpl run --structured` experiment measuring prompt-only JSON
+  adherence per template family (arXiv:2501.10868v2 JSONSchemaBench;
+  askpert.dev JSON-mode notes): 9 synthetic fixtures across 3 shapes
+  (extraction, classification, routing), each with a flat hand-rolled
+  JSON schema (zero runtime dependencies) and a fixture-identity marker
+  `(ref: structured/<id>)`. Responses are classified independently of
+  the strict `exact_match` verdict (`parse_ok` / `parse_failed` /
+  `not_text`, then `schema_ok` / `schema_failed` / `schema_invalid`
+  against the hand-rolled validator), aggregated into per-candidate
+  parse/schema/adherent rates with the invariant
+  `adherent_rate <= parse_rate`. The pre-registered falsifiable claim is
+  that the template change produces a measurably positive adherence gap
+  (max-minus-min adherent rate) rather than ~0. Honest framing: the lab
+  cannot constrain a decoder, so this is the prompt-only elicitation
+  baseline, not a constrained-decoding claim. `results.json` gains the
+  `structured` section (per-candidate cells, `weakest_candidates`,
+  `adherence_gap`, `uniform` null-hypothesis flag); the HTML report gains
+  the TOC-anchored "Structured-output adherence" section; `diff-reports`
+  gains `diff_structured` (rate/gap drift, weakest added/removed,
+  candidates added/removed) with `structured_changed` /
+  `structured_asymmetric` feeding `identical`. 142 new tests (4/4
+  tempdir mutation gates, 200-case brute-force oracle differential,
+  Hypothesis properties, single-cause pins, hostile-payload tests);
+  both diff oracles extended. This was the LAST unconsumed wave-3
+  research idea — the wave-3 backlog is now exhausted.
+
 ### Added (cycle 156 — whitespace canonicalization, wave-3 research idea #4, 2026-10-19)
 
 - New `mpl run --ws-scan` experiment auditing whitespace at template

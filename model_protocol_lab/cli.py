@@ -301,6 +301,17 @@ def build_parser() -> argparse.ArgumentParser:
         "search compute; the stage never fails the run.",
     )
     run.add_argument(
+        "--structured",
+        action="store_true",
+        help="Structured-output adherence probe: evaluate every search "
+        "candidate on synthetic JSON fixtures (extraction / "
+        "classification / routing shapes with fixed schemas) and "
+        "measure prompt-only parse-valid and schema-valid rates per "
+        "template -- the honest baseline no constrained-decoding paper "
+        "publishes. No constrained decoder; roughly 1x search "
+        "compute; the stage never fails the run.",
+    )
+    run.add_argument(
         "--include-evidence",
         action="store_true",
         help="Include potentially sensitive raw answer/token traces in JSON",
@@ -742,6 +753,56 @@ def _run_ws_probe(
         result["ws_canonical"] = {
             "available": False,
             "detail": "ws_scan_unavailable",
+        }
+
+
+def _run_structured_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the structured-output adherence probe; never raises.
+
+    Evaluates every search candidate on the synthetic JSON fixtures
+    from ``structured.STRUCTURED_SPECS`` and stores the ``structured``
+    analysis payload on ``result``. Any failure degrades to an
+    "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import structured_adherence, structured_stage
+        from .structured import (
+            STRUCTURED_SPECS,
+            build_structured_fixtures,
+            schema_map,
+            validate_structured_specs,
+        )
+
+        specs = validate_structured_specs(STRUCTURED_SPECS)
+        fixtures = build_structured_fixtures(specs)
+        schemas = schema_map(specs)
+        stage = structured_stage(
+            backend,
+            formats,
+            fixtures,
+            schemas=schemas,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["structured"] = structured_adherence(
+            tuple(fmt.name for fmt in formats),
+            stage,
+        )
+    except Exception:  # noqa: BLE001 -- structured probe must not fail the run
+        result["structured"] = {
+            "available": False,
+            "detail": "structured_unavailable",
         }
 
 
@@ -1708,6 +1769,20 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Structured-output adherence probe (research wave-3
+                # idea 5): evaluate every search candidate on synthetic
+                # JSON fixtures and measure prompt-only parse/schema
+                # adherence per template. Never fails the run.
+                if args.structured:
+                    _run_structured_probe(
+                        backend,
+                        formats,
+                        result,
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
