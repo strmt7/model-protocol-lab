@@ -8,6 +8,7 @@ compatible_on_fixture_set) and shows what a real report looks like.
 Regenerating must be byte-identical; tests/test_sample_report.py enforces it.
 """
 
+import re
 import sys
 from pathlib import Path
 from threading import Event
@@ -399,6 +400,49 @@ class DeliDemoBackend(DemoBackend):
                 text = ("WRONG" + "|").ljust(max_new_tokens)[:max_new_tokens]
                 return Generation(tuple(map(ord, text)), "limit")
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
+class FewshotDemoBackend(DemoBackend):
+    """Scripted demo-order policy for the fewshot exercise.
+
+    Non-fewshot prompts delegate to DemoBackend's keyword policy (the
+    0-shot baseline arm). A prompt carrying the demo turns (keyed on the
+    ``Example 1 of 2:`` demo header, which only build_demo_messages
+    emits) is answered from the demo answers parsed off the ``A:``
+    lines: the base candidate (identified by WINNER_PREFIX/WINNER_SUFFIX
+    like DemoBackend) answers the LAST demo's answer (recency), the
+    mutated candidates answer the FIRST demo's answer (primacy). The
+    demo answers (BLUE/GREEN) never match the held-out expected values
+    (7/SOUTH), so the base candidate's verdicts flip 0-shot -> k-shot
+    (gain 1.0) while the mutated candidates -- whose baselines already
+    fail -- stay put (gain 0.0): the committed sample report exercises
+    the few-shot section with genuine gain variation and genuine
+    per-arm selection flips (both demo orders move the run from
+    "selected" to "no_candidate"). Deterministic.
+    """
+
+    fingerprint = "synthetic-fewshot-demo-v1-not-a-model"
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        if "Example 1 of 2:" not in prompt:
+            return super().generate(
+                input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
+            )
+        answers = re.findall(r"^A: (\S+)", prompt, re.M)
+        is_base = (
+            prompt.startswith(WINNER_PREFIX)
+            and prompt.count("<|begin_of_text|>") == 1
+            and prompt.endswith(WINNER_SUFFIX)
+        )
+        if not answers:
+            answer = "WRONG"
+        elif is_base:
+            answer = answers[-1]
+        else:
+            answer = answers[0]
+        text = (answer + "|").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
 
 
 def build_sample_report(output_dir: Path) -> dict:
@@ -1001,6 +1045,38 @@ def build_sample_report(output_dir: Path) -> dict:
         result["deliforge"] = {
             "available": False,
             "detail": "deliforge_unavailable",
+        }
+    # Few-shot x template probe (research wave-4 idea 2): run the real
+    # fewshot stage (demos from the search split, both demo orders) and
+    # the gain analysis against the scripted demo-order backend, so the
+    # committed sample report exercises the few-shot section with
+    # genuine gain variation (base candidate 1.0, mutated candidates
+    # 0.0 -- their baselines already fail) and genuine per-arm flips.
+    # Degrades to an "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import fewshot_gain, fewshot_stage
+
+        _f_fmts = candidates("llama3", mutate=True)
+        _f_names = tuple(f.name for f in _f_fmts)
+        _f_stage = fewshot_stage(
+            FewshotDemoBackend(),
+            _f_fmts,
+            tuple(split.search),
+            tuple(split.held_out),
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        result["fewshot"] = fewshot_gain(
+            result.get("selected_candidate"),
+            result["decision"],
+            _f_names,
+            _f_stage,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["fewshot"] = {
+            "available": False,
+            "detail": "fewshot_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

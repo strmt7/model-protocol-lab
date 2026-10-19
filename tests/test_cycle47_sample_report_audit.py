@@ -81,6 +81,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "ws_canonical",
     "structured",
     "deliforge",
+    "fewshot",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

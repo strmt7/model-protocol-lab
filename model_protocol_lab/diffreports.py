@@ -568,6 +568,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    fewshot_diff = diff_fewshot(old.get("fewshot"), new.get("fewshot"))
+    fewshot_asymmetric = fewshot_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -611,6 +616,8 @@ def diff_reports(
         and not structured_asymmetric
         and not deliforge_diff["changed"]
         and not deliforge_asymmetric
+        and not fewshot_diff["changed"]
+        and not fewshot_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -655,6 +662,8 @@ def diff_reports(
         "structured_asymmetric": structured_asymmetric,
         "deliforge_changed": deliforge_diff["changed"],
         "deliforge_asymmetric": deliforge_asymmetric,
+        "fewshot_changed": fewshot_diff["changed"],
+        "fewshot_asymmetric": fewshot_asymmetric,
         "identical": identical,
     }
     return {
@@ -681,6 +690,7 @@ def diff_reports(
         "ws_canonical": wscan_diff,
         "structured": structured_diff,
         "deliforge": deliforge_diff,
+        "fewshot": fewshot_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2375,6 +2385,164 @@ def diff_deliforge(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_fewshot(payload: Any) -> bool:
+    """Structural check for a ``fewshot`` few-shot x template payload.
+
+    Enforces the wave-2 C3 lesson at the value level: gain must be
+    numbers/None in [0, 1], order sensitivity numbers/None in [0, 0.5],
+    per-order change rates numbers/None in [0, 1], arm decisions and
+    winners strings/None, and map keys strings, so the renderers never
+    hit a TypeError on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    demo_ids = payload.get("demo_ids")
+    if type(demo_ids) is not list or not demo_ids or not all(type(d) is str for d in demo_ids):
+        return False
+    if type(payload.get("k")) is not int or type(payload.get("n_eval")) is not int:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        gain = entry.get("gain")
+        if gain is not None and not (type(gain) in (int, float) and 0.0 <= gain <= 1.0):
+            return False
+        sensitivity = entry.get("order_sensitivity")
+        if sensitivity is not None and not (
+            type(sensitivity) in (int, float) and 0.0 <= sensitivity <= 0.5
+        ):
+            return False
+        per_order = entry.get("per_order")
+        if type(per_order) is not dict:
+            return False
+        for order in per_order.values():
+            if type(order) is not dict:
+                return False
+            rate = order.get("change_rate")
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+            for key in ("n_changed", "n_evaluable"):
+                count = order.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+    per_arm = payload.get("per_arm")
+    if type(per_arm) is not dict:
+        return False
+    for arm in per_arm.values():
+        if type(arm) is not dict or type(arm.get("decision")) is not str:
+            return False
+        winner = arm.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+    flips = payload.get("flips")
+    if type(flips) is not list or any(type(f) is not dict for f in flips):
+        return False
+    excluded = payload.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def diff_fewshot(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``fewshot`` few-shot x template payloads; deterministic.
+
+    Answers "did the few-shot story change between runs?": per-candidate
+    gain drift and order-sensitivity drift, per-arm (decision, winner)
+    drift, added/removed candidates, and changes in the excluded set. A
+    newly high gain after a template change is the regression signal --
+    demos now move verdicts they did not move before. A side without a
+    recorded probe is reported plainly. No model, no network.
+    """
+    old_ok = _valid_fewshot(old)
+    new_ok = _valid_fewshot(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_fewshot guarantees str keys and dict entries, so
+            # no defensive skip is needed here (it would be dead code
+            # and an uncoverable line).
+            view[name] = {
+                "gain": entry.get("gain"),
+                "order_sensitivity": entry.get("order_sensitivity"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return view
+
+    def _arm_view(payload: Any) -> dict[str, tuple[Any, Any]]:
+        return {
+            arm: (cell.get("decision"), cell.get("winner"))
+            for arm, cell in (payload.get("per_arm") or {}).items()
+            if type(cell) is dict
+        }
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    fewshot_candidates_added = sorted(set(new_view) - set(old_view))
+    fewshot_candidates_removed = sorted(set(old_view) - set(new_view))
+    fewshot_gain_drift: list[dict[str, Any]] = []
+    fewshot_sensitivity_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_gain = old_view[name]["gain"]
+        new_gain = new_view[name]["gain"]
+        if old_gain != new_gain:
+            fewshot_gain_drift.append({"candidate": name, "old": old_gain, "new": new_gain})
+        old_sens = old_view[name]["order_sensitivity"]
+        new_sens = new_view[name]["order_sensitivity"]
+        if old_sens != new_sens:
+            fewshot_sensitivity_drift.append({"candidate": name, "old": old_sens, "new": new_sens})
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    fewshot_excluded_added = sorted(new_excluded - old_excluded)
+    fewshot_excluded_removed = sorted(old_excluded - new_excluded)
+    old_arms = _arm_view(old)
+    new_arms = _arm_view(new)
+    fewshot_arm_drift: list[dict[str, Any]] = []
+    for arm in sorted(set(old_arms) & set(new_arms)):
+        if old_arms[arm] != new_arms[arm]:
+            fewshot_arm_drift.append(
+                {
+                    "arm": arm,
+                    "old_decision": old_arms[arm][0],
+                    "new_decision": new_arms[arm][0],
+                    "old_winner": old_arms[arm][1],
+                    "new_winner": new_arms[arm][1],
+                }
+            )
+    result["gain_drift"] = fewshot_gain_drift
+    result["sensitivity_drift"] = fewshot_sensitivity_drift
+    result["arm_drift"] = fewshot_arm_drift
+    result["candidates_added"] = fewshot_candidates_added
+    result["candidates_removed"] = fewshot_candidates_removed
+    result["excluded_added"] = fewshot_excluded_added
+    result["excluded_removed"] = fewshot_excluded_removed
+    # NOTE: fewshot-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        fewshot_gain_drift
+        or fewshot_sensitivity_drift
+        or fewshot_arm_drift
+        or fewshot_candidates_added
+        or fewshot_candidates_removed
+        or fewshot_excluded_added
+        or fewshot_excluded_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -3756,6 +3924,73 @@ def _render_deliforge_summary(deliforge_diff: dict[str, Any] | None) -> list[str
     return lines
 
 
+def _render_fewshot_summary(fewshot_diff: dict[str, Any] | None) -> list[str]:
+    """Few-shot x template comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson).
+    """
+    if type(fewshot_diff) is not dict:
+        return []
+    available = fewshot_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [f"Few-shot comparison unavailable: {missing} run did not record the fewshot probe."]
+    lines: list[str] = []
+
+    def _fmt_gain(value: Any) -> str:
+        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+
+    gain_drift = fewshot_diff.get("gain_drift") or []
+    if gain_drift:
+        lines.append(f"Few-shot gain drift ({len(gain_drift)}):")
+        for entry in gain_drift[:5]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"  {_display_id(entry.get('candidate'))}: "
+                f"{_fmt_gain(entry.get('old'))} -> {_fmt_gain(entry.get('new'))}"
+            )
+        if len(gain_drift) > 5:
+            lines.append(f"  ... and {len(gain_drift) - 5} more")
+    sens_drift = fewshot_diff.get("sensitivity_drift") or []
+    for entry in sens_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Few-shot order-sensitivity drift "
+            f"({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_gain(entry.get('old'))} -> {_fmt_gain(entry.get('new'))}"
+        )
+    arm_drift = fewshot_diff.get("arm_drift") or []
+    for entry in arm_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            f"Few-shot arm drift ({_display_id(entry.get('arm'))}): "
+            f"{entry.get('old_decision')}/{_display_id(entry.get('old_winner'))} -> "
+            f"{entry.get('new_decision')}/{_display_id(entry.get('new_winner'))}"
+        )
+    added = fewshot_diff.get("candidates_added") or []
+    removed = fewshot_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Few-shot candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Few-shot candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    excl_added = fewshot_diff.get("excluded_added") or []
+    excl_removed = fewshot_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(f"Few-shot newly excluded: {', '.join(_display_id(c) for c in excl_added)}")
+    if excl_removed:
+        lines.append(
+            f"Few-shot no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -4180,6 +4415,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_ws_canonical_summary(diff.get("ws_canonical")))
     lines.extend(_render_structured_summary(diff.get("structured")))
     lines.extend(_render_deliforge_summary(diff.get("deliforge")))
+    lines.extend(_render_fewshot_summary(diff.get("fewshot")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

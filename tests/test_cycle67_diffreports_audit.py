@@ -251,6 +251,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "ws_canonical": {"available": "neither", "changed": False},
         "structured": {"available": "neither", "changed": False},
         "deliforge": {"available": "neither", "changed": False},
+        "fewshot": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -303,6 +304,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "structured_asymmetric": False,
             "deliforge_changed": False,
             "deliforge_asymmetric": False,
+            "fewshot_changed": False,
+            "fewshot_asymmetric": False,
             "identical": True,
         },
     }
@@ -2193,6 +2196,152 @@ def _o_deliforge(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_fewshot_valid(value: Any) -> bool:
+    """Oracle fewshot validator: mirrors diffreports._valid_fewshot."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    demo_ids = value.get("demo_ids")
+    if type(demo_ids) is not list or not demo_ids or not all(type(d) is str for d in demo_ids):
+        return False
+    if type(value.get("k")) is not int or type(value.get("n_eval")) is not int:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        gain = entry.get("gain")
+        if gain is not None and not (type(gain) in (int, float) and 0.0 <= gain <= 1.0):
+            return False
+        sensitivity = entry.get("order_sensitivity")
+        if sensitivity is not None and not (
+            type(sensitivity) in (int, float) and 0.0 <= sensitivity <= 0.5
+        ):
+            return False
+        per_order = entry.get("per_order")
+        if type(per_order) is not dict:
+            return False
+        for order in per_order.values():
+            if type(order) is not dict:
+                return False
+            rate = order.get("change_rate")
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+            for key in ("n_changed", "n_evaluable"):
+                count = order.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+    per_arm = value.get("per_arm")
+    if type(per_arm) is not dict:
+        return False
+    for arm in per_arm.values():
+        if type(arm) is not dict or type(arm.get("decision")) is not str:
+            return False
+        winner = arm.get("winner")
+        if winner is not None and type(winner) is not str:
+            return False
+    flips = value.get("flips")
+    if type(flips) is not list or any(type(f) is not dict for f in flips):
+        return False
+    excluded = value.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def _o_fewshot(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle fewshot section: gain/sensitivity/arm drift.
+
+    Independent reimplementation: dict-comprehension views rather than
+    the implementation's nested accumulation loops.
+    """
+    old_ok = _o_fewshot_valid(old)
+    new_ok = _o_fewshot_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            entry = entry or {}
+            out[name] = {
+                "gain": entry.get("gain"),
+                "order_sensitivity": entry.get("order_sensitivity"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return out
+
+    def _arm_view(payload: Any) -> dict[str, tuple[Any, Any]]:
+        return {
+            arm: (cell.get("decision"), cell.get("winner"))
+            for arm, cell in (payload.get("per_arm") or {}).items()
+            if type(cell) is dict
+        }
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    gain_drift = [
+        {"candidate": name, "old": old_view[name]["gain"], "new": new_view[name]["gain"]}
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["gain"] != new_view[name]["gain"]
+    ]
+    sensitivity_drift = [
+        {
+            "candidate": name,
+            "old": old_view[name]["order_sensitivity"],
+            "new": new_view[name]["order_sensitivity"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["order_sensitivity"] != new_view[name]["order_sensitivity"]
+    ]
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    old_arms = _arm_view(old)
+    new_arms = _arm_view(new)
+    arm_drift = [
+        {
+            "arm": arm,
+            "old_decision": old_arms[arm][0],
+            "new_decision": new_arms[arm][0],
+            "old_winner": old_arms[arm][1],
+            "new_winner": new_arms[arm][1],
+        }
+        for arm in sorted(set(old_arms) & set(new_arms))
+        if old_arms[arm] != new_arms[arm]
+    ]
+    diff["gain_drift"] = gain_drift
+    diff["sensitivity_drift"] = sensitivity_drift
+    diff["arm_drift"] = arm_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        gain_drift
+        or sensitivity_drift
+        or arm_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle contamination section: worst tier and pair-set drift."""
     old_ok = _o_contamination_valid(old)
@@ -2553,6 +2702,7 @@ def _oracle_diff(
         old.get("structured"), new.get("structured")
     )
     o_dl, o_dl_changed, o_dl_asymmetric = _o_deliforge(old.get("deliforge"), new.get("deliforge"))
+    o_fs, o_fs_changed, o_fs_asymmetric = _o_fewshot(old.get("fewshot"), new.get("fewshot"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -2596,6 +2746,8 @@ def _oracle_diff(
         and not o_st_asymmetric
         and not o_dl_changed
         and not o_dl_asymmetric
+        and not o_fs_changed
+        and not o_fs_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -2621,6 +2773,7 @@ def _oracle_diff(
         "ws_canonical": o_ws,
         "structured": o_st,
         "deliforge": o_dl,
+        "fewshot": o_fs,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -2669,6 +2822,8 @@ def _oracle_diff(
             "structured_asymmetric": o_st_asymmetric,
             "deliforge_changed": o_dl_changed,
             "deliforge_asymmetric": o_dl_asymmetric,
+            "fewshot_changed": o_fs_changed,
+            "fewshot_asymmetric": o_fs_asymmetric,
             "identical": identical,
         },
     }
@@ -2828,6 +2983,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "structured_asymmetric": False,
                 "deliforge_changed": False,
                 "deliforge_asymmetric": False,
+                "fewshot_changed": False,
+                "fewshot_asymmetric": False,
                 "identical": False,
             },
         )
@@ -4053,8 +4210,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     # Newest diff sections (transfer, contamination, selection
     # robustness, perturbation, token healing, hierarchy, prefill,
     # portfolio, synthhistory, batch_invariance, position, stop_cause,
-    # ws_canonical, structured, deliforge): emitted often enough that the
-    # differential fuzz exercises them, not just the legacy axes.
+    # ws_canonical, structured, deliforge, fewshot): emitted often enough
+    # that the differential fuzz exercises them, not just the legacy axes.
     if rng.random() < 0.45:
         report["transfer"] = _fuzz_transfer_section(rng)
     if rng.random() < 0.45:
@@ -4085,6 +4242,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["structured"] = _fuzz_structured_section(rng)
     if rng.random() < 0.45:
         report["deliforge"] = _fuzz_deliforge_section(rng)
+    if rng.random() < 0.45:
+        report["fewshot"] = _fuzz_fewshot_section(rng)
     return report
 
 
@@ -4235,6 +4394,56 @@ def _fuzz_deliforge_section(rng: random.Random) -> dict[str, Any]:
         "per_candidate": per_candidate,
         "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
         "max_authority_gap": rng.choice([0.0, 0.5, 1.0, None]),
+    }
+
+
+def _fuzz_fewshot_section(rng: random.Random) -> dict[str, Any]:
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        roll = rng.random()
+        if roll < 0.15:
+            per_candidate[name] = None
+            continue
+        if roll < 0.25:
+            # Hostile entry shape: the validator must reject it.
+            per_candidate[name] = rng.choice([42, "x", {"gain": 1.5}])
+            continue
+        per_order = {}
+        for arm in ("order_a", "order_b"):
+            if rng.random() < 0.15:
+                per_order[arm] = {"change_rate": rng.choice([1.5, "high"])}
+            else:
+                n_evaluable = rng.randint(0, 3)
+                per_order[arm] = {
+                    "change_rate": rng.choice([0.0, 0.5, 1.0, None]),
+                    "n_changed": rng.randint(0, n_evaluable),
+                    "n_evaluable": n_evaluable,
+                }
+        per_candidate[name] = {
+            "gain": rng.choice([0.0, 0.5, 1.0, None]),
+            "order_sensitivity": rng.choice([0.0, 0.25, 0.5, None]),
+            "n_evaluable": rng.randint(0, 3),
+            "per_order": per_order,
+        }
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"gain": 0.0}
+    per_arm = {}
+    for arm in ("baseline", "order_a", "order_b"):
+        per_arm[arm] = {
+            "decision": rng.choice(["selected", "ambiguous", "no_candidate", 7]),
+            "winner": rng.choice(["alpha", None, 42]),
+        }
+    return {
+        "available": True,
+        "k": rng.choice([2, "2"]),
+        "demo_ids": rng.choice([["d0", "d1"], [], [1]]),
+        "n_eval": rng.choice([2, 0]),
+        "primary_winner": rng.choice(["alpha", None]),
+        "primary_decision": "selected",
+        "per_candidate": per_candidate,
+        "excluded_candidates": rng.choice([[], ["alpha"], [1]]),
+        "per_arm": per_arm,
+        "flips": rng.choice([[], [{"arm": "order_a"}]]),
     }
 
 
@@ -4522,6 +4731,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not structured_asymmetric\n"
             '        and not deliforge_diff["changed"]\n'
             "        and not deliforge_asymmetric\n"
+            '        and not fewshot_diff["changed"]\n'
+            "        and not fewshot_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
