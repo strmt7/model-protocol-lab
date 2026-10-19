@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 165 — mutation-gate recursion + Codecov badge, 2026-10-19)
+
+- Mutation-gate self-recursion eliminated in all four in-place gates
+  (cycles 124/125/131/134): each gate's subprocess ran `pytest` on its whole
+  test file, gate included, so the gate re-entered itself once per nesting
+  level and stacked mutants — the cycle-125 gate's 22-site anchor fanned
+  out to 184 processes in one traced run, and the stacked mutants poisoned
+  the file left on disk, failing 136 tests in the next suite run. The
+  subprocess now passes `-k "not TestMutationGate"` (`--deselect` was tried
+  first but silently never matches: `__file__` is absolute under unittest
+  discovery while pytest normalizes node IDs to relative paths). The kill
+  verdict now comes from the audit tests alone. Genuine-kill audit of all
+  16 mutants found two that had been surviving vacuously behind the
+  recursion confound, both now pinned: cycle-125's span-merge `budget - 2`
+  mutant (new `test_adjacent_spans_merge`) and cycle-134's per-candidate
+  `"rate": 0.0` mutant (extended `test_planted_problem_shows_in_rate` to
+  assert the per-candidate rate). The cycle-135/136 gates already ran
+  pytest against single test targets and were unaffected.
+- README Codecov badge switched to shields.io with `label=Codecov`
+  (capital C in the rendered image), mirroring the owner's
+  rejection-rejector repo; `test_readme_codecov_badge_exact` pins the line
+  byte-exact.
+
 ### Added (cycle 163 — prompt-only tool-call adherence × template, wave-4 research idea #4, 2026-10-19)
 
 - `mpl run --tool-call`: prompt-only tool-call syntax adherence per template
