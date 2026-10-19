@@ -187,11 +187,11 @@ class ValidationToolchainTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertGreater(int(match.group(1)), 66)
 
-    def test_mypy_clean_34_source_files(self):
-        # Doc: "mypy model_protocol_lab -- clean (34 source files)".
+    def test_mypy_clean_35_source_files(self):
+        # Doc: "mypy model_protocol_lab -- clean (35 source files)".
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("34 source files", proc.stdout)
+        self.assertIn("35 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:
@@ -356,10 +356,10 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertLess(readme.index(ci_badge), readme.index(badge))
 
     def test_pre_commit_ruff_rev(self):
-        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.0)".
+        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.1)".
         text = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         self.assertIn("ruff-pre-commit", text)
-        self.assertIn("rev: v0.17.0", text)
+        self.assertIn("rev: v0.17.1", text)
 
     def test_dependabot_three_ecosystems(self):
         # Doc: "Dependabot YAML (pip, github-actions, pre-commit)".
