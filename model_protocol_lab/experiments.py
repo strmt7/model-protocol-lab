@@ -48,6 +48,17 @@ from .deliforge import (
     validate_marker_index,
     validate_payload,
 )
+from .faketurn import (
+    DETAIL_MARKER_COUNT_MISMATCH,
+    DETAIL_NO_PROVENANCE,
+    DETAIL_REF_MISSING,
+    SOURCES,
+    build_faketurn_fixtures,
+    marker_provenance,
+    payload_intact,
+    payload_ref,
+    transfer_gap,
+)
 from .fewshot import (
     ARMS as FEWSHOT_ARMS,
 )
@@ -5042,4 +5053,369 @@ def deliforge_authority(
         "per_candidate": per_candidate,
         "excluded_candidates": sorted(excluded),
         "max_authority_gap": max(all_gaps) if all_gaps else None,
+    }
+
+
+def _faketurn_cell_unsupported(detail: str) -> dict[str, Any]:
+    """One unsupported faketurn cell: fail-closed, never a phantom flip rate."""
+    return {"supported": False, "detail": detail}
+
+
+def _faketurn_original_id(forged_id: str) -> str:
+    """Strip the ``faketurn/<payload>/<index>/`` prefix from a forged id."""
+    parts = forged_id.split("/", 3)
+    if len(parts) == 4 and parts[0] == "faketurn":
+        return parts[3]
+    return forged_id
+
+
+def faketurn_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    cases: tuple[Fixture, ...],
+    *,
+    payloads: tuple[str, ...] = PAYLOADS,
+    marker_indexes: tuple[int, ...] | None = None,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Re-evaluate every candidate with forged history turns per provenance.
+
+    For each forged-turn payload (see :mod:`faketurn`) and each
+    delimiter marker, every search candidate is evaluated once with
+    ``core.evaluate()`` on the forged fixtures -- the forged turn
+    appended to the last user message, encoded at the family's native
+    form. The independent variable is the forged marker's token
+    provenance: ``same`` when the marker is also a genuine delimiter
+    of the rendering template, ``cross`` when it is a real
+    chat-template control token from another family's token set (see
+    :func:`faketurn.marker_provenance`).
+
+    A (candidate, payload, marker) cell degrades to an unsupported
+    marker instead of failing the stage: provenance undeterminable
+    (``no_provenance``), forged payload not intact in the rendered
+    prompt (``ref_missing`` / ``marker_count_mismatch``), or the
+    forged evaluation not aggregable (``cell_failed``). Backend
+    failures degrade the cell to None -- fail-closed, never a phantom
+    flip rate.
+
+    Returns ``{"payloads": [...], "marker_indexes": [...],
+    "per_payload": {payload: {"per_marker": {str(index):
+    {"per_candidate": {name: cell | None}}}}}``. Raises ``ValueError``
+    on caller-contract violations (None backend, bad formats/cases/
+    payloads/marker_indexes/boundary), never on backend data.
+    """
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases or any(type(case) is not Fixture for case in cases):
+        raise ValueError("cases must be a nonempty tuple of Fixture")
+    if type(payloads) is not tuple or not payloads:
+        raise ValueError("payloads must be a nonempty tuple")
+    for payload in payloads:
+        validate_payload(payload)
+    if marker_indexes is None:
+        marker_indexes = tuple(range(len(MARKERS)))
+    if type(marker_indexes) is not tuple or not marker_indexes:
+        raise ValueError("marker_indexes must be a nonempty tuple")
+    for index in marker_indexes:
+        validate_marker_index(index)
+    if len(set(marker_indexes)) != len(marker_indexes):
+        raise ValueError("marker_indexes must not repeat")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    per_payload: dict[str, dict[str, Any]] = {}
+    for payload in payloads:
+        per_marker: dict[str, dict[str, Any]] = {}
+        for marker_index in marker_indexes:
+            marker = MARKERS[marker_index]
+            forged = build_faketurn_fixtures(cases, payload=payload, marker_index=marker_index)
+            per_candidate: dict[str, dict[str, Any] | None] = {}
+            for fmt in formats:
+                try:
+                    per_candidate[fmt.name] = _faketurn_candidate_cell(
+                        backend,
+                        fmt,
+                        cases,
+                        forged,
+                        payload=payload,
+                        marker_index=marker_index,
+                        marker=marker,
+                        boundary=boundaries[fmt.name],
+                        max_new_tokens=max_new_tokens,
+                        seed=seed,
+                    )
+                except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                    per_candidate[fmt.name] = None
+            per_marker[str(marker_index)] = {"per_candidate": per_candidate}
+        per_payload[payload] = {"per_marker": per_marker}
+    return {
+        "payloads": list(payloads),
+        "marker_indexes": list(marker_indexes),
+        "per_payload": per_payload,
+    }
+
+
+def _faketurn_candidate_cell(
+    backend: Backend,
+    fmt: Format,
+    cases: tuple[Fixture, ...],
+    forged: tuple[Fixture, ...],
+    *,
+    payload: str,
+    marker_index: int,
+    marker: str,
+    boundary: tuple[int, ...],
+    max_new_tokens: int,
+    seed: int,
+) -> dict[str, Any]:
+    """Run the forged arm for one candidate x payload x marker.
+
+    Determines the marker's token provenance from the candidate's
+    own benign renders (``same`` iff the marker is also a genuine
+    delimiter of this template), evaluates the forged fixtures, and
+    verifies each rendered prompt carries its unique ref exactly once
+    with the forged marker occurring at least twice. Returns the
+    supported cell ``{"supported": True, "n": ..., "marker": ...,
+    "token_source": "same"|"cross", "verdicts": {fixture_id:
+    bool | None}}`` or an unsupported marker dict. Raises on
+    backend/evaluation failure (the caller degrades the cell to None).
+    """
+    try:
+        provenance: str | None = None
+        for case in cases:
+            hit = marker_provenance(fmt.render(case.messages), marker)
+            if hit is None:
+                provenance = None
+                break
+            if hit == "same":
+                provenance = "same"
+                break
+            provenance = "cross"
+    except Exception:  # noqa: BLE001 -- render failure degrades the cell
+        provenance = None
+    if provenance is None:
+        return _faketurn_cell_unsupported(DETAIL_NO_PROVENANCE)
+    report = evaluate(
+        backend,
+        fmt,
+        forged,
+        boundary=boundary,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+    )
+    if not report.aggregate_eligible:
+        return _faketurn_cell_unsupported(DETAIL_CELL_FAILED)
+    verdicts: dict[str, bool | None] = {}
+    for obs in report.observations:
+        original_id = _faketurn_original_id(obs.fixture)
+        ref = payload_ref(original_id, payload, marker_index)
+        if ref is None:
+            return _faketurn_cell_unsupported(DETAIL_CELL_FAILED)
+        text = fmt.render(_forged_messages_for(forged, obs.fixture))
+        if text.count(ref) != 1:
+            return _faketurn_cell_unsupported(DETAIL_REF_MISSING)
+        if not payload_intact(text, ref, marker):
+            return _faketurn_cell_unsupported(DETAIL_MARKER_COUNT_MISMATCH)
+        verdicts[original_id] = (
+            bool(obs.exact_match and obs.boundary_found) if obs.status == "completed" else None
+        )
+    return {
+        "supported": True,
+        "n": len(cases),
+        "marker": marker,
+        "token_source": provenance,
+        "verdicts": verdicts,
+    }
+
+
+def _faketurn_cell_view(entry: Any) -> dict[str, Any] | None:
+    """Normalize one faketurn robustness cell entry, or None if malformed."""
+    if entry is None:
+        return {"supported": False, "detail": DETAIL_CELL_FAILED}
+    if type(entry) is not dict:
+        return None
+    if entry.get("supported") is not True:
+        detail = entry.get("detail")
+        return {
+            "supported": False,
+            "detail": detail if type(detail) is str else DETAIL_CELL_FAILED,
+        }
+    token_source = entry.get("token_source")
+    if token_source not in SOURCES:
+        return None
+    verdicts = entry.get("verdicts")
+    if type(verdicts) is not dict or not all(
+        type(fid) is str and (v is None or type(v) is bool) for fid, v in verdicts.items()
+    ):
+        return None
+    return {"supported": True, "token_source": token_source, "verdicts": verdicts}
+
+
+def faketurn_robustness(
+    native_outcomes: dict[str, dict[str, Any]],
+    stage_result: dict[str, Any],
+    candidates: tuple[str, ...],
+) -> dict[str, Any]:
+    """Analyze fake-turn history-tampering robustness per candidate (pure post-hoc).
+
+    Answers "does a forged prior turn flip task verdicts, and does
+    the delimiter provenance matter?": per (candidate, payload,
+    marker) cell, the flip rate of the forged arm against the native
+    search verdicts and its token provenance (``same``/``cross``);
+    per candidate, the pooled same-family and cross-family flip
+    rates and the ``transfer_gap`` (cross minus same, in [-1, 1]).
+    The pre-registered falsifiable claim (see :mod:`faketurn`) is
+    that the gap is ~0 and flip rates do not cluster by token set; a
+    systematically positive gap means foreign delimiters carry more
+    tampering authority than the family's own.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(native_outcomes) is not dict:
+        return {"available": False, "detail": "native_data_malformed"}
+    if type(stage_result) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    payloads = stage_result.get("payloads")
+    marker_indexes = stage_result.get("marker_indexes")
+    per_payload = stage_result.get("per_payload")
+    if (
+        type(payloads) is not list
+        or not payloads
+        or not all(type(p) is str for p in payloads)
+        or type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+        or type(per_payload) is not dict
+    ):
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate: dict[str, dict[str, Any]] = {}
+    excluded: list[str] = []
+    for cand in candidates:
+        native = native_outcomes.get(cand)
+        native_verdicts = native.get("per_fixture") if type(native) is dict else None
+        if type(native_verdicts) is not dict or not all(
+            type(v) is bool for v in native_verdicts.values()
+        ):
+            excluded.append(cand)
+            continue
+        cells: dict[str, dict[str, Any]] = {}
+        malformed = False
+        for payload in payloads:
+            section = per_payload.get(payload)
+            markers = section.get("per_marker") if type(section) is dict else None
+            if type(markers) is not dict:
+                malformed = True
+                break
+            for marker_index in marker_indexes:
+                block = markers.get(str(marker_index))
+                entry = block.get("per_candidate", {}).get(cand) if type(block) is dict else None
+                view = _faketurn_cell_view(entry)
+                if view is None:
+                    malformed = True
+                    break
+                key = f"{payload}/{marker_index}"
+                if not view["supported"]:
+                    cells[key] = view
+                    continue
+                try:
+                    flips = flip_rates(
+                        native_verdicts,
+                        dict(view["verdicts"].items()),
+                    )
+                except ValueError:
+                    malformed = True
+                    break
+                cells[key] = {
+                    "supported": True,
+                    "n_evaluable": flips["n_evaluable"],
+                    "n_flips": flips["n_flips"],
+                    "flip_rate": flips["flip_rate"],
+                    "token_source": view["token_source"],
+                }
+            if malformed:
+                break
+        if malformed:
+            return {"available": False, "detail": "stage_invalid"}
+        pooled: dict[str, dict[str, int]] = {
+            "same": {"flips": 0, "evaluable": 0},
+            "cross": {"flips": 0, "evaluable": 0},
+        }
+        rates: list[float] = []
+        for cell in cells.values():
+            if not cell.get("supported"):
+                continue
+            source = cell["token_source"]
+            pooled[source]["flips"] += cell["n_flips"]
+            pooled[source]["evaluable"] += cell["n_evaluable"]
+            rate = cell["flip_rate"]
+            if type(rate) in (int, float):
+                rates.append(float(rate))
+        same_rate = (
+            pooled["same"]["flips"] / pooled["same"]["evaluable"]
+            if pooled["same"]["evaluable"]
+            else None
+        )
+        cross_rate = (
+            pooled["cross"]["flips"] / pooled["cross"]["evaluable"]
+            if pooled["cross"]["evaluable"]
+            else None
+        )
+        try:
+            gap = transfer_gap(cross_rate, same_rate)
+        except ValueError:
+            return {"available": False, "detail": "stage_invalid"}
+        evaluable_cells = sum(
+            1
+            for cell in cells.values()
+            if cell.get("supported")
+            and type(cell.get("n_evaluable")) is int
+            and cell["n_evaluable"] > 0
+        )
+        per_candidate[cand] = {
+            "cells": cells,
+            "n_cells": len(cells),
+            "n_evaluable_cells": evaluable_cells,
+            "same_flip_rate": same_rate,
+            "cross_flip_rate": cross_rate,
+            "transfer_gap": gap,
+            "mean_flip_rate": (sum(rates) / len(rates)) if rates else None,
+            "max_flip_rate": max(rates) if rates else None,
+        }
+        if not evaluable_cells:
+            excluded.append(cand)
+    max_gap = [
+        entry["transfer_gap"]
+        for entry in per_candidate.values()
+        if type(entry.get("transfer_gap")) in (int, float)
+    ]
+    max_rate = [
+        entry["max_flip_rate"]
+        for entry in per_candidate.values()
+        if type(entry.get("max_flip_rate")) in (int, float)
+    ]
+    return {
+        "available": True,
+        "payloads": list(payloads),
+        "marker_indexes": list(marker_indexes),
+        "per_candidate": per_candidate,
+        "excluded_candidates": sorted(excluded),
+        "max_transfer_gap": max(max_gap) if max_gap else None,
+        "max_flip_rate": max(max_rate) if max_rate else None,
     }

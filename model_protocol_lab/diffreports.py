@@ -573,6 +573,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    faketurn_diff = diff_faketurn(old.get("faketurn"), new.get("faketurn"))
+    faketurn_asymmetric = faketurn_diff["available"] not in (
+        "both",
+        "neither",
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -618,6 +623,8 @@ def diff_reports(
         and not deliforge_asymmetric
         and not fewshot_diff["changed"]
         and not fewshot_asymmetric
+        and not faketurn_diff["changed"]
+        and not faketurn_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -664,6 +671,8 @@ def diff_reports(
         "deliforge_asymmetric": deliforge_asymmetric,
         "fewshot_changed": fewshot_diff["changed"],
         "fewshot_asymmetric": fewshot_asymmetric,
+        "faketurn_changed": faketurn_diff["changed"],
+        "faketurn_asymmetric": faketurn_asymmetric,
         "identical": identical,
     }
     return {
@@ -691,6 +700,7 @@ def diff_reports(
         "structured": structured_diff,
         "deliforge": deliforge_diff,
         "fewshot": fewshot_diff,
+        "faketurn": faketurn_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -2543,6 +2553,185 @@ def diff_fewshot(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_faketurn(payload: Any) -> bool:
+    """Structural check for a ``faketurn`` history-tampering payload.
+
+    Enforces the wave-2 C3 lesson at the value level: flip rates must
+    be numbers/None in [0, 1], transfer gaps numbers/None in [-1, 1],
+    token sources exactly "same"/"cross", and map keys strings, so
+    the renderers never hit a TypeError on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    payloads = payload.get("payloads")
+    if type(payloads) is not list or not payloads or not all(type(p) is str for p in payloads):
+        return False
+    marker_indexes = payload.get("marker_indexes")
+    if (
+        type(marker_indexes) is not list
+        or not marker_indexes
+        or not all(type(i) is int for i in marker_indexes)
+    ):
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if type(entry) is not dict:
+            return False
+        cells = entry.get("cells")
+        if type(cells) is not dict or not all(type(k) is str for k in cells):
+            return False
+        for cell in cells.values():
+            if type(cell) is not dict or cell.get("supported") is not True:
+                continue
+            if cell.get("token_source") not in ("same", "cross"):
+                return False
+            n_evaluable = cell.get("n_evaluable")
+            if type(n_evaluable) is not int or n_evaluable < 0:
+                return False
+            rate = cell.get("flip_rate")
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+        for key in ("same_flip_rate", "cross_flip_rate", "max_flip_rate"):
+            rate = entry.get(key)
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+        gap = entry.get("transfer_gap")
+        if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+            return False
+    excluded = payload.get("excluded_candidates")
+    return type(excluded) is list and all(type(c) is str for c in excluded)
+
+
+def diff_faketurn(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``faketurn`` history-tampering payloads; deterministic.
+
+    Answers "did the fake-turn tampering story change between runs?":
+    per-candidate per-cell flip-rate drift, transfer-gap drift,
+    provenance (same/cross) changes per cell, added/removed
+    candidates, and changes in the excluded set. A newly positive
+    cross-minus-same gap after a template change is the regression
+    signal -- foreign delimiters gaining tampering authority they did
+    not have before. A side without a recorded probe is reported
+    plainly. No model, no network.
+    """
+    old_ok = _valid_faketurn(old)
+    new_ok = _valid_faketurn(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_faketurn guarantees str keys and dict entries, so
+            # no defensive skip is needed here (it would be dead code
+            # and an uncoverable line).
+            cells: dict[str, Any] = {}
+            for key, cell in (entry.get("cells") or {}).items():
+                if type(cell) is dict and cell.get("supported") is True:
+                    cells[key] = {
+                        "flip_rate": cell.get("flip_rate"),
+                        "token_source": cell.get("token_source"),
+                    }
+                else:
+                    cells[key] = None
+            view[name] = {
+                "cells": cells,
+                "transfer_gap": entry.get("transfer_gap"),
+                "max_flip_rate": entry.get("max_flip_rate"),
+                "excluded": name in set(payload.get("excluded_candidates") or []),
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    faketurn_candidates_added = sorted(set(new_view) - set(old_view))
+    faketurn_candidates_removed = sorted(set(old_view) - set(new_view))
+    faketurn_cell_drift: list[dict[str, Any]] = []
+    faketurn_source_drift: list[dict[str, Any]] = []
+    faketurn_gap_drift: list[dict[str, Any]] = []
+    faketurn_top_rate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_cells = old_view[name]["cells"]
+        new_cells = new_view[name]["cells"]
+        for key in sorted(set(old_cells) & set(new_cells)):
+            old_cell = old_cells[key]
+            new_cell = new_cells[key]
+            if old_cell is None or new_cell is None:
+                if old_cell != new_cell:
+                    faketurn_source_drift.append(
+                        {
+                            "candidate": name,
+                            "cell": key,
+                            "old": "supported" if old_cell is not None else "unsupported",
+                            "new": "supported" if new_cell is not None else "unsupported",
+                        }
+                    )
+                continue
+            if old_cell["flip_rate"] != new_cell["flip_rate"]:
+                faketurn_cell_drift.append(
+                    {
+                        "candidate": name,
+                        "cell": key,
+                        "old": old_cell["flip_rate"],
+                        "new": new_cell["flip_rate"],
+                    }
+                )
+            if old_cell["token_source"] != new_cell["token_source"]:
+                faketurn_source_drift.append(
+                    {
+                        "candidate": name,
+                        "cell": key,
+                        "old": old_cell["token_source"],
+                        "new": new_cell["token_source"],
+                    }
+                )
+        old_gap = old_view[name]["transfer_gap"]
+        new_gap = new_view[name]["transfer_gap"]
+        if old_gap != new_gap:
+            faketurn_gap_drift.append({"candidate": name, "old": old_gap, "new": new_gap})
+        old_top = old_view[name]["max_flip_rate"]
+        new_top = new_view[name]["max_flip_rate"]
+        if old_top != new_top:
+            faketurn_top_rate_drift.append({"candidate": name, "old": old_top, "new": new_top})
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    faketurn_excluded_added = sorted(new_excluded - old_excluded)
+    faketurn_excluded_removed = sorted(old_excluded - new_excluded)
+    result["cell_drift"] = faketurn_cell_drift
+    result["gap_drift"] = faketurn_gap_drift
+    result["top_rate_drift"] = faketurn_top_rate_drift
+    result["source_drift"] = faketurn_source_drift
+    result["candidates_added"] = faketurn_candidates_added
+    result["candidates_removed"] = faketurn_candidates_removed
+    result["excluded_added"] = faketurn_excluded_added
+    result["excluded_removed"] = faketurn_excluded_removed
+    # NOTE: faketurn-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        faketurn_cell_drift
+        or faketurn_gap_drift
+        or faketurn_top_rate_drift
+        or faketurn_source_drift
+        or faketurn_candidates_added
+        or faketurn_candidates_removed
+        or faketurn_excluded_added
+        or faketurn_excluded_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -3991,6 +4180,78 @@ def _render_fewshot_summary(fewshot_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_faketurn_summary(faketurn_diff: dict[str, Any] | None) -> list[str]:
+    """Fake-turn history-tampering comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson).
+    """
+    if type(faketurn_diff) is not dict:
+        return []
+    available = faketurn_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Fake-turn comparison unavailable: {missing} run did not record the faketurn probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+
+    def _fmt_gap(value: Any) -> str:
+        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+
+    cell_drift = faketurn_diff.get("cell_drift") or []
+    if cell_drift:
+        lines.append(f"Fake-turn flip-rate drift ({len(cell_drift)}):")
+        for entry in cell_drift[:5]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"  {_display_id(entry.get('candidate'))}/{_display_id(entry.get('cell'))}: "
+                f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+            )
+        if len(cell_drift) > 5:
+            lines.append(f"  ... and {len(cell_drift) - 5} more")
+    gap_drift = faketurn_diff.get("gap_drift") or []
+    for entry in gap_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Fake-turn transfer-gap drift "
+            f"({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_gap(entry.get('old'))} -> {_fmt_gap(entry.get('new'))}"
+        )
+    source_drift = faketurn_diff.get("source_drift") or []
+    for entry in source_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            f"Fake-turn provenance drift ({_display_id(entry.get('candidate'))}/"
+            f"{_display_id(entry.get('cell'))}): "
+            f"{_display_id(entry.get('old'))} -> {_display_id(entry.get('new'))}"
+        )
+    added = faketurn_diff.get("candidates_added") or []
+    removed = faketurn_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Fake-turn candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Fake-turn candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    excl_added = faketurn_diff.get("excluded_added") or []
+    excl_removed = faketurn_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(f"Fake-turn newly excluded: {', '.join(_display_id(c) for c in excl_added)}")
+    if excl_removed:
+        lines.append(
+            f"Fake-turn no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -4416,6 +4677,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_structured_summary(diff.get("structured")))
     lines.extend(_render_deliforge_summary(diff.get("deliforge")))
     lines.extend(_render_fewshot_summary(diff.get("fewshot")))
+    lines.extend(_render_faketurn_summary(diff.get("faketurn")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

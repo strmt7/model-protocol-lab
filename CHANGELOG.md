@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 162 — fake-turn history tampering × template, wave-4 research idea #3, 2026-10-19)
+
+- `mpl run --fake-turn`: fake-turn history-tampering robustness per template
+  family (arXiv:2405.20234 "Hidden in Plain Sight"). A forged prior turn
+  (fake assistant asserting a wrong answer; fake system contradicting the
+  task — the deliforge payload builders over the same fixed MARKERS list)
+  is appended to the search fixtures' user content at each family's native
+  encoding; the independent variable is the forged marker's token provenance
+  — `same` when the marker is also a genuine delimiter of the rendering
+  template, `cross` when it is a real chat-template control token from
+  another family's token set. Per (candidate, payload, marker) cell the
+  verdict-flip rate against native search verdicts; per candidate the pooled
+  same/cross rates and the transfer gap (cross minus same, in [-1, 1]); the
+  pre-registered falsifiable claim is a ~0 gap with no token-set clustering.
+  Every rendered prompt is integrity-checked (unique ref exactly once,
+  forged marker at least twice); violations degrade fail-closed. New pure
+  `model_protocol_lab/faketurn.py` (100% line coverage), `experiments.faketurn_stage`
+  / `faketurn_robustness`, results.json + HTML section (TOC `history-tampering`,
+  all interpolations escaped), `diff_faketurn` with `faketurn_changed` /
+  `faketurn_asymmetric` feeding `identical` (cell flip-rate drift, transfer-gap
+  drift, provenance changes, added/removed candidates, excluded-set changes).
+  Sample exercise with a scripted provenance-policy backend shows genuine
+  signal (llama3 same 1.0 / cross 0.0 / gap -1.0), report regenerated
+  byte-identical ×3 (md5 7339f7378d50d8ac702f0d767c3fe21f /
+  0993b2622513127c869c675127c93b0c). Boundary with deliforge is documented:
+  deliforge varies encoding of fixed text; faketurn varies delimiter
+  provenance at native encoding.
+
 ### Added (cycle 161 — mandatory dev-tool integration: cocoindex-code, caveman, crawl4ai, 2026-10-19)
 
 - Mandatory development-tool integration, ported from strmt7/FlitzZip and made

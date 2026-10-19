@@ -4457,6 +4457,124 @@ def _deliforge_section(result: dict[str, Any]) -> str:
     )
 
 
+def _faketurn_section(result: dict[str, Any]) -> str:
+    """Fake-turn history tampering: forged prior turns, same vs cross delimiters.
+
+    Renders the ``faketurn`` payload (see experiments.faketurn_robustness)
+    as a per-candidate table of verdict-flip rates: forged prior turns
+    (fake assistant asserting a wrong answer, fake system contradicting
+    the task) injected into user content at the family's native
+    encoding, with the forged delimiters wearing the family's own
+    token set (same) vs another family's token set (cross). The
+    pre-registered falsifiable claim is a transfer gap of ~0 uniform
+    across families; a systematically positive gap means foreign
+    delimiters carry more tampering authority -- arXiv:2405.20234's
+    token-set-dependence claim, measured per family with the model
+    fixed. "Authority" is measured strictly as verdict-flip rate on
+    fixed fixtures, not open-ended harm. Every interpolation is
+    escaped at this boundary.
+    """
+    audit: Any = result.get("faketurn")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.2f}"
+        return "n/a"
+
+    def _gap(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:+.2f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable_cells")))
+            + " / "
+            + escape(str(entry.get("n_cells")))
+            + "</td><td>"
+            + escape(_rate(entry.get("mean_flip_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("same_flip_rate")))
+            + "</td><td>"
+            + escape(_rate(entry.get("cross_flip_rate")))
+            + "</td><td>"
+            + escape(_gap(entry.get("transfer_gap")))
+            + "</td></tr>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates without an evaluable cell (provenance "
+            "undeterminable, payload not intact, or no native verdicts): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    top_gap = audit.get("max_transfer_gap")
+    top_line = ""
+    if type(top_gap) in (int, float):
+        top_line = (
+            "<p>Largest cross-minus-same flip-rate gap over all evaluable "
+            "candidates: <strong>"
+            + escape(f"{top_gap:+.2f}")
+            + "</strong>. A positive gap means forged turns wearing "
+            "another family's delimiters flipped task verdicts more "
+            "often than forged turns wearing the family's own "
+            "delimiters.</p>"
+        )
+    top_rate = audit.get("max_flip_rate")
+    rate_line = ""
+    if type(top_rate) in (int, float):
+        rate_line = (
+            "<p>Largest per-cell verdict-flip rate over all evaluable "
+            "candidates: <strong>" + escape(f"{top_rate:.2f}") + "</strong>.</p>"
+        )
+    return (
+        '<section class="card" id="history-tampering">'
+        "<h2>Fake-turn history tampering</h2>"
+        "<p>A forged prior turn -- a fake assistant message asserting a "
+        "wrong answer, or a fake system instruction contradicting the "
+        "task -- was injected into user content and evaluated at each "
+        "family's native encoding. The forged delimiters either belong "
+        "to the family's own token set (<em>same</em>: the marker is "
+        "also a genuine delimiter of the rendering template) or to "
+        "another family's token set (<em>cross</em>). <strong>Transfer "
+        "gap</strong> = cross-family flip rate minus same-family flip "
+        "rate, in [-1, 1].</p>"
+        + top_line
+        + rate_line
+        + (
+            '<div class="table-wrap"><table><caption>Fake-turn flip rates per candidate.</caption>'
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable cells</th><th scope="col">Mean flip rate</th>'
+            '<th scope="col">Same-family rate</th><th scope="col">Cross-family rate</th>'
+            '<th scope="col">Transfer gap</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -5377,6 +5495,7 @@ def render_html(result: dict[str, Any]) -> str:
     structured_html = _structured_section(result)
     deliforge_html = _deliforge_section(result)
     fewshot_html = _fewshot_section(result)
+    faketurn_html = _faketurn_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5465,6 +5584,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "Few-shot \u00d7 template",
                 fewshot_html,
             ),
+            (
+                "history-tampering",
+                "Fake-turn history tampering",
+                faketurn_html,
+            ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
@@ -5520,6 +5644,7 @@ def render_html(result: dict[str, Any]) -> str:
         + structured_html
         + deliforge_html
         + fewshot_html
+        + faketurn_html
         + sweep_html
         + logprob_html
         + held_out_html

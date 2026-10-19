@@ -402,6 +402,43 @@ class DeliDemoBackend(DemoBackend):
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
 
 
+class FakeTurnDemoBackend(DemoBackend):
+    """Scripted history-tampering policy for the faketurn exercise.
+
+    Ord codec like DemoBackend (markers are NOT single ids here --
+    faketurn provenance is template-text-based, exactly the
+    experiment's operational rule). A forged prompt flips (answers
+    WRONG) exactly when its forged marker text occurs more than twice
+    in the prompt: the forged payload pins two occurrences, so a
+    third proves the marker is also a genuine delimiter of the
+    rendering template (same-family). Cross-family forged prompts
+    delegate to DemoBackend's keyword policy, so no flip. For the
+    llama3 sample candidates this yields genuine signal: the base
+    candidate flips on the <|start_header_id|> (same-family) cells
+    and on nothing else; the mutated candidates' native verdicts are
+    already failures, so nothing flips there. Deterministic.
+    """
+
+    fingerprint = "synthetic-faketurn-demo-v1-not-a-model"
+
+    _MARKERS = (
+        "<|im_start|>",
+        "<|im_end|>",
+        "<|assistant|>",
+        "<|start_header_id|>",
+    )
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        prompt = self.decode(input_ids)
+        if "(ref: faketurn/" in prompt:
+            match = re.search(r"\(ref: faketurn/[^/]+/(\d+)/", prompt)
+            marker = self._MARKERS[int(match.group(1))] if match else None
+            if marker is not None and prompt.count(marker) > 2:
+                text = ("WRONG" + "|").ljust(max_new_tokens)[:max_new_tokens]
+                return Generation(tuple(map(ord, text)), "limit")
+        return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
+
+
 class FewshotDemoBackend(DemoBackend):
     """Scripted demo-order policy for the fewshot exercise.
 
@@ -1077,6 +1114,41 @@ def build_sample_report(output_dir: Path) -> dict:
         result["fewshot"] = {
             "available": False,
             "detail": "fewshot_unavailable",
+        }
+    # Fake-turn history-tampering probe (research wave-4 idea 3): run
+    # the real faketurn stage against the scripted provenance-policy
+    # backend, so the committed sample report exercises the
+    # history-tampering section with genuine same-vs-cross signal (the
+    # base candidate flips on the same-family <|start_header_id|> cells
+    # and nothing else; mutated candidates' native verdicts are already
+    # failures). Degrades to an "unavailable" marker instead of failing
+    # the build.
+    try:
+        from model_protocol_lab.experiments import (
+            faketurn_robustness,
+            faketurn_stage,
+            native_search_outcomes,
+        )
+
+        _t_fmts = candidates("llama3", mutate=True)
+        _t_names = tuple(f.name for f in _t_fmts)
+        _t_stage = faketurn_stage(
+            FakeTurnDemoBackend(),
+            _t_fmts,
+            tuple(split.search),
+            boundary=BOUNDARY,
+            max_new_tokens=MAX_NEW_TOKENS,
+            seed=20261012,
+        )
+        result["faketurn"] = faketurn_robustness(
+            native_search_outcomes(result.get("search") or [], _t_names),
+            _t_stage,
+            _t_names,
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["faketurn"] = {
+            "available": False,
+            "detail": "faketurn_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

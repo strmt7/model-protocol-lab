@@ -4872,6 +4872,359 @@
       }
     ]
   },
+  "faketurn": {
+    "available": true,
+    "payloads": [
+      "fake_assistant",
+      "fake_system"
+    ],
+    "marker_indexes": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "per_candidate": {
+      "llama3": {
+        "cells": {
+          "fake_assistant/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 2,
+            "flip_rate": 1.0,
+            "token_source": "same"
+          },
+          "fake_system/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 2,
+            "flip_rate": 1.0,
+            "token_source": "same"
+          }
+        },
+        "n_cells": 8,
+        "n_evaluable_cells": 8,
+        "same_flip_rate": 1.0,
+        "cross_flip_rate": 0.0,
+        "transfer_gap": -1.0,
+        "mean_flip_rate": 0.25,
+        "max_flip_rate": 1.0
+      },
+      "llama3/toggle-bos": {
+        "cells": {
+          "fake_assistant/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          },
+          "fake_system/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          }
+        },
+        "n_cells": 8,
+        "n_evaluable_cells": 8,
+        "same_flip_rate": 0.0,
+        "cross_flip_rate": 0.0,
+        "transfer_gap": 0.0,
+        "mean_flip_rate": 0.0,
+        "max_flip_rate": 0.0
+      },
+      "llama3/no-bos": {
+        "cells": {
+          "fake_assistant/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          },
+          "fake_system/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          }
+        },
+        "n_cells": 8,
+        "n_evaluable_cells": 8,
+        "same_flip_rate": 0.0,
+        "cross_flip_rate": 0.0,
+        "transfer_gap": 0.0,
+        "mean_flip_rate": 0.0,
+        "max_flip_rate": 0.0
+      },
+      "llama3/prefix-newline": {
+        "cells": {
+          "fake_assistant/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          },
+          "fake_system/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          }
+        },
+        "n_cells": 8,
+        "n_evaluable_cells": 8,
+        "same_flip_rate": 0.0,
+        "cross_flip_rate": 0.0,
+        "transfer_gap": 0.0,
+        "mean_flip_rate": 0.0,
+        "max_flip_rate": 0.0
+      },
+      "llama3/prefix-trim": {
+        "cells": {
+          "fake_assistant/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_assistant/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          },
+          "fake_system/0": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/1": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/2": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "cross"
+          },
+          "fake_system/3": {
+            "supported": true,
+            "n_evaluable": 2,
+            "n_flips": 0,
+            "flip_rate": 0.0,
+            "token_source": "same"
+          }
+        },
+        "n_cells": 8,
+        "n_evaluable_cells": 8,
+        "same_flip_rate": 0.0,
+        "cross_flip_rate": 0.0,
+        "transfer_gap": 0.0,
+        "mean_flip_rate": 0.0,
+        "max_flip_rate": 0.0
+      }
+    },
+    "excluded_candidates": [],
+    "max_transfer_gap": 0.0,
+    "max_flip_rate": 1.0
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",
