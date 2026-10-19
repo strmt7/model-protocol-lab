@@ -259,5 +259,4 @@ memory-DoS prevention; the sweep multiplies input size across variants),
 ≤ 50 fixtures, operators/seeds fixed by the frozen plan (no free
 `n_seeds`, no free timeout), one-sweep-at-a-time lock, cooperative
 cancellation between forwards with fail-closed `status: "cancelled"` on
-budget expiry (R5 — never a partial score), progress content blocks
-(R10).
+budget expiry (R5 — never a partial score).

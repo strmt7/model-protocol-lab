@@ -54,6 +54,9 @@ WHITESPACE_MODES: tuple[str, ...] = ("collapse", "double", "newline-split")
 MAX_PROMPT_CHARS = 1024 * 1024  # 1 MiB: memory-DoS prevention; the sweep
 # multiplies input size across variants, so the cap is on the subject.
 MAX_FIXTURES = 50  # bounds the variant x fixture forward-pass fan-out.
+MAX_FIXTURE_MESSAGE_CHARS = 256 * 1024  # 256 KiB per message: the sweep
+# re-encodes every fixture's messages for every variant, so unbounded
+# content is a memory-DoS vector (Finding 5).
 
 RENDER_PREFIX = "Instruction: "
 
@@ -99,6 +102,12 @@ def _check_fixtures(fixtures: Any) -> tuple[Fixture, ...]:
         raise ValueError(f"at most {MAX_FIXTURES} fixtures per probe run")
     if len({case.id for case in fixtures}) != len(fixtures):
         raise ValueError("fixture ids must be unique")
+    for case in fixtures:
+        for message in case.messages:
+            if len(message.content) > MAX_FIXTURE_MESSAGE_CHARS:
+                raise ValueError(
+                    f"fixture {case.id!r} message exceeds {MAX_FIXTURE_MESSAGE_CHARS} characters"
+                )
     return fixtures
 
 
@@ -126,6 +135,12 @@ def _check_seed(seed: Any) -> int:
 
 def _valid_ids(ids: Any) -> bool:
     return type(ids) is tuple and all(type(t) is int and t >= 0 for t in ids)
+
+
+def surfacenoise_code_hash() -> str:
+    """sha256 of surfacenoise.py (the scorer: flip predicate, stability formula)."""
+    path = Path(__file__).with_name("surfacenoise.py")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def perturbation_code_hash() -> str:
@@ -196,7 +211,9 @@ def freeze_surface_noise_protocol(
         "denominator": (
             "n_effective counts variants whose perturbed prompt span "
             "changed the token-id sequence (via backend.encode); no-op "
-            "variants are listed, never counted as stable."
+            "variants are listed, never counted as stable. n_unevaluable "
+            "counts variants with zero mutually-evaluable fixtures; they are "
+            "excluded from the stability denominator, never counted as unchanged."
         ),
         "distance": (
             "Token indel-edit rate: Myers O(ND) insertion/deletion distance "
@@ -207,12 +224,23 @@ def freeze_surface_noise_protocol(
         "backend_fingerprint": backend_fingerprint,
         "fixture_ids": [case.id for case in fixtures],
         "fixture_sha256": _fixture_hash(fixtures),
+        "surfacenoise_code_sha256": surfacenoise_code_hash(),
         "frozen_at": datetime.now(UTC).isoformat(),
     }
 
 
-def verify_protocol(protocol: Any, *, backend_fingerprint: str) -> dict[str, Any]:
-    """Fail-closed protocol check; returns the protocol on success."""
+def verify_protocol(
+    protocol: Any,
+    *,
+    backend_fingerprint: str,
+    fixtures: tuple[Fixture, ...] | None = None,
+) -> dict[str, Any]:
+    """Fail-closed protocol check; returns the protocol on success.
+
+    When ``fixtures`` is provided, their hash must match the protocol's
+    ``fixture_sha256`` — the probe refuses to score a fixture set different
+    from the one the protocol was frozen for (cross-run comparability binding).
+    """
     if type(protocol) is not dict:
         raise ValueError("protocol must be the dict from freeze_surface_noise_protocol")
     if type(backend_fingerprint) is not str or not backend_fingerprint:
@@ -225,10 +253,14 @@ def verify_protocol(protocol: Any, *, backend_fingerprint: str) -> dict[str, Any
         )
     if protocol.get("perturbation_code_sha256") != perturbation_code_hash():
         raise ValueError("perturbation.py changed since the protocol was frozen")
+    if protocol.get("surfacenoise_code_sha256") != surfacenoise_code_hash():
+        raise ValueError("surfacenoise.py changed since the protocol was frozen")
     if protocol.get("search_plan") != frozen_search_plan():
         raise ValueError("search plan differs from the frozen protocol")
     if protocol.get("backend_fingerprint") != backend_fingerprint:
         raise ValueError("backend fingerprint differs from the frozen protocol")
+    if fixtures is not None and _fixture_hash(fixtures) != protocol.get("fixture_sha256"):
+        raise ValueError("fixtures differ from the frozen protocol's fixture set")
     return protocol
 
 
@@ -448,7 +480,10 @@ def _operator_coverage(operator: str, n: int) -> str:
     if operator in ("typo", "case_flip", "unicode_variant"):
         return f"{len(SEARCH_PLAN_SEEDS)} of 2**64 seeds searched (heuristic)"
     if operator == "whitespace":
-        return f"{n} modes enumerated (exact)"
+        return (
+            f"{n} of 3 declared modes produced distinct outcomes (exact); "
+            "textually-identical modes are listed as no-ops, never counted"
+        )
     return "single deterministic outcome (exact)"
 
 
@@ -492,8 +527,19 @@ def probe_surface_noise(
     seed = _check_seed(seed)
     if cancel is not None and not isinstance(cancel, threading.Event):
         raise ValueError("cancel must be a threading.Event")
-    protocol = verify_protocol(protocol, backend_fingerprint=backend.fingerprint)
+    protocol = verify_protocol(protocol, backend_fingerprint=backend.fingerprint, fixtures=fixtures)
     event = cancel if cancel is not None else threading.Event()
+    if event.is_set():
+        return {
+            "instrument": PROBE_NAME,
+            "protocol_version": PROBE_VERSION,
+            "status": "cancelled",
+            "reason": "cancelled_before_baseline",
+            "completed_variants": 0,
+            "total_variants": 0,
+            "prompt_sha256": hashlib.sha256(prompt_text.encode()).hexdigest(),
+            "protocol": protocol,
+        }
 
     try:
         base_ids = backend.encode(prompt_text)
@@ -524,6 +570,7 @@ def probe_surface_noise(
         n_total = len(op_variants)
         n_effective = 0
         n_unchanged = 0
+        n_unevaluable = 0
         n_abstained = 0
         n_error = 0
         no_ops: list[str] = []
@@ -576,12 +623,15 @@ def probe_surface_noise(
                     "adapter_rule": ADAPTER_RULE,
                 }
             n_abstained += sum(1 for v in vector if v == "abstain")
-            changed = [
-                case.id
+            mutually_evaluable = [
+                (case.id, base_v, var_v)
                 for case, base_v, var_v in zip(fixtures, baseline, vector, strict=True)
-                if base_v != "abstain" and var_v != "abstain" and base_v != var_v
+                if base_v != "abstain" and var_v != "abstain"
             ]
-            if changed:
+            changed = [case_id for case_id, base_v, var_v in mutually_evaluable if base_v != var_v]
+            if not mutually_evaluable:
+                n_unevaluable += 1
+            elif changed:
                 flips.append(
                     {
                         "variant_id": variant_id,
@@ -595,14 +645,22 @@ def probe_surface_noise(
             else:
                 n_unchanged += 1
             done += 1
-        stability = (n_unchanged / n_effective) if n_effective else None
+        n_scored = n_effective - n_unevaluable
+        stability = (n_unchanged / n_scored) if n_scored else None
         operators[operator] = {
             "n_total": n_total,
             "n_effective": n_effective,
             "n_abstained": n_abstained,
             "n_error": n_error,
             "n_unchanged": n_unchanged,
+            "n_unevaluable": n_unevaluable,
             "stability": stability,
+            "stability_note": (
+                "stability 1.0 with n_unevaluable > 0 means no mutually-evaluable "
+                "fixtures observed a change — not evidence of stability"
+                if n_unevaluable
+                else None
+            ),
             "nearest_observed_flip": (
                 {"distance": nearest[0], "variant_id": nearest[1]} if nearest is not None else None
             ),
@@ -614,7 +672,14 @@ def probe_surface_noise(
 
     denominators = {
         key: sum(op[key] for op in operators.values())
-        for key in ("n_total", "n_effective", "n_abstained", "n_error", "n_unchanged")
+        for key in (
+            "n_total",
+            "n_effective",
+            "n_abstained",
+            "n_error",
+            "n_unchanged",
+            "n_unevaluable",
+        )
     }
     return {
         "instrument": PROBE_NAME,
@@ -735,9 +800,11 @@ def hardening_notes(probe_result: dict[str, Any]) -> dict[str, Any]:
         for flip in op.get("flips") or []:
             if type(flip) is not dict:
                 continue
+            distance = flip.get("distance")
+            distance_str = f"{distance:.4f}" if type(distance) in (int, float) else str(distance)
             counterfactuals.append(
                 f"Operator {name}: variant {flip.get('variant_id')} "
-                f"(token indel-edit rate {flip.get('distance'):.4f}) flips "
+                f"(token indel-edit rate {distance_str}) flips "
                 f"fixtures {flip.get('changed_fixtures')}"
             )
     lint = probe_result.get("static_lint") or {}
@@ -856,6 +923,8 @@ class _ControlCalibrationBackend:
         seed: int,
         cancel: threading.Event | None,
     ) -> Generation:
+        if cancel is not None and cancel.is_set():
+            return Generation((), "cancelled")
         prompt = self.decode(input_ids)
         if "exactly: OK" in prompt:
             text = "OK"
@@ -905,6 +974,8 @@ class SelfTestBackend:
         seed: int,
         cancel: threading.Event | None,
     ) -> Generation:
+        if cancel is not None and cancel.is_set():
+            return Generation((), "cancelled")
         prompt = self.decode(input_ids)
         text = ("BLUE" + chr(7)) if self._marker in prompt else ("WRONG" + chr(7))
         ids = self.encode(text)
@@ -1129,10 +1200,14 @@ def render_surface_noise_dashboard(report: dict[str, Any], prompt_text: str | No
         for flip in op.get("flips") or []:
             if type(flip) is not dict:
                 continue
+            distance = flip.get("distance")
+            distance_str = (
+                f"{distance:.4f}" if type(distance) in (int, float) else escape(str(distance))
+            )
             line = (
                 f"Operator {escape(name)}: variant "
                 f"{escape(str(flip.get('variant_id')))} "
-                f"(token indel-edit rate {flip.get('distance'):.4f}) flips "
+                f"(token indel-edit rate {distance_str}) flips "
                 f"fixtures {escape(str(flip.get('changed_fixtures')))}"
             )
             if show_excerpts and prompt_text is not None:
@@ -1169,7 +1244,8 @@ def render_surface_noise_dashboard(report: dict[str, Any], prompt_text: str | No
 
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
-        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">'
+        '<meta http-equiv="Content-Security-Policy"'
+        " content=\"default-src 'none'; style-src 'unsafe-inline'\">"
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<title>Surface-noise self-consistency probe</title>"
         "<style>"
@@ -1412,7 +1488,8 @@ def run_surface_noise(args: Any, parser: Any) -> int:
 
     probe: JSON goes to stdout and to <output>/probe.json, the human
     summary to stderr, dashboard.html alongside. Exit 0 when the sweep
-    completed, 2 when it was cancelled, 1 for invalid input.
+    completed, 2 when it was cancelled, 3 when the baseline was
+    unavailable (no score produced), 1 for invalid input.
     diff: JSON to stdout, summary to stderr, exit 0/1.
     protocol: descriptor JSON to stdout, exit 0.
     """
@@ -1452,15 +1529,27 @@ def run_surface_noise(args: Any, parser: Any) -> int:
         protocol = freeze_surface_noise_protocol(
             backend_fingerprint=backend.fingerprint, fixtures=fixtures
         )
-        report = probe_surface_noise(
-            prompt_text,
-            fixtures,
-            backend,
-            protocol,
-            boundary=args.boundary_ids,
-            max_new_tokens=args.max_new_tokens,
-            seed=args.seed,
-        )
+        import signal as _signal
+
+        cancel = threading.Event()
+        _previous_int = _signal.getsignal(_signal.SIGINT)
+        _previous_term = _signal.getsignal(_signal.SIGTERM)
+        _signal.signal(_signal.SIGINT, lambda _s, _f: cancel.set())
+        _signal.signal(_signal.SIGTERM, lambda _s, _f: cancel.set())
+        try:
+            report = probe_surface_noise(
+                prompt_text,
+                fixtures,
+                backend,
+                protocol,
+                boundary=args.boundary_ids,
+                max_new_tokens=args.max_new_tokens,
+                seed=args.seed,
+                cancel=cancel,
+            )
+        finally:
+            _signal.signal(_signal.SIGINT, _previous_int)
+            _signal.signal(_signal.SIGTERM, _previous_term)
     except ValueError as exc:
         print(f"surface-noise probe: {exc}", file=sys.stderr)
         return 1
@@ -1491,4 +1580,6 @@ def run_surface_noise(args: Any, parser: Any) -> int:
     )
     if status == "cancelled":
         return 2
+    if status == "unavailable":
+        return 3
     return 0

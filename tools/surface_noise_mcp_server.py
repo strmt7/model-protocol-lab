@@ -22,8 +22,7 @@ against one. Re-check before claiming conformance.
 Sweep bounds (FlitzZip pattern, POSIX enforcement): every sweep
 dimension is capped in the tool schema, one sweep runs at a time
 (threading lock), cancellation is cooperative between forwards with a
-fail-closed ``status: "cancelled"`` (never a partial score), and
-progress is reported in content blocks so agents do not retry blindly.
+fail-closed ``status: "cancelled"`` (never a partial score).
 
 Run from the repository root:
     python3 tools/surface_noise_mcp_server.py
@@ -181,7 +180,12 @@ def tool_probe(params: dict) -> dict:
     prompt = _parse_prompt(params.get("prompt"))
     fixtures = _parse_fixtures(params.get("fixtures"))
     boundary = _parse_boundary(params.get("boundary"))
-    backend = _build_backend(params.get("backend") or {"kind": "selftest"})
+    backend_spec = params.get("backend")
+    if backend_spec is None:
+        backend_spec = {"kind": "selftest"}
+    if type(backend_spec) is not dict:
+        raise ValueError("backend must be a dict or omitted")
+    backend = _build_backend(backend_spec)
     max_new_tokens = _parse_optional_int(
         params.get("max_new_tokens"), "max_new_tokens", 1, 4096, 64
     )

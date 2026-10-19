@@ -307,6 +307,35 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual([r["id"] for r in responses], [1, 2, 3])
         self.assertTrue(all("result" in r for r in responses))
 
+    def test_finding8_falsy_backend_rejected(self):
+        # "backend": [] (or "", 0, {}) must be -32602, not silent selftest.
+        for bad in ([], "", 0, {}):
+            responses = _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "probe_surface_noise_stability",
+                            "arguments": {
+                                "prompt": "x",
+                                "fixtures": [
+                                    {
+                                        "id": "t0",
+                                        "messages": [{"role": "user", "content": "x"}],
+                                        "expected": "BLUE",
+                                    }
+                                ],
+                                "boundary_ids": [7],
+                                "backend": bad,
+                            },
+                        },
+                    ),
+                ]
+            )
+            self.assertIn("error", responses[0], f"backend={bad!r} not rejected")
+            self.assertEqual(responses[0]["error"]["code"], -32602)
+
 
 if __name__ == "__main__":
     unittest.main()
