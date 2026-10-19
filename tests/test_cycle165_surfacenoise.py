@@ -457,17 +457,17 @@ class CancellationTests(unittest.TestCase):
         verdicts = sn.evaluate_prompt("x", fixtures, backend, boundary=(7,))
         self.assertEqual(verdicts, ("abstain",) * len(fixtures))
 
-    def test_pre_cancelled_event_is_unavailable(self):
-        # A pre-set event makes every fixture abstain at baseline, so the
-        # probe reports unavailable (fail-closed, no score) — the honest
-        # status when nothing could be evaluated.
+    def test_pre_cancelled_event_is_cancelled(self):
+        # A pre-set event is "cancelled" (Finding 9 fix) — not misattributed
+        # as "unavailable". Cancellation is distinguishable from backend failure.
         protocol, backend, fixtures = _protocol()
         cancel = threading.Event()
         cancel.set()
         report = sn.probe_surface_noise(
             "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel
         )
-        self.assertEqual(report["status"], "unavailable")
+        self.assertEqual(report["status"], "cancelled")
+        self.assertEqual(report["reason"], "cancelled_before_baseline")
         self.assertNotIn("operators", report)
 
     def test_mid_sweep_cancel(self):
@@ -490,9 +490,11 @@ class CancellationTests(unittest.TestCase):
                 return self.calls >= self.fire_at
 
         n = len(fixtures)
-        # is_set() calls: baseline 2n (evaluate_prompt genexpr + _evaluate_one
-        # per fixture), variant 1: top + 2n + post, then variant 2's top check.
-        fire_at = 2 * n + (1 + 2 * n + 1) + 1
+        # is_set() calls: pre-baseline check (Finding 9) + baseline 3n
+        # (evaluate_prompt genexpr + generate's cancel check + _evaluate_one
+        # post-generate check per fixture), variant 1: top + 3n + post,
+        # then variant 2's top check.
+        fire_at = 1 + 3 * n + (1 + 3 * n + 1) + 1
         cancel_event = CountingEvent(fire_at)
         report = sn.probe_surface_noise(
             "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel_event
@@ -911,10 +913,14 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
                 handle.write(mutated)
             # surfacenoise.perturbation_code_hash() reads perturbation.py
             # relative to __file__; the tempdir mutant needs it beside it.
+            # surfacenoise_code_hash() reads surfacenoise.py the same way.
             if module_name == "surfacenoise":
                 real_perturbation = Path(mod.__file__).with_name("perturbation.py")
                 with open(os.path.join(tmpdir, "perturbation.py"), "w", encoding="utf-8") as handle:
                     handle.write(real_perturbation.read_text(encoding="utf-8"))
+                real_scorer = Path(mod.__file__).with_name("surfacenoise.py")
+                with open(os.path.join(tmpdir, "surfacenoise.py"), "w", encoding="utf-8") as handle:
+                    handle.write(real_scorer.read_text(encoding="utf-8"))
             dotted = f"model_protocol_lab.{module_name}_mut_{name}"
             spec = importlib.util.spec_from_file_location(dotted, mod_path)
             assert spec is not None and spec.loader is not None
@@ -1287,12 +1293,125 @@ class CoverageGapTests(unittest.TestCase):
         protocol, backend, fixtures = _protocol()
         cancel = threading.Event()
         cancel.set()
-        # Pre-cancelled -> unavailable (exit 1), not cancelled; the exit-2
-        # path is the mid-sweep cancel, covered in CancellationTests.
+        # Pre-cancelled -> cancelled (Finding 9 fix); the exit-2 path is the
+        # mid-sweep cancel, covered in CancellationTests.
         report = sn.probe_surface_noise(
             "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel
         )
+        self.assertEqual(report["status"], "cancelled")
+
+
+class Wave5FixesTests(unittest.TestCase):
+    """Tests for wave-5 red-team findings (11 survivors + 1 downgraded)."""
+
+    def test_finding1_fixture_binding_rejected(self):
+        # Freeze with F1, probe with F2 -> ValueError (fail-closed).
+        protocol, backend, fixtures = _protocol()
+        other_fixtures = _fixtures(expected="WRONG")
+        with self.assertRaises(ValueError):
+            sn.probe_surface_noise("MAGICWORD", other_fixtures, backend, protocol, boundary=(7,))
+
+    def test_finding1_fixture_binding_accepted(self):
+        # Same fixtures -> OK.
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "ok")
+
+    def test_finding2_unevaluable_not_counted_stable(self):
+        # Backend that abstains on all variants: n_unevaluable > 0,
+        # stability is None (not 1.0), n_unchanged excludes unevaluable.
+        from model_protocol_lab.core import Generation
+
+        class AbstainOnVariantBackend(sn.SelfTestBackend):
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                prompt = self.decode(input_ids)
+                # Abstain if the prompt was perturbed (contains typo marker)
+                if "MAGICWORD" not in prompt:
+                    return Generation((), "cancelled")
+                return super().generate(
+                    input_ids,
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                    cancel=cancel,
+                )
+
+        protocol, _, fixtures = _protocol()
+        backend = AbstainOnVariantBackend()
+        protocol = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=backend.fingerprint, fixtures=fixtures
+        )
+        report = sn.probe_surface_noise("MAGICWORD", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(report["status"], "ok")
+        for name, op in report["operators"].items():
+            if op["n_effective"] > 0:
+                # All variants unevaluable -> stability None, not 1.0
+                self.assertIsNone(op["stability"], f"{name} stability should be None")
+                self.assertGreater(op["n_unevaluable"], 0)
+                self.assertEqual(op["n_unchanged"], 0)
+
+    def test_finding4_csp_allows_inline_style(self):
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD", fixtures, backend, protocol, boundary=(7,))
+        html = sn.render_surface_noise_dashboard(report)
+        self.assertIn("style-src 'unsafe-inline'", html)
+
+    def test_finding5_fixture_content_capped(self):
+        from model_protocol_lab.core import Fixture, Message
+
+        big_content = "x" * (sn.MAX_FIXTURE_MESSAGE_CHARS + 1)
+        fixtures = (
+            Fixture(
+                id="big",
+                messages=(Message(role="user", content=big_content),),
+                expected="BLUE",
+                group="t",
+            ),
+        )
+        with self.assertRaises(ValueError):
+            sn._check_fixtures(fixtures)
+
+    def test_finding6_unavailable_exit_3(self):
+        # Unavailable status -> exit 3 (not 0).
+
+        protocol, backend, fixtures = _protocol()
+
+        # Force unavailable by using a backend that fails to encode
+        class BadEncodeBackend(sn.SelfTestBackend):
+            @staticmethod
+            def encode(text):
+                raise RuntimeError("encode failed")
+
+        bad_backend = BadEncodeBackend()
+        bad_protocol = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=bad_backend.fingerprint, fixtures=fixtures
+        )
+        report = sn.probe_surface_noise("x", fixtures, bad_backend, bad_protocol, boundary=(7,))
         self.assertEqual(report["status"], "unavailable")
+
+    def test_finding7_scorer_hash_pinned(self):
+        protocol, _, _ = _protocol()
+        self.assertIn("surfacenoise_code_sha256", protocol)
+        self.assertEqual(protocol["surfacenoise_code_sha256"], sn.surfacenoise_code_hash())
+
+    def test_finding10_distance_guard_malformed(self):
+        # Malformed distance ("x") does not crash the dashboard.
+        protocol, backend, fixtures = _protocol()
+        report = sn.probe_surface_noise("MAGICWORD", fixtures, backend, protocol, boundary=(7,))
+        # Inject malformed flip
+        for op in report["operators"].values():
+            if op.get("nearest_observed_flip"):
+                op["nearest_observed_flip"]["distance"] = "x"
+        # Should not raise
+        html = sn.render_surface_noise_dashboard(report)
+        self.assertIn("x", html)
+
+    def test_finding11_selftest_honors_cancel(self):
+
+        backend = sn.SelfTestBackend()
+        cancel = threading.Event()
+        cancel.set()
+        gen = backend.generate((1, 2, 3), max_new_tokens=10, seed=0, cancel=cancel)
+        self.assertEqual(gen.reason, "cancelled")
 
 
 class CoverageGapTests3(unittest.TestCase):
