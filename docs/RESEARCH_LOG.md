@@ -7376,3 +7376,72 @@ baseline and scopes findings to the run's date; the probe reads
 only the `tokenizer_config.json`-embedded template string, so
 list-form templates and a separate `chat_template.jinja` file are
 reported `no_template`, never probed silently.
+
+## Cycle 183 — prompt repetition × template (`run --repeat`)
+
+Wave-7 rank 4 (research section 4). Leviathan, Kalman & Matias
+(arXiv:2512.14982) show prompt repetition improves non-reasoning
+LLMs on API models rendered with each provider's own chat template;
+their padding ablation shows random-token padding does not reproduce
+the effect. No surveyed harness ships a repetition arm, and none
+crosses repetition with hand-rendered foreign template families
+under an abstention rule on a local checkpoint with exact-token
+greedy scoring. The combination is the claim; the paper's "no
+latency increase" claim is explicitly NOT imported (this lab's
+decoder is full-prefix recompute with no KV cache, so a doubled
+prompt costs real compute, and the docs say so).
+
+Monday-morning utility: a practitioner about to ship a prompt that
+asks twice (or wondering whether to) learns, per candidate template
+on their own checkpoint, whether repeating the request inside the
+turn changes verdicts once prompt length is controlled — and
+whether the conservative winner survives repetition.
+
+Cross-check outcome (binding): red-team A returned DO NOT BUILD AS
+SPECIFIED — the R1 id-span invariant is false for ordinary
+tokenizers and its text-level fallback swallows the falsification;
+a prefill-shaped payload cannot express the headline pass-rate
+gain; the padding control is unsatisfiable as specified (frozen
+filler, exact token match, no sizing unit); the token-budget guard
+cites a precedent that does not exist; prefill's flip comparison
+imports a decision-vocabulary phantom flip. Red-team B upheld A in
+substance and amended the corrected design: the string-level
+oracle must be reconstructive, never search-and-replace; the x1
+arm reuses recorded observations but needs the raw records, not
+the healing helper's fused bools; pad sizing must handle delta
+<= 0, overshoot, and degenerate zero-filler matches, and
+pad-evaluability bias must be disclosed; the selection readout is
+withheld over mismatched completed sets (the scorer-lens
+discipline); cancellation must be threaded dispatch → wrapper →
+stage → evaluate (no existing `_run_*` wrapper threads it);
+a failed/cancelled search gates the stage to zero generations.
+The shipped design is A's section 11 as amended by B (gates
+G1–G22): last-user-message surgery pre-render, joiner frozen as
+"\n" (held constant across the headline x2-vs-pad contrast),
+per-(candidate, fixture) token-exact padding with a bounded
+rendered-length search, paired per-contrast denominators,
+`length_effect` / `repetition_effect` / joiner-inclusive
+`raw_gain`, think-channel grouping only, and per-fixture ground
+records the diff validator recomputes from.
+
+Build outcome (cycle 183, shipped): pure `repetition.py`
+(protocol v1 frozen as data with a SHA-256 fingerprint over the
+canonical table), `experiments.repetition_stage` /
+`repetition_analysis`, the `--repeat` wrapper with the G20 gate
+and end-to-end cancel threading, a reporting section, and a
+full-recompute diff validator (`diff_repetition`). Two
+corrections were earned during the build, both by execution
+rather than review. First, red-team B's annotation that "the
+cat sat. the cat sat." escapes detector v1 is wrong: the string
+decomposes as t + " " + t with t = "the cat sat." (the period
+belongs to the repeated half), which clause (i) admits — the
+frozen definition governs, the design doc states the corrected
+example, and the detector's real limitation is near-repeats
+that differ inside a copy. Second, the first stage draft
+screened the filler unit with `fixtures._extract_special_tokens`,
+which takes a Format, not text; the cycle-67 differential fuzz
+caught the resulting ValueError before any push, and the screen
+now runs the fixture audit against the candidate formats'
+inventories, as designed. The shipped filler is clean against
+the shipped catalog, so that branch is proven with a stubbed
+hostile unit rather than left as decoration.

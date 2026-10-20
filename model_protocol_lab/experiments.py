@@ -6267,6 +6267,419 @@ def _aliasing_flag(
     return False, "boundaries_differ_within_passing_set", []
 
 
+def repetition_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    search_entries: Any,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Prompt-repetition stage (cycle 183): x2 and pad arms per candidate.
+
+    The x1 arm is the recorded native search (reused, never
+    regenerated — the healing precedent, but extracted from the raw
+    observations because the ground records need ``boundary_found``,
+    ``boundary_text_match`` and token counts separately, which the
+    fused native-outcomes helper discards). The treated arms rewrite
+    the last user message's content before render and are evaluated
+    per fixture, so one overlong fixture degrades alone instead of
+    destroying the candidate's whole cell. Cancellation is honoured
+    between fixtures; a cancelled stage returns no partial aggregates.
+    Design: docs/REPETITION_DESIGN.md.
+    """
+    from . import repetition as _rep
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    protocol = _rep.protocol_block([case.id for case in cases], str(backend.fingerprint))
+    if len(formats) * len(cases) > _rep.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "repetition_cell_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    if audit_special_token_literals(_rep.FILLER_UNIT, formats):
+        # The filler ships clean against the shipped catalog; a
+        # candidate whose framing inventory collides with it would
+        # make every pad arm carry a special-token literal, so the
+        # stage fails closed instead of measuring a forged boundary.
+        return {
+            "available": False,
+            "detail": "filler_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    entries: dict[str, Any] = {}
+    if type(search_entries) is list:
+        for entry in search_entries:
+            if type(entry) is not dict:
+                continue
+            fmt_dict = entry.get("format")
+            name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+            if type(name) is str and name:
+                entries[name] = entry
+    expected_by_fixture = {case.id: case.expected for case in cases}
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    screened_fixtures, screened_candidates = _rep.screen_filler(expected_by_fixture, boundary_text)
+    unit_estimate = max(1, len(backend.encode(_rep.FILLER_UNIT)))
+    marker = "\x00mplrep\x00"
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        entry = entries.get(name)
+        summary = entry.get("summary") if type(entry) is dict else None
+        observations = entry.get("observations") if type(entry) is dict else None
+        if (
+            type(entry) is not dict
+            or type(observations) is not list
+            or not observations
+            or (type(summary) is dict and summary.get("aggregate_eligible") is False)
+        ):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "think_channel": opens_think_channel(fmt),
+                "render_signature": None,
+                "records": [],
+            }
+            continue
+        obs_by_fixture: dict[str, Any] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict or type(obs.get("fixture")) is not str:
+                usable = False
+                break
+            obs_by_fixture[obs["fixture"]] = obs
+        if not usable or any(case.id not in obs_by_fixture for case in cases):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "think_channel": opens_think_channel(fmt),
+                "render_signature": None,
+                "records": [],
+            }
+            continue
+        signature = sha256(
+            json.dumps([list(obs_by_fixture[case.id]["input_ids"]) for case in cases]).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        records: list[dict[str, Any]] = []
+        for case in cases:
+            if _cancelled():
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+            obs = obs_by_fixture[case.id]
+            ids_x1 = tuple(obs["input_ids"])
+            x1_cell = {
+                "verdict": bool(obs["exact_match"] and obs["boundary_found"]),
+                "boundary_found": bool(obs["boundary_found"]),
+                "boundary_text_match": obs["boundary_text_match"],
+                "input_tokens": len(ids_x1),
+            }
+            content = _rep.target_content(case)
+            vacuous = _rep.is_vacuous(content)
+            record: dict[str, Any] = {
+                "fixture": case.id,
+                "vacuous": vacuous,
+                "pre_repeated": _rep.detect_pre_repeated(content),
+                "echo_fixture": _rep.is_echo_fixture(case),
+                "construction": "vacuous" if vacuous else "text_level",
+                "seam_ids": [],
+                "delta_tokens": None,
+                "filler_tokens": None,
+                "pad_evaluable": False,
+                "arms": {"x1": x1_cell, "x2": None, "pad": None},
+                "arm_details": {"x2": "", "pad": ""},
+            }
+            records.append(record)
+            if vacuous:
+                record["arm_details"] = {"x2": "vacuous", "pad": "vacuous"}
+                continue
+            # Construction affixes: render the fixture with the target
+            # content replaced by a marker and split — Format.render is
+            # pure concatenation, so the render is prefix+marker+suffix.
+            prefix_ids: tuple[int, ...] | None = None
+            suffix_ids: tuple[int, ...] | None = None
+            joiner_region: tuple[int, ...] | None = None
+            if marker not in content:
+                marker_fixture = _fixture_with_content(case, marker)
+                rendered_marker = fmt.render(marker_fixture.messages)
+                if rendered_marker.count(marker) == 1:
+                    head, tail = rendered_marker.split(marker)
+                    prefix_ids = backend.encode(head)
+                    suffix_ids = backend.encode(tail)
+                    joiner_fixture = _fixture_with_content(case, _rep.JOINER)
+                    joiner_ids = backend.encode(fmt.render(joiner_fixture.messages))
+                    joiner_region = _rep.content_region(joiner_ids, prefix_ids, suffix_ids)
+            x2_fixture = _rep.build_arm_fixture(case, "x2")
+            ids_x2 = backend.encode(fmt.render(x2_fixture.messages))
+            record["delta_tokens"] = len(ids_x2) - len(ids_x1)
+            region_x1 = (
+                _rep.content_region(ids_x1, prefix_ids, suffix_ids)
+                if prefix_ids is not None and suffix_ids is not None
+                else None
+            )
+            region_x2 = (
+                _rep.content_region(ids_x2, prefix_ids, suffix_ids)
+                if prefix_ids is not None and suffix_ids is not None
+                else None
+            )
+            construction, seam = _rep.classify_construction(region_x1, region_x2, joiner_region)
+            record["construction"] = construction
+            record["seam_ids"] = list(seam)
+            # Pad sizing: exact rendered-length match, bounded search.
+            pad_fixture: Any = None
+            empty_pad_ids = backend.encode(
+                fmt.render(_rep.build_arm_fixture(case, "pad", "").messages)
+            )
+            if name in screened_candidates or case.id in screened_fixtures:
+                record["arm_details"]["pad"] = "pad_screened"
+            elif len(empty_pad_ids) > len(ids_x2):
+                record["arm_details"]["pad"] = "pad_unmatchable"
+            else:
+                for reps, cut in _rep.filler_search_order(
+                    unit_estimate, int(record["delta_tokens"])
+                ):
+                    text = _rep.filler_text(reps, cut)
+                    candidate_fixture = _rep.build_arm_fixture(case, "pad", text)
+                    ids_pad = backend.encode(fmt.render(candidate_fixture.messages))
+                    if len(ids_pad) == len(ids_x2):
+                        filler_tokens = len(ids_pad) - len(empty_pad_ids)
+                        if filler_tokens > 0:
+                            pad_fixture = candidate_fixture
+                            record["filler_tokens"] = filler_tokens
+                            record["pad_evaluable"] = True
+                            break
+                        # A zero-filler match is a degenerate pad (a
+                        # whitespace variant, not a filler control):
+                        # keep searching for a positive-filler match.
+                if pad_fixture is None and record["arm_details"]["pad"] == "":
+                    record["arm_details"]["pad"] = "pad_unmatchable"
+            # Generation, per arm, with the backend's own inequality.
+            for arm, arm_fixture in (("x2", x2_fixture), ("pad", pad_fixture)):
+                if arm_fixture is None:
+                    continue
+                ids_arm = (
+                    ids_x2 if arm == "x2" else backend.encode(fmt.render(arm_fixture.messages))
+                )
+                if len(ids_arm) + max_new_tokens > max_context:
+                    record["arm_details"][arm] = "arm_context_exceeded"
+                    continue
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                report = evaluate(
+                    backend,
+                    fmt,
+                    (arm_fixture,),
+                    boundary=boundaries[name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                    cancel=cancel,
+                )
+                if report.aggregate_eligible and report.observations:
+                    arm_obs = report.observations[0]
+                    record["arms"][arm] = {
+                        "verdict": bool(arm_obs.exact_match and arm_obs.boundary_found),
+                        "boundary_found": bool(arm_obs.boundary_found),
+                        "boundary_text_match": arm_obs.boundary_text_match,
+                        "input_tokens": len(arm_obs.input_ids),
+                    }
+                else:
+                    record["arm_details"][arm] = "arm_evaluation_failed"
+        candidates[name] = {
+            "status": "available",
+            "detail": "",
+            "think_channel": opens_think_channel(fmt),
+            "render_signature": signature,
+            "records": records,
+        }
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def _fixture_with_content(fixture: Any, content: str) -> Any:
+    """A copy of ``fixture`` whose target message carries ``content``."""
+    from . import repetition as _rep
+    from .core import Fixture, Message
+
+    index = _rep.target_index(fixture)
+    messages = tuple(
+        Message(role=m.role, content=content if i == index else m.content)
+        for i, m in enumerate(fixture.messages)
+    )
+    return Fixture(id=fixture.id, messages=messages, expected=fixture.expected, group=fixture.group)
+
+
+def repetition_analysis(
+    stage: dict[str, Any],
+    primary_decision: Any,
+    primary_winner: Any,
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a repetition stage into the stored payload (cycle 183).
+
+    Per-arm winners follow the conservative rule over each arm's
+    completed, non-vacuous fixtures — and are *withheld* whenever any
+    candidate is unavailable for the arm or the completed sets differ
+    across candidates (the scorer-lens withholding discipline): a
+    flip the denominators cannot explain is not published. The x1 arm
+    never reports a flip (it is the recorded native run by
+    construction).
+    """
+    from . import repetition as _rep
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "repetition_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped_primary = ("selected", primary_winner)
+    else:
+        mapped_primary = (primary_decision, primary_winner)
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "think_channel": entry["think_channel"],
+                "render_signature": None,
+                "records": [],
+            }
+            continue
+        aggregates = _rep.aggregate_candidate(entry["records"])
+        aggregates.update(
+            {
+                "status": "available",
+                "detail": "",
+                "think_channel": entry["think_channel"],
+                "render_signature": entry["render_signature"],
+                "records": entry["records"],
+            }
+        )
+        candidates_out[name] = aggregates
+    arms_out: dict[str, Any] = {}
+    for arm in _rep.ARMS:
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for name in candidate_names:
+            entry = stage_candidates[name]
+            if entry["status"] != "available":
+                withheld = True
+                all_pass[name] = None
+                continue
+            all_pass[name] = _rep.arm_all_pass(entry["records"], arm)
+            completed_sets.append(
+                frozenset(
+                    r["fixture"]
+                    for r in entry["records"]
+                    if not r["vacuous"] and r["arms"][arm] is not None
+                )
+            )
+            if all_pass[name] is None:
+                withheld = True
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            arms_out[arm] = {
+                "decision": "unavailable",
+                "winner": None,
+                "withheld": True,
+                "detail": "selection_withheld_mismatched_sets",
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidate_names if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        flip: bool | None = None
+        if arm != "x1":
+            flip = (decision, winner) != mapped_primary
+        arms_out[arm] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": flip,
+        }
+    think_groups: dict[str, Any] = {}
+    for label, key in ((True, "think"), (False, "no_think")):
+        effects: list[tuple[str, float, str | None]] = []
+        for name in candidate_names:
+            entry = candidates_out[name]
+            if entry["status"] != "available" or entry["think_channel"] is not label:
+                continue
+            effect = entry["contrasts"]["x2_vs_pad"]["repetition_effect"]
+            if effect is not None:
+                effects.append((name, float(effect), entry["render_signature"]))
+        dedup: dict[str, float] = {}
+        for cand_name, effect, signature in sorted(effects):
+            dedup.setdefault(signature or cand_name, effect)
+        think_groups[key] = {
+            "n_candidates": len(effects),
+            "n_distinct_renders": len(dedup),
+            "mean_repetition_effect": (
+                sum(e for _n, e, _s in effects) / len(effects) if effects else None
+            ),
+            "mean_repetition_effect_dedup": (sum(dedup.values()) / len(dedup) if dedup else None),
+        }
+    signatures = {
+        candidates_out[name]["render_signature"]
+        for name in candidate_names
+        if candidates_out[name]["status"] == "available"
+    }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "primary_decision": primary_decision,
+        "primary_winner": primary_winner,
+        "candidates": candidates_out,
+        "arms": arms_out,
+        "think_groups": think_groups,
+        "n_candidates": len(candidate_names),
+        "n_distinct_renders": len(signatures),
+    }
+
+
 def cache_profile_stage(
     *,
     observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],

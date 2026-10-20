@@ -437,6 +437,24 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--repeat",
+        action="store_true",
+        help="Prompt-repetition probe (cycle 183, research wave-7 "
+        "rank 4): each search fixture's last user message is repeated "
+        "verbatim inside the same turn (x2 arm) and compared against "
+        "the recorded native run (x1) and a token-length-matched "
+        "padding control (pad arm, frozen neutral filler), with the "
+        "conservative selection re-applied per arm and per-candidate "
+        "repetition effects reported over paired denominators. "
+        "Monday morning: 'does repeating the request actually help "
+        "my checkpoint -- and does the answer depend on which chat "
+        "template carries the duplicate?' Costs 2 extra generations "
+        "per candidate per fixture (4,800 at the legal maximum); "
+        "doubled prompts cost real compute in this lab (full-prefix "
+        "recompute, no KV cache). Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1284,6 +1302,67 @@ def _run_aliasing_probe(result: Any) -> None:
         result["aliasing"] = {
             "available": False,
             "detail": "aliasing_unavailable",
+        }
+
+
+def _run_repeat_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the prompt-repetition probe; never raises.
+
+    The x1 arm is the recorded native search, so a failed, cancelled,
+    or truncated search gates the probe to zero generations (the
+    treated arms would have nothing sound to compare against). The
+    run's cancel event is threaded dispatch -> wrapper -> stage ->
+    evaluate, so SIGINT/SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import repetition_analysis, repetition_stage
+
+        search = result.get("search")
+        names = tuple(fmt.name for fmt in formats)
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["repetition"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        stage = repetition_stage(
+            backend,
+            formats,
+            cases,
+            search,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["repetition"] = repetition_analysis(
+            stage,
+            result.get("decision"),
+            result.get("selected_candidate"),
+            names,
+        )
+    except Exception:  # noqa: BLE001 -- repetition must not fail the run
+        result["repetition"] = {
+            "available": False,
+            "detail": "repetition_unavailable",
         }
 
 
@@ -2654,6 +2733,25 @@ def main(argv: list[str] | None = None) -> int:
                 # changes selection. Never fails the run.
                 if args.aliasing:
                     _run_aliasing_probe(result)
+                # Prompt-repetition probe (cycle 183, research wave-7
+                # rank 4): x2 / pad generation arms against the
+                # recorded native run, per-fixture degradation, the
+                # run's cancel event threaded into the stage.
+                # Informational only -- never changes selection.
+                # Never fails the run.
+                if args.repeat:
+                    _run_repeat_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
                 # Prefix-cache sharability profile (cycle 168, research
                 # wave-6 idea 2): per-family exact-prefix sharability of
                 # the recorded input_ids, post-hoc over the main run's

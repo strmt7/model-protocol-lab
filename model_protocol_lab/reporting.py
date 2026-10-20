@@ -5585,6 +5585,160 @@ def _aliasing_section(result: dict[str, Any]) -> str:
     )
 
 
+def _repetition_section(result: dict[str, Any]) -> str:
+    """Prompt-repetition probe: x2 vs recorded native vs padding control.
+
+    Renders the ``repetition`` payload (see
+    experiments.repetition_analysis): per candidate, the repetition
+    effect (x2 pass rate minus pad pass rate over paired fixtures)
+    with its paired denominator and pad-evaluable share beside it —
+    never a bare effect — plus the length effect and the
+    joiner-inclusive raw gain, and the per-arm selection readout.
+    A withheld arm comparison leads the section: a flip computed
+    over mismatched completed sets is not published, and the reader
+    must see that before any number. Every interpolation is escaped
+    at this boundary.
+    """
+    probe: Any = result.get("repetition")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):+.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    arms = probe.get("arms")
+    withheld_arms = []
+    arm_lines = []
+    if type(arms) is dict:
+        for arm in ("x2", "pad"):
+            entry = arms.get(arm)
+            if type(entry) is not dict:
+                continue
+            if entry.get("withheld") is True:
+                withheld_arms.append(arm)
+                continue
+            winner = entry.get("winner")
+            flip = entry.get("flip")
+            arm_lines.append(
+                "<li>"
+                + escape(arm)
+                + " arm: "
+                + escape(str(entry.get("decision")))
+                + (
+                    " · winner " + '<span class="mono">' + escape(winner) + "</span>"
+                    if type(winner) is str and winner
+                    else ""
+                )
+                + (
+                    " · <strong>selection flip</strong> against the recorded run"
+                    if flip is True
+                    else " · no selection flip"
+                    if flip is False
+                    else ""
+                )
+                + "</li>"
+            )
+    withheld_block = ""
+    if withheld_arms:
+        withheld_block = (
+            "<p><strong>Selection comparison withheld for "
+            + ", ".join(escape(a) for a in withheld_arms)
+            + ":</strong> candidates did not all complete the same "
+            "fixture set under that arm, so no winner or flip is "
+            "reported for it — a flip the denominators cannot explain "
+            "would be a phantom.</p>"
+        )
+    rows = []
+    for name in sorted(candidates):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        label = '<span class="mono">' + escape(name) + "</span>"
+        if entry.get("status") != "available":
+            rows.append(
+                "<tr><td>"
+                + label
+                + '</td><td colspan="4">unavailable ('
+                + escape(str(entry.get("detail", "")).replace("_", " "))
+                + ")</td></tr>"
+            )
+            continue
+        contrasts = entry.get("contrasts")
+        headline = contrasts.get("x2_vs_pad") if type(contrasts) is dict else None
+        length = contrasts.get("pad_vs_x1") if type(contrasts) is dict else None
+        raw = contrasts.get("x2_vs_x1") if type(contrasts) is dict else None
+        rows.append(
+            "<tr><td>"
+            + label
+            + "</td><td>"
+            + (_rate(headline.get("repetition_effect")) if type(headline) is dict else "n/a")
+            + " (n="
+            + (_count(headline.get("n_paired")) if type(headline) is dict else "n/a")
+            + ", pad-evaluable "
+            + _rate(entry.get("pad_evaluable_share"))
+            + ")</td><td>"
+            + (_rate(length.get("length_effect")) if type(length) is dict else "n/a")
+            + "</td><td>"
+            + (_rate(raw.get("raw_gain")) if type(raw) is dict else "n/a")
+            + "</td><td>"
+            + _count(entry.get("n_pre_repeated"))
+            + " pre-repeated, "
+            + _count(entry.get("n_vacuous"))
+            + " vacuous</td></tr>"
+        )
+    groups = probe.get("think_groups")
+    group_line = ""
+    if type(groups) is dict:
+        parts = []
+        for key, label in (("think", "think-channel"), ("no_think", "no think channel")):
+            group = groups.get(key)
+            if type(group) is dict and group.get("mean_repetition_effect") is not None:
+                parts.append(
+                    label
+                    + ": "
+                    + _rate(group.get("mean_repetition_effect"))
+                    + " over "
+                    + _count(group.get("n_candidates"))
+                    + " candidates ("
+                    + _count(group.get("n_distinct_renders"))
+                    + " distinct renders)"
+                )
+        if parts:
+            group_line = "<p>Repetition effect by group — " + "; ".join(parts) + ".</p>"
+    return (
+        '<section class="card" id="repetition">'
+        "<h2>Prompt repetition</h2>"
+        "<p>Does repeating the request inside the turn change the "
+        "verdict? Each fixture's last user message was repeated "
+        "verbatim (x2) and, as a control, followed by token-length-"
+        "matched neutral filler (pad); the x1 arm is the recorded "
+        "run itself. The headline contrast is x2 minus pad: at equal "
+        "total prompt length, a difference is not explained by "
+        "length alone — content position and repetition-specific "
+        "attention are not separated by this design. The raw gain "
+        "(x2 minus x1) additionally includes the effect of the "
+        "joiner itself. Doubled prompts cost real compute here "
+        "(full-prefix recompute, no KV cache).</p>"
+        + withheld_block
+        + ("<ul>" + "".join(arm_lines) + "</ul>" if arm_lines else "")
+        + "<table><thead><tr><th>Candidate</th><th>Repetition effect "
+        "(x2 − pad)</th><th>Length effect (pad − x1)</th><th>Raw gain "
+        "(x2 − x1)</th><th>Fixtures</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + group_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -6905,6 +7059,7 @@ def render_html(result: dict[str, Any]) -> str:
     refusals_html = _refusals_section(result)
     scorerlens_html = _scorerlens_section(result)
     aliasing_html = _aliasing_section(result)
+    repetition_html = _repetition_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7029,6 +7184,11 @@ def render_html(result: dict[str, Any]) -> str:
                 aliasing_html,
             ),
             (
+                "repetition",
+                "Prompt repetition",
+                repetition_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -7114,6 +7274,7 @@ def render_html(result: dict[str, Any]) -> str:
         + refusals_html
         + scorerlens_html
         + aliasing_html
+        + repetition_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

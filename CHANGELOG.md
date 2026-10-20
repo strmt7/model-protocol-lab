@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 183 — prompt repetition × template, 2026-10-20)
+
+- `model-protocol-lab run --repeat`: repetition probe crossing
+  prompt repetition with the candidate templates (wave-7 rank
+  4, arXiv:2512.14982). Per search fixture, the last user
+  message is repeated verbatim inside the same turn (x2)
+  against a token-length-matched filler control (pad) and the
+  recorded native run (x1, reused — the baseline costs no
+  generations). The headline repetition effect is x2 minus pad
+  at identical prompt length; pairs that cannot be matched
+  exactly leave the denominator, with the pad-evaluable share
+  and delta sign counts disclosed per candidate. Per-fixture
+  degradation (context budget, screening, evaluation failure),
+  a frozen pre-repetition detector with an excluding-flagged
+  subpopulation readout, per-arm winner re-derivation with the
+  selection readout withheld over mismatched completed sets,
+  and a full-recompute `diff-reports` validator. The run's
+  cancel event is threaded dispatch → wrapper → stage →
+  evaluate (the first `_run_*` probe to thread it end-to-end),
+  and a failed or cancelled native search gates the probe to
+  zero generations. Doubled prompts cost real compute under
+  this lab's full-prefix decoder; no latency claim is imported
+  from the paper. Design: `docs/REPETITION_DESIGN.md`; the
+  design survived a red-team pair cross-check that rejected
+  the research sketch's construction invariant, payload shape,
+  and padding control before any code was written.
+
 ### Added (cycle 182 — behavioural template probe, 2026-10-20)
 
 - `model-protocol-lab doctor --template-probe`: behavioural probe
