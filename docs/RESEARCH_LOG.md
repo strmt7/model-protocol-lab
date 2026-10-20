@@ -6749,3 +6749,99 @@ checkpoint (fresh `LocalHFBackend` instance, certificate issued).
 Three tempdir mutation gates (comparison off-by-one, fingerprint
 gate removal, length-invariant removal) each proven killed by a
 named test and non-vacuous against the shipped module. 6681 tests.
+
+## Cycle 174 (2026-10-20) -- refusal-rate probe (`run --refusals`)
+
+### Uniqueness pass (researcher, accessed 2026-10-20)
+
+Question: does any shipped harness measure refusal rate with the
+chat-template *rendering* as the independent variable -- role
+delimiters, special tokens, BOS, generation prompt -- while the
+conversation content is held fixed, post-hoc over ordinary
+capability fixtures, with a frozen published detector? Surveyed:
+XSTest (arXiv:2308.01263; varies models and system-prompt *content*
+-- the Llama-2 safe-prompt result, full refusal 38% -> 14% on
+removal, is a content effect, not a rendering effect), OR-Bench
+(arXiv:2405.20947; varies models, removes system prompts entirely
+as a confound), HarmBench (arXiv:2402.04249; a fine-tuned Llama-2
+13B classifier, no string list), StrongREJECT (arXiv:2402.07877;
+ranks string matching its worst evaluator, bias 0.484), garak
+(detectors for harmful-content compliance -- the inverted problem,
+and its ~188-phrase lists are FP-heavy by design), lm-eval /
+HELM / inspect_evals (no template-conditioned refusal
+measurement). Two informal blog posts show chat format gating
+refusal of *harmful* prompts (n=5, harmful set, no code). The docs
+therefore never claim "first to show format affects refusal"; the
+combination -- rendering as IV with content fixed by construction,
+zero extra model calls over capability fixtures, frozen opener
+list, suspected x passed cross-tab -- is the scoped claim, and the
+XSTest content-variation concession is stated in USAGE 8.36 and in
+the detector docstring.
+
+Detector evidence, carried into the docs because it bounds what
+the numbers can mean: XSTest Table 2 -- its own string matching
+over-counts GPT-4 safe-prompt refusals by +4.8 points (the
+canonical false positive is an empathy opener: "I'm sorry to hear
+about your hamster") and under-counts Mistral's by ~29 points; the
+error's sign is model-dependent and no published precision/recall
+transfers to this lab's fixture distribution. Hence the
+*suspected-* naming everywhere, counts with every rate, and the
+cross-tab's honest job: separating decision-relevant suspected
+failures from echo-fixture artifacts, not estimating precision.
+
+### Design decisions (post red-team)
+
+Four-specialist round (researcher, verifier, red-team A, red-team
+B disproving A); briefs in `~/workspace/agents_out/cycle174/`. Of
+A's 12 findings, B downgraded seven (F2's "measurement flaw" to
+LOW -- the retained answer is the unit every answer-level analysis
+in the lab measures; F3 confirmed in fact, reframed as a
+guard-cell semantics fix), confirmed F1/F4/F5/F11/F12 in whole or
+part, and added four findings of its own (B1-B4), two of which
+changed the build:
+
+1. **No answer text in the payload** (F1 CRITICAL vs the first
+   draft, independently found by the verifier). The wave-6 brief
+   asked for "verbatim evidence quoted"; a top-level payload is
+   never scrubbed by `reporting._public_view`, so excerpts would
+   have leaked recorded answers into the public results.json.
+   Deviation recorded: hits are fixture id + matched opener +
+   passed -- a pointer to the evidence, not a copy. B1 then struck
+   the leftover "verbatim evidence" phrasing from the draft's
+   utility sentence and the uniqueness element.
+2. **"no," and "no." dropped from the frozen list** (B2, with a
+   live repro). XSTest Appendix D's two shortest items fire on
+   correct short yes/no answers ("No." is a complete correct
+   answer on this lab's fixture style). The list ships as the
+   XSTest core minus those two items, plus itemised OR-Bench
+   Appendix M and GCG-lineage supplements (30 openers), with the
+   deviation and its reason in the detector docstring. Reality
+   over verbatim fidelity; the digest in every result's method
+   block makes any future list change a visible protocol drift.
+3. **Rate gating, not just a flag** (F4, B strengthening A). The
+   interrupted candidate's rate is withheld (None with
+   `candidate_not_eligible`) per the `_summary` precedent, and
+   `evaluable_mismatch` flags differing completed fixture sets.
+   B proved the mismatch is confined to the single interrupted
+   candidate (a completed evaluation loop visits identical sets).
+4. **No invented normalisation** (F5). A proposed leading
+   markdown/quote strip was dropped: B's repro showed it newly
+   firing on quoted copy-task answers and markdown-heading hedges.
+   The frozen recipe is NFKC, Cf-strip, casefold, apostrophe fold,
+   whitespace collapse -- markdown-led refusals are a documented
+   miss, the same trade XSTest makes.
+5. **Entries, not flat observations** (B fresh-eyes). The profile
+   assembles over search entries (stop-cause/portfolio input
+   discipline): eligibility and candidate identity live on the
+   entry, and a flat observation list cannot carry them.
+
+Pre-registered claims G1-G6 (module docstring + test file): exact
+oracle rates, cross-tab semantics as reframed in (the original G2
+was wrong -- under byte-exact matching a hedged failure is
+indistinguishable from a refusal at this tier, which is precisely
+why the rate is "suspected"), beginning-anchoring, normalisation
+coverage, absence without the flag, fail-closed hostility. All
+hold on the shipped tree. Three tempdir mutation gates (anchoring,
+longest-match attribution, rate gating) each proven killed by a
+named test. `model_protocol_lab/refusals.py` (45th source file)
+at 100% line+branch under scoped coverage. 6736 tests.

@@ -5048,6 +5048,148 @@ def _verbosity_section(result: dict[str, Any]) -> str:
     )
 
 
+def _refusals_section(result: dict[str, Any]) -> str:
+    """Suspected-refusal profile per candidate template.
+
+    Renders the ``refusals`` payload (see experiments.refusal_profile)
+    as a per-candidate table of suspected-refusal rates on benign
+    search fixtures: recorded answers classified against the frozen
+    refusal-opener list (see :mod:`refusals`). Rates travel with
+    their exact counts (k of n) -- a rate on a small denominator is
+    never a bare headline. The rates are named *suspected*: the
+    detector is beginning-anchored string matching, the field's
+    known-weak baseline, and a hedged answer that fails its fixture
+    is indistinguishable from a true refusal at this tier. Hits name
+    the fixture and the opener that fired; the answer text itself is
+    never rendered here (it lives in the evidence-bearing results,
+    keyed by fixture). Every interpolation is escaped at this
+    boundary.
+    """
+    audit: Any = result.get("refusals")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    candidates = audit.get("candidates")
+    if type(candidates) is not list:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.0%}"
+        return "n/a"
+
+    rows = []
+    hit_items = []
+    unavailable_names = []
+    for entry in candidates:
+        if type(entry) is not dict:
+            continue
+        name = entry.get("candidate")
+        label = escape(str(name)) if type(name) is str and name else "unknown"
+        if not entry.get("available"):
+            unavailable_names.append(label)
+            continue
+        rate_text = _rate(entry.get("suspected_rate"))
+        note = entry.get("rate_note")
+        if type(note) is str and note:
+            rate_text += " (" + escape(note.replace("_", " ")) + ")"
+        rows.append(
+            '<tr><td><span class="mono">'
+            + label
+            + "</span></td><td>"
+            + escape(str(entry.get("n_completed")))
+            + "</td><td>"
+            + escape(str(entry.get("n_boundary_found")))
+            + "</td><td>"
+            + escape(str(entry.get("n_suspected")))
+            + " — "
+            + rate_text
+            + "</td><td>"
+            + escape(str(entry.get("n_suspected_passed")))
+            + "</td><td>"
+            + escape(str(entry.get("n_suspected_failed")))
+            + "</td></tr>"
+        )
+        hits = entry.get("hits")
+        if type(hits) is list:
+            for hit in hits:
+                if type(hit) is not dict:
+                    continue
+                fixture = hit.get("fixture")
+                opener = hit.get("opener")
+                hit_items.append(
+                    "<li>"
+                    + '<span class="mono">'
+                    + label
+                    + "</span> · fixture "
+                    + '<span class="mono">'
+                    + (escape(fixture) if type(fixture) is str else "unknown")
+                    + "</span> · opener "
+                    + '<span class="mono">'
+                    + (escape(opener) if type(opener) is str else "unknown")
+                    + "</span> · "
+                    + ("passed" if hit.get("passed") is True else "failed")
+                    + "</li>"
+                )
+    mismatch_line = ""
+    if audit.get("evaluable_mismatch") is True:
+        mismatch_line = (
+            "<p><strong>Caution:</strong> candidates were not all "
+            "measured on the same completed fixture set (an interrupted "
+            "candidate is measured on a prefix); compare rates across "
+            "candidates with care.</p>"
+        )
+    hits_block = ""
+    if hit_items:
+        hits_block = (
+            "<p>Suspected-refusal hits (the recorded answer for each "
+            "fixture is in the evidence-bearing results file):</p><ul>"
+            + "".join(hit_items)
+            + "</ul>"
+        )
+    unavailable_line = ""
+    if unavailable_names:
+        unavailable_line = (
+            "<p>Candidates with no usable recorded observations: "
+            + ", ".join('<span class="mono">' + name + "</span>" for name in unavailable_names)
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="refusals">'
+        "<h2>Suspected-refusal profile</h2>"
+        "<p>Does the <em>template</em> -- not the model -- change how "
+        "often the checkpoint refuses benign questions? Each "
+        "candidate's recorded search answers are classified against a "
+        "frozen, published refusal-opener list (beginning-anchored, "
+        "after normalisation). A hit is a <strong>suspected</strong> "
+        "refusal: string matching both over-counts (empathy openers) "
+        "and under-counts (refusals that open differently), and no "
+        "published accuracy figure transfers to this fixture set. "
+        "Suspected-and-passed hits are detector artifacts on "
+        "echo-style fixtures whose expected answer itself opens with "
+        "an opener; suspected-and-failed hits are the "
+        "decision-relevant cell. Informational only -- this profile "
+        "never affects selection.</p>"
+        + mismatch_line
+        + (
+            '<div class="table-wrap"><table>'
+            "<caption>Suspected refusals per candidate (completed "
+            "search observations).</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Completed</th>'
+            '<th scope="col">Boundary found</th>'
+            '<th scope="col">Suspected (count — rate)</th>'
+            '<th scope="col">Suspected &amp; passed</th>'
+            '<th scope="col">Suspected &amp; failed</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + hits_block
+        + unavailable_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -6365,6 +6507,7 @@ def render_html(result: dict[str, Any]) -> str:
     faketurn_html = _faketurn_section(result)
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
+    refusals_html = _refusals_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -6474,6 +6617,11 @@ def render_html(result: dict[str, Any]) -> str:
                 verbosity_html,
             ),
             (
+                "refusals",
+                "Suspected-refusal profile",
+                refusals_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -6556,6 +6704,7 @@ def render_html(result: dict[str, Any]) -> str:
         + faketurn_html
         + toolcall_html
         + verbosity_html
+        + refusals_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

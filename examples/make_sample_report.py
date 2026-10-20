@@ -1321,6 +1321,20 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "verbosity_unavailable",
         }
+    # Suspected-refusal profile (cycle 174, research wave-6 idea 6):
+    # classify the main run's recorded search answers against the
+    # frozen refusal-opener list -- post-hoc, zero extra model calls.
+    # The scripted sample backend's answers contain no refusal
+    # openers, so the committed sample shows genuine zero rates.
+    try:
+        from model_protocol_lab.experiments import refusal_profile
+
+        result["refusals"] = refusal_profile(result)
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["refusals"] = {
+            "available": False,
+            "detail": "refusals_unavailable",
+        }
     # Prefix-cache sharability profile (research wave-6 idea 2): run
     # the real cache-profile stage post-hoc over the verbosity
     # exercise's observations -- the candidates render prompts that

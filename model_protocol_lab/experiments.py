@@ -84,6 +84,7 @@ from .prefill import (
     opens_think_channel,
     validate_prefill_specs,
 )
+from .refusals import DETECTOR_ID, OPENERS_SHA256, REFUSAL_OPENERS, analyze_candidate
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 from .structured import candidate_adherence, classify_response, validate_schema_def
 from .synthhistory import (
@@ -5884,6 +5885,77 @@ def verbosity_profile(
         "uniform": uniform,
         "capped_candidates": sorted(capped),
         "excluded_candidates": sorted(excluded),
+    }
+
+
+def refusal_profile(result: dict[str, Any]) -> dict[str, Any]:
+    """Per-candidate suspected-refusal profile (pure post-hoc).
+
+    Answers "does the template change how often the checkpoint
+    refuses benign fixtures?" from the run's recorded search
+    observations -- zero extra model calls. The detector contract
+    (frozen opener list, beginning-anchored, suspected- naming) is
+    :mod:`refusals`; this assembly adds the run-level discipline:
+    rates are withheld for candidates whose search did not complete
+    (the interrupted candidate was measured on a fixture prefix),
+    and ``evaluable_mismatch`` flags candidates whose completed
+    fixture sets differ, so rates are never compared across unlike
+    denominators in silence.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code for a structurally unusable result; a
+    result whose candidates are all unusable stays ``available``
+    with per-candidate records saying why (an explained absence,
+    never a silent one).
+    """
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    candidates: list[dict[str, Any]] = []
+    completed_sets: list[frozenset[str]] = []
+    n_available = 0
+    for entry in entries:
+        fmt = entry.get("format") if type(entry) is dict else None
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(entry) is not dict or type(name) is not str or not name:
+            candidates.append({"candidate": None, "available": False, "detail": "entry_malformed"})
+            continue
+        summary = entry.get("summary")
+        eligible = type(summary) is dict and summary.get("aggregate_eligible") is True
+        record: dict[str, Any] = {"candidate": name}
+        record.update(analyze_candidate(entry.get("observations"), eligible=eligible))
+        candidates.append(record)
+        if record["available"]:
+            n_available += 1
+            completed_sets.append(
+                frozenset(
+                    observation["fixture"]
+                    for observation in entry["observations"]
+                    if type(observation) is dict
+                    and observation.get("status") == "completed"
+                    and type(observation.get("fixture")) is str
+                )
+            )
+    return {
+        "available": True,
+        "method": {
+            "detector": DETECTOR_ID,
+            "openers": list(REFUSAL_OPENERS),
+            "openers_sha256": OPENERS_SHA256,
+            "normalization": (
+                "nfkc, cf-strip, casefold, apostrophe-fold, whitespace-collapse; beginning-anchored"
+            ),
+            "scope": (
+                "search observations only; recorded (boundary-cut) answers; "
+                "completed observations only"
+            ),
+        },
+        "evaluable_mismatch": len(set(completed_sets)) > 1,
+        "candidates": candidates,
+        "n_candidates": len(candidates),
+        "n_candidates_available": n_available,
     }
 
 

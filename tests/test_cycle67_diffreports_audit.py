@@ -139,7 +139,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from model_protocol_lab import cacheprofile, diffreports
+from model_protocol_lab import cacheprofile, diffreports, refusals
 
 # ---------------------------------------------------------------------------
 # Builders: canonical reports for the adversarial pairs.
@@ -255,6 +255,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "faketurn": {"available": "neither", "changed": False},
         "toolcall": {"available": "neither", "changed": False},
         "verbosity": {"available": "neither", "changed": False},
+        "refusals": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -320,6 +321,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "toolcall_asymmetric": False,
             "verbosity_changed": False,
             "verbosity_asymmetric": False,
+            "refusals_changed": False,
+            "refusals_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -1311,6 +1314,190 @@ def _o_verbosity(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or candidates_removed
         or excluded_added
         or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_refusals_valid(value: Any) -> bool:
+    """Oracle refusals validator: mirrors diffreports._valid_refusals."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    method = value.get("method")
+    if type(method) is not dict:
+        return False
+    if type(method.get("detector")) is not str or not method.get("detector"):
+        return False
+    digest = method.get("openers_sha256")
+    if type(digest) is not str or not digest:
+        return False
+    if type(value.get("evaluable_mismatch")) is not bool:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not list:
+        return False
+    if type(value.get("n_candidates")) is not int or value.get("n_candidates") != len(candidates):
+        return False
+    n_available = 0
+    for entry in candidates:
+        if type(entry) is not dict:
+            return False
+        name = entry.get("candidate")
+        if name is not None and type(name) is not str:
+            return False
+        if type(entry.get("available")) is not bool:
+            return False
+        if entry.get("available") is not True:
+            if type(entry.get("detail")) is not str:
+                return False
+            continue
+        n_available += 1
+        counts = {}
+        for key in (
+            "n_observations",
+            "n_completed",
+            "n_boundary_found",
+            "n_suspected",
+            "n_suspected_passed",
+            "n_suspected_failed",
+        ):
+            count = entry.get(key)
+            if type(count) is not int or count < 0:
+                return False
+            counts[key] = count
+        if counts["n_completed"] > counts["n_observations"]:
+            return False
+        if counts["n_boundary_found"] > counts["n_completed"]:
+            return False
+        if counts["n_suspected"] > counts["n_completed"]:
+            return False
+        if counts["n_suspected_passed"] + counts["n_suspected_failed"] != counts["n_suspected"]:
+            return False
+        rate = entry.get("suspected_rate")
+        if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+            return False
+        if type(entry.get("rate_note")) is not str:
+            return False
+        hits = entry.get("hits")
+        if type(hits) is not list or len(hits) != counts["n_suspected"]:
+            return False
+        for hit in hits:
+            if type(hit) is not dict:
+                return False
+            fixture = hit.get("fixture")
+            if fixture is not None and type(fixture) is not str:
+                return False
+            if type(hit.get("opener")) is not str or not hit.get("opener"):
+                return False
+            if type(hit.get("passed")) is not bool:
+                return False
+    if type(value.get("n_candidates_available")) is not int:
+        return False
+    return value.get("n_candidates_available") == n_available
+
+
+def _o_refusals(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle refusals section: rate/hit drift, protocol drift.
+
+    Independent reimplementation: set-based hit comparison and
+    comprehension-built drift lists rather than the implementation's
+    accumulation loops, in the implementation's output order.
+    """
+    old_ok = _o_refusals_valid(old)
+    new_ok = _o_refusals_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = (old["method"].get("detector"), old["method"].get("openers_sha256")) != (
+        new["method"].get("detector"),
+        new["method"].get("openers_sha256"),
+    )
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for entry in payload.get("candidates") or []:
+            name = entry.get("candidate")
+            if type(name) is not str:
+                continue
+            if entry.get("available") is not True:
+                out[name] = {"excluded": True}
+                continue
+            out[name] = {
+                "excluded": False,
+                "rate": entry.get("suspected_rate"),
+                "n": entry.get("n_completed"),
+                "hits": {
+                    (hit.get("fixture"), hit.get("opener"), hit.get("passed"))
+                    for hit in entry.get("hits") or []
+                },
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+
+    def _hit_rows(names: Any, source: Any, other: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for cand in names:
+            delta = source[cand]["hits"] - other[cand]["hits"]
+            for fixture, opener, passed in sorted(
+                delta, key=lambda h: (str(h[0]), str(h[1]), str(h[2]))
+            ):
+                rows.append(
+                    {"candidate": cand, "fixture": fixture, "opener": opener, "passed": passed}
+                )
+        return rows
+
+    shared = sorted(set(old_view) & set(new_view))
+    comparable = [n for n in shared if not old_view[n]["excluded"] and not new_view[n]["excluded"]]
+    rate_drift = [
+        {
+            "candidate": n,
+            "old_rate": old_view[n]["rate"],
+            "new_rate": new_view[n]["rate"],
+            "old_n": old_view[n]["n"],
+            "new_n": new_view[n]["n"],
+        }
+        for n in comparable
+        if (old_view[n]["rate"], old_view[n]["n"]) != (new_view[n]["rate"], new_view[n]["n"])
+    ]
+    hits_added = _hit_rows(comparable, new_view, old_view)
+    hits_removed = _hit_rows(comparable, old_view, new_view)
+    old_excluded = {n for n, v in old_view.items() if v["excluded"]}
+    new_excluded = {n for n, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    mismatch_changed = old.get("evaluable_mismatch") != new.get("evaluable_mismatch")
+    diff["rate_drift"] = rate_drift
+    diff["hits_added"] = hits_added
+    diff["hits_removed"] = hits_removed
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    diff["protocol_drift"] = protocol_drift
+    diff["mismatch_changed"] = mismatch_changed
+    changed = bool(
+        rate_drift
+        or hits_added
+        or hits_removed
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+        or mismatch_changed
+        or protocol_drift
     )
     diff["changed"] = changed
     return diff, changed, asymmetric
@@ -3358,6 +3545,7 @@ def _oracle_diff(
     o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
     o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
     o_vb, o_vb_changed, o_vb_asymmetric = _o_verbosity(old.get("verbosity"), new.get("verbosity"))
+    o_rf, o_rf_changed, o_rf_asymmetric = _o_refusals(old.get("refusals"), new.get("refusals"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -3461,6 +3649,7 @@ def _oracle_diff(
         "faketurn": o_ft,
         "toolcall": o_tc,
         "verbosity": o_vb,
+        "refusals": o_rf,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -3522,6 +3711,8 @@ def _oracle_diff(
             "toolcall_asymmetric": o_tc_asymmetric,
             "verbosity_changed": o_vb_changed,
             "verbosity_asymmetric": o_vb_asymmetric,
+            "refusals_changed": o_rf_changed,
+            "refusals_asymmetric": o_rf_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -4296,6 +4487,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "toolcall_asymmetric": False,
                 "verbosity_changed": False,
                 "verbosity_asymmetric": False,
+                "refusals_changed": False,
+                "refusals_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -5573,6 +5766,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.45:
         report["verbosity"] = _fuzz_verbosity_section(rng)
     if rng.random() < 0.45:
+        report["refusals"] = _fuzz_refusals_section(rng)
+    if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
@@ -5911,6 +6106,68 @@ def _fuzz_verbosity_section(rng: random.Random) -> dict[str, Any]:
         "least_verbose": rng.choice([[], ["alpha"]]),
         "capped_candidates": rng.choice([[], ["beta"]]),
         "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+    }
+
+
+def _fuzz_refusals_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent cells are produced by the real analyzer over random
+    # recorded observations (guaranteeing the count identities hold);
+    # hostile mutations then try to break them, and oracle and
+    # implementation must agree on every rejection.
+    answers = [
+        "I'm sorry, I cannot help with that.",
+        "I can't be certain, but 7",
+        "7",
+        "Paris",
+        "As an AI language model, I refuse.",
+        "The capital is Paris.",
+        "Sorry to hear that. The answer is 7.",
+    ]
+    candidates = []
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            candidates.append(
+                {"candidate": name, "available": False, "detail": "observations_missing"}
+            )
+            continue
+        observations = []
+        for index in range(rng.randint(0, 6)):
+            observations.append(
+                {
+                    "fixture": f"fx-{index}",
+                    "status": rng.choice(["completed", "completed", "completed", "failed"]),
+                    "answer": rng.choice(answers),
+                    "exact_match": rng.choice([True, False]),
+                    "boundary_found": rng.choice([True, True, False]),
+                }
+            )
+        entry = {"candidate": name}
+        entry.update(refusals.analyze_candidate(observations, eligible=rng.random() < 0.8))
+        if rng.random() < 0.08:
+            entry["suspected_rate"] = 1.5  # hostile: rate out of range
+        if rng.random() < 0.08:
+            entry["n_suspected"] = entry["n_suspected"] + 1  # hostile: identity broken
+        if rng.random() < 0.08:
+            entry["hits"] = []  # hostile: hits/suspected mismatch
+        candidates.append(entry)
+    if rng.random() < 0.1:
+        candidates.append({"candidate": 7, "available": False, "detail": "entry_malformed"})
+    digest = refusals.OPENERS_SHA256
+    if rng.random() < 0.2:
+        digest = "0" * 64  # protocol drift between sides
+    return {
+        "available": True,
+        "method": {
+            "detector": refusals.DETECTOR_ID,
+            "openers": list(refusals.REFUSAL_OPENERS),
+            "openers_sha256": digest,
+            "normalization": "fuzz",
+            "scope": "fuzz",
+        },
+        "evaluable_mismatch": rng.choice([True, False]),
+        "candidates": candidates,
+        "n_candidates": len(candidates),
+        "n_candidates_available": sum(1 for c in candidates if c.get("available") is True),
     }
 
 
@@ -6359,6 +6616,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not toolcall_asymmetric\n"
             '        and not verbosity_diff["changed"]\n'
             "        and not verbosity_asymmetric\n"
+            '        and not refusals_diff["changed"]\n'
+            "        and not refusals_asymmetric\n"
             '        and not cache_profile_diff["changed"]\n'
             "        and not cache_profile_asymmetric\n"
             '        and not template_robustness_diff["changed"]\n'
@@ -6417,6 +6676,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or toolcall_asymmetric\n"
             '        or verbosity_diff["changed"]\n'
             "        or verbosity_asymmetric\n"
+            '        or refusals_diff["changed"]\n'
+            "        or refusals_asymmetric\n"
             '        or cache_profile_diff["changed"]\n'
             "        or cache_profile_asymmetric\n"
             '        or confidentiality_diff["changed"]\n'

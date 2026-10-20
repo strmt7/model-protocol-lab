@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 174 — suspected-refusal profile, 2026-10-20)
+
+- New opt-in probe `model-protocol-lab run --refusals` (wave-6
+  idea 6): per-template suspected-refusal rate on benign search
+  fixtures, classified post-hoc over the recorded answers with
+  zero extra model calls. The detector is frozen as
+  `frozen_refusal_openers_v1` (pure `refusals.py`): XSTest
+  Appendix D core minus "no,"/"no." (dropped deliberately — they
+  fire on correct short yes/no answers; deviation documented in
+  the module), plus itemised OR-Bench Appendix M and GCG-lineage
+  supplements; beginning-anchored after a frozen normalisation,
+  longest-match attribution, list digest carried in every
+  result's method block so a detector change surfaces in
+  `diff-reports` as protocol drift. Rates are named *suspected*
+  throughout (string matching is the field's known-weak baseline;
+  no published accuracy transfers to this fixture set), travel
+  with exact counts and a suspected × passed cross-tab, and are
+  withheld for candidates whose search did not complete. Hits
+  name the fixture and the opener — never the answer text, so
+  the section is safe in the public results file. HTML section
+  and `diff_refusals` included; USAGE §8.36; uniqueness pass and
+  swarm record in `docs/RESEARCH_LOG.md`. Informational only;
+  never touches selection.
+
 ### Added (cycle 173 — determinism self-audit, 2026-10-20)
 
 - New opt-in mode `model-protocol-lab verify --determinism --model

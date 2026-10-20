@@ -2011,3 +2011,69 @@ setup, check whether your boundary marker can manufacture failures out
 of correct answers. Opt-in: runs entirely on scripted emissions (no
 extra model generations, but `model-protocol-lab run` itself loads the
 checkpoint as usual). The stage never fails the run and never touches selection.
+
+### 8.36 Suspected-refusal profile (`refusals`)
+
+Opt-in with `model-protocol-lab run --refusals`. Post-hoc over the
+main run's recorded search observations -- zero extra model calls:
+each candidate's recorded answers are classified against a frozen,
+published refusal-opener list, and the run gains a `refusals`
+section with the per-candidate suspected-refusal rate on benign
+fixtures. Monday-morning use: after adding or changing a chat
+template, check whether the new rendering makes the checkpoint
+refuse questions it answered under the old one -- with the weights
+and the message content held fixed, a rate difference is a
+rendering effect by construction.
+
+The detector is frozen as `frozen_refusal_openers_v1`: the core is
+XSTest's Appendix D string list (arXiv:2308.01263), minus "no," and
+"no." -- on this lab's short-answer fixtures those two fire on
+correct yes/no answers, so they are dropped and the deviation is
+recorded in the detector's own docstring -- plus itemised
+supplements from OR-Bench Appendix M (arXiv:2405.20947) and the
+GCG refusal-string lineage. An answer is a *suspected* refusal when
+its normalised form starts with a listed opener (NFKC, format
+characters stripped, casefolded, curly apostrophes folded,
+whitespace collapsed; longest match reported). The section's
+`method` block carries the full list and its SHA-256 digest in
+every result, so a detector change is visible in `diff-reports` as
+protocol drift instead of silently moving the rates.
+
+Read the numbers as the section names them: *suspected*. String
+matching is the field's known-weak baseline -- XSTest's own
+validation shows it over-counting one model's refusals (empathy
+openers such as "I'm sorry to hear...") and under-counting
+another's, with the sign of the error model-dependent, and no
+published accuracy figure transfers to this fixture set. Three
+consequences are built in rather than footnoted: every rate travels
+with its exact counts (suspected k of n completed); the
+suspected-and-passed cell separates detector artifacts on
+echo-style fixtures (whose expected answer itself opens with an
+opener) from the decision-relevant suspected-and-failed cell,
+while a hedged failing answer ("I can't be certain, but ...")
+stays indistinguishable from a true refusal at this tier; and
+answers that open with markdown or a quotation mark are a
+documented miss, not silently normalised into hits. The classified
+text is the lab's recorded answer (the boundary-cut retained
+decode every answer-level analysis here measures), over completed
+search observations only -- held-out observations are never read.
+
+Rates are withheld (reported as counts with a `rate_note`, never a
+number) for a candidate whose search did not complete: an
+interrupted candidate is measured on a fixture prefix, and
+comparing its rate against full-set rates would be a silent
+denominator change. When candidates' completed fixture sets
+differ, the section sets `evaluable_mismatch` and the HTML report
+prints a caution next to the table. Hits identify the fixture and
+the opener that fired -- a pointer to the evidence, never a copy:
+the answer text itself stays in the evidence-bearing observations,
+so the section is safe in the public (evidence-stripped)
+`results.json`.
+
+`diff-reports` compares per-candidate rate drift (with denominator
+drift alongside -- a rate that moved because its n moved is a
+different story), hit-set changes, excluded-candidate transitions,
+the mismatch flag, and detector protocol drift
+(`diff_refusals`, `refusals_changed` / `refusals_asymmetric` feed
+`identical`). Informational only: the profile never affects
+selection, and the stage never fails the run.

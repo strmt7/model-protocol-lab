@@ -1371,6 +1371,86 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_refusals_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_refusals exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        method = value.get("method")
+        if type(method) is not dict:
+            return False
+        if type(method.get("detector")) is not str or not method.get("detector"):
+            return False
+        digest = method.get("openers_sha256")
+        if type(digest) is not str or not digest:
+            return False
+        if type(value.get("evaluable_mismatch")) is not bool:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not list:
+            return False
+        if type(value.get("n_candidates")) is not int or value.get("n_candidates") != len(
+            candidates
+        ):
+            return False
+        n_available = 0
+        for entry in candidates:
+            if type(entry) is not dict:
+                return False
+            name = entry.get("candidate")
+            if name is not None and type(name) is not str:
+                return False
+            if type(entry.get("available")) is not bool:
+                return False
+            if entry.get("available") is not True:
+                if type(entry.get("detail")) is not str:
+                    return False
+                continue
+            n_available += 1
+            counts = {}
+            for key in (
+                "n_observations",
+                "n_completed",
+                "n_boundary_found",
+                "n_suspected",
+                "n_suspected_passed",
+                "n_suspected_failed",
+            ):
+                count = entry.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+                counts[key] = count
+            if counts["n_completed"] > counts["n_observations"]:
+                return False
+            if counts["n_boundary_found"] > counts["n_completed"]:
+                return False
+            if counts["n_suspected"] > counts["n_completed"]:
+                return False
+            if counts["n_suspected_passed"] + counts["n_suspected_failed"] != counts["n_suspected"]:
+                return False
+            rate = entry.get("suspected_rate")
+            if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+                return False
+            if type(entry.get("rate_note")) is not str:
+                return False
+            hits = entry.get("hits")
+            if type(hits) is not list or len(hits) != counts["n_suspected"]:
+                return False
+            for hit in hits:
+                if type(hit) is not dict:
+                    return False
+                fixture = hit.get("fixture")
+                if fixture is not None and type(fixture) is not str:
+                    return False
+                if type(hit.get("opener")) is not str or not hit.get("opener"):
+                    return False
+                if type(hit.get("passed")) is not bool:
+                    return False
+        if type(value.get("n_candidates_available")) is not int:
+            return False
+        return value.get("n_candidates_available") == n_available
+
     def _or_confidentiality_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
@@ -1692,6 +1772,18 @@ def oracle_diff_reports(
         _o_vb_available = "neither"
     _o_vb_asymmetric = _o_vb_available not in ("both", "neither")
 
+    _rf_old_ok = _or_refusals_valid(old.get("refusals"))
+    _rf_new_ok = _or_refusals_valid(new.get("refusals"))
+    if _rf_old_ok and _rf_new_ok:
+        _o_rf_available = "both"
+    elif _rf_old_ok:
+        _o_rf_available = "old"
+    elif _rf_new_ok:
+        _o_rf_available = "new"
+    else:
+        _o_rf_available = "neither"
+    _o_rf_asymmetric = _o_rf_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -1755,6 +1847,7 @@ def oracle_diff_reports(
         and not _o_ft_asymmetric
         and not _o_tc_asymmetric
         and not _o_vb_asymmetric
+        and not _o_rf_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -1812,6 +1905,8 @@ def oracle_diff_reports(
         "toolcall_asymmetric": _o_tc_asymmetric,
         "verbosity_changed": False,
         "verbosity_asymmetric": _o_vb_asymmetric,
+        "refusals_changed": False,
+        "refusals_asymmetric": _o_rf_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -1852,6 +1947,7 @@ def oracle_diff_reports(
         "faketurn": {"available": _o_ft_available, "changed": False},
         "toolcall": {"available": _o_tc_available, "changed": False},
         "verbosity": {"available": _o_vb_available, "changed": False},
+        "refusals": {"available": _o_rf_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},
