@@ -5190,6 +5190,189 @@ def _refusals_section(result: dict[str, Any]) -> str:
     )
 
 
+def _scorerlens_section(result: dict[str, Any]) -> str:
+    """Scorer-lens regrade per candidate template.
+
+    Renders the ``scorerlens`` payload (see
+    experiments.scorerlens_profile) as a per-candidate table of
+    verdict counts under each rung of the frozen normalisation
+    ladder: how many of a template's byte-exact failures a more
+    forgiving -- but still fully specified -- scorer would have
+    passed. The verdict counts always include the recorded
+    boundary fact, which no rung can move; the boundary-blocked
+    count travels with the table so a stable winner is never read
+    as scorer evidence when the boundary was the whole story.
+    Flip attribution names the fixture and the first rung that
+    recovers it; the answer and expected texts are never rendered
+    here. Every interpolation is escaped at this boundary.
+    """
+    audit: Any = result.get("scorerlens")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    candidates = audit.get("candidates")
+    if type(candidates) is not list:
+        return ""
+
+    def _count(entry: dict[str, Any], key: str, rung: str) -> str:
+        counts = entry.get(key)
+        if type(counts) is dict and type(counts.get(rung)) is int:
+            return escape(str(counts[rung]))
+        return "n/a"
+
+    def _share(entry: dict[str, Any]) -> str:
+        value = entry.get("surface_failure_share")
+        text = f"{value:.0%}" if type(value) in (int, float) else "n/a"
+        note = entry.get("share_note")
+        if type(note) is str and note:
+            text += " (" + escape(note.replace("_", " ")) + ")"
+        return text
+
+    rows = []
+    flip_items = []
+    unavailable_names = []
+    for entry in candidates:
+        if type(entry) is not dict:
+            continue
+        name = entry.get("candidate")
+        label = escape(str(name)) if type(name) is str and name else "unknown"
+        if not entry.get("available"):
+            unavailable_names.append(label)
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + label
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + "</td><td>"
+            + _count(entry, "verdict_counts", "0")
+            + "</td><td>"
+            + _count(entry, "verdict_counts", "1")
+            + "</td><td>"
+            + _count(entry, "verdict_counts", "2")
+            + "</td><td>"
+            + _count(entry, "verdict_counts", "3")
+            + "</td><td>"
+            + _count(entry, "verdict_counts", "4")
+            + "</td><td>"
+            + escape(str(entry.get("n_boundary_blocked")))
+            + "</td><td>"
+            + _share(entry)
+            + "</td></tr>"
+        )
+        records = entry.get("records")
+        if type(records) is list:
+            for record in records:
+                if type(record) is not dict:
+                    continue
+                rung = record.get("first_flip_rung")
+                if type(rung) is not int:
+                    continue
+                fixture = record.get("fixture")
+                via = record.get("flip_via")
+                via_text = ""
+                if type(via) is str and via:
+                    via_text = " via " + escape(via)
+                flip_items.append(
+                    "<li>"
+                    + '<span class="mono">'
+                    + label
+                    + "</span> · fixture "
+                    + '<span class="mono">'
+                    + (escape(fixture) if type(fixture) is str else "unknown")
+                    + "</span> · first passes at rung "
+                    + escape(str(rung))
+                    + via_text
+                    + (
+                        " · boundary still blocks the verdict"
+                        if record.get("boundary_found") is not True
+                        else ""
+                    )
+                    + "</li>"
+                )
+    winner_block = ""
+    winners = audit.get("winner_by_rung")
+    if type(winners) is dict:
+        lines = []
+        for rung in ("0", "1", "2", "3", "4"):
+            winner = winners.get(rung)
+            lines.append(
+                "<li>rung "
+                + rung
+                + ": "
+                + (
+                    '<span class="mono">' + escape(winner) + "</span>"
+                    if type(winner) is str and winner
+                    else "no unique winner"
+                )
+                + "</li>"
+            )
+        winner_block = (
+            "<p>Search-phase winner under each rung (the conservative "
+            "bar re-applied to the rung verdict counts; held-out is "
+            "never regraded):</p><ul>" + "".join(lines) + "</ul>"
+        )
+    else:
+        detail = audit.get("winner_detail")
+        winner_block = (
+            "<p>Search-phase winner readout withheld"
+            + (
+                " (" + escape(detail.replace("_", " ")) + ")"
+                if type(detail) is str and detail
+                else ""
+            )
+            + ": a winner computed over a partial or ineligible "
+            "field would not mean what it appears to mean.</p>"
+        )
+    mismatch_line = ""
+    if audit.get("evaluable_mismatch") is True:
+        mismatch_line = (
+            "<p><strong>Caution:</strong> candidates were not all "
+            "measured on the same evaluable fixture set; compare "
+            "counts across candidates with care.</p>"
+        )
+    flips_block = ""
+    if flip_items:
+        flips_block = (
+            "<p>Fixtures recovered by the ladder (first rung that "
+            "passes them):</p><ul>" + "".join(flip_items) + "</ul>"
+        )
+    unavailable_line = ""
+    if unavailable_names:
+        unavailable_line = (
+            "<p>Candidates with no usable recorded observations: "
+            + ", ".join('<span class="mono">' + name + "</span>" for name in unavailable_names)
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="scorerlens">'
+        "<h2>Scorer-lens regrade</h2>"
+        "<p>Is a template actually worse, or is the byte-exact "
+        "scorer discarding answers a human would accept? Each "
+        "candidate's recorded search answers are regraded under a "
+        "frozen ladder: R0 exact, R1 whitespace, R2 case/Unicode, "
+        "R3 edge punctuation and markdown fences, R4 numeric value. "
+        "Verdict counts include the recorded boundary fact, which "
+        "no rung can move. The ladder has no label-strip operation "
+        '-- <span class="mono">Answer: 42</span> against expected '
+        '<span class="mono">42</span> flips at no rung -- and R4 '
+        'does not read decimal commas (<span class="mono">1,5</span> '
+        'is not <span class="mono">15</span>). Casefold equates '
+        "German ß with ss; a rung-2 flip on a name fixture deserves "
+        "a second look.</p>"
+        + mismatch_line
+        + "<table><thead><tr><th>Candidate</th><th>Evaluable</th>"
+        "<th>R0</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th>"
+        "<th>Boundary-blocked</th><th>Surface share of failures</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + winner_block
+        + flips_block
+        + unavailable_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -6508,6 +6691,7 @@ def render_html(result: dict[str, Any]) -> str:
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
     refusals_html = _refusals_section(result)
+    scorerlens_html = _scorerlens_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -6622,6 +6806,11 @@ def render_html(result: dict[str, Any]) -> str:
                 refusals_html,
             ),
             (
+                "scorerlens",
+                "Scorer-lens regrade",
+                scorerlens_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -6705,6 +6894,7 @@ def render_html(result: dict[str, Any]) -> str:
         + toolcall_html
         + verbosity_html
         + refusals_html
+        + scorerlens_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

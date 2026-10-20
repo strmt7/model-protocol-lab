@@ -388,6 +388,22 @@ def build_parser() -> argparse.ArgumentParser:
         "never touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--scorer-lens",
+        action="store_true",
+        help="Scorer-lens regrade (cycle 180, research wave-7 rank 1): "
+        "regrade each candidate's recorded search answers under a "
+        "frozen normalisation ladder (exact; whitespace; case/Unicode; "
+        "edge punctuation and markdown fences; numeric value) and "
+        "report how many failures each rung recovers, which fixture "
+        "flips first at which rung, and whether the search-phase "
+        "winner changes under a more forgiving scorer -- post-hoc "
+        "over the main run's observations, zero extra model calls. "
+        "Monday morning: 'is this template actually worse, or is the "
+        "byte-exact scorer discarding answers a human would accept?' "
+        "Counts and fixture IDs only; no answer text. Informational "
+        "only; never touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1187,6 +1203,31 @@ def _run_refusals_probe(result: Any) -> None:
         result["refusals"] = {
             "available": False,
             "detail": "refusals_unavailable",
+        }
+
+
+def _run_scorerlens_probe(result: Any, *, search_fixtures: Any) -> None:
+    """Run the scorer-lens regrade probe; never raises.
+
+    Post-hoc over the main run's recorded search observations (zero
+    extra model calls): each candidate's recorded answers are
+    regraded under the frozen normalisation ladder (see
+    :mod:`scorerlens`) against the expected texts joined from the
+    run's own fixture set -- recorded results carry no ``expected``
+    field by design, so the join is explicit here, exactly as in
+    the verbosity probe. The profile is stored as the
+    ``scorerlens`` payload on ``result``. Any failure degrades to
+    an "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .experiments import scorerlens_profile
+
+        expected_by_fixture = {f.id: f.expected for f in search_fixtures}
+        result["scorerlens"] = scorerlens_profile(result, expected_by_fixture)
+    except Exception:  # noqa: BLE001 -- scorer-lens probe must not fail the run
+        result["scorerlens"] = {
+            "available": False,
+            "detail": "scorerlens_unavailable",
         }
 
 
@@ -2541,6 +2582,14 @@ def main(argv: list[str] | None = None) -> int:
                 # only -- never changes selection. Never fails the run.
                 if args.refusals:
                     _run_refusals_probe(result)
+                # Scorer-lens regrade (cycle 180, research wave-7
+                # rank 1): per-candidate regrade of the recorded
+                # search answers under the frozen normalisation
+                # ladder, post-hoc (zero extra model calls).
+                # Informational only -- never changes selection.
+                # Never fails the run.
+                if args.scorer_lens:
+                    _run_scorerlens_probe(result, search_fixtures=tuple(split.search))
                 # Prefix-cache sharability profile (cycle 168, research
                 # wave-6 idea 2): per-family exact-prefix sharability of
                 # the recorded input_ids, post-hoc over the main run's

@@ -7157,3 +7157,73 @@ every module" claim holds for the last ungated pure module.
   (which turn's answer is scored, and against what). Deferred
   until that policy is designed and recorded; no build before
   then.
+
+## Cycle 180 — scorer-lens regrade (2026-10-20)
+
+Wave-7 research rank 1, built only after its design survived the
+red-team pair. The instrument: regrade a run's recorded search
+answers under a frozen normalisation ladder (R0 exact; R1
+whitespace; R2 case/Unicode; R3 edge punctuation and markdown
+fences; R4 numeric value) and report per-candidate verdict counts
+per rung, first-flip attribution per fixture, the surface share
+of each candidate's native failures, and the search-phase winner
+re-derived per rung. Post-hoc, zero model calls. Utility: decide
+whether a template actually got worse or the byte-exact scorer is
+discarding human-acceptable answers, and whether the winner
+survives the mildest defensible scorer. Uniqueness (combination
+framing, per the wave-7 research pass): HF `evaluate`'s
+exact-match normalisation knobs are prospective only and can
+invent matches (huggingface/evaluate#822); promptfoo assertions
+grade per-test at run time; no surveyed harness regrades a
+finished run's recorded generations per template under a frozen
+ladder with boundary conjunction and selection re-application.
+
+**Design cross-check (binding).** Red-team A returned DO NOT
+BUILD AS SPECIFIED (12 findings): the recorded result carries no
+`expected` field, so the profile cannot follow the refusals
+signature (BLOCKER — resolved by taking the expected map as an
+explicit parameter, the verbosity precedent, with a fail-closed
+join); rung-pass was undefined against the native boundary
+conjunct; the motivating `Answer: 42` example flips at no rung
+(the ladder has no label-strip operation — the docs now say so);
+R4's `1,000` example is false under a naive `Decimal` parse, and
+the naive comma-strip manufactures 10x false passes on decimal
+commas; S1 and S3 were jointly unsatisfiable on legal
+empty-expected fixtures. Red-team B re-derived every finding
+independently and upheld all of them (one sub-claim refuted:
+casefold does equate the fi ligature), and added two binding
+amendments — one ASCII-only full-match grammar for all R4 inputs
+(A's own `\d` regex accepted Unicode digits), and ground records
+rich enough for the diff validator to recompute denominators
+and the winner readout. The corrected contract is
+`docs/SCORER_LENS_DESIGN.md`; all four pre-registered claims
+(S1–S4) are pinned by named tests in
+`tests/test_cycle180_scorerlens.py`.
+
+**Reality corrected the build three times.** (1) The first S2
+property run failed on identical all-punctuation pairs: the
+empty guard made `"***"` pass at R2 but not R3. Rung match is
+now cumulative ("passes under the ladder up to this rung") —
+the semantics the payload's counts already used — and S2 is a
+theorem again, with S3 intact for distinct pairs. (2) The mark
+strip used NFKD, whose compatibility decomposition silently
+folded fullwidth digits to ASCII at R2, hollowing out R4's
+ASCII-only grammar; the strip now uses canonical NFD (the
+Turkish İ and NFD-authored-fixture recoveries survive; the
+deliberate difference from the refusal detector's NFKC is
+documented). (3) The fence-strip mutation gate's first scenario
+was non-discriminating — edge backtick stripping plus the final
+trim recovers a bare fence without the fence operation; the
+gate now pins the info-string fence, the case only the fence
+operation recovers. Also recorded: an absurd exponent
+(`1e10000000000000000000`) matches the R4 grammar but `Decimal`
+refuses it — the parse guard is reachable and pinned, not
+decoration.
+
+**Oracle note.** Adding the section surfaced a latent gap in
+the cycle-67 oracle: its `identical` conjunction omitted the
+refusals terms added in cycle 174 (the implementation had
+them). The fuzz never discriminated it because independently
+generated report pairs differ elsewhere first. The oracle now
+carries both the refusals and scorerlens terms.
+

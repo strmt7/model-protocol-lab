@@ -133,6 +133,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import json
 import os
 import random
 import tempfile
@@ -140,7 +141,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from model_protocol_lab import cacheprofile, diffreports, refusals
+from model_protocol_lab import cacheprofile, diffreports, experiments, refusals, scorerlens
 
 # ---------------------------------------------------------------------------
 # Builders: canonical reports for the adversarial pairs.
@@ -257,6 +258,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "toolcall": {"available": "neither", "changed": False},
         "verbosity": {"available": "neither", "changed": False},
         "refusals": {"available": "neither", "changed": False},
+        "scorerlens": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -324,6 +326,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "verbosity_asymmetric": False,
             "refusals_changed": False,
             "refusals_asymmetric": False,
+            "scorerlens_changed": False,
+            "scorerlens_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -1528,6 +1532,336 @@ def _o_refusals(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or excluded_removed
         or mismatch_changed
         or protocol_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_scorerlens_valid(value: Any) -> bool:
+    """Oracle scorerlens validator: mirrors diffreports._valid_scorerlens."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    method = value.get("method")
+    if type(method) is not dict:
+        return False
+    protocol = method.get("protocol")
+    if type(protocol) is not str or not protocol:
+        return False
+    ladder = method.get("ladder")
+    if type(ladder) is not dict or ladder.get("protocol") != protocol:
+        return False
+    canonical = json.dumps(ladder, sort_keys=True, separators=(",", ":"))
+    if method.get("ladder_sha256") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        return False
+    fixture_sha = value.get("fixture_set_sha256")
+    if (
+        type(fixture_sha) is not str
+        or len(fixture_sha) != 64
+        or any(c not in "0123456789abcdef" for c in fixture_sha)
+    ):
+        return False
+    if type(value.get("evaluable_mismatch")) is not bool:
+        return False
+    native_winner = value.get("native_winner")
+    if native_winner is not None and type(native_winner) is not str:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not list or not candidates:
+        return False
+    if type(value.get("n_candidates")) is not int or value.get("n_candidates") != len(candidates):
+        return False
+    n_available = 0
+    seen_names: set = set()
+    evaluable_sets: list = []
+    available_entries: list = []
+    for entry in candidates:
+        if type(entry) is not dict:
+            return False
+        name = entry.get("candidate")
+        if name is not None and type(name) is not str:
+            return False
+        if type(name) is str:
+            if name in seen_names:
+                return False
+            seen_names.add(name)
+        if type(entry.get("available")) is not bool:
+            return False
+        if entry.get("available") is not True:
+            if type(entry.get("detail")) is not str:
+                return False
+            continue
+        n_available += 1
+        available_entries.append(entry)
+        if type(entry.get("eligible")) is not bool:
+            return False
+        n_observations = entry.get("n_observations")
+        n_completed_field = entry.get("n_completed")
+        if (
+            type(n_observations) is not int
+            or n_observations < 0
+            or type(n_completed_field) is not int
+            or n_completed_field < 0
+            or n_completed_field > n_observations
+        ):
+            return False
+        records = entry.get("records")
+        if type(records) is not list or len(records) != n_observations:
+            return False
+        for record in records:
+            if type(record) is not dict:
+                return False
+            if type(record.get("fixture")) is not str or not record.get("fixture"):
+                return False
+            if any(
+                type(record.get(flag)) is not bool
+                for flag in ("completed", "boundary_found", "exact_match", "excluded")
+            ):
+                return False
+            flip = record.get("first_flip_rung")
+            if flip is not None and (type(flip) is not int or flip < 1 or flip > 4):
+                return False
+            via = record.get("flip_via")
+            if via is not None and via not in ("nfc", "casefold"):
+                return False
+            if (via is not None) != (flip == 2):
+                return False
+            if record.get("exact_match") is True and flip is not None:
+                return False
+            if record.get("excluded") is True and flip is not None:
+                return False
+            if any(
+                type(record.get(flag)) is not bool
+                for flag in ("expected_r3_altered", "newline_differs")
+            ):
+                return False
+        if sum(1 for r in records if r["completed"] is True) != n_completed_field:
+            return False
+        evaluable = [r for r in records if r["excluded"] is not True]
+        evaluable_sets.append(frozenset(r["fixture"] for r in evaluable))
+
+        def _matches(r: Any, rung: int) -> bool:
+            return r["exact_match"] is True or (
+                r["first_flip_rung"] is not None and r["first_flip_rung"] <= rung
+            )
+
+        match_counts = {str(k): sum(1 for r in evaluable if _matches(r, k)) for k in range(5)}
+        verdict_counts = {
+            str(k): sum(
+                1
+                for r in evaluable
+                if r["completed"] is True and r["boundary_found"] is True and _matches(r, k)
+            )
+            for k in range(5)
+        }
+        if entry.get("match_counts") != match_counts:
+            return False
+        if entry.get("verdict_counts") != verdict_counts:
+            return False
+        n_evaluable = len(evaluable)
+        if entry.get("n_evaluable") != n_evaluable:
+            return False
+        if entry.get("n_excluded_empty_expected") != len(records) - n_evaluable:
+            return False
+        if entry.get("n_boundary_blocked") != sum(
+            1 for r in evaluable if r["completed"] is True and r["boundary_found"] is not True
+        ):
+            return False
+        n_failures = n_evaluable - verdict_counts["0"]
+        n_recovered = verdict_counts["4"] - verdict_counts["0"]
+        if entry.get("n_native_verdict_failures") != n_failures:
+            return False
+        if entry.get("n_recovered_by_r4") != n_recovered:
+            return False
+        flipped = [r for r in evaluable if r["first_flip_rung"] is not None]
+        if entry.get("n_flips_boundary_blocked") != sum(
+            1 for r in flipped if r["boundary_found"] is not True
+        ):
+            return False
+        if entry.get("n_flips_expected_altered") != sum(
+            1 for r in flipped if r["expected_r3_altered"] is True
+        ):
+            return False
+        if entry.get("n_r1_flips_newline_changed") != sum(
+            1 for r in flipped if r["first_flip_rung"] == 1 and r["newline_differs"] is True
+        ):
+            return False
+        share = entry.get("surface_failure_share")
+        note = entry.get("share_note")
+        if note not in ("", "candidate_not_eligible", "no_native_failures"):
+            return False
+        if (share is None) != (note != ""):
+            return False
+        if entry["eligible"] is not True:
+            if note != "candidate_not_eligible":
+                return False
+        elif n_failures == 0:
+            if note != "no_native_failures":
+                return False
+        elif share != n_recovered / n_failures:
+            return False
+        if share is not None and not (type(share) in (int, float) and 0.0 <= share <= 1.0):
+            return False
+    if type(value.get("n_candidates_available")) is not int:
+        return False
+    if value.get("n_candidates_available") != n_available:
+        return False
+    if value.get("evaluable_mismatch") != (len(set(evaluable_sets)) > 1):
+        return False
+    winner_detail = value.get("winner_detail")
+    winners = value.get("winner_by_rung")
+    if winner_detail not in (
+        "",
+        "candidate_unavailable",
+        "candidate_not_eligible",
+        "evaluable_mismatch",
+    ):
+        return False
+    if (winners is None) != (winner_detail != ""):
+        return False
+    if winners is None:
+        if n_available != len(candidates):
+            expected_detail = "candidate_unavailable"
+        elif any(e["eligible"] is not True for e in available_entries):
+            expected_detail = "candidate_not_eligible"
+        elif value.get("evaluable_mismatch") is True:
+            expected_detail = "evaluable_mismatch"
+        else:
+            return False
+        return winner_detail == expected_detail
+    if type(winners) is not dict or set(winners) != {"0", "1", "2", "3", "4"}:
+        return False
+    if n_available != len(candidates):
+        return False
+    if any(e["eligible"] is not True for e in available_entries):
+        return False
+    if value.get("evaluable_mismatch") is True:
+        return False
+    for rung in ("0", "1", "2", "3", "4"):
+        rung_winners = [
+            e["candidate"]
+            for e in available_entries
+            if e["verdict_counts"][rung] == e["n_evaluable"] and e["n_evaluable"] > 0
+        ]
+        if winners.get(rung) != (rung_winners[0] if len(rung_winners) == 1 else None):
+            return False
+    return True
+
+
+def _o_scorerlens(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle scorerlens section: winner/share/flip drift, protocol drift.
+
+    Independent reimplementation: view-based comparison and
+    comprehension-built drift lists, in the implementation's
+    output order.
+    """
+    old_ok = _o_scorerlens_valid(old)
+    new_ok = _o_scorerlens_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = (old["method"].get("protocol"), old["method"].get("ladder_sha256")) != (
+        new["method"].get("protocol"),
+        new["method"].get("ladder_sha256"),
+    )
+    fixture_set_drift = old.get("fixture_set_sha256") != new.get("fixture_set_sha256")
+    comparable = not protocol_drift and not fixture_set_drift
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for entry in payload.get("candidates") or []:
+            name = entry.get("candidate")
+            if type(name) is not str:
+                continue
+            if entry.get("available") is not True:
+                out[name] = {"excluded": True}
+                continue
+            out[name] = {
+                "excluded": False,
+                "share": entry.get("surface_failure_share"),
+                "n": entry.get("n_native_verdict_failures"),
+                "flips": {
+                    record.get("fixture"): record.get("first_flip_rung")
+                    for record in entry.get("records") or []
+                },
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    shared = sorted(set(old_view) & set(new_view))
+    live = [n for n in shared if not old_view[n]["excluded"] and not new_view[n]["excluded"]]
+    share_drift = [
+        {
+            "candidate": n,
+            "old_share": old_view[n]["share"],
+            "new_share": new_view[n]["share"],
+            "old_n": old_view[n]["n"],
+            "new_n": new_view[n]["n"],
+        }
+        for n in live
+        if (old_view[n]["share"], old_view[n]["n"]) != (new_view[n]["share"], new_view[n]["n"])
+    ]
+    flip_changes = [
+        {
+            "candidate": n,
+            "fixture": fixture,
+            "old_rung": old_view[n]["flips"][fixture],
+            "new_rung": new_view[n]["flips"][fixture],
+        }
+        for n in live
+        for fixture in sorted(set(old_view[n]["flips"]) & set(new_view[n]["flips"]))
+        if old_view[n]["flips"][fixture] != new_view[n]["flips"][fixture]
+    ]
+    old_excluded = {n for n, v in old_view.items() if v["excluded"]}
+    new_excluded = {n for n, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    mismatch_changed = old.get("evaluable_mismatch") != new.get("evaluable_mismatch")
+    old_winners = old.get("winner_by_rung")
+    new_winners = new.get("winner_by_rung")
+    winner_readout_changed = (old_winners is None) != (new_winners is None)
+    winner_drift = [
+        {"rung": int(rung), "old": old_winners.get(rung), "new": new_winners.get(rung)}
+        for rung in ("0", "1", "2", "3", "4")
+        if type(old_winners) is dict
+        and type(new_winners) is dict
+        and old_winners.get(rung) != new_winners.get(rung)
+    ]
+    diff["winner_drift"] = winner_drift
+    diff["winner_readout_changed"] = winner_readout_changed
+    diff["share_drift"] = share_drift
+    diff["flip_changes"] = flip_changes
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    diff["protocol_drift"] = protocol_drift
+    diff["fixture_set_drift"] = fixture_set_drift
+    diff["comparable"] = comparable
+    diff["mismatch_changed"] = mismatch_changed
+    changed = bool(
+        winner_drift
+        or winner_readout_changed
+        or share_drift
+        or flip_changes
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+        or mismatch_changed
+        or protocol_drift
+        or fixture_set_drift
     )
     diff["changed"] = changed
     return diff, changed, asymmetric
@@ -3644,6 +3978,9 @@ def _oracle_diff(
     o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
     o_vb, o_vb_changed, o_vb_asymmetric = _o_verbosity(old.get("verbosity"), new.get("verbosity"))
     o_rf, o_rf_changed, o_rf_asymmetric = _o_refusals(old.get("refusals"), new.get("refusals"))
+    o_sl, o_sl_changed, o_sl_asymmetric = _o_scorerlens(
+        old.get("scorerlens"), new.get("scorerlens")
+    )
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -3708,6 +4045,10 @@ def _oracle_diff(
         and not o_tc_asymmetric
         and not o_vb_changed
         and not o_vb_asymmetric
+        and not o_rf_changed
+        and not o_rf_asymmetric
+        and not o_sl_changed
+        and not o_sl_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -3748,6 +4089,7 @@ def _oracle_diff(
         "toolcall": o_tc,
         "verbosity": o_vb,
         "refusals": o_rf,
+        "scorerlens": o_sl,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -3811,6 +4153,8 @@ def _oracle_diff(
             "verbosity_asymmetric": o_vb_asymmetric,
             "refusals_changed": o_rf_changed,
             "refusals_asymmetric": o_rf_asymmetric,
+            "scorerlens_changed": o_sl_changed,
+            "scorerlens_asymmetric": o_sl_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -4722,6 +5066,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "verbosity_asymmetric": False,
                 "refusals_changed": False,
                 "refusals_asymmetric": False,
+                "scorerlens_changed": False,
+                "scorerlens_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -6001,6 +6347,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.45:
         report["refusals"] = _fuzz_refusals_section(rng)
     if rng.random() < 0.45:
+        report["scorerlens"] = _fuzz_scorerlens_section(rng)
+    if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
@@ -6402,6 +6750,68 @@ def _fuzz_refusals_section(rng: random.Random) -> dict[str, Any]:
         "n_candidates": len(candidates),
         "n_candidates_available": sum(1 for c in candidates if c.get("available") is True),
     }
+
+
+def _fuzz_scorerlens_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent cells are produced by the real profile over random
+    # recorded observations (guaranteeing every recompute identity
+    # holds); hostile mutations then try to break them, and oracle
+    # and implementation must agree on every rejection. A coherent
+    # foreign ladder (correct digest over modified data) exercises
+    # true protocol drift rather than corruption.
+    expected = {"fx-0": "42", "fx-1": "Paris", "fx-2": "1,000", "fx-3": ""}
+    answers = [
+        "42",
+        "42.",
+        "paris",
+        "```\n42\n```",
+        "1000",
+        "1,5",
+        "Answer: 42",
+        "",
+        "?",
+        "PARIS",
+        "1,000",
+    ]
+    search = []
+    for name in ("alpha", "beta"):
+        observations = []
+        for index in range(4):
+            observations.append(
+                {
+                    "fixture": f"fx-{index}",
+                    "status": rng.choice(["completed", "completed", "completed", "failed"]),
+                    "answer": rng.choice(answers),
+                    "boundary_found": rng.choice([True, True, False]),
+                    "exact_match": False,
+                }
+            )
+        search.append(
+            {
+                "format": {"name": name},
+                "summary": {"aggregate_eligible": rng.random() < 0.8},
+                "observations": observations,
+            }
+        )
+    result = {"search": search, "selected_candidate": rng.choice(["alpha", "beta", None])}
+    payload = experiments.scorerlens_profile(result, dict(expected))
+    if rng.random() < 0.15:
+        ladder = copy.deepcopy(scorerlens.LADDER_SPEC)
+        ladder["decisions"] = dict(ladder["decisions"], percent="fuzz-foreign")
+        payload["method"]["ladder"] = ladder
+        payload["method"]["ladder_sha256"] = hashlib.sha256(
+            json.dumps(ladder, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    if rng.random() < 0.1:
+        payload["fixture_set_sha256"] = hashlib.sha256(b"other-fixtures").hexdigest()
+    available = [c for c in payload.get("candidates", []) if c.get("available") is True]
+    if available and rng.random() < 0.1:
+        available[0]["verdict_counts"]["4"] += 1  # hostile: counts off records
+    if available and rng.random() < 0.08:
+        available[0]["surface_failure_share"] = 0.99  # hostile: share off counts
+    if payload.get("winner_by_rung") and rng.random() < 0.08:
+        payload["winner_by_rung"]["4"] = "ghost"  # hostile: manufactured winner
+    return payload
 
 
 def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
@@ -6861,6 +7271,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not confidentiality_asymmetric\n"
             '        and not answer_collision_diff["changed"]\n'
             "        and not answer_collision_asymmetric\n"
+            '        and not scorerlens_diff["changed"]\n'
+            "        and not scorerlens_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -6917,6 +7329,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or confidentiality_asymmetric\n"
             '        or answer_collision_diff["changed"]\n'
             "        or answer_collision_asymmetric\n"
+            '        or scorerlens_diff["changed"]\n'
+            "        or scorerlens_asymmetric\n"
             "    )\n",
             scenario,
         )

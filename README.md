@@ -19,7 +19,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (6848 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (6913 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -91,7 +91,7 @@ sharability, confidentiality, the answer-collision audit, and the held-out
 stage with its verification-floor callout. Sections whose inputs a run does
 not produce (template conformance, backend divergence, the stop matrix,
 sensitivity sweep, the log-likelihood diagnostic, token healing, template
-robustness, field ablation) render only when the data exists and are absent
+robustness, field ablation, scorer lens) render only when the data exists and are absent
 from the sample. It is one self-contained file — a single
 tiny inline table-sorting script (hash-allowlisted in its
 Content-Security-Policy), no fonts or remote assets — and it never embeds
@@ -144,6 +144,7 @@ raw prompts or generations.
 - Labeled-block confidentiality (`run --confidentiality`): a privilege-marked block folded into the user turn carries a marker the model is told to keep internal; frozen elicitation probes then measure, per template, whether the marker leaks verbatim or in fragments.
 - Answer-collision audit (`run --answer-collision`): the lab audits its own token-ID boundary detector — can a different answer produce the same boundary configuration and be misread as the recorded one? The unit of measurement is the boundary configuration, not the template.
 - Suspected-refusal profile (`run --refusals`): post-hoc over the recorded answers, zero extra model calls — a frozen refusal-opener detector estimates each template's spurious-refusal rate on benign fixtures. Rates are *suspected* (string matching is the field's weak baseline), travel with exact counts, and are withheld for candidates whose search did not complete.
+- Scorer-lens regrade (`run --scorer-lens`): post-hoc over the recorded answers, zero extra model calls — every recorded answer is regraded under a frozen normalisation ladder (exact; whitespace; case/Unicode; edge punctuation and markdown fences; numeric value), reporting how many of each template's failures each rung recovers, which fixture flips first at which rung, and whether the search-phase winner changes under a more forgiving scorer. The ladder has no label-strip operation (`Answer: 42` flips at no rung), never reads decimal commas as grouping, and reports counts and fixture IDs only — no answer text.
 - Teacher-forced log-likelihood diagnostic (`run --logprob-diagnostic`): the log-probability of each fixture's expected answer under every candidate, reported as a banded heuristic next to the exact verdicts — where the greedy answer and the model's own scoring disagree, the band says so instead of hiding it.
 
 **Operator experience.**
