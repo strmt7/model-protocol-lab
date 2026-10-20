@@ -86,6 +86,46 @@ carries the full matrix under `portability_matrix` (per-candidate rows
 with per-token checks); the CLI also prints a readable table to stderr so
 stdout stays parseable JSON.
 
+### Behavioural template probe (`doctor --template-probe`)
+
+The static template firewall (section 8.12) proves a checkpoint's chat
+template contains no RCE primitives. It cannot see content-conditional
+logic written in legal Jinja — a template that injects an instruction
+only when a trigger phrase appears in a user message passes the AST
+scan untouched. `model-protocol-lab doctor --model DIR
+--template-probe` is the dynamic tier: it renders frozen probe
+conversations — synthetic messages bracketed by sentinel strings —
+through the checkpoint's own tokenizer, in pairs that differ by one
+frozen word swap, and reports per pair whether the rendering changed
+anywhere outside the swapped message's own span. Run it on a
+downloaded checkpoint before trusting its template; that is the
+decision it informs.
+
+The JSON report carries the section under `template_probe`:
+`counts` for every pair outcome (`clean`, `extra_span_change`,
+`span_content_mismatch`, `transform_unverifiable`, `content_dropped`,
+`span_unresolvable`, `unexercised`, `nondeterministic_render`,
+`render_error`), a findings list (capped, grouped by the changed
+region's SHA-256, each with a capped control-stripped excerpt), role-arm
+render-diff facts (a message's span vanished, merged into another
+span, or changed order when a system message is added or a user
+message is relabelled), the template source SHA-256, and the probe
+protocol fingerprint. Findings never change the doctor verdict or the
+exit code, in either direction: the probe reports facts, not a
+certificate. The full design — definitions, pre-registered claims,
+budgets — is in `docs/TEMPLATE_PROBE_DESIGN.md`.
+
+Limits, in the same breath as the capability: the probe
+conversations are published constants, and a template can detect them
+(sentinel, shape, or phrasing) and suppress conditional behaviour
+while being probed, so a section with no findings bounds only
+non-probe-aware templates; the probe set is a frozen sample, so a
+backdoor keyed on anything outside its swaps is missed; the probe
+reads only the `tokenizer_config.json`-embedded template string, so
+list-form templates and a separate `chat_template.jinja` file report
+`no_template`. Legitimate content conditionals produce findings too
+— judge the inserted text, which is why it is shown.
+
 ## 3. Prepare a local model
 
 Use trusted local GPT-2 or Llama causal-LM assets supported by the adapter. Required files include `config.json`, a self-contained `tokenizer.json`, and either `model.safetensors` or `model.safetensors.index.json` with its flat-named shards. Optional `generation_config.json` is fingerprinted but does not control generation.

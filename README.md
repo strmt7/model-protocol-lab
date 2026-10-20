@@ -19,7 +19,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (6983 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (7040 tests, 95% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -125,6 +125,7 @@ raw prompts or generations.
 - Protocol portfolio (`run`, always on): pure post-hoc over the stored search observations — how much the single global winner leaves on the table versus a per-fixture oracle, and the greedy covering protocol portfolio over solvable fixtures (deterministic; reported as an approximation, not an optimum).
 - Token-budget robustness frontier: the search decision recomputed at every smaller token budget, post-hoc and exact — plus a deterministic inline-SVG frontier chart with a decision ribbon and a per-budget selection-margin trajectory chart.
 - Cross-tokenizer boundary portability check (`doctor --reference-model`).
+- Behavioural template probe (`doctor --template-probe`): frozen sentinel-bracketed probe conversations rendered in word-swap pairs through the checkpoint's own tokenizer, reporting per pair whether the rendering changed anywhere outside the swapped message's span — the signature of content-conditional template logic (an instruction that appears only for some user messages) that the static template firewall cannot see. Findings only, never a verdict; a section with no findings bounds only templates that cannot detect the published probe conversations.
 - Prompt-boundary sensitivity sweep (`run --sensitivity-sweep`): measures whether truncating the prompt mid-token flips the selection (the per-depth byte cap is `--max-drop-bytes`).
 - Raw evidence, opt-in only (`run --include-evidence`): adds the recorded answer/token traces to `results.json` for debugging. Off by default — the public results file carries verdicts, counts and IDs, not raw generations, unless you ask for them.
 - Whitespace canonicalization (`run --ws-scan`): every search candidate's rendered prompts re-encoded under 8 whitespace mutations of the render string (trailing/leading space, newline, tab, stripping, collapsing) — id sequences compared exactly, fixtures on divergent variants re-run to measure verdict flips. Per-family whitespace fragility with the honest split: divergent ids + flipped verdict is fragility, flipped verdict on identical ids is a backend-determinism finding.
@@ -149,7 +150,7 @@ raw prompts or generations.
 - Teacher-forced log-likelihood diagnostic (`run --logprob-diagnostic`): the log-probability of each fixture's expected answer under every candidate, reported as a banded heuristic next to the exact verdicts — where the greedy answer and the model's own scoring disagree, the band says so instead of hiding it.
 
 **Operator experience.**
-- `doctor` pre-flight validation of checkpoint assets and fixtures without loading weights, with actionable next-command suggestions; `--portability-matrix` renders the cross-tokenizer boundary-portability matrix for every attached checkpoint in one pass.
+- `doctor` pre-flight validation of checkpoint assets and fixtures without loading weights, with actionable next-command suggestions; `--portability-matrix` renders the cross-tokenizer boundary-portability matrix for every attached checkpoint in one pass; `--template-probe` behaviourally probes the checkpoint's own chat template (see Capabilities).
 - `inspect`: validates a fixture file against the strict schema and prints its split hygiene (counts, groups, vacuous-answer warnings) without running anything.
 - `fixtures build`: CSV fixture authoring that makes search/held-out leakage structurally unbuildable.
 - `fixtures fuzz`: a seeded contract fuzzer for the fixture loaders — a fixed, published 133-case mutator table (JSON text, CSV text, whole-file mutations) checked against the loaders' documented accept/reject contract; the same seed reproduces the report byte-for-byte, and the report carries counts and case IDs only, never fixture text. It is a fixed corpus, not a coverage-guided fuzzer, and says so.

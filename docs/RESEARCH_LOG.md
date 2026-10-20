@@ -7311,3 +7311,68 @@ redundant count).
 the probe had dispatched and attached correctly. The test now
 asserts the exit-code contract explicitly rather than assuming
 0 means success.
+
+## Cycle 182 — behavioural template-backdoor probe (`doctor --template-probe`)
+
+Wave-7 rank 3 (research section 3). The static template firewall
+(`template_audit.scan_template_ast`, cycle 136) proves the absence of
+RCE primitives in a checkpoint's chat template. It cannot see
+content-conditional logic written in legal Jinja — a template that
+injects an instruction only when a trigger phrase appears in a user
+message passes the AST scan with zero findings (reproduced live by
+red-team A against `scan_template_ast`). That class is demonstrated
+in the wild by arXiv:2602.04653 (chat-template backdoors keyed on
+multi-word trigger phrases in user messages, typically matched
+case-normalised). Existing tooling covers the static tier (this
+repo's firewall; ctxray-style scanners) and hosted guardrails score
+model outputs; a local, tokenizer-only, paired-render behavioural
+probe of the template itself — sentinel-bracketed probe
+conversations, one frozen word swapped per pair, change-envelope
+classification — is the combination that does not exist as a
+shipped tool. That combination is the claim; no "first" is claimed.
+
+Monday-morning utility: a practitioner who downloads a checkpoint
+runs `model-protocol-lab doctor --model DIR --template-probe`
+before the first experiment and learns, per probe pair, whether the
+template's rendering changes anywhere outside the swapped message's
+own span — the signature of content-conditional template logic —
+instead of trusting that a passed static scan means the template
+only frames messages.
+
+Cross-check outcome (binding on the build): red-team A returned DO
+NOT BUILD AS SPECIFIED on the research design — "the swapped
+message's rendered span" does not exist for an arbitrary Jinja
+render, T1 is falsified by legitimate in-tree templates (length
+branches, dedup, synthesized system blocks, and a `strftime_now`
+template that is not even self-identical), T2 fails in both
+directions, and the role arm is circular as specified. Red-team B
+upheld A's verdict and then refuted parts of A's corrected design:
+A's exercised-pair rule would exclude the very pair carrying an
+injection (executed), a template can rebuild the published
+sentinels around an injection inside the span (executed), and a
+template can detect the published probe conversations and suppress
+(executed). The shipped design is A's as amended by B: spans exist
+only by sentinel construction; a pair is unexercised only when the
+two renders are byte-identical overall; the envelope check runs in
+both renders' coordinates; a within-span substitution check catches
+rebuilt spans; findings are per-pair facts (extra-span change,
+span-content mismatch), never a template verdict; the doctor
+verdict and exit code are unchanged by the section. Pre-registered
+claims T1'–T5' as amended: the seeded controls (single-word,
+phrase-completion, and case-normalised triggers; conditional-removed
+and payload-neutral twins; trigger-in-unchanged-message pinned as
+pair-level not-detected under protocol v1) and the legitimate
+controls (length branch, dedup, truncation, upper-case transform,
+duplicate-content, Gemma fold/raise) each carry a named expected
+outcome class, asserted by test.
+
+Honesty limits, stated in the design doc and the USAGE section in
+the same paragraph as the capability: the probe conversations are
+published constants, a template can detect them (sentinel, shape,
+or phrasing) and suppress conditional behaviour under probe, and a
+section with no findings therefore bounds only non-probe-aware
+templates; day-granularity time-dependence passes the double-render
+baseline and scopes findings to the run's date; the probe reads
+only the `tokenizer_config.json`-embedded template string, so
+list-form templates and a separate `chat_template.jinja` file are
+reported `no_template`, never probed silently.
