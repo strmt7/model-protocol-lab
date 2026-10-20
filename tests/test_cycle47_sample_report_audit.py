@@ -85,6 +85,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "faketurn",
     "toolcall",
     "verbosity",
+    "refusals",
     "cache_profile",
     "confidentiality",
     "answer_collision",

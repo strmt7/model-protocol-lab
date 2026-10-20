@@ -596,6 +596,7 @@ def diff_reports(
         "neither",
     )
     verbosity_diff = diff_verbosity(old.get("verbosity"), new.get("verbosity"))
+    refusals_diff = diff_refusals(old.get("refusals"), new.get("refusals"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -620,6 +621,10 @@ def diff_reports(
         "neither",
     )
     verbosity_asymmetric = verbosity_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    refusals_asymmetric = refusals_diff["available"] not in (
         "both",
         "neither",
     )
@@ -682,6 +687,8 @@ def diff_reports(
         and not toolcall_asymmetric
         and not verbosity_diff["changed"]
         and not verbosity_asymmetric
+        and not refusals_diff["changed"]
+        and not refusals_asymmetric
         and not cache_profile_diff["changed"]
         and not cache_profile_asymmetric
         and not template_robustness_diff["changed"]
@@ -744,6 +751,8 @@ def diff_reports(
         "toolcall_asymmetric": toolcall_asymmetric,
         "verbosity_changed": verbosity_diff["changed"],
         "verbosity_asymmetric": verbosity_asymmetric,
+        "refusals_changed": refusals_diff["changed"],
+        "refusals_asymmetric": refusals_asymmetric,
         "cache_profile_changed": cache_profile_diff["changed"],
         "cache_profile_asymmetric": cache_profile_asymmetric,
         "template_robustness_changed": template_robustness_diff["changed"],
@@ -784,6 +793,7 @@ def diff_reports(
         "faketurn": faketurn_diff,
         "toolcall": toolcall_diff,
         "verbosity": verbosity_diff,
+        "refusals": refusals_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -3115,6 +3125,210 @@ def diff_verbosity(old: Any, new: Any) -> dict[str, Any]:
         or verbosity_candidates_removed
         or verbosity_excluded_added
         or verbosity_excluded_removed
+    )
+    return result
+
+
+def _valid_refusals(payload: Any) -> bool:
+    """Structural check for a ``refusals`` profile payload.
+
+    Mirrors the fail-closed shape of the other profile validators:
+    the method block must name the detector and carry the opener-list
+    digest, counts must be non-negative ints with their arithmetic
+    invariants intact (suspected = passed + failed, hits length =
+    suspected count, rate in [0, 1] when present), so the diff and
+    the renderers never hit a TypeError on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    method = payload.get("method")
+    if type(method) is not dict:
+        return False
+    if type(method.get("detector")) is not str or not method.get("detector"):
+        return False
+    if type(method.get("openers_sha256")) is not str or not method.get("openers_sha256"):
+        return False
+    if type(payload.get("evaluable_mismatch")) is not bool:
+        return False
+    candidates = payload.get("candidates")
+    if type(candidates) is not list:
+        return False
+    n_candidates = payload.get("n_candidates")
+    if type(n_candidates) is not int or n_candidates != len(candidates):
+        return False
+    n_available = 0
+    for entry in candidates:
+        if type(entry) is not dict:
+            return False
+        name = entry.get("candidate")
+        if name is not None and type(name) is not str:
+            return False
+        if type(entry.get("available")) is not bool:
+            return False
+        if entry.get("available") is not True:
+            if type(entry.get("detail")) is not str:
+                return False
+            continue
+        n_available += 1
+        counts: dict[str, int] = {}
+        for key in (
+            "n_observations",
+            "n_completed",
+            "n_boundary_found",
+            "n_suspected",
+            "n_suspected_passed",
+            "n_suspected_failed",
+        ):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+            counts[key] = value
+        if counts["n_completed"] > counts["n_observations"]:
+            return False
+        if counts["n_boundary_found"] > counts["n_completed"]:
+            return False
+        if counts["n_suspected"] > counts["n_completed"]:
+            return False
+        if counts["n_suspected_passed"] + counts["n_suspected_failed"] != counts["n_suspected"]:
+            return False
+        rate = entry.get("suspected_rate")
+        if rate is not None and not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+            return False
+        if type(entry.get("rate_note")) is not str:
+            return False
+        hits = entry.get("hits")
+        if type(hits) is not list or len(hits) != counts["n_suspected"]:
+            return False
+        for hit in hits:
+            if type(hit) is not dict:
+                return False
+            fixture = hit.get("fixture")
+            if fixture is not None and type(fixture) is not str:
+                return False
+            if type(hit.get("opener")) is not str or not hit.get("opener"):
+                return False
+            if type(hit.get("passed")) is not bool:
+                return False
+    n_candidates_available = payload.get("n_candidates_available")
+    return type(n_candidates_available) is int and n_candidates_available == n_available
+
+
+def diff_refusals(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``refusals`` profile payloads; deterministic.
+
+    Answers "did the suspected-refusal story change between runs?":
+    per-candidate rate drift with denominator drift alongside (a
+    rate moved because its n moved is a different story from a rate
+    moved on the same n), hit-set changes per candidate, candidates
+    added/removed, candidates newly/no-longer excluded, an
+    evaluable-mismatch change, and detector protocol drift (the
+    frozen opener list or detector version differs -- rates across a
+    detector change are not comparable, and the diff says so). A
+    side without a recorded probe is reported plainly. No model, no
+    network.
+    """
+    old_ok = _valid_refusals(old)
+    new_ok = _valid_refusals(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    protocol_drift = (old["method"].get("detector"), old["method"].get("openers_sha256")) != (
+        new["method"].get("detector"),
+        new["method"].get("openers_sha256"),
+    )
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for entry in payload.get("candidates") or []:
+            # _valid_refusals guarantees the entry shape, so no
+            # defensive skip is needed here (it would be dead code
+            # and an uncoverable line).
+            name = entry.get("candidate")
+            if type(name) is not str:
+                continue
+            if entry.get("available") is not True:
+                view[name] = {"excluded": True}
+                continue
+            view[name] = {
+                "excluded": False,
+                "rate": entry.get("suspected_rate"),
+                "n": entry.get("n_completed"),
+                "hits": {
+                    (hit.get("fixture"), hit.get("opener"), hit.get("passed"))
+                    for hit in entry.get("hits") or []
+                },
+            }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    refusals_candidates_added = sorted(set(new_view) - set(old_view))
+    refusals_candidates_removed = sorted(set(old_view) - set(new_view))
+    refusals_rate_drift: list[dict[str, Any]] = []
+    refusals_hits_added: list[dict[str, Any]] = []
+    refusals_hits_removed: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        if old_entry["excluded"] or new_entry["excluded"]:
+            continue
+        if (old_entry["rate"], old_entry["n"]) != (new_entry["rate"], new_entry["n"]):
+            refusals_rate_drift.append(
+                {
+                    "candidate": name,
+                    "old_rate": old_entry["rate"],
+                    "new_rate": new_entry["rate"],
+                    "old_n": old_entry["n"],
+                    "new_n": new_entry["n"],
+                }
+            )
+        for fixture, opener, passed in sorted(
+            new_entry["hits"] - old_entry["hits"], key=lambda h: (str(h[0]), str(h[1]), str(h[2]))
+        ):
+            refusals_hits_added.append(
+                {"candidate": name, "fixture": fixture, "opener": opener, "passed": passed}
+            )
+        for fixture, opener, passed in sorted(
+            old_entry["hits"] - new_entry["hits"], key=lambda h: (str(h[0]), str(h[1]), str(h[2]))
+        ):
+            refusals_hits_removed.append(
+                {"candidate": name, "fixture": fixture, "opener": opener, "passed": passed}
+            )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    refusals_excluded_added = sorted(new_excluded - old_excluded)
+    refusals_excluded_removed = sorted(old_excluded - new_excluded)
+    refusals_mismatch_changed = old.get("evaluable_mismatch") != new.get("evaluable_mismatch")
+    result["rate_drift"] = refusals_rate_drift
+    result["hits_added"] = refusals_hits_added
+    result["hits_removed"] = refusals_hits_removed
+    result["candidates_added"] = refusals_candidates_added
+    result["candidates_removed"] = refusals_candidates_removed
+    result["excluded_added"] = refusals_excluded_added
+    result["excluded_removed"] = refusals_excluded_removed
+    result["protocol_drift"] = protocol_drift
+    result["mismatch_changed"] = refusals_mismatch_changed
+    # NOTE: refusals-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        refusals_rate_drift
+        or refusals_hits_added
+        or refusals_hits_removed
+        or refusals_candidates_added
+        or refusals_candidates_removed
+        or refusals_excluded_added
+        or refusals_excluded_removed
+        or refusals_mismatch_changed
+        or protocol_drift
     )
     return result
 
@@ -5751,6 +5965,70 @@ def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str
     return lines
 
 
+def _render_refusals_summary(refusals_diff: dict[str, Any] | None) -> list[str]:
+    """Suspected-refusal comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate or fixture name cannot inject terminal escapes
+    (the wave-3 red-team A lesson). Rates are percentages and travel
+    with their denominators.
+    """
+    if type(refusals_diff) is not dict:
+        return []
+    available = refusals_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Refusals comparison unavailable: {missing} run did not record the refusals probe."
+        ]
+    lines: list[str] = []
+    if refusals_diff.get("protocol_drift"):
+        lines.append(
+            "Refusals detector protocol drift: the frozen opener list or detector "
+            "version differs between runs; rates are not directly comparable."
+        )
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+
+    drift = refusals_diff.get("rate_drift") or []
+    for entry in drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            f"Refusals rate drift ({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_rate(entry.get('old_rate'))} of {entry.get('old_n')} -> "
+            f"{_fmt_rate(entry.get('new_rate'))} of {entry.get('new_n')}"
+        )
+    if len(drift) > 3:
+        lines.append(f"  ... and {len(drift) - 3} more rate drifts")
+    hits_added = refusals_diff.get("hits_added") or []
+    hits_removed = refusals_diff.get("hits_removed") or []
+    if hits_added:
+        lines.append(f"Refusals hits added: {len(hits_added)}")
+    if hits_removed:
+        lines.append(f"Refusals hits removed: {len(hits_removed)}")
+    added = refusals_diff.get("candidates_added") or []
+    removed = refusals_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Refusals candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Refusals candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    excl_added = refusals_diff.get("excluded_added") or []
+    excl_removed = refusals_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(f"Refusals newly excluded: {', '.join(_display_id(c) for c in excl_added)}")
+    if excl_removed:
+        lines.append(
+            f"Refusals no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    if refusals_diff.get("mismatch_changed"):
+        lines.append("Refusals evaluable-mismatch status changed between runs.")
+    return lines
+
+
 def _render_cache_profile_summary(cache_profile_diff: dict[str, Any] | None) -> list[str]:
     """Cache-profile comparison lines for the stderr summary.
 
@@ -6239,6 +6517,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_faketurn_summary(diff.get("faketurn")))
     lines.extend(_render_toolcall_summary(diff.get("toolcall")))
     lines.extend(_render_verbosity_summary(diff.get("verbosity")))
+    lines.extend(_render_refusals_summary(diff.get("refusals")))
     lines.extend(_render_cache_profile_summary(diff.get("cache_profile")))
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     lines.extend(_render_ablation_summary(diff.get("ablation")))

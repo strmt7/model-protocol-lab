@@ -373,6 +373,21 @@ def build_parser() -> argparse.ArgumentParser:
         "shorter is not better. The stage never fails the run.",
     )
     run.add_argument(
+        "--refusals",
+        action="store_true",
+        help="Suspected-refusal profile (cycle 174, research wave-6 "
+        "idea 6): classify each candidate's recorded search answers "
+        "against a frozen, published refusal-opener list (XSTest "
+        "Appendix D core plus itemised supplements) and report the "
+        "per-template suspected-refusal rate on benign fixtures -- "
+        "post-hoc over the main run's observations, zero extra model "
+        "calls. Monday morning: 'does this template make the model "
+        "refuse questions it would otherwise answer?' Detector is "
+        "heuristic and beginning-anchored; hits name the fixture and "
+        "the opener, never the answer text. Informational only; "
+        "never touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1150,6 +1165,28 @@ def _run_verbosity_probe(
         result["verbosity"] = {
             "available": False,
             "detail": "verbosity_unavailable",
+        }
+
+
+def _run_refusals_probe(result: Any) -> None:
+    """Run the suspected-refusal profile probe; never raises.
+
+    Post-hoc over the main run's recorded search observations (zero
+    extra model calls): each candidate's recorded answers are
+    classified against the frozen refusal-opener list (see
+    :mod:`refusals`) and the per-candidate suspected-refusal rates
+    are stored as the ``refusals`` profile on ``result``. Any
+    failure degrades to an "unavailable" marker instead of failing
+    the run.
+    """
+    try:
+        from .experiments import refusal_profile
+
+        result["refusals"] = refusal_profile(result)
+    except Exception:  # noqa: BLE001 -- refusals probe must not fail the run
+        result["refusals"] = {
+            "available": False,
+            "detail": "refusals_unavailable",
         }
 
 
@@ -2497,6 +2534,13 @@ def main(argv: list[str] | None = None) -> int:
                         search_fixtures=tuple(split.search),
                         max_new_tokens=args.max_new_tokens,
                     )
+                # Suspected-refusal profile (cycle 174, research
+                # wave-6 idea 6): per-template suspected-refusal rate
+                # on benign search fixtures from the recorded answers,
+                # post-hoc (zero extra model calls). Informational
+                # only -- never changes selection. Never fails the run.
+                if args.refusals:
+                    _run_refusals_probe(result)
                 # Prefix-cache sharability profile (cycle 168, research
                 # wave-6 idea 2): per-family exact-prefix sharability of
                 # the recorded input_ids, post-hoc over the main run's
