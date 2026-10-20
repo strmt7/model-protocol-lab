@@ -558,6 +558,20 @@ def probe_surface_noise(
         cancel=event,
     )
     n_base_abstain = sum(1 for v in baseline if v == "abstain")
+    if event.is_set():
+        # Cancel landed mid-baseline: evaluate_prompt maps a set event to
+        # per-fixture abstains, but the truth is "cancelled" (exit 2), not a
+        # measurement failure (exit 3).
+        return {
+            "instrument": PROBE_NAME,
+            "protocol_version": PROBE_VERSION,
+            "status": "cancelled",
+            "reason": "cancelled_during_baseline",
+            "completed_variants": 0,
+            "total_variants": 0,
+            "prompt_sha256": hashlib.sha256(prompt_text.encode()).hexdigest(),
+            "protocol": protocol,
+        }
     if n_base_abstain == len(fixtures):
         return _unavailable(protocol, prompt_text, fixtures, "baseline_all_abstained")
 
@@ -1595,7 +1609,7 @@ def run_surface_noise(args: Any, parser: Any) -> int:
 # ---------------------------------------------------------------------------
 
 TEMPLATE_ROBUSTNESS_PROBE_NAME = "template-surface-noise-robustness"
-TEMPLATE_ROBUSTNESS_PROBE_VERSION = "1.0.0"
+TEMPLATE_ROBUSTNESS_PROBE_VERSION = "1.0.1"
 
 # Presentation-level operators ONLY (F1): these perturb presentation without
 # changing the task's correct answer. Excluded: typo ("cat"->"car") and
@@ -1676,7 +1690,10 @@ def freeze_template_robustness_protocol(
             "Perturbation applies to user-role message contents only; roles, "
             "message order, and non-user messages are byte-identical. "
             "Operators are presentation-level (whitespace, case_flip, "
-            "unicode_variant) and cannot change the task's correct answer; "
+            "unicode_variant); results are conditional on fixtures whose "
+            "correct answer is invariant under these transforms. "
+            "Presentation-sensitive fixtures (whitespace-significant code, "
+            "character-position or verbatim-copy tasks) are out of scope. "
             "typo and punctuation_strip are excluded for exactly that reason."
         ),
         "rendering": (
@@ -1761,14 +1778,18 @@ def _perturb_fixture_contents(
     operator: str,
     seed: int,
 ) -> tuple[str, ...]:
-    """Perturbed user contents for one fixture (F10: user-role only)."""
-    out: list[str] = []
-    for m in case.messages:
-        if m.role == "user":
-            out.append(perturb_text(m.content, operator, seed=seed))
-        else:
-            out.append(m.content)
-    return tuple(out)
+    """Perturbed user contents for one fixture (F10: user-role only).
+
+    Returns one entry per *user* message, in order. Assistant (few-shot
+    demonstration) messages are never perturbed — perturbing them would be
+    the R6 inversion again (a semantic change that can move the correct
+    answer while ``expected`` stays pinned). Consumers
+    (``_with_perturbed_contents``, the no-op filter, the distance) all
+    expect the user-only shape.
+    """
+    return tuple(
+        perturb_text(m.content, operator, seed=seed) for m in case.messages if m.role == "user"
+    )
 
 
 def _whitespace_fixture_contents(
@@ -1778,13 +1799,14 @@ def _whitespace_fixture_contents(
     """Whitespace variant: mode_index-th mode per user message (cycling).
 
     Each user message gets its (mode_index mod n_modes)-th whitespace mode;
-    messages without whitespace are unchanged. Deterministic and bounded:
+    messages without whitespace are unchanged. Returns one entry per *user*
+    message, in order (assistant messages are never perturbed and are not
+    represented in the tuple). Deterministic and bounded:
     the variant count is the max mode count across user messages.
     """
     out: list[str] = []
     for m in case.messages:
         if m.role != "user":
-            out.append(m.content)
             continue
         modes = _whitespace_mode_pairs(m.content)
         if not modes:
@@ -1954,6 +1976,7 @@ def probe_template_robustness(
             "status": "cancelled",
             "reason": reason,
             "template_name": template_name,
+            "boundary": list(boundary),
             "protocol": protocol,
         }
 
@@ -1964,6 +1987,7 @@ def probe_template_robustness(
             "status": "unavailable",
             "reason": reason,
             "template_name": template_name,
+            "boundary": list(boundary),
             "protocol": protocol,
         }
 
@@ -1991,6 +2015,10 @@ def probe_template_robustness(
             hasher=render_hasher,
         )
     n_base_abstain = sum(1 for v in baseline.values() if v == "abstain")
+    if event.is_set():
+        # Cancel landed during the last baseline evaluation: the verdict came
+        # back "abstain", but the truth is "cancelled", not "unavailable".
+        return _cancelled("cancelled_during_baseline")
     if n_base_abstain == len(fixtures):
         return _unavailable("baseline_all_abstained")
 
@@ -2128,6 +2156,10 @@ def probe_template_robustness(
                 v = variant_verdicts[vid]
                 if v == "abstain" or v == base_v:
                     continue
+                if base_v == "abstain":
+                    # B-NEW-2: an abstain baseline has no verdict to flip
+                    # from (flip_predicate requires both non-abstain).
+                    continue
                 d = variant_distances[vid]
                 if best is None or d < best[0]:
                     best = (d, vid)
@@ -2154,6 +2186,7 @@ def probe_template_robustness(
         "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
         "status": "ok",
         "template_name": template_name,
+        "boundary": list(boundary),
         "protocol": protocol,
         "n_fixtures": len(fixtures),
         "n_pass_baseline": sum(1 for v in baseline.values() if v == "pass"),

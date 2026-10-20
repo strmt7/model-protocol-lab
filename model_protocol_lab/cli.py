@@ -381,8 +381,21 @@ def build_parser() -> argparse.ArgumentParser:
         "presentation-level surface noise (whitespace, case, unicode "
         "variants) applied to user message contents. Template is the "
         "independent variable; weights fixed. Informational only, never "
-        "changes winner selection. Opt-in: costs about C*F*25 extra "
+        "changes winner selection. Opt-in: costs about C*F*17 extra "
         "generations. The stage never fails the run.",
+    )
+    run.add_argument(
+        "--ablate-fields",
+        action="store_true",
+        help="Template field ablation (cycle 167): for the top-2 candidates "
+        "by search accuracy, replace one Format structural field at a time "
+        "(bos, role prefixes, turn terminators, open_suffix) with its "
+        "neutral value and re-evaluate, attributing verdict flips per "
+        "field. Answers 'what about the winner won' -- only the causal "
+        "field transfers to the next template you write. Main effects "
+        "only; informational, never changes winner selection. Opt-in: "
+        "costs about 2*(1+8) extra evaluations. The stage never fails "
+        "the run.",
     )
     run.add_argument(
         "--include-evidence",
@@ -1081,6 +1094,7 @@ def _run_template_robustness_probe(
     backend: Any,
     search_fixtures: Any,
     boundary: Any,
+    boundary_map: Any,
     max_new_tokens: int,
     seed: int,
 ) -> None:
@@ -1088,9 +1102,11 @@ def _run_template_robustness_probe(
 
     For each candidate template, probes verdict preservation under
     presentation-level surface noise on user message contents (cycle 166).
-    Informational only: results are stored as ``result["template_robustness"]``
-    and never change winner selection. Any failure degrades to an
-    "unavailable" marker instead of failing the run.
+    Each candidate is judged under its own boundary (``boundary_map``), the
+    same honest-boundary rule as the main evaluation. Informational only:
+    results are stored as ``result["template_robustness"]`` and never change
+    winner selection. Any failure degrades to an "unavailable" marker instead
+    of failing the run.
     """
     try:
         from .experiments import template_robustness_stage
@@ -1100,6 +1116,7 @@ def _run_template_robustness_probe(
             tuple(search_fixtures),
             backend,
             boundary=tuple(boundary),
+            boundary_map=boundary_map,
             max_new_tokens=max_new_tokens,
             seed=seed,
         )
@@ -1112,6 +1129,51 @@ def _run_template_robustness_probe(
         result["template_robustness"] = {
             "available": False,
             "detail": "template_robustness_unavailable",
+        }
+
+
+def _run_ablation_probe(
+    result: Any,
+    formats: Any,
+    *,
+    backend: Any,
+    search_fixtures: Any,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the template field ablation stage; never raises.
+
+    For the top-2 candidates by search accuracy, evaluates one
+    single-field ablation arm per structural Format field (cycle 167).
+    Each candidate is judged under its own boundary (``boundary_map``), the
+    same honest-boundary rule as the main evaluation. Informational only:
+    results are stored as ``result["ablation"]`` and never change winner
+    selection. Any failure degrades to an "unavailable" marker instead of
+    failing the run.
+    """
+    try:
+        from .experiments import ablation_stage
+
+        stage = ablation_stage(
+            tuple(formats),
+            tuple(search_fixtures),
+            backend,
+            boundary=tuple(boundary),
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        result["ablation"] = {
+            "available": True,
+            "candidates": stage["candidates"],
+            "n_focus": stage["n_focus"],
+        }
+    except Exception:  # noqa: BLE001 -- ablation probe must not fail the run
+        result["ablation"] = {
+            "available": False,
+            "detail": "ablation_unavailable",
         }
 
 
@@ -2241,6 +2303,21 @@ def main(argv: list[str] | None = None) -> int:
                         backend=backend,
                         search_fixtures=tuple(split.search),
                         boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Template field ablation (cycle 167): per-field causal
+                # attribution for the top-2 candidates. Informational
+                # only -- never changes selection. Never fails the run.
+                if args.ablate_fields:
+                    _run_ablation_probe(
+                        result,
+                        formats,
+                        backend=backend,
+                        search_fixtures=tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
                     )

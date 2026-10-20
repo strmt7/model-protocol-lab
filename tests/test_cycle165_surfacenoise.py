@@ -492,9 +492,10 @@ class CancellationTests(unittest.TestCase):
         n = len(fixtures)
         # is_set() calls: pre-baseline check (Finding 9) + baseline 3n
         # (evaluate_prompt genexpr + generate's cancel check + _evaluate_one
-        # post-generate check per fixture), variant 1: top + 3n + post,
+        # post-generate check per fixture) + post-baseline cancelled check
+        # (wave-6 finding 4), variant 1: top + 3n + post,
         # then variant 2's top check.
-        fire_at = 1 + 3 * n + (1 + 3 * n + 1) + 1
+        fire_at = 1 + 3 * n + 1 + (1 + 3 * n + 1) + 1
         cancel_event = CountingEvent(fire_at)
         report = sn.probe_surface_noise(
             "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel_event
@@ -1648,3 +1649,109 @@ class CoverageGapTests2(unittest.TestCase):
                         ]
                     )
             self.assertEqual(code, 2)
+
+
+class FailClosedCoverageWave6Tests(unittest.TestCase):
+    """Cover fail-closed defensive paths the wave-6 verifier found uncovered."""
+
+    def test_baseline_all_abstained_is_unavailable(self):
+        from model_protocol_lab.core import Generation
+
+        class ErrorBackend(sn.SelfTestBackend):
+            fingerprint = "wave6-error-all-abstain/v1"
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                return Generation((), "error", error="diag")
+
+        backend = ErrorBackend()
+        protocol, _, fixtures = _protocol(backend)
+        rep = sn.probe_surface_noise("x", fixtures, backend, protocol, boundary=(7,))
+        self.assertEqual(rep["status"], "unavailable")
+        self.assertEqual(rep["reason"], "baseline_all_abstained")
+
+    def test_cli_probe_unavailable_exit_code(self):
+        # Drive run_surface_noise with a mocked unavailable probe to hit the
+        # exit-3 path (mirrors test_cli_probe_cancelled_exit_code).
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        from model_protocol_lab.cli import main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompt_path = Path(tmpdir) / "prompt.txt"
+            prompt_path.write_text("MAGICWORD please", encoding="utf-8")
+            fixture_path = Path(tmpdir) / "f.json"
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        "search": [
+                            {
+                                "id": "s1",
+                                "group": "g1",
+                                "messages": [{"role": "user", "content": "x"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                        "held_out": [
+                            {
+                                "id": "h1",
+                                "group": "g2",
+                                "messages": [{"role": "user", "content": "y"}],
+                                "expected": "BLUE",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir = Path(tmpdir) / "out"
+            with mock.patch.object(
+                sn,
+                "probe_surface_noise",
+                return_value={"status": "unavailable", "reason": "baseline_all_abstained"},
+            ):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code = main(
+                        [
+                            "surface-noise",
+                            "probe",
+                            "--prompt",
+                            str(prompt_path),
+                            "--fixtures",
+                            str(fixture_path),
+                            "--boundary-ids",
+                            "7",
+                            "--output",
+                            str(out_dir),
+                        ]
+                    )
+            self.assertEqual(code, 3)
+
+    def test_cancel_during_last_baseline_is_cancelled(self):
+        # Wave-6 red-team A finding 4: a cancel landing during the baseline
+        # must report "cancelled" (exit 2), not "unavailable" (exit 3).
+        import threading
+
+        from model_protocol_lab.core import Generation
+
+        event = threading.Event()
+
+        class CancelOnLastBackend(sn.SelfTestBackend):
+            fingerprint = "wave6-cancel-on-last/v1"
+
+            def __init__(self):
+                self.calls = 0
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                self.calls += 1
+                if self.calls == 2:
+                    event.set()
+                return Generation((), "error", error="diag")
+
+        backend = CancelOnLastBackend()
+        protocol, _, fixtures = _protocol(backend)
+        rep = sn.probe_surface_noise("x", fixtures, backend, protocol, boundary=(7,), cancel=event)
+        self.assertEqual(rep["status"], "cancelled")
+        self.assertEqual(rep["reason"], "cancelled_during_baseline")

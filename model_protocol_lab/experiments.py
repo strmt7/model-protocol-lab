@@ -5892,6 +5892,7 @@ def template_robustness_stage(
     backend: Any,
     *,
     boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
     max_new_tokens: int = 64,
     seed: int = 0,
     cancel: Event | None = None,
@@ -5902,8 +5903,11 @@ def template_robustness_stage(
     presentation-level surface noise applied to user-role message contents.
     The template is the independent variable; weights, fixtures, backend,
     and protocol are fixed. One frozen protocol covers all candidates in the
-    run (comparability). Per-candidate measurement failures degrade to
-    ``status: "unavailable"`` markers; the stage never raises.
+    run (comparability). Each candidate is judged under its own boundary
+    (``boundary_map``, resolved by :func:`_resolve_boundaries`) -- the same
+    honest-boundary rule as the main evaluation. Per-candidate measurement
+    failures degrade to ``status: "unavailable"`` markers; the stage never
+    raises.
 
     Returns ``{"candidates": {name: report}, "protocol": protocol}``.
     Design: docs/TEMPLATE_ROBUSTNESS_DESIGN.md.
@@ -5914,6 +5918,7 @@ def template_robustness_stage(
         raise ValueError("formats must be a nonempty tuple")
     if type(fixtures) is not tuple or not fixtures:
         raise ValueError("fixtures must be a nonempty tuple")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
     protocol = _sn.freeze_template_robustness_protocol(backend.fingerprint, fixtures)
     candidates: dict[str, Any] = {}
     for fmt in formats:
@@ -5929,7 +5934,7 @@ def template_robustness_stage(
                 fixtures,
                 backend,
                 protocol,
-                boundary=boundary,
+                boundary=boundaries[name],
                 max_new_tokens=max_new_tokens,
                 seed=seed,
                 cancel=cancel,
@@ -5940,8 +5945,122 @@ def template_robustness_stage(
                 "status": "unavailable",
                 "reason": "candidate_probe_failed",
                 "template_name": name,
+                "boundary": list(boundaries[name]),
             }
         # N3: per-candidate renderer context (Format fields + rendered inputs).
         report["renderer_sha256"] = renderer_sha256
         candidates[name] = report
     return {"candidates": candidates, "protocol": protocol}
+
+
+def ablation_stage(
+    formats: tuple[Any, ...],
+    fixtures: tuple[Any, ...],
+    backend: Any,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Template field ablation (cycle 167, informational).
+
+    For the top-2 candidates by search accuracy (ties broken by name, so
+    the focus is deterministic), evaluates the base format and one
+    single-field ablation arm per structural field via ``core.evaluate``,
+    then attributes verdict flips per field with
+    ``ablation.summarize_arm``. A field is *load-bearing* for a candidate
+    when the base passes every search fixture but the arm does not --
+    i.e. the field carried the candidate over the conservative selection
+    bar. Main effects only; pairwise interactions are out of scope.
+
+    Never raises for measurement failures: per-arm errors degrade to an
+    ``"unavailable"`` arm marker, per-candidate errors to an
+    ``"unavailable"`` candidate marker. Never changes winner selection.
+    Returns ``{"candidates": {name: report}, "n_focus": 2}``.
+    """
+    from . import ablation as _ab
+    from .core import evaluate as _evaluate
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(fixtures) is not tuple or not fixtures:
+        raise ValueError("fixtures must be a nonempty tuple")
+    # Each candidate is judged under its own boundary (the same
+    # honest-boundary rule as the main evaluation and the
+    # template-robustness probe).
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+
+    def _verdicts(fmt: Any) -> tuple[bool, ...] | None:
+        try:
+            report = _evaluate(
+                backend,
+                fmt,
+                fixtures,
+                boundary=boundaries[fmt.name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=cancel,
+            )
+        except Exception:  # noqa: BLE001 -- per-arm fail-closed
+            return None
+        if not report.aggregate_eligible:
+            return None
+        return tuple(bool(o.exact_match and o.boundary_found) for o in report.observations)
+
+    # Rank candidates by search accuracy; ties broken by name (deterministic).
+    scored: list[tuple[float, str, Any]] = []
+    for fmt in formats:
+        verdicts = _verdicts(fmt)
+        if verdicts is None:
+            continue
+        rate = sum(verdicts) / len(verdicts) if verdicts else 0.0
+        scored.append((rate, fmt.name, fmt))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    focus = [fmt for _, _, fmt in scored[:2]]
+
+    fixture_ids = tuple(f.id for f in fixtures)
+    candidates: dict[str, Any] = {}
+    for fmt in focus:
+        name = fmt.name
+        base_verdicts = _verdicts(fmt)
+        if base_verdicts is None:
+            candidates[name] = {"status": "unavailable", "reason": "base_evaluation_failed"}
+            continue
+        arms: dict[str, Any] = {}
+        load_bearing: list[str] = []
+        base_passes_all = all(base_verdicts)
+        try:
+            arm_list = _ab.ablation_arms(fmt)
+            not_applicable = _ab.inapplicable_fields(fmt)
+        except Exception:  # noqa: BLE001 -- arm construction fail-closed
+            candidates[name] = {"status": "unavailable", "reason": "arm_construction_failed"}
+            continue
+        for arm in arm_list:
+            arm_verdicts = _verdicts(arm.ablated)
+            if arm_verdicts is None:
+                arms[arm.field] = {"status": "unavailable", "reason": "arm_evaluation_failed"}
+                continue
+            summary = _ab.summarize_arm(base_verdicts, arm_verdicts, fixture_ids)
+            arms[arm.field] = {
+                "status": "ok",
+                "original": arm.original,
+                "neutral": _ab.NEUTRAL_VALUES[arm.field],
+                **summary,
+            }
+            if base_passes_all and not summary["selection_bar_held"]:
+                load_bearing.append(arm.field)
+        candidates[name] = {
+            "status": "ok",
+            "boundary": list(boundaries[name]),
+            "base_accuracy": sum(base_verdicts) / len(base_verdicts) if base_verdicts else 0.0,
+            "base_passes_all": base_passes_all,
+            "arms": arms,
+            "not_applicable_fields": list(not_applicable),
+            "load_bearing_fields": load_bearing,
+            "any_attribution": any(
+                a.get("n_flips", 0) > 0 for a in arms.values() if a.get("status") == "ok"
+            ),
+        }
+    return {"candidates": candidates, "n_focus": len(focus)}

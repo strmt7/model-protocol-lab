@@ -4699,6 +4699,116 @@ def _toolcall_section(result: dict[str, Any]) -> str:
     )
 
 
+def _ablation_section(result: dict[str, Any]) -> str:
+    """Template field ablation (cycle 167).
+
+    Renders the ``ablation`` payload as a per-candidate, per-field table:
+    for each structural field, the number of verdict flips when the field
+    is replaced by its neutral value, the flip directions, and whether the
+    arm still clears the conservative selection bar. Load-bearing fields
+    (base passes all, arm does not) are highlighted. Informational only:
+    the section states it never changes winner selection, that attribution
+    is causal only within the measured (template, fixtures, backend)
+    triple, and that only main effects are measured. Every interpolation
+    is escaped at this boundary.
+    """
+    import re as _re
+    from html import escape as _escape
+
+    _control_chars = _re.compile(
+        r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+    )
+
+    audit: Any = result.get("ablation")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    candidates = audit.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return ""
+
+    def _display_id(raw: Any) -> str:
+        return _escape(_control_chars.sub("", str(raw)))
+
+    blocks: list[str] = []
+    for name in sorted(candidates):
+        rep = candidates[name]
+        if type(rep) is not dict:
+            continue
+        if rep.get("status") != "ok":
+            blocks.append(
+                "<h3>"
+                + _display_id(name)
+                + "</h3><p>unavailable: "
+                + _display_id(rep.get("reason"))
+                + "</p>"
+            )
+            continue
+        arms = rep.get("arms")
+        rows: list[str] = []
+        load_bearing = rep.get("load_bearing_fields")
+        load_set = set(load_bearing) if type(load_bearing) is list else set()
+        if type(arms) is dict:
+            for field in sorted(arms):
+                arm = arms[field]
+                if type(arm) is not dict or arm.get("status") != "ok":
+                    rows.append(
+                        "<tr><td>" + _escape(str(field)) + "</td>"
+                        '<td colspan="4">unavailable</td></tr>'
+                    )
+                    continue
+                marker = " &#9733;" if field in load_set else ""
+                rows.append(
+                    "<tr><td>"
+                    + _escape(str(field))
+                    + marker
+                    + "</td><td>"
+                    + _escape(str(arm.get("n_flips")))
+                    + "</td><td>"
+                    + _escape(str(arm.get("pass_to_fail")))
+                    + " / "
+                    + _escape(str(arm.get("fail_to_pass")))
+                    + "</td><td>"
+                    + ("yes" if arm.get("selection_bar_held") else "no")
+                    + "</td><td>"
+                    + _escape(", ".join(arm.get("flipped_fixture_ids") or ()))
+                    + "</td></tr>"
+                )
+        table = (
+            "<table><thead><tr><th>Field</th><th>Verdict flips</th>"
+            "<th>pass&rarr;fail / fail&rarr;pass</th>"
+            "<th>Selection bar held</th><th>Flipped fixtures</th></tr></thead>"
+            "<tbody>" + "".join(rows) + "</tbody></table>"
+        )
+        note = ""
+        if not rep.get("any_attribution"):
+            note = (
+                "<p><em>No single field explains this candidate's verdicts: "
+                "ablation arms show ~zero marginal attribution. This negative "
+                "result is the finding.</em></p>"
+            )
+        blocks.append(
+            "<h3>" + _display_id(name) + "</h3>"
+            "<p>Base accuracy: " + _escape(str(rep.get("base_accuracy"))) + "; "
+            "load-bearing fields: "
+            + _escape(", ".join(load_set) if load_set else "none")
+            + ".</p>"
+            + note
+            + table
+        )
+    return (
+        '<section class="card" id="field-ablation">'
+        "<h2>Template field ablation</h2>"
+        "<p>Which structural field drives the verdict? For the top-2 "
+        "candidates, one <em>Format</em> field at a time is replaced by its "
+        "neutral value and the candidate re-evaluated; &#9733; marks a "
+        "<em>load-bearing</em> field (the base passes every search fixture "
+        "but the arm does not). Attribution is causal only within the "
+        "measured (template, fixtures, backend) triple; only main effects "
+        "are measured, never pairwise interactions. Informational only -- "
+        "it never changes winner selection.</p>" + "".join(blocks) + "</section>"
+    )
+
+
 def _template_robustness_section(result: dict[str, Any]) -> str:
     """Per-template surface-noise robustness (cycle 166).
 
@@ -5862,6 +5972,7 @@ def render_html(result: dict[str, Any]) -> str:
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
     template_robustness_html = _template_robustness_section(result)
+    ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
@@ -5969,6 +6080,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "template-robustness",
                 "Template surface-noise robustness",
                 template_robustness_html,
+            ),
+            (
+                "field-ablation",
+                "Template field ablation",
+                ablation_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),

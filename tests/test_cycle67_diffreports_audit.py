@@ -256,6 +256,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "toolcall": {"available": "neither", "changed": False},
         "verbosity": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
+        "ablation": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -318,6 +319,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "verbosity_asymmetric": False,
             "template_robustness_changed": False,
             "template_robustness_asymmetric": False,
+            "ablation_changed": False,
+            "ablation_asymmetric": False,
             "identical": True,
         },
     }
@@ -3165,6 +3168,7 @@ def _oracle_diff(
     o_trob, o_trob_changed, o_trob_asymmetric = _o_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
     )
+    o_ab, o_ab_changed, o_ab_asymmetric = _o_ablation(old.get("ablation"), new.get("ablation"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -3218,6 +3222,8 @@ def _oracle_diff(
         and not o_vb_asymmetric
         and not o_trob_changed
         and not o_trob_asymmetric
+        and not o_ab_changed
+        and not o_ab_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -3248,6 +3254,7 @@ def _oracle_diff(
         "toolcall": o_tc,
         "verbosity": o_vb,
         "template_robustness": o_trob,
+        "ablation": o_ab,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3306,6 +3313,8 @@ def _oracle_diff(
             "verbosity_asymmetric": o_vb_asymmetric,
             "template_robustness_changed": o_trob_changed,
             "template_robustness_asymmetric": o_trob_asymmetric,
+            "ablation_changed": o_ab_changed,
+            "ablation_asymmetric": o_ab_asymmetric,
             "identical": identical,
         },
     }
@@ -3403,6 +3412,109 @@ def _o_template_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, bo
     diff["candidates_added"] = candidates_added
     diff["candidates_removed"] = candidates_removed
     changed = bool(preservation_drift or operator_drift or candidates_added or candidates_removed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_ablation_valid(value: Any) -> bool:
+    """Oracle ablation validator: mirrors diffreports._valid_ablation."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    if not all(type(name) is str for name in candidates):
+        return False
+    for rep in candidates.values():
+        if type(rep) is not dict:
+            return False
+        if rep.get("status") != "ok":
+            continue
+        arms = rep.get("arms")
+        if type(arms) is not dict:
+            return False
+        for arm in arms.values():
+            if type(arm) is not dict:
+                return False
+            if arm.get("status") != "ok":
+                continue
+            for key in ("n_flips", "pass_to_fail", "fail_to_pass"):
+                if type(arm.get(key)) is not int:
+                    return False
+        load_bearing = rep.get("load_bearing_fields")
+        if type(load_bearing) is not list or not all(type(f) is str for f in load_bearing):
+            return False
+    return True
+
+
+def _o_ablation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle ablation section: per-field flip-count + load-bearing drift.
+
+    Independent reimplementation: dict-comprehension views rather than
+    the implementation's accumulation loops.
+    """
+    old_ok = _o_ablation_valid(old)
+    new_ok = _o_ablation_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        return {
+            name: (
+                {"flips": {}, "load_bearing": []}
+                if entry.get("status") != "ok"
+                else {
+                    "flips": {
+                        field: (arm.get("n_flips") if type(arm) is dict else None)
+                        for field, arm in (entry.get("arms") or {}).items()
+                    },
+                    "load_bearing": sorted(entry.get("load_bearing_fields") or []),
+                }
+            )
+            for name, entry in payload["candidates"].items()
+        }
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    attribution_drift = [
+        {
+            "candidate": name,
+            "field": field,
+            "old_n_flips": old_view[name]["flips"].get(field),
+            "new_n_flips": new_view[name]["flips"].get(field),
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        for field in sorted(set(old_view[name]["flips"]) | set(new_view[name]["flips"]))
+        if old_view[name]["flips"].get(field) != new_view[name]["flips"].get(field)
+    ]
+    load_bearing_drift = [
+        {
+            "candidate": name,
+            "old_load_bearing": old_view[name]["load_bearing"],
+            "new_load_bearing": new_view[name]["load_bearing"],
+        }
+        for name in sorted(set(old_view) & set(new_view))
+        if old_view[name]["load_bearing"] != new_view[name]["load_bearing"]
+    ]
+    diff["attribution_drift"] = attribution_drift
+    diff["load_bearing_drift"] = load_bearing_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    changed = bool(
+        attribution_drift or load_bearing_drift or candidates_added or candidates_removed
+    )
     diff["changed"] = changed
     return diff, changed, asymmetric
 
@@ -3571,6 +3683,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "verbosity_asymmetric": False,
                 "template_robustness_changed": False,
                 "template_robustness_asymmetric": False,
+                "ablation_changed": False,
+                "ablation_asymmetric": False,
                 "identical": False,
             },
         )
@@ -5467,6 +5581,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not verbosity_asymmetric\n"
             '        and not template_robustness_diff["changed"]\n'
             "        and not template_robustness_asymmetric\n"
+            '        and not ablation_diff["changed"]\n'
+            "        and not ablation_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
