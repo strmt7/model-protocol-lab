@@ -1694,6 +1694,354 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_aliasing_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_aliasing exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too, including every recompute identity.
+        def _hex(v: Any) -> bool:
+            return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+        def _recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+            """Re-derive every aliasing aggregate from the ground records.
+
+            Independent code (the cycle-67 gate harness loads this module
+            standalone): cohorts, classes, counts, pairs, suspect cells and
+            the flag are all recomputed from the per-cell digest records,
+            so a payload cannot manufacture a class structure or a fired
+            flag its records do not support. This is an internal-
+            consistency recompute -- it detects aggregates inconsistent
+            with the ground records; it cannot detect fabricated ground
+            records, the standing limitation of every house ground layer.
+            Returns the recomputed structure, or None on any inconsistency
+            with the payload's own fields (the caller compares).
+            """
+            candidates = payload.get("candidates")
+            if type(candidates) is not list or not candidates:
+                return None
+            if payload.get("n_candidates_recorded") != len(candidates):
+                return None
+            available: list[dict[str, Any]] = []
+            total_cells = 0
+            seen_names: set[str] = set()
+            for entry in candidates:
+                if type(entry) is not dict:
+                    return None
+                name = entry.get("candidate")
+                if name is not None and type(name) is not str:
+                    return None
+                if type(name) is str:
+                    if name in seen_names:
+                        return None
+                    seen_names.add(name)
+                if type(entry.get("available")) is not bool:
+                    return None
+                if entry.get("available") is not True:
+                    if type(entry.get("detail")) is not str:
+                        return None
+                    continue
+                available.append(entry)
+                if type(entry.get("eligible")) is not bool:
+                    return None
+                planned = entry.get("planned")
+                if planned is not None and (type(planned) is not int or planned < 0):
+                    return None
+                boundary = entry.get("boundary_token_ids")
+                if (
+                    type(boundary) is not list
+                    or not boundary
+                    or any(type(t) is not int or t < 0 for t in boundary)
+                ):
+                    return None
+                records = entry.get("records")
+                if type(records) is not list or entry.get("n_observations") != len(records):
+                    return None
+                total_cells += len(records)
+                fixtures_seen: set[str] = set()
+                n_completed = 0
+                n_evaluable = 0
+                for record in records:
+                    if type(record) is not dict:
+                        return None
+                    fixture = record.get("fixture")
+                    if type(fixture) is not str or not fixture or fixture in fixtures_seen:
+                        return None
+                    fixtures_seen.add(fixture)
+                    if type(record.get("status")) is not str:
+                        return None
+                    for flag in ("evaluable", "exact_match", "boundary_found"):
+                        if type(record.get(flag)) is not bool:
+                            return None
+                    btm = record.get("boundary_text_match")
+                    if btm is not None and type(btm) is not bool:
+                        return None
+                    if record["status"] == "completed":
+                        n_completed += 1
+                    if record["evaluable"] is True:
+                        n_evaluable += 1
+                        if record["status"] != "completed":
+                            return None
+                        if not _hex(record.get("input_sha256")):
+                            return None
+                        if not _hex(record.get("output_sha256")):
+                            return None
+                    else:
+                        if record["status"] == "completed":
+                            return None
+                        if (
+                            record.get("input_sha256") is not None
+                            or record.get("output_sha256") is not None
+                        ):
+                            return None
+                if entry.get("n_completed") != n_completed:
+                    return None
+                if entry.get("n_not_completed") != len(records) - n_completed:
+                    return None
+                if entry.get("n_evaluable") != n_evaluable:
+                    return None
+            if total_cells > 2400 or len(available) > 24:
+                return None
+            if payload.get("n_candidates_available") != len(available):
+                return None
+
+            def _fixtures(entry: dict[str, Any]) -> frozenset[str]:
+                return frozenset(r["fixture"] for r in entry["records"] if r["evaluable"])
+
+            mismatch = len({_fixtures(e) for e in available}) > 1
+            groups: dict[frozenset[str], list[dict[str, Any]]] = {}
+            for entry in available:
+                groups.setdefault(_fixtures(entry), []).append(entry)
+
+            def _rank(item: tuple[frozenset[str], list[dict[str, Any]]]) -> tuple[Any, ...]:
+                fixtures, members = item
+                return (
+                    -len(members),
+                    -len(fixtures),
+                    tuple(sorted(fixtures)),
+                    tuple(sorted(str(m.get("candidate")) for m in members)),
+                )
+
+            primary = sorted(groups.items(), key=_rank)[0][1] if groups else []
+            primary_names = {str(e.get("candidate")) for e in primary}
+            fixtures_sorted = sorted(_fixtures(primary[0])) if primary else []
+
+            def _classes(key_with_boundary: bool) -> list[list[str]]:
+                grouped: dict[tuple[Any, ...], list[str]] = {}
+                for entry in primary:
+                    cells = {r["fixture"]: r for r in entry["records"] if r["evaluable"]}
+                    sig = tuple(cells[f]["input_sha256"] for f in fixtures_sorted)
+                    if key_with_boundary:
+                        sig = sig + (tuple(entry["boundary_token_ids"]),)
+                    grouped.setdefault(sig, []).append(str(entry.get("candidate")))
+                return sorted((sorted(v) for v in grouped.values()), key=lambda names: names[0])
+
+            render_classes = _classes(False)
+            measurement_classes = _classes(True)
+            redundant_measurement = 0
+            redundant_render = 0
+            for fixture in fixtures_sorted:
+                m_tuples: set[tuple[Any, ...]] = set()
+                r_tuples: set[Any] = set()
+                for entry in primary:
+                    cell = next(
+                        r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture
+                    )
+                    r_tuples.add(cell["input_sha256"])
+                    m_tuples.add((cell["input_sha256"], tuple(entry["boundary_token_ids"])))
+                redundant_measurement += len(primary) - len(m_tuples)
+                redundant_render += len(primary) - len(r_tuples)
+            by_name = {str(e.get("candidate")): e for e in primary}
+            suspects: list[dict[str, Any]] = []
+            for names in measurement_classes:
+                if len(names) < 2:
+                    continue
+                for fixture in fixtures_sorted:
+                    outputs: set[Any] = set()
+                    outcomes: set[tuple[Any, ...]] = set()
+                    for name in names:
+                        cell = next(
+                            r
+                            for r in by_name[name]["records"]
+                            if r["evaluable"] and r["fixture"] == fixture
+                        )
+                        outputs.add(cell["output_sha256"])
+                        outcomes.add(
+                            (
+                                cell["exact_match"],
+                                cell["boundary_found"],
+                                cell["boundary_text_match"],
+                                cell["status"],
+                            )
+                        )
+                    out_bad = len(outputs) > 1
+                    oc_bad = len(outcomes) > 1
+                    if out_bad or oc_bad:
+                        if out_bad and oc_bad:
+                            kind = "both"
+                        elif out_bad:
+                            kind = "output"
+                        else:
+                            kind = "outcome"
+                        suspects.append(
+                            {"fixture": fixture, "candidates": list(names), "kind": kind}
+                        )
+            suspects.sort(key=lambda c: (c["fixture"], c["candidates"]))
+            pairs: list[dict[str, Any]] = []
+            for i, left in enumerate(available):
+                left_cells = {
+                    r["fixture"]: r["input_sha256"] for r in left["records"] if r["evaluable"]
+                }
+                for right in available[i + 1 :]:
+                    right_cells = {
+                        r["fixture"]: r["input_sha256"] for r in right["records"] if r["evaluable"]
+                    }
+                    common = sorted(set(left_cells) & set(right_cells))
+                    if not common:
+                        continue
+                    shared = [f for f in common if left_cells[f] == right_cells[f]]
+                    pairs.append(
+                        {
+                            "candidates": sorted(
+                                [str(left.get("candidate")), str(right.get("candidate"))]
+                            ),
+                            "n_common_completed": len(common),
+                            "n_shared": len(shared),
+                            "shared_fixture_ids": shared,
+                        }
+                    )
+            pairs.sort(key=lambda p: p["candidates"])
+            passing = sorted(
+                str(e.get("candidate"))
+                for e in primary
+                if e.get("eligible") is True
+                and e.get("n_evaluable", 0) > 0
+                and all(
+                    r["exact_match"] and r["boundary_found"] for r in e["records"] if r["evaluable"]
+                )
+            )
+            # The flag, recomputed in the producer's priority order.
+            flag = False
+            flag_detail = ""
+            flag_members: list[str] = []
+            if len(available) != len(candidates):
+                flag_detail = "candidate_unavailable"
+            elif payload.get("decision") != "ambiguous":
+                flag_detail = "decision_not_ambiguous"
+            elif len(passing) < 2:
+                flag_detail = "passing_set_inconsistent"
+            else:
+                passing_set = set(passing)
+                containing = [cls for cls in measurement_classes if passing_set <= set(cls)]
+                if containing:
+                    cls = containing[0]
+                    if any(
+                        cell["kind"] in ("outcome", "both") and set(cell["candidates"]) == set(cls)
+                        for cell in suspects
+                    ):
+                        flag_detail = "determinism_suspect_in_class"
+                    else:
+                        flag = True
+                        flag_members = list(cls)
+                elif not any(passing_set <= set(cls) for cls in render_classes):
+                    flag_detail = "passing_spans_classes"
+                else:
+                    flag_detail = "boundaries_differ_within_passing_set"
+            return {
+                "evaluable_mismatch": mismatch,
+                "primary_names": primary_names,
+                "render_classes": render_classes,
+                "measurement_classes": measurement_classes,
+                "n_redundant_completed_observations": redundant_measurement,
+                "n_redundant_render_observations": redundant_render,
+                "determinism_suspect_cells": suspects,
+                "pairs": pairs,
+                "passing_candidates": passing,
+                "alias_suspect_abstention": flag,
+                "alias_suspect_detail": flag_detail,
+                "alias_suspect_class_members": flag_members,
+                "fixture_set_sha256": hashlib.sha256(
+                    "\n".join(fixtures_sorted).encode("utf-8")
+                ).hexdigest(),
+                "excluded_candidates": sorted(
+                    str(e.get("candidate"))
+                    for e in available
+                    if str(e.get("candidate")) not in primary_names
+                ),
+            }
+
+        payload = value
+        if type(payload) is not dict or payload.get("available") is not True:
+            return False
+        method = payload.get("method")
+        if type(method) is not dict:
+            return False
+        for key in ("protocol", "token_ids_digest", "scope"):
+            if type(method.get(key)) is not str or not method.get(key):
+                return False
+        for key in ("decision", "selected_candidate", "backend_fingerprint"):
+            value = payload.get(key)
+            if value is not None and type(value) is not str:
+                return False
+        for key in ("seed", "max_new_tokens"):
+            value = payload.get(key)
+            if value is not None and type(value) is not int:
+                return False
+        if not _hex(payload.get("fixture_set_sha256")):
+            return False
+        if type(payload.get("evaluable_mismatch")) is not bool:
+            return False
+        recomputed = _recompute(payload)
+        if recomputed is None:
+            return False
+        candidates = payload["candidates"]
+        for entry in candidates:
+            if entry.get("available") is not True:
+                continue
+            name = str(entry.get("candidate"))
+            if entry.get("in_primary_cohort") is not (name in recomputed["primary_names"]):
+                return False
+            expected_render = next(
+                (cls for cls in recomputed["render_classes"] if name in cls), None
+            )
+            expected_measurement = next(
+                (cls for cls in recomputed["measurement_classes"] if name in cls), None
+            )
+            if entry.get("render_class_members") != expected_render:
+                return False
+            if entry.get("measurement_class_members") != expected_measurement:
+                return False
+        checks = (
+            ("evaluable_mismatch", recomputed["evaluable_mismatch"]),
+            ("fixture_set_sha256", recomputed["fixture_set_sha256"]),
+            ("excluded_candidates", recomputed["excluded_candidates"]),
+            ("n_candidates_excluded", len(recomputed["excluded_candidates"])),
+            ("n_primary_cohort", len(recomputed["primary_names"])),
+            ("n_effective_render", len(recomputed["render_classes"])),
+            ("n_effective_measurement", len(recomputed["measurement_classes"])),
+            ("render_classes", recomputed["render_classes"]),
+            ("measurement_classes", recomputed["measurement_classes"]),
+            (
+                "n_redundant_completed_observations",
+                recomputed["n_redundant_completed_observations"],
+            ),
+            ("n_redundant_render_observations", recomputed["n_redundant_render_observations"]),
+            ("determinism_suspect_cells", recomputed["determinism_suspect_cells"]),
+            ("n_determinism_suspect_cells", len(recomputed["determinism_suspect_cells"])),
+            (
+                "n_outcome_suspect_cells",
+                sum(
+                    1
+                    for c in recomputed["determinism_suspect_cells"]
+                    if c["kind"] in ("outcome", "both")
+                ),
+            ),
+            ("pairs", recomputed["pairs"]),
+            ("passing_candidates", recomputed["passing_candidates"]),
+            ("alias_suspect_abstention", recomputed["alias_suspect_abstention"]),
+            ("alias_suspect_detail", recomputed["alias_suspect_detail"]),
+            ("alias_suspect_class_members", recomputed["alias_suspect_class_members"]),
+        )
+        return all(payload.get(key) == expected for key, expected in checks)
+
     def _or_confidentiality_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
@@ -2169,6 +2517,18 @@ def oracle_diff_reports(
         _o_sl_available = "neither"
     _o_sl_asymmetric = _o_sl_available not in ("both", "neither")
 
+    _al_old_ok = _or_aliasing_valid(old.get("aliasing"))
+    _al_new_ok = _or_aliasing_valid(new.get("aliasing"))
+    if _al_old_ok and _al_new_ok:
+        _o_al_available = "both"
+    elif _al_old_ok:
+        _o_al_available = "old"
+    elif _al_new_ok:
+        _o_al_available = "new"
+    else:
+        _o_al_available = "neither"
+    _o_al_asymmetric = _o_al_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -2234,6 +2594,7 @@ def oracle_diff_reports(
         and not _o_vb_asymmetric
         and not _o_rf_asymmetric
         and not _o_sl_asymmetric
+        and not _o_al_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -2295,6 +2656,8 @@ def oracle_diff_reports(
         "refusals_asymmetric": _o_rf_asymmetric,
         "scorerlens_changed": False,
         "scorerlens_asymmetric": _o_sl_asymmetric,
+        "aliasing_changed": False,
+        "aliasing_asymmetric": _o_al_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -2337,6 +2700,7 @@ def oracle_diff_reports(
         "verbosity": {"available": _o_vb_available, "changed": False},
         "refusals": {"available": _o_rf_available, "changed": False},
         "scorerlens": {"available": _o_sl_available, "changed": False},
+        "aliasing": {"available": _o_al_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

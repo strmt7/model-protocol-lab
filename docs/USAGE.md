@@ -178,9 +178,9 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
-A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation and scorer-lens sections are absent from the sample even though real runs render them.
+A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation, scorer-lens and candidate-aliasing sections are absent from the sample even though real runs render them.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -1556,6 +1556,94 @@ exam change with the scorer's effect (`diff_scorerlens`,
 Informational only: the regrade never affects selection, and
 the stage never fails the run.
 
+### 8.38 Candidate aliasing audit (`aliasing`)
+
+Opt-in with `model-protocol-lab run --aliasing`. Post-hoc over
+the main run's recorded search observations -- zero extra model
+calls: candidates are grouped into token-identity equivalence
+classes over the recorded `input_ids`, and the run gains an
+`aliasing` section with effective-vs-recorded candidate counts,
+the class lists, a per-pair coincidence matrix, and the
+alias-suspect abstention flag. Monday-morning use: after a
+24-candidate sweep, decide whether to prune the candidate set
+before the next expensive run -- and whether an `ambiguous`
+abstention was two genuinely different templates tying, or one
+token sequence wearing two name tags.
+
+Two class notions are reported and never conflated. *Render
+classes* share one prompt token sequence on every fixture of
+their cohort; *measurement classes* also share the response
+boundary, which is part of the measurement in this lab (under
+`--boundary-map`, identical prompts under different boundaries
+are different experiments that happen to share a prompt).
+Effective counts are reported for both; the redundant count and
+the flag cite measurement classes only. Classes exist only
+inside cohorts of candidates with identical completed fixture
+sets -- an interrupted candidate was measured on a fixture
+prefix and is listed as excluded, never silently merged.
+Redundant completed observations are counted once per fixture
+under one formula; they are redundant as prompt evaluations,
+and they are also the replicates the determinism cross-check
+below consumes, which is why the payload calls them redundant,
+never wasted.
+
+Within one measurement class, the recorded outputs must agree
+per fixture: the per-request seed derives from the run seed and
+the fixture ID only, and the generation cap is run-global, so
+identical measurement configurations present identical
+generation inputs. A disagreement is reported per cell as a
+*determinism-suspect* cell -- recorded cells a deterministic
+backend could not have produced from one measurement
+configuration, attributable to backend nondeterminism (stateful
+or order-dependent backends included) or artifact corruption;
+the audit asserts neither cause, and `verify --determinism`
+replay is the discriminating follow-up. The alias-suspect flag
+fires only when the decision is `ambiguous`, the recomputed
+passing set has at least two members inside one measurement
+class, and that class holds no outcome-suspect cell; a tie
+spanning distinct prompts never fires it -- that is the lab
+working as intended, not an artifact. The flag is advisory: it
+never rewrites the decision, and it does not assert any
+candidate would have survived held-out, which was never run for
+any of them.
+
+Honesty boundaries. Every claim is relative to this run's
+fixture set and backend tokenizer: two templates identical on
+short fixtures may diverge on long or multi-turn ones, and a
+collapse is a tokenizer-by-fixture interaction, not a claim
+that the catalog families are duplicates. Back-porting works
+over `--include-evidence` artifacts and in-memory results
+only; over a public `results.json` (observations stripped) the
+audit is unavailable by design and says so. The payload carries
+no raw token IDs and no text -- per cell it carries SHA-256
+digests of the canonical ID lists under a frozen digest
+definition (`sha256-json-intlist-v1`), plus counts and class
+structure; an unsalted digest of a short prompt does permit
+offline confirmation of a guessed prompt, which is strictly
+weaker than carrying the IDs themselves (they reconstruct the
+prompt exactly). The payload is the largest per-cell payload
+the lab ships (about 0.92 MB worst case in the indented public
+JSON at the run caps of 24 candidates x 100 fixtures), which is
+why the audit is flag-gated. Its ground records let
+`diff-reports` recompute every aggregate -- an
+internal-consistency recompute: it detects aggregates that
+disagree with their records, not fabricated records.
+
+`diff-reports` compares measurement-partition drift over the
+common candidates (pairs joined / pairs split), per-candidate
+boundary drift, effective-count and suspect-count drift, the
+flag, candidates added/removed/excluded, and the mismatch flag
+-- across a different fixture set, backend fingerprint, or
+digest version, drift is still listed but flagged
+`comparable: false`; a changed backend fingerprint means
+tokenizer identity is *not proven equal* (the fingerprint also
+binds device, context limit, and dependency versions), never
+"a different tokenizer" (`diff_aliasing`, `aliasing_changed` /
+`aliasing_asymmetric` feed `identical`). The full contract is
+in `docs/ALIASING_AUDIT_DESIGN.md`. Informational only: the
+audit never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -1932,7 +2020,7 @@ cleaner or more contaminated?), and one key per recorded experiment
 stage -- `perturbation`, `token_healing`, `hierarchy`, `prefill`,
 `portfolio`, `synthhistory`, `batch_invariance`, `position`,
 `stop_cause`, `ws_canonical`, `structured`, `deliforge`, `fewshot`,
-`faketurn`, `toolcall`, `verbosity`, `refusals`, `scorerlens`, `cache_profile`,
+`faketurn`, `toolcall`, `verbosity`, `refusals`, `scorerlens`, `aliasing`, `cache_profile`,
 `template_robustness`, `ablation`, `confidentiality`,
 `answer_collision` -- each carrying that stage's verdict drift and
 per-candidate drift, with the stage's own section in section 8

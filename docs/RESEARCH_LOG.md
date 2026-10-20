@@ -7227,3 +7227,87 @@ them). The fuzz never discriminated it because independently
 generated report pairs differ elsewhere first. The oracle now
 carries both the refusals and scorerlens terms.
 
+
+## Cycle 181 — candidate aliasing audit (2026-10-20)
+
+Wave-7 research rank 2, built only after its design survived the
+red-team pair. The instrument: group a run's candidates into
+token-identity equivalence classes over the recorded search
+`input_ids` — render classes (same prompt token sequences) and
+measurement classes (same prompts and same response boundary) —
+and report effective vs recorded candidate counts, redundant
+completed observations under one per-fixture formula, a per-pair
+coincidence matrix, determinism-suspect cells inside a class, and
+an alias-suspect abstention flag. Post-hoc, zero model calls.
+Utility: decide whether to prune a candidate set before the next
+expensive run, and whether an `ambiguous` abstention was two
+templates tying or one token sequence wearing two name tags.
+Uniqueness (combination framing, per the wave-7 research pass):
+serving-side prompt caching dedupes identical prefixes to save
+compute (an optimisation over requests, not a validity audit of
+an evaluation's candidate set); semantic-caching write-ups warn
+embeddings cannot safely dedupe prompts — this audit is the
+opposite pole, exact token identity with no similarity threshold;
+FormatSpread (Sclar et al., ICLR 2024) samples semantically
+equivalent text formats and never checks whether two formats
+collapse to the same token sequence on the checkpoint's
+tokenizer, and it has no abstention rule for aliasing to corrupt.
+No surveyed harness audits its own candidate set for
+token-identity collapse, reports an effective-candidate count, or
+diagnoses aliasing as a possible cause of a tie-abstention.
+
+**Design cross-check (binding).** Red-team A returned DO NOT
+BUILD AS SPECIFIED (10 findings): the ids-only class was spent as
+a render identity, a measurement identity, and an outcome
+identity, but boundaries are per-candidate and part of the
+measurement (classes split into render/measurement — F1); the
+§8 back-port claim was false for the default public artifact,
+whose observations are stripped (F2); completed sets differ by
+construction on interrupted runs, the abort path's empty-ids
+sentinel collides with itself, and duplicate observations were
+last-wins in the nearest helper (F3); `candidate_fingerprint`
+hashes the format's name, so fingerprint classes would be
+singletons forever (F4, executed); "wasted evaluations"
+double-counted under the two natural formulas, was blind to
+partial aliasing, and mislabelled boundary-distinct work (F5);
+A2 checked a lossy outcome projection and named only one cause
+(F6); and the payload had no verifiable ground layer — token IDs
+are prompt text by proxy, so the ground layer is per-cell SHA-256
+digests under a frozen canonical definition (F7). Red-team B
+upheld the verdict and every core finding, downgraded five
+severities, and repaired A's own fixes where they were wrong:
+the top-level stripped trigger is determinism's every-entry test,
+not "no candidate available"; A's gate-5 text admitted two
+measurement formulas giving 2 vs 0 on A's own partial
+counterexample (executed) — the per-fixture measurement-tuple
+formula is the single headline; flag suppression keys on
+outcome-suspect cells only, because a post-boundary-only output
+divergence leaves the aliasing explanation intact (executed with
+`first_boundary`); the detail field is `""` exactly when the flag
+fires, per the scorer-lens precedent A cited inverted; and the
+digest layer buys internal consistency, not verifiability
+against fabricated records — with the size measured at 921,192
+bytes indented at the 2400-cell cap, not A's estimated ~0.5 MB.
+B also refuted one A sub-claim (the scorer-lens precedent accepts
+duplicate fixture IDs; the duplicate rule is new, not a
+transplant), caught A's internal contradiction on `n_nominal`,
+and added four findings (guess-confirmation wording for unsalted
+digests; `seed`/`max_new_tokens`/`selected_candidate` in the
+payload; digests null — never a digest of `[]` — for
+non-evaluable cells; duplicate search entries producer-side).
+The corrected contract is `docs/ALIASING_AUDIT_DESIGN.md`; claims
+A1'–A3' are pinned by named tests in
+`tests/test_cycle181_aliasing.py`, including a brute-force oracle
+differential for A1', a `run_experiment` construction of the
+flag case with a stub backend whose lossy `encode` aliases two
+differently fingerprinted formats, and three tempdir mutation
+gates (boundary dropped from the measurement signature, the
+nonempty evaluable predicate dropped, boundary dropped from the
+redundant count).
+
+**Reality check during the build.** The first dispatch e2e
+"failed" with exit 2 — the run's own abstention exit code for an
+`ambiguous` decision (only `compatible_on_fixture_set` exits 0);
+the probe had dispatched and attached correctly. The test now
+asserts the exit-code contract explicitly rather than assuming
+0 means success.

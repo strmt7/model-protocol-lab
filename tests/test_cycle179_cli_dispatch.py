@@ -101,6 +101,7 @@ STAGE_FLAGS = [
     ("--verbosity", "verbosity", None),
     ("--refusals", "refusals", None),
     ("--scorer-lens", "scorer_lens", None),
+    ("--aliasing", "aliasing", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -220,6 +221,12 @@ HELPER_DISPATCH = [
         "scorerlens",
         "scorerlens_unavailable",
         ["scorerlens_profile"],
+    ),
+    (
+        "_run_aliasing_probe",
+        "aliasing",
+        "aliasing_unavailable",
+        ["aliasing_profile"],
     ),
     (
         "_run_cache_profile_probe",
