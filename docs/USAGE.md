@@ -1717,6 +1717,36 @@ The JSON report goes to stdout; a human-readable summary goes to
 stderr. Exit 0 when every applicable check passes, 2 when any check
 fails, 1 for unreadable or invalid input.
 
+### 13.1 Sealing a result (`pack`, `verify --bundle`)
+
+Monday-morning use: an auditor asks to prove a run's result files are
+unchanged since packing. After `verify` answers "is this result
+self-consistent", sealing answers the second question: "was it edited
+since the run was packed":
+
+```sh
+python -m model_protocol_lab pack run-baseline
+python -m model_protocol_lab verify --bundle run-baseline.bundle.zip \
+    --expect-digest <the 64-char hex `pack` printed>
+```
+
+`pack` seals every file in the report directory (plus any files named
+with `--include`, stored under `inputs/`) into one bundle with a
+SHA-256 per file and a bundle digest printed on stderr — publish that
+hex alongside the result; `--expect-digest` lets `verify --bundle`
+compare against it. Re-checking re-hashes every sealed file, fails on
+any mismatch, and then runs the section-13 replay on the sealed
+`results.json` as a second, independent layer.
+
+The seal is unsigned, and the docs say so plainly: it proves
+bit-integrity since packing only when the digest comes through an
+independent channel. It does not prove who packed the bundle, that the
+experiment really ran, or that the bundle is the newest one. The format
+contract, caps, and check list live in
+`docs/SEALED_BUNDLE_DESIGN.md`. Exit codes mirror `verify` (0 ok,
+2 checks failed, 1 unreadable); scripts should branch on the JSON
+report, not the exit code alone.
+
 ## 14. Surface-noise self-consistency probe (`surface-noise`)
 
 Monday-morning use: you rewrote a prompt over the weekend — the probe

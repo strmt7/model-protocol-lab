@@ -246,6 +246,7 @@ class TestParserContract(unittest.TestCase):
                 "debug",
                 "verify",
                 "surface-noise",
+                "pack",
             },
         )
 

@@ -2,7 +2,7 @@
 
 The release-readiness definition of done requires that a few numbers the
 docs cite stay pinned to the actual tree: the 29 catalog families and the
-118 mutate candidates (README), the eight CLI subcommands, and version
+118 mutate candidates (README), the CLI subcommand set, and version
 consistency across pyproject / __init__ / CITATION.cff. None of these
 reads the environment, the network, or the calendar.
 
@@ -61,7 +61,7 @@ class CatalogCountTest(unittest.TestCase):
 
 
 class SubcommandSurfaceTest(unittest.TestCase):
-    def test_ten_subcommands(self) -> None:
+    def test_eleven_subcommands(self) -> None:
         parser = build_parser()
         actions = list(parser._subparsers._group_actions)
         names = sorted(actions[0].choices.keys())
@@ -75,6 +75,7 @@ class SubcommandSurfaceTest(unittest.TestCase):
                 "doctor",
                 "fixtures",
                 "inspect",
+                "pack",
                 "run",
                 "surface-noise",
                 "verify",

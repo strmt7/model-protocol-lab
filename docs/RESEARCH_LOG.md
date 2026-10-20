@@ -6458,3 +6458,66 @@ id -- covered by the blind-backend test); and a lossy decode that drops
    before the guarded construction ran. Caught by scoped coverage on
    collision.py, not by the tests themselves -- a passing test is not
    proof the guarded line executed.
+
+## Cycle 171 (2026-10-20) -- sealed result bundle (`pack` / `verify --bundle`)
+
+### Uniqueness pass (researcher, accessed 2026-10-20)
+
+Sources: lm-evaluation-harness results format (records git_hash, task
+versions, configs inside results.json -- provenance metadata, no digest
+manifest, no verifier), Inspect AI provenance-by-replay (log records git
+origin/commit), Promptfoo export/share, HELM/OpenAI Evals/PromptBench/
+DeepEval documentation (nothing found; flagged unverified as proof of
+absence), DamageBDD/ECAI unsigned eval receipts (SHA-256 manifest, and the
+vendor page concedes "the portable verifier checks the receipt bytes; it
+does not rerun the graders"), a CLQT arXiv benchmark with a
+recompute-verifiable hash chain (re-derives hashes, not the selection
+decision), SLSA v1.1 and in-toto specifications (an attestation is a
+*signed* statement; the word is signing-bound), sigstore documentation on
+integrity vs authenticity.
+
+Verdict: the combination is unoccupied -- an unsigned hash-sealed bundle
+binding results + inputs + catalog + package version, verified offline,
+with an independent decision replay as the second layer, in a local
+deterministic harness. Each element exists somewhere (unsealed provenance
+metadata; receipts without replay; hash chains without decision
+re-derivation), but the two-layer combination does not. Terminology is
+pinned by the standards check: "hash-sealed", "tamper-evident",
+"decision re-derivation" -- never "attestation", "signature",
+"tamper-proof", or any SLSA level claim. The honest boundary is stated
+everywhere the feature is described: an unsigned seal proves
+bit-integrity since packing only against a digest obtained through an
+independent channel; it does not prove origin, that the experiment ran,
+or freshness.
+
+### Design decisions (post red-team)
+
+Red-team A filed 24 findings (all ZIP behaviours reproduced empirically
+on CPython 3.12.3); red-team B re-ran every empirical claim (19/19
+reproduced) and downgraded 17 on severity/design grounds. Surviving
+must-pins, all adopted: F14 (pack and bundle-verify parse results.json
+through the same bounded reader as `verify` -- factored
+`parse_results_bytes` out of `diffreports.load_results`; a results.json
+the plain path rejects is unreadable in a bundle too, so the two
+subcommands can never disagree on the same artifact), F5 (EOCD pre-parse
+before `ZipFile` construction, ZIP64 rejected), F6-core (per-entry and
+total uncompressed caps from the central directory before any read,
+chunked stream hashing with a length assertion), F12 (bundle digest over
+the exact stored manifest bytes, duplicate manifest keys rejected), F19
+(single-fd bounded bundle read -- a FIFO cannot hang the verifier), F18
+file discipline at pack time (single read per file, O_NOFOLLOW + fstat,
+non-regular entries are errors, never silently skipped), F20 (--include
+name validation, --output never inside the report dir, O_EXCL creation),
+F21 (verify takes exactly one of positional/`--bundle`, enforced in
+`run_verify` returning 1), F23 (fixed error vocabulary; manifest-derived
+strings through the `_display_id` sanitizer), F24 (every byte-affecting
+ZipInfo field normalised; the determinism claim scoped to same package
+and interpreter version). B's refutations adopted: no byte-covering
+digest (cross-version ZipInfo drift would become verification failures);
+no STORED-only mandate (pre-read caps bound DEFLATE equally); unknown
+manifest keys and roles accepted for forward compatibility; docs carry
+the F1/F3/F4 honesty sentences in the first section, not an appendix.
+
+Deviation recorded: no `diff-reports` section this cycle (rationale in
+`docs/SEALED_BUNDLE_DESIGN.md` -- a bundle is a container, not a
+measurement).

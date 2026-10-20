@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 171 — sealed result bundle, 2026-10-20)
+
+- New commands `model-protocol-lab pack` and
+  `model-protocol-lab verify --bundle` (wave-6 idea 5): a report
+  directory is sealed into one hash-bound bundle (per-file SHA-256
+  manifest binding results, report, included inputs, catalog digest,
+  and package version); verification re-hashes everything offline,
+  fails closed on any mismatch, and then re-runs the `verify` decision
+  replay on the sealed `results.json` as an independent second layer.
+  The seal is unsigned and the docs say so in the first paragraph: it
+  proves bit-integrity since packing only against a digest obtained
+  through an independent channel (`pack` prints it for exactly that
+  purpose; `--expect-digest` checks it). Pure `pack.py`; format
+  contract in `docs/SEALED_BUNDLE_DESIGN.md`; `parse_results_bytes`
+  factored out of `diffreports.load_results` so plain `verify`, `pack`,
+  and `verify --bundle` reject exactly the same artifacts.
+
 ### Added (cycle 170 — answer-collision audit, 2026-10-20)
 
 - New research instrument `mpl run --answer-collision` (wave-6 idea 4):
