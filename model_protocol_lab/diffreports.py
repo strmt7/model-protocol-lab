@@ -936,7 +936,7 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     result["budget_robust"] = {
         "old": old_robust,
         "new": new_robust,
-        "changed": False,
+        "changed": old_robust != new_robust,
     }
 
     def decision_points(frontier: dict[str, Any]) -> list[tuple[int, tuple[str, Any]]]:
