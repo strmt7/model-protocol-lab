@@ -17,6 +17,7 @@ from .backends import (
     emulate_hf_stop_string,
     emulate_vllm_holdback,
 )
+from .cacheprofile import candidate_cache_profile
 from .core import (
     Backend,
     EvaluationReport,
@@ -5883,6 +5884,249 @@ def verbosity_profile(
         "uniform": uniform,
         "capped_candidates": sorted(capped),
         "excluded_candidates": sorted(excluded),
+    }
+
+
+def cache_profile_stage(
+    *,
+    observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    block_size: int = 16,
+) -> dict[str, Any]:
+    """Measure per-candidate prefix-cache sharability post-hoc.
+
+    Purely post-hoc: no model calls, no backend. For every completed
+    observation, the recorded ``input_ids`` are grouped by candidate and
+    aggregated by :func:`cacheprofile.candidate_cache_profile` (exact
+    achievable sharability fractions plus the potential upper bound;
+    block-quantized for vLLM-style prefix caching). ``block_size`` is
+    recorded in the output so every number is reproducible.
+
+    ``observations`` are flat observation dicts (as produced by
+    ``asdict(Observation)``). Malformed observations are excluded from
+    the evaluable set (fail-closed: visible via each candidate's ``n``
+    vs ``n_evaluable``, never crashing the stage). Raises
+    ``ValueError`` on caller-contract violations (bad container type,
+    bad ``block_size``), never on observation data.
+
+    Returns ``{"n_observations", "block_size", "per_candidate":
+    {name: cell}}`` where each cell is the
+    :func:`cacheprofile.candidate_cache_profile` dict.
+    """
+    if type(observations) is not tuple and type(observations) is not list:
+        raise ValueError("observations must be a tuple or list of observation dicts")
+    if type(block_size) is not int or block_size < 1:
+        raise ValueError(f"block_size must be a positive int, got {block_size!r}")
+    records: dict[str, list[Any]] = {}
+    seen: dict[str, int] = {}
+    n_observations = 0
+    for obs in observations:
+        if type(obs) is not dict:
+            continue
+        candidate = obs.get("candidate")
+        if type(candidate) is not str or not candidate:
+            continue
+        n_observations += 1
+        seen[candidate] = seen.get(candidate, 0) + 1
+        if obs.get("status") != "completed":
+            # Fail-closed: the observation stays visible via the
+            # candidate's n vs n_evaluable, never counted and never
+            # crashing the stage.
+            continue
+        records.setdefault(candidate, []).append(obs.get("input_ids"))
+    per_candidate: dict[str, dict[str, Any]] = {}
+    for candidate, n_seen in seen.items():
+        cell = candidate_cache_profile(records.get(candidate, []), block_size)
+        # n counts every observation seen for the candidate, including
+        # the fail-closed exclusions above; n_evaluable counts only the
+        # measured ones.
+        cell["n"] = n_seen
+        per_candidate[candidate] = cell
+    return {
+        "n_observations": n_observations,
+        "block_size": block_size,
+        "per_candidate": per_candidate,
+    }
+
+
+def _share_in_unit(value: Any) -> bool:
+    """Whether ``value`` is a real number in [0, 1] (bools excluded).
+
+    mypy does not narrow ``type(value) in (int, float)``; the explicit
+    ``isinstance`` gives the narrowing. The exact-type check runs first
+    so bools (``isinstance(True, int)``) are never accepted.
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and 0.0 <= value <= 1.0
+
+
+def _positive_number(value: Any) -> bool:
+    """Whether ``value`` is a real number > 0 (bools excluded).
+
+    Same narrowing trick as :func:`_share_in_unit`.
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and value > 0
+
+
+def _cache_profile_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of a cache-profile stage."""
+    if type(entry) is not dict:
+        return False
+    for key in ("n", "n_evaluable"):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    if entry["n_evaluable"] > entry["n"]:
+        return False
+    for key in (
+        "total_tokens",
+        "cacheable_tokens",
+        "shared_prefixes",
+        "achievable_tokens",
+        "block_cacheable_blocks",
+        "distinct_block_prefixes",
+        "achievable_blocks",
+        "n_duplicate_prompts",
+    ):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    # Integer identities the producer guarantees (wave-2 C3 lesson:
+    # enforce at the value level, not just the type level).
+    if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
+        return False
+    if (
+        entry["achievable_blocks"]
+        != entry["block_cacheable_blocks"] - entry["distinct_block_prefixes"]
+    ):
+        return False
+    if entry["cacheable_tokens"] > entry["total_tokens"]:
+        return False
+    if entry["n_duplicate_prompts"] > entry["n_evaluable"]:
+        return False
+    for key in (
+        "potential_token_fraction",
+        "achievable_token_fraction",
+        "potential_block_fraction",
+        "achievable_block_fraction",
+    ):
+        value = entry.get(key)
+        if entry["n_evaluable"] == 0:
+            if value is not None:
+                return False
+        elif not _share_in_unit(value):
+            return False
+    mean = entry.get("mean_prompt_tokens")
+    if entry["n_evaluable"] == 0:
+        if mean is not None:
+            return False
+    elif not _positive_number(mean):
+        return False
+    # Ordering invariants (cycle-168 red-team R8/S5): block <= token at
+    # both levels, achievable <= potential at both levels.
+    achievable_token = entry.get("achievable_token_fraction")
+    potential_token = entry.get("potential_token_fraction")
+    achievable_block = entry.get("achievable_block_fraction")
+    potential_block = entry.get("potential_block_fraction")
+    return not (
+        isinstance(achievable_token, (int, float))
+        and isinstance(potential_token, (int, float))
+        and isinstance(achievable_block, (int, float))
+        and isinstance(potential_block, (int, float))
+        and not (
+            achievable_block <= achievable_token <= potential_token
+            and achievable_block <= potential_block <= potential_token
+        )
+    )
+
+
+def cache_profile_profile(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze prefix-cache sharability across candidates (pure post-hoc).
+
+    Answers "does the template change prefix sharability?": reports the
+    per-candidate cells from the stage, the max-minus-min gap on the
+    headline metric (achievable block fraction) -- the pre-registered
+    falsifiable claim (see :mod:`cacheprofile`) is that the gap is
+    measurably positive rather than exactly 0 -- and ``uniform``
+    reporting the null hypothesis (all evaluable candidates identical
+    on all four fractions), never asserting it. ``most_sharable`` /
+    ``least_sharable`` are behavior labels for a cost *input*, never a
+    cost verdict. ``evaluable_mismatch`` flags candidates measured on
+    different numbers of prompts (cycle-168 red-team R14): fractions
+    from different denominators are not directly comparable.
+
+    Never raises on malformed input: returns ``{"available": False}``
+    with a ``detail`` code.
+    """
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    block_size = stage.get("block_size")
+    if type(block_size) is not int or block_size < 1:
+        return {"available": False, "detail": "stage_invalid"}
+    n_observations = stage.get("n_observations")
+    if type(n_observations) is not int or n_observations < 0:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _cache_profile_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+    evaluable: dict[str, float] = {}
+    excluded: list[str] = []
+    evaluable_counts: list[int] = []
+    for cand in candidates:
+        entry = per_candidate.get(cand)
+        if (
+            type(entry) is not dict
+            or entry.get("n_evaluable", 0) == 0
+            or type(entry.get("achievable_block_fraction")) not in (int, float)
+        ):
+            excluded.append(cand)
+            continue
+        evaluable[cand] = float(entry["achievable_block_fraction"])
+        evaluable_counts.append(entry["n_evaluable"])
+    sharability_gap: float | None = None
+    most_sharable: list[str] = []
+    least_sharable: list[str] = []
+    uniform: bool | None = None
+    if evaluable:
+        values = list(evaluable.values())
+        sharability_gap = max(values) - min(values)
+        top = max(values)
+        bottom = min(values)
+        most_sharable = sorted(name for name, value in evaluable.items() if value == top)
+        least_sharable = sorted(name for name, value in evaluable.items() if value == bottom)
+        fraction_keys = (
+            "achievable_block_fraction",
+            "achievable_token_fraction",
+            "potential_block_fraction",
+            "potential_token_fraction",
+        )
+        first = per_candidate[next(iter(evaluable))]
+        uniform = all(
+            all(per_candidate[name].get(key) == first.get(key) for name in evaluable)
+            for key in fraction_keys
+        )
+    return {
+        "available": True,
+        "block_size": block_size,
+        "n_observations": n_observations,
+        "per_candidate": {cand: per_candidate.get(cand) for cand in candidates},
+        "most_sharable": most_sharable,
+        "least_sharable": least_sharable,
+        "sharability_gap": sharability_gap,
+        "uniform": uniform,
+        "excluded_candidates": sorted(excluded),
+        "evaluable_mismatch": len(set(evaluable_counts)) > 1,
     }
 
 

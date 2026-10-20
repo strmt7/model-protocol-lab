@@ -1758,3 +1758,48 @@ says nothing about semantic paraphrase, prompt injection, hierarchy
 attacks, or tool-call adherence under noise. An MCP server
 (`tools/surface_noise_mcp_server.py`, stdlib-only) exposes the same
 instrument to agents.
+
+### 8.33 Prefix-cache sharability profile (`cache_profile`)
+
+Your serving stack deduplicates prompt prefixes in the KV cache -- how
+much prefill could it skip for each template? `model-protocol-lab run
+--cache-profile` measures, per template family, the fraction of the
+run's recorded prompt tokens that exact-prefix reuse (vLLM automatic
+prefix caching) could skip, computed offline from the recorded
+`input_ids` with zero extra model calls, block-quantized to full
+blocks (default 16, vLLM's block size; partial trailing blocks never
+count). The headline metric is the **achievable block fraction** --
+exact, not a bound: for each shared prefix, every request order (a
+permutation of the recorded prompts served once into a cold, infinite,
+dedicated cache) yields exactly one first-occurrence miss and
+k_{shared}-1 hits, so achievable = potential minus first occurrences,
+order-free. Red-team A found the naive "cacheable fraction" metric
+provably *misranks* templates against every realizable order (the
+inversion is in the design record); the achievable quantity survived
+an adversarial disproof attempt plus brute-force simulation over all
+permutations of random prompt sets. The report also shows the token-
+level diagnostic (ignores block quantization) and the eviction-robust
+"potential" upper bounds -- labeled as such, never as production
+ceilings. The pre-registered falsifiable claim (in `cacheprofile.py`)
+is a max-minus-min achievable-block gap of exactly 0 uniform across
+families; a measurably positive gap means the template, not the model
+or the fixture set, decides how much prefill a prefix cache could
+skip. Three honesty pins: (1) sharability is a cost *input*, never a
+cost verdict -- it says nothing about absolute prefill cost, latency,
+or TTFT; (2) the metric's closed world is a permutation of the
+recorded prompts -- production interleaving, cross-workload warming,
+and repeated requests can move real hits either way; (3) "efficiency"
+is deliberately never used for it (the term belongs to HELM-style
+accuracy-per-compute). `results.json` carries `cache_profile` with
+per-candidate cells, most/least sharable labels, the gap, and an
+`evaluable_mismatch` flag when candidates were measured on different
+denominators. `diff-reports` compares achievable-block, achievable-
+token, and potential-block drift, added/removed candidates, and
+excluded-set changes (`diff_cache_profile`; `cache_profile_changed` /
+`cache_profile_asymmetric` feed `identical`). `--cache-profile-block-size`
+re-quantizes for other engines (recorded in the output). Monday-morning
+use: an inference engineer deciding between two prompt templates for a
+vLLM deployment checks which one's prompts share more exact prefixes
+(block-quantized) before wiring up prefix caching -- the number is the
+routing/templating input, not a serving-cost promise. The stage never
+fails the run and never touches selection.

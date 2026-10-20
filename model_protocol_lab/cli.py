@@ -373,6 +373,25 @@ def build_parser() -> argparse.ArgumentParser:
         "shorter is not better. The stage never fails the run.",
     )
     run.add_argument(
+        "--cache-profile",
+        action="store_true",
+        help="Prefix-cache sharability profile (cycle 168, research wave-6 "
+        "idea 2): per template family, measure the fraction of prompt tokens "
+        "that exact-prefix KV-cache reuse (vLLM automatic prefix caching) "
+        "could skip -- computed offline from the run's recorded input_ids, "
+        "zero extra model calls, with block quantization for vLLM-style "
+        "16-token blocks. Headline: exact achievable block fraction (cost "
+        "input, not a cost verdict). Informational only -- never changes "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
+        "--cache-profile-block-size",
+        type=int,
+        default=16,
+        help="Block size in tokens for --cache-profile block quantization "
+        "(default 16, vLLM's block size). Recorded in the output.",
+    )
+    run.add_argument(
         "--template-robustness",
         action="store_true",
         help="Per-template surface-noise robustness (cycle 166): for each "
@@ -1084,6 +1103,51 @@ def _run_verbosity_probe(
         result["verbosity"] = {
             "available": False,
             "detail": "verbosity_unavailable",
+        }
+
+
+def _run_cache_profile_probe(
+    result: Any,
+    formats: Any,
+    *,
+    block_size: int = 16,
+) -> None:
+    """Run the prefix-cache sharability probe; never raises.
+
+    Post-hoc over the main run's observations (zero extra model
+    calls): for every completed observation, the recorded ``input_ids``
+    are grouped by candidate and aggregated by
+    :func:`cacheprofile.candidate_cache_profile` (exact achievable
+    sharability fractions plus the potential upper bound,
+    block-quantized for vLLM-style prefix caching). The analysis is
+    stored as ``result["cache_profile"]``. Informational only -- never
+    changes selection. Any failure degrades to an "unavailable" marker
+    instead of failing the run.
+    """
+    try:
+        from .experiments import cache_profile_profile, cache_profile_stage
+
+        entries = result.get("search")
+        if type(entries) is not list:
+            raise ValueError("result has no search entries")
+        observations: list[dict[str, Any]] = []
+        for entry in entries:
+            if type(entry) is not dict:
+                continue
+            entry_obs = entry.get("observations")
+            if type(entry_obs) is not list:
+                continue
+            observations.extend(o for o in entry_obs if type(o) is dict)
+        candidates = tuple(fmt.name for fmt in formats)
+        stage = cache_profile_stage(
+            observations=observations,
+            block_size=block_size,
+        )
+        result["cache_profile"] = cache_profile_profile(candidates, stage)
+    except Exception:  # noqa: BLE001 -- cache-profile probe must not fail the run
+        result["cache_profile"] = {
+            "available": False,
+            "detail": "cache_profile_unavailable",
         }
 
 
@@ -2291,6 +2355,17 @@ def main(argv: list[str] | None = None) -> int:
                         backend=backend,
                         search_fixtures=tuple(split.search),
                         max_new_tokens=args.max_new_tokens,
+                    )
+                # Prefix-cache sharability profile (cycle 168, research
+                # wave-6 idea 2): per-family exact-prefix sharability of
+                # the recorded input_ids, post-hoc over the main run's
+                # observations (zero extra model calls). Informational
+                # only -- never changes selection. Never fails the run.
+                if args.cache_profile:
+                    _run_cache_profile_probe(
+                        result,
+                        formats,
+                        block_size=args.cache_profile_block_size,
                     )
                 # Per-template surface-noise robustness (cycle 166):
                 # verdict preservation rate per candidate under

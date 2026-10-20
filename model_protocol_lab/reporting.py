@@ -5048,6 +5048,155 @@ def _verbosity_section(result: dict[str, Any]) -> str:
     )
 
 
+def _cache_profile_section(result: dict[str, Any]) -> str:
+    """Prefix-cache sharability profile per template family.
+
+    Renders the ``cache_profile`` payload (see
+    experiments.cache_profile_profile) as a per-candidate table: the
+    exact achievable sharability fractions (block-quantized headline;
+    token-level diagnostic) plus the potential upper bounds, computed
+    offline from the run's recorded input_ids with zero extra model
+    calls. "Achievable" is exact for a permutation of the recorded
+    prompts served once into a cold, infinite, dedicated cache; the
+    section says so, and fences the framing: sharability is a cost
+    *input*, not a cost verdict, and never a latency claim. Every
+    interpolation is escaped at this boundary.
+    """
+    audit: Any = result.get("cache_profile")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _pct(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1%}"
+        return "n/a"
+
+    def _num(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_evaluable")))
+            + " / "
+            + escape(str(entry.get("n")))
+            + "</td><td>"
+            + escape(_num(entry.get("mean_prompt_tokens")))
+            + "</td><td>"
+            + escape(_pct(entry.get("achievable_block_fraction")))
+            + "</td><td>"
+            + escape(_pct(entry.get("achievable_token_fraction")))
+            + "</td><td>"
+            + escape(_pct(entry.get("potential_block_fraction")))
+            + "</td><td>"
+            + escape(_pct(entry.get("potential_token_fraction")))
+            + "</td><td>"
+            + escape(str(entry.get("n_duplicate_prompts")))
+            + "</td></tr>"
+        )
+    block_size = audit.get("block_size")
+    gap = audit.get("sharability_gap")
+    gap_line = ""
+    if type(gap) in (int, float):
+        gap_line = (
+            "<p>Max-minus-min achievable block sharability over evaluable "
+            "candidates: <strong>" + escape(f"{gap:.1%}") + "</strong>.</p>"
+        )
+    extremes_line = ""
+    most = audit.get("most_sharable")
+    least = audit.get("least_sharable")
+    if type(most) is list and most and type(least) is list and least:
+        extremes_line = (
+            "<p>Most sharable (highest achievable block fraction): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in most
+                if type(name) is str
+            )
+            + "; least sharable: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in least
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    mismatch_line = ""
+    if audit.get("evaluable_mismatch") is True:
+        mismatch_line = (
+            "<p><strong>Caution:</strong> candidates were measured on "
+            "different numbers of evaluable prompts; fractions from "
+            "different denominators are not directly comparable.</p>"
+        )
+    excluded = audit.get("excluded_candidates")
+    excluded_line = ""
+    if type(excluded) is list and excluded:
+        excluded_line = (
+            "<p>Candidates with no evaluable prompt: "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in excluded
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="cache-profile">'
+        "<h2>Prefix-cache sharability profile</h2>"
+        "<p>For each candidate, the fraction of recorded prompt tokens "
+        "that exact-prefix KV-cache reuse could skip, computed offline "
+        "from the run's recorded input_ids with zero extra model "
+        "calls. <strong>Achievable</strong> is exact for a permutation "
+        "of the recorded prompts served once into a cold, infinite, "
+        "dedicated cache: each shared prefix costs exactly one "
+        "first-occurrence miss in every request order. "
+        "<strong>Potential</strong> counts every cacheable token and "
+        "is an eviction-robust upper bound over those orders -- not a "
+        "production ceiling (cross-workload warming and repeated "
+        "requests can exceed it). Block rows quantize to full blocks "
+        "of "
+        + escape(str(block_size))
+        + " tokens (vLLM automatic prefix caching caches full blocks "
+        "only; partial trailing blocks never count). Sharability is a "
+        "cost <em>input</em>, <strong>not a cost verdict</strong>: it "
+        "says nothing about absolute prefill cost, latency, or "
+        "TTFT.</p>"
+        + gap_line
+        + extremes_line
+        + mismatch_line
+        + (
+            '<div class="table-wrap"><table>'
+            "<caption>Prefix sharability per candidate (share of prompt "
+            "tokens).</caption>"
+            '<thead><tr><th scope="col">Candidate</th>'
+            '<th scope="col">Evaluable</th>'
+            '<th scope="col">Mean prompt</th>'
+            '<th scope="col">Achievable block</th>'
+            '<th scope="col">Achievable token</th>'
+            '<th scope="col">Potential block</th>'
+            '<th scope="col">Potential token</th>'
+            '<th scope="col">Duplicates</th>'
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+            if rows
+            else ""
+        )
+        + excluded_line
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -5971,6 +6120,7 @@ def render_html(result: dict[str, Any]) -> str:
     faketurn_html = _faketurn_section(result)
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
+    cache_profile_html = _cache_profile_section(result)
     template_robustness_html = _template_robustness_section(result)
     ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
@@ -6077,6 +6227,11 @@ def render_html(result: dict[str, Any]) -> str:
                 verbosity_html,
             ),
             (
+                "cache-profile",
+                "Prefix-cache sharability profile",
+                cache_profile_html,
+            ),
+            (
                 "template-robustness",
                 "Template surface-noise robustness",
                 template_robustness_html,
@@ -6144,6 +6299,9 @@ def render_html(result: dict[str, Any]) -> str:
         + faketurn_html
         + toolcall_html
         + verbosity_html
+        + cache_profile_html
+        + template_robustness_html
+        + ablation_html
         + sweep_html
         + logprob_html
         + held_out_html

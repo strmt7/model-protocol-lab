@@ -1371,6 +1371,101 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_cache_profile_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_cache_profile exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        block_size = value.get("block_size")
+        if type(block_size) is not int or block_size < 1:
+            return False
+        n_observations = value.get("n_observations")
+        if type(n_observations) is not int or n_observations < 0:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if entry is None:
+                continue
+            if type(entry) is not dict:
+                return False
+            for key in ("n", "n_evaluable"):
+                count = entry.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+            if entry["n_evaluable"] > entry["n"]:
+                return False
+            for key in (
+                "total_tokens",
+                "cacheable_tokens",
+                "shared_prefixes",
+                "achievable_tokens",
+                "block_cacheable_blocks",
+                "distinct_block_prefixes",
+                "achievable_blocks",
+                "n_duplicate_prompts",
+            ):
+                count = entry.get(key)
+                if type(count) is not int or count < 0:
+                    return False
+            if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
+                return False
+            if (
+                entry["achievable_blocks"]
+                != entry["block_cacheable_blocks"] - entry["distinct_block_prefixes"]
+            ):
+                return False
+            if entry["cacheable_tokens"] > entry["total_tokens"]:
+                return False
+            if entry["n_duplicate_prompts"] > entry["n_evaluable"]:
+                return False
+            for key in (
+                "potential_token_fraction",
+                "achievable_token_fraction",
+                "potential_block_fraction",
+                "achievable_block_fraction",
+            ):
+                share = entry.get(key)
+                if entry["n_evaluable"] == 0:
+                    if share is not None:
+                        return False
+                elif not (type(share) in (int, float) and 0.0 <= share <= 1.0):
+                    return False
+            mean = entry.get("mean_prompt_tokens")
+            if entry["n_evaluable"] == 0:
+                if mean is not None:
+                    return False
+            elif not (type(mean) in (int, float) and mean > 0):
+                return False
+            achievable_token = entry.get("achievable_token_fraction")
+            potential_token = entry.get("potential_token_fraction")
+            achievable_block = entry.get("achievable_block_fraction")
+            potential_block = entry.get("potential_block_fraction")
+            if (
+                entry["n_evaluable"] > 0
+                and type(achievable_token) in (int, float)
+                and type(potential_token) in (int, float)
+                and type(achievable_block) in (int, float)
+                and type(potential_block) in (int, float)
+                and not (
+                    achievable_block <= achievable_token <= potential_token
+                    and achievable_block <= potential_block <= potential_token
+                )
+            ):
+                return False
+        for key in ("most_sharable", "least_sharable", "excluded_candidates"):
+            value_list = value.get(key)
+            if type(value_list) is not list or not all(type(c) is str for c in value_list):
+                return False
+        gap = value.get("sharability_gap")
+        if gap is not None and not (type(gap) in (int, float) and gap >= 0):
+            return False
+        if value.get("uniform") is not None and type(value.get("uniform")) is not bool:
+            return False
+        return type(value.get("evaluable_mismatch")) is bool
+
     def _or_trob_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_template_robustness exactly.
         def _ok_rate(v: Any) -> bool:
@@ -1460,6 +1555,18 @@ def oracle_diff_reports(
     else:
         _o_vb_available = "neither"
     _o_vb_asymmetric = _o_vb_available not in ("both", "neither")
+
+    _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
+    _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
+    if _cp_old_ok and _cp_new_ok:
+        _o_cp_available = "both"
+    elif _cp_old_ok:
+        _o_cp_available = "old"
+    elif _cp_new_ok:
+        _o_cp_available = "new"
+    else:
+        _o_cp_available = "neither"
+    _o_cp_asymmetric = _o_cp_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1489,6 +1596,7 @@ def oracle_diff_reports(
         and not _o_ft_asymmetric
         and not _o_tc_asymmetric
         and not _o_vb_asymmetric
+        and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
     )
@@ -1543,6 +1651,8 @@ def oracle_diff_reports(
         "toolcall_asymmetric": _o_tc_asymmetric,
         "verbosity_changed": False,
         "verbosity_asymmetric": _o_vb_asymmetric,
+        "cache_profile_changed": False,
+        "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
         "template_robustness_asymmetric": _o_trob_asymmetric,
         "ablation_changed": False,
@@ -1577,6 +1687,7 @@ def oracle_diff_reports(
         "faketurn": {"available": _o_ft_available, "changed": False},
         "toolcall": {"available": _o_tc_available, "changed": False},
         "verbosity": {"available": _o_vb_available, "changed": False},
+        "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},
         "config_drift": config_drift,

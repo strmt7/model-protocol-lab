@@ -1298,6 +1298,28 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "verbosity_unavailable",
         }
+    # Prefix-cache sharability profile (research wave-6 idea 2): run
+    # the real cache-profile stage post-hoc over the verbosity
+    # exercise's observations -- the candidates render prompts that
+    # share the fixture-side structure (genuine signal: base and
+    # mutated templates differ in how much exact prefix their prompts
+    # share, and therefore in how much prefill a prefix cache could
+    # skip). Zero additional model calls. Degrades to an
+    # "unavailable" marker instead of failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            cache_profile_profile,
+            cache_profile_stage,
+        )
+
+        _cp_names = tuple(f.name for f in _v_fmts)
+        _cp_stage = cache_profile_stage(observations=_v_observations)
+        result["cache_profile"] = cache_profile_profile(_cp_names, _cp_stage)
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["cache_profile"] = {
+            "available": False,
+            "detail": "cache_profile_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

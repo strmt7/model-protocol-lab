@@ -139,7 +139,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from model_protocol_lab import diffreports
+from model_protocol_lab import cacheprofile, diffreports
 
 # ---------------------------------------------------------------------------
 # Builders: canonical reports for the adversarial pairs.
@@ -255,6 +255,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "faketurn": {"available": "neither", "changed": False},
         "toolcall": {"available": "neither", "changed": False},
         "verbosity": {"available": "neither", "changed": False},
+        "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
         "config_drift": [],
@@ -317,6 +318,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "toolcall_asymmetric": False,
             "verbosity_changed": False,
             "verbosity_asymmetric": False,
+            "cache_profile_changed": False,
+            "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
             "template_robustness_asymmetric": False,
             "ablation_changed": False,
@@ -1298,6 +1301,190 @@ def _o_verbosity(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         median_drift
         or iqr_drift
         or capped_share_drift
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_cache_profile_valid(value: Any) -> bool:
+    """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    block_size = value.get("block_size")
+    if type(block_size) is not int or block_size < 1:
+        return False
+    n_observations = value.get("n_observations")
+    if type(n_observations) is not int or n_observations < 0:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable"):
+            count = entry.get(key)
+            if type(count) is not int or count < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in (
+            "total_tokens",
+            "cacheable_tokens",
+            "shared_prefixes",
+            "achievable_tokens",
+            "block_cacheable_blocks",
+            "distinct_block_prefixes",
+            "achievable_blocks",
+            "n_duplicate_prompts",
+        ):
+            count = entry.get(key)
+            if type(count) is not int or count < 0:
+                return False
+        if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
+            return False
+        if (
+            entry["achievable_blocks"]
+            != entry["block_cacheable_blocks"] - entry["distinct_block_prefixes"]
+        ):
+            return False
+        if entry["cacheable_tokens"] > entry["total_tokens"]:
+            return False
+        if entry["n_duplicate_prompts"] > entry["n_evaluable"]:
+            return False
+        for key in (
+            "potential_token_fraction",
+            "achievable_token_fraction",
+            "potential_block_fraction",
+            "achievable_block_fraction",
+        ):
+            share = entry.get(key)
+            if entry["n_evaluable"] == 0:
+                if share is not None:
+                    return False
+            elif not (type(share) in (int, float) and 0.0 <= share <= 1.0):
+                return False
+        mean = entry.get("mean_prompt_tokens")
+        if entry["n_evaluable"] == 0:
+            if mean is not None:
+                return False
+        elif not (type(mean) in (int, float) and mean > 0):
+            return False
+        achievable_token = entry.get("achievable_token_fraction")
+        potential_token = entry.get("potential_token_fraction")
+        achievable_block = entry.get("achievable_block_fraction")
+        potential_block = entry.get("potential_block_fraction")
+        if (
+            entry["n_evaluable"] > 0
+            and type(achievable_token) in (int, float)
+            and type(potential_token) in (int, float)
+            and type(achievable_block) in (int, float)
+            and type(potential_block) in (int, float)
+            and not (
+                achievable_block <= achievable_token <= potential_token
+                and achievable_block <= potential_block <= potential_token
+            )
+        ):
+            return False
+    for key in ("most_sharable", "least_sharable", "excluded_candidates"):
+        value_list = value.get(key)
+        if type(value_list) is not list or not all(type(c) is str for c in value_list):
+            return False
+    gap = value.get("sharability_gap")
+    if gap is not None and not (type(gap) in (int, float) and gap >= 0):
+        return False
+    if value.get("uniform") is not None and type(value.get("uniform")) is not bool:
+        return False
+    return type(value.get("evaluable_mismatch")) is bool
+
+
+def _o_cache_profile(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle cache-profile section: block/token/potential drift.
+
+    Independent reimplementation: comprehension-built views rather
+    than the implementation's accumulation loops, with the drift
+    buckets filled in the implementation's per-candidate field order.
+    """
+    old_ok = _o_cache_profile_valid(old)
+    new_ok = _o_cache_profile_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        # Mirrors the implementation: a None cell (candidate missing
+        # from the stage) counts as excluded, exactly like the
+        # profile's excluded_candidates semantics.
+        out: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            if entry is None:
+                out[name] = {
+                    "achievable_block_fraction": None,
+                    "achievable_token_fraction": None,
+                    "potential_block_fraction": None,
+                    "excluded": True,
+                }
+            else:
+                out[name] = {
+                    "achievable_block_fraction": entry.get("achievable_block_fraction"),
+                    "achievable_token_fraction": entry.get("achievable_token_fraction"),
+                    "potential_block_fraction": entry.get("potential_block_fraction"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    # Same per-candidate field order as the implementation's loop.
+    block_drift: list[dict[str, Any]] = []
+    token_drift: list[dict[str, Any]] = []
+    potential_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        for field, bucket in (
+            ("achievable_block_fraction", block_drift),
+            ("achievable_token_fraction", token_drift),
+            ("potential_block_fraction", potential_drift),
+        ):
+            if old_view[name][field] != new_view[name][field]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_view[name][field],
+                        "new": new_view[name][field],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    diff["block_drift"] = block_drift
+    diff["token_drift"] = token_drift
+    diff["potential_drift"] = potential_drift
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    changed = bool(
+        block_drift
+        or token_drift
+        or potential_drift
         or candidates_added
         or candidates_removed
         or excluded_added
@@ -3165,6 +3352,9 @@ def _oracle_diff(
     o_ft, o_ft_changed, o_ft_asymmetric = _o_faketurn(old.get("faketurn"), new.get("faketurn"))
     o_tc, o_tc_changed, o_tc_asymmetric = _o_toolcall(old.get("toolcall"), new.get("toolcall"))
     o_vb, o_vb_changed, o_vb_asymmetric = _o_verbosity(old.get("verbosity"), new.get("verbosity"))
+    o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
+        old.get("cache_profile"), new.get("cache_profile")
+    )
     o_trob, o_trob_changed, o_trob_asymmetric = _o_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
     )
@@ -3220,6 +3410,8 @@ def _oracle_diff(
         and not o_tc_asymmetric
         and not o_vb_changed
         and not o_vb_asymmetric
+        and not o_cp_changed
+        and not o_cp_asymmetric
         and not o_trob_changed
         and not o_trob_asymmetric
         and not o_ab_changed
@@ -3253,6 +3445,7 @@ def _oracle_diff(
         "faketurn": o_ft,
         "toolcall": o_tc,
         "verbosity": o_vb,
+        "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
         "config_drift": config_drift,
@@ -3311,6 +3504,8 @@ def _oracle_diff(
             "toolcall_asymmetric": o_tc_asymmetric,
             "verbosity_changed": o_vb_changed,
             "verbosity_asymmetric": o_vb_asymmetric,
+            "cache_profile_changed": o_cp_changed,
+            "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
             "template_robustness_asymmetric": o_trob_asymmetric,
             "ablation_changed": o_ab_changed,
@@ -3681,6 +3876,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "toolcall_asymmetric": False,
                 "verbosity_changed": False,
                 "verbosity_asymmetric": False,
+                "cache_profile_changed": False,
+                "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
                 "template_robustness_asymmetric": False,
                 "ablation_changed": False,
@@ -4951,6 +5148,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["toolcall"] = _fuzz_toolcall_section(rng)
     if rng.random() < 0.45:
         report["verbosity"] = _fuzz_verbosity_section(rng)
+    if rng.random() < 0.45:
+        report["cache_profile"] = _fuzz_cache_profile_section(rng)
     return report
 
 
@@ -5287,6 +5486,48 @@ def _fuzz_verbosity_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent cells are produced by the real implementation over
+    # random prompt sets (guaranteeing the integer identities and
+    # ordering invariants hold); hostile mutations then try to break
+    # them, and oracle/implementation must agree on every rejection.
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        prompts = [
+            [rng.randint(0, 7) for _ in range(rng.randint(1, 12))] for _ in range(rng.randint(0, 5))
+        ]
+        entry = cacheprofile.candidate_cache_profile(prompts, block_size=rng.choice([2, 4, 16]))
+        entry["n"] = entry["n_evaluable"] + rng.randint(0, 2)
+        if rng.random() < 0.1:
+            entry["n"] = 0  # hostile: n < n_evaluable
+        if rng.random() < 0.1:
+            entry["achievable_block_fraction"] = 1.5  # hostile: out of range
+        if rng.random() < 0.1:
+            entry["achievable_tokens"] = entry["cacheable_tokens"]  # identity broken
+        if rng.random() < 0.1:
+            entry["potential_token_fraction"] = 0.0  # hostile: ordering violated
+        if rng.random() < 0.1:
+            entry[rng.choice(["n", 7])] = -1  # hostile: negative / bad key
+        per_candidate[name] = entry
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"n": 1}  # hostile: non-string key
+    return {
+        "available": True,
+        "block_size": rng.choice([2, 16, 16, 0, -1]),
+        "n_observations": rng.choice([0, 5, 10, -1]),
+        "per_candidate": per_candidate,
+        "most_sharable": rng.choice([[], ["alpha"], ["beta"], [7]]),
+        "least_sharable": rng.choice([[], ["alpha"]]),
+        "sharability_gap": rng.choice([0.0, 0.25, 0.5, None, -0.1]),
+        "uniform": rng.choice([True, False, None, "yes"]),
+        "excluded_candidates": rng.choice([[], ["alpha"], ["beta"]]),
+        "evaluable_mismatch": rng.choice([True, False, "x"]),
+    }
+
+
 def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
     mutations = ["trailing_space", "leading_space", "trailing_newline"]
     if rng.random() < 0.3:
@@ -5579,6 +5820,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not toolcall_asymmetric\n"
             '        and not verbosity_diff["changed"]\n'
             "        and not verbosity_asymmetric\n"
+            '        and not cache_profile_diff["changed"]\n'
+            "        and not cache_profile_asymmetric\n"
             '        and not template_robustness_diff["changed"]\n'
             "        and not template_robustness_asymmetric\n"
             '        and not ablation_diff["changed"]\n'
@@ -5631,6 +5874,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or toolcall_asymmetric\n"
             '        or verbosity_diff["changed"]\n'
             "        or verbosity_asymmetric\n"
+            '        or cache_profile_diff["changed"]\n'
+            "        or cache_profile_asymmetric\n"
             "    )\n",
             scenario,
         )
