@@ -80,6 +80,38 @@ def _reject_constant(_value: Any) -> Any:
     raise ValueError("results_nonfinite_number")
 
 
+def parse_results_bytes(content: bytes) -> dict[str, Any]:
+    """Parse ``results.json`` bytes under the bounded reader's rules.
+
+    Shared by :func:`load_results` (file path), ``pack`` (sealing), and
+    ``verify --bundle`` (replay), so all three call sites reject exactly
+    the same artifacts with exactly the same fixed error codes: oversize,
+    non-UTF-8, duplicate fields, non-finite numbers, excessive nesting,
+    non-object roots, and wrong minimal shape.
+    """
+    if len(content) > MAX_RESULTS_BYTES:
+        raise ValueError("results_too_large")
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("results_not_utf8") from None
+    try:
+        value = json.loads(
+            text,
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+        )
+    except RecursionError:
+        # Deeply nested input within the byte cap exhausts the parser stack.
+        raise ValueError("results_nesting_too_deep") from None
+    except json.JSONDecodeError:
+        raise ValueError("results_invalid_json") from None
+    if type(value) is not dict:
+        raise ValueError("results_not_an_object")
+    _require_shape(value)
+    return value
+
+
 def load_results(path: str | Path) -> dict[str, Any]:
     """Read a ``results.json`` (or a report directory holding one).
 
@@ -111,27 +143,7 @@ def load_results(path: str | Path) -> dict[str, Any]:
     finally:
         if fd != -1:
             os.close(fd)
-    if len(content) > MAX_RESULTS_BYTES:
-        raise ValueError("results_too_large")
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
-        raise ValueError("results_not_utf8") from None
-    try:
-        value = json.loads(
-            text,
-            object_pairs_hook=_unique_object,
-            parse_constant=_reject_constant,
-        )
-    except RecursionError:
-        # Deeply nested input within the byte cap exhausts the parser stack.
-        raise ValueError("results_nesting_too_deep") from None
-    except json.JSONDecodeError:
-        raise ValueError("results_invalid_json") from None
-    if type(value) is not dict:
-        raise ValueError("results_not_an_object")
-    _require_shape(value)
-    return value
+    return parse_results_bytes(content)
 
 
 def _require_shape(value: dict[str, Any]) -> None:

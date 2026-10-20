@@ -673,7 +673,7 @@ class TestDefensiveBranches(unittest.TestCase):
         import io
         from contextlib import redirect_stderr, redirect_stdout
 
-        args = argparse.Namespace(results=target)
+        args = argparse.Namespace(results=target, bundle=None, expect_digest=None)
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = verify.run_verify(args, None)

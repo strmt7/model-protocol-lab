@@ -581,10 +581,24 @@ def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
     JSON goes to stdout, the human-readable summary to stderr (mirroring
     ``diff-reports``). Exit 0 when every applicable check passes, 2 when
-    any check fails, 1 for unreadable/invalid input.
+    any check fails, 1 for unreadable/invalid input. With ``--bundle`` the
+    bundle path is verified by ``pack.run_verify_bundle`` instead.
     """
     from .diffreports import load_results
 
+    if args.bundle is not None and args.results is not None:
+        print("verify: exactly one of results and --bundle", file=sys.stderr)
+        return 1
+    if args.bundle is not None:
+        from .pack import run_verify_bundle
+
+        return run_verify_bundle(args)
+    if args.expect_digest is not None:
+        print("verify: --expect-digest requires --bundle", file=sys.stderr)
+        return 1
+    if args.results is None:
+        print("verify: exactly one of results and --bundle", file=sys.stderr)
+        return 1
     try:
         data = load_results(args.results)
     except ValueError as exc:
@@ -598,15 +612,39 @@ def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
     return 0 if report["verdict"] == "ok" else 2
 
 
+def _expect_digest_type(value: str) -> str:
+    if re.fullmatch(r"[0-9a-f]{64}", value or "") is None:
+        raise argparse.ArgumentTypeError("expect-digest must be 64 lowercase hex characters")
+    return value
+
+
 def build_verify_parser(sub: Any) -> None:
     """Register the ``verify`` subcommand (called from cli.build_parser)."""
     verify_cmd = sub.add_parser(
         "verify",
-        help="Independently re-derive an experiment's recorded decision and diagnostics",
+        help="Independently re-derive an experiment's recorded decision and diagnostics. "
+        "Monday morning, a user asks 'is this result self-consistent and was "
+        "it edited since packing' — verify answers the first, and "
+        "--bundle answers the second",
         allow_abbrev=False,
     )
     verify_cmd.add_argument(
         "results",
         type=Path,
+        nargs="?",
+        default=None,
         help="Report directory (containing results.json) or results.json path",
+    )
+    verify_cmd.add_argument(
+        "--bundle",
+        type=Path,
+        default=None,
+        help="Sealed bundle to verify (exactly one of results and --bundle)",
+    )
+    verify_cmd.add_argument(
+        "--expect-digest",
+        type=_expect_digest_type,
+        default=None,
+        help="64-char hex bundle digest obtained through an independent "
+        "channel (only with --bundle)",
     )

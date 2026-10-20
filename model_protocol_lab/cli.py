@@ -497,6 +497,9 @@ def build_parser() -> argparse.ArgumentParser:
     from .verify import build_verify_parser
 
     build_verify_parser(sub)
+    from .pack import build_pack_parser
+
+    build_pack_parser(sub)
     diff_reports_cmd = sub.add_parser(
         "diff-reports",
         help="Compare two experiment result directories (or results.json files)",
@@ -1581,6 +1584,10 @@ def main(argv: list[str] | None = None) -> int:
             from .verify import run_verify
 
             return run_verify(args, parser)
+        if args.command == "pack":
+            from .pack import run_pack
+
+            return run_pack(args, parser)
         if args.command == "diff-reports":
             from .diffreports import run_diff_reports
 
