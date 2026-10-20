@@ -1407,6 +1407,48 @@ def oracle_diff_reports(
         _o_trob_available = "neither"
     _o_trob_asymmetric = _o_trob_available not in ("both", "neither")
 
+    def _or_ablation_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_ablation exactly.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        if not all(type(name) is str for name in candidates):
+            return False
+        for rep in candidates.values():
+            if type(rep) is not dict:
+                return False
+            if rep.get("status") != "ok":
+                continue
+            arms = rep.get("arms")
+            if type(arms) is not dict:
+                return False
+            for arm in arms.values():
+                if type(arm) is not dict:
+                    return False
+                if arm.get("status") != "ok":
+                    continue
+                for key in ("n_flips", "pass_to_fail", "fail_to_pass"):
+                    if type(arm.get(key)) is not int:
+                        return False
+            load_bearing = rep.get("load_bearing_fields")
+            if type(load_bearing) is not list or not all(type(f) is str for f in load_bearing):
+                return False
+        return True
+
+    _ab_old_ok = _or_ablation_valid(old.get("ablation"))
+    _ab_new_ok = _or_ablation_valid(new.get("ablation"))
+    if _ab_old_ok and _ab_new_ok:
+        _o_ab_available = "both"
+    elif _ab_old_ok:
+        _o_ab_available = "old"
+    elif _ab_new_ok:
+        _o_ab_available = "new"
+    else:
+        _o_ab_available = "neither"
+    _o_ab_asymmetric = _o_ab_available not in ("both", "neither")
+
     _vb_old_ok = _or_verbosity_valid(old.get("verbosity"))
     _vb_new_ok = _or_verbosity_valid(new.get("verbosity"))
     if _vb_old_ok and _vb_new_ok:
@@ -1448,6 +1490,7 @@ def oracle_diff_reports(
         and not _o_tc_asymmetric
         and not _o_vb_asymmetric
         and not _o_trob_asymmetric
+        and not _o_ab_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1502,6 +1545,8 @@ def oracle_diff_reports(
         "verbosity_asymmetric": _o_vb_asymmetric,
         "template_robustness_changed": False,
         "template_robustness_asymmetric": _o_trob_asymmetric,
+        "ablation_changed": False,
+        "ablation_asymmetric": _o_ab_asymmetric,
         "identical": identical,
     }
     return {
@@ -1533,6 +1578,7 @@ def oracle_diff_reports(
         "toolcall": {"available": _o_tc_available, "changed": False},
         "verbosity": {"available": _o_vb_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
+        "ablation": {"available": _o_ab_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

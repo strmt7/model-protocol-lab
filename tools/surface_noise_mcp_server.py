@@ -22,7 +22,11 @@ against one. Re-check before claiming conformance.
 Sweep bounds (FlitzZip pattern, POSIX enforcement): every sweep
 dimension is capped in the tool schema, one sweep runs at a time
 (threading lock), cancellation is cooperative between forwards with a
-fail-closed ``status: "cancelled"`` (never a partial score).
+fail-closed ``status: "cancelled"`` (never a partial score). The 600 s
+wall-clock budget is enforced with ``SIGALRM``/``ITIMER_REAL`` and is
+therefore POSIX-only: on platforms without ``SIGALRM`` the sweep still
+runs, but the budget degrades to best-effort (not enforced) rather than
+failing the call.
 
 Run from the repository root:
     python3 tools/surface_noise_mcp_server.py
@@ -195,13 +199,18 @@ def tool_probe(params: dict) -> dict:
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
     cancel = threading.Event()
 
+    # SIGALRM/ITIMER_REAL do not exist on Windows: guard the POSIX-only
+    # enforcement and degrade to best-effort there (documented above).
+    _has_alarm = getattr(signal, "SIGALRM", None) is not None and hasattr(signal, "setitimer")
+
     def _on_alarm(_signum: int, _frame: object) -> None:
         cancel.set()
 
     with _sweep_lock:
-        previous = signal.signal(signal.SIGALRM, _on_alarm)
+        previous = signal.signal(signal.SIGALRM, _on_alarm) if _has_alarm else None
         try:
-            signal.setitimer(signal.ITIMER_REAL, SWEEP_TIMEOUT_SECONDS)
+            if _has_alarm:
+                signal.setitimer(signal.ITIMER_REAL, SWEEP_TIMEOUT_SECONDS)
             try:
                 report = sn.probe_surface_noise(
                     prompt,
@@ -214,9 +223,11 @@ def tool_probe(params: dict) -> dict:
                     cancel=cancel,
                 )
             finally:
-                signal.setitimer(signal.ITIMER_REAL, 0)
+                if _has_alarm:
+                    signal.setitimer(signal.ITIMER_REAL, 0)
         finally:
-            signal.signal(signal.SIGALRM, previous)
+            if _has_alarm:
+                signal.signal(signal.SIGALRM, previous)
 
     status = report.get("status")
     if status == "cancelled":

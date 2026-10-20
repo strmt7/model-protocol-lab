@@ -5819,3 +5819,65 @@ baseline-conditioned verdict preservation rate). v2 design re-verified by B:
 24/26 resolved, 2 partially (F4 token-ID no-op filter, F6 falsifiability item 3)
 — both fixed before code. 55 tests, 3 tempdir mutation gates, F14 controls
 (determinism + scripted robust-vs-fragile discrimination).
+
+## Cycle 167 (2026-10-20): template field ablation — uniqueness pass
+
+Question: does any shipped tool answer "which structural field of a chat
+template drives its verdict" by single-field causal ablation (replace one
+field with its neutral value, re-apply the selection bar, attribute flips)?
+
+**Checked 2026-10-20 (web):**
+- ChatInject (arXiv:2509.22830): shows chat-template *structure* changes model
+  behavior (attack success 5.18% -> 32.05% when wrapping payloads in the
+  target's template) — evidence the question matters, but it is an attack
+  paper, not a measurement tool, and it varies whole templates, not fields.
+- "Same Bytes, Different Authority" (arXiv:2609.35932, the deliforge paper
+  from wave-4): separates reserved-token vs subword encoding of template
+  markers — again whole-marker contrasts, not per-field ablation, and a
+  paper, not a shipped instrument.
+- The Prompt Report survey (arXiv:2406.06608): formalizes the prompt template
+  as T(x*) but studies wording-level techniques; no structural field
+  decomposition, no tool.
+- Few-shot "leave-one-out" practice (e.g. aicassindra.com few-shot guide):
+  ablates *examples*, not template structural fields — different independent
+  variable.
+- LM Eval Harness / HELM / OpenAI evals / PromptPerfect / DSPy: fixed-prompt
+  accuracy harnesses or prompt optimizers; none decomposes a chat template
+  into ablatable structural fields with a neutral-value control.
+- "Understanding the Prompt Sensitivity" (arXiv:2604.18389): hidden-state
+  deltas for wording sensitivity — paper-only, not chat templates, no tool.
+
+**Verdict:** the combination — single-field causal ablation of a chat
+template's structural fields (BOS, role prefixes, turn terminators, per-role
+overrides, open suffix) against neutral values, re-applying the lab's
+conservative selection bar per arm, with per-field flip attribution and an
+explicit publishable-negative path ("no single field explains the winner"),
+deterministic and local — does not exist as a shipped tool. Framed as "the
+combination", never "first". Related work is cited as motivation (template
+structure demonstrably moves behavior), not claimed over.
+
+## Cycle 167 (2026-10-20): template field ablation — build record
+
+The cycle-167 uniqueness pass above cleared the build. Implementation: pure
+`ablation.py` (ABLATION_FIELDS, NEUTRAL_VALUES, ablate_format, ablation_arms,
+inapplicable_fields, summarize_arm with flip counts + selection_bar_held),
+`experiments.ablation_stage` (top-2 candidates by search accuracy, ties by
+name; per-arm core.evaluate; per-field flip attribution; load_bearing_fields;
+fail-closed per arm/candidate; per-candidate boundary_map — wave-6 red-team A
+finding 2), `mpl run --ablate-fields` (informational, never touches
+selection), HTML section in `reporting.py` (id="field-ablation"), and
+`diffreports.diff_ablation` (attribution_drift, load_bearing_drift,
+candidates added/removed; feeds `identical` and the summary).
+Wave-6 specialist round: researcher 8 ranked proposals (ablation ranked #1),
+red-team A 7 findings (2 HIGH) — coordinator independently re-verified all 7
+against the tree (findings 1+6 reproduced live) — all 7 fixed in-cycle:
+RecursionError/non-finite-float fail-closed in _parse_emitted; boundary_map
+for template_robustness_stage + ablation_stage with per-candidate boundary
+recorded in reports; frozen protocol subject_span scoped + version 1.0.1;
+cancel-during-baseline reports cancelled; distance test decoupled from
+private enumeration; MCP SIGALRM POSIX guard; test doubles use "limit".
+Red-team B cross-checked the cycle-166 A brief (21/22 survived + 2 new,
+both fixed); wave-6 A findings were coordinator-verified (B finished before
+A's brief landed). Verifier: 8 claims checked, 2 refuted (F18 cost formula —
+fixed; surfacenoise "100% coverage" — was 96%, corrected to genuine 100%
+line+branch via 14 gap tests).

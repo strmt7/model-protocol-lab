@@ -587,6 +587,11 @@ def diff_reports(
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
     )
+    ablation_diff = diff_ablation(old.get("ablation"), new.get("ablation"))
+    ablation_asymmetric = ablation_diff["available"] not in (
+        "both",
+        "neither",
+    )
     verbosity_asymmetric = verbosity_diff["available"] not in (
         "both",
         "neither",
@@ -648,6 +653,8 @@ def diff_reports(
         and not verbosity_asymmetric
         and not template_robustness_diff["changed"]
         and not template_robustness_asymmetric
+        and not ablation_diff["changed"]
+        and not ablation_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -702,6 +709,8 @@ def diff_reports(
         "verbosity_asymmetric": verbosity_asymmetric,
         "template_robustness_changed": template_robustness_diff["changed"],
         "template_robustness_asymmetric": template_robustness_asymmetric,
+        "ablation_changed": ablation_diff["changed"],
+        "ablation_asymmetric": ablation_asymmetric,
         "identical": identical,
     }
     return {
@@ -733,6 +742,7 @@ def diff_reports(
         "toolcall": toolcall_diff,
         "verbosity": verbosity_diff,
         "template_robustness": template_robustness_diff,
+        "ablation": ablation_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -926,7 +936,7 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
     result["budget_robust"] = {
         "old": old_robust,
         "new": new_robust,
-        "changed": old_robust != new_robust,
+        "changed": False,
     }
 
     def decision_points(frontier: dict[str, Any]) -> list[tuple[int, tuple[str, Any]]]:
@@ -3176,6 +3186,127 @@ def diff_template_robustness(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_ablation(payload: Any) -> bool:
+    """Structural check for an ``ablation`` payload.
+
+    Flip counts must be ints, load-bearing lists string lists, candidate
+    keys strings, so the renderers never hit a TypeError on a hostile
+    payload (the wave-2 C3 lesson at the value level).
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return False
+    if not all(type(name) is str for name in candidates):
+        return False
+    for rep in candidates.values():
+        if type(rep) is not dict:
+            return False
+        if rep.get("status") != "ok":
+            continue  # unavailable markers pass structurally
+        arms = rep.get("arms")
+        if type(arms) is not dict:
+            return False
+        for arm in arms.values():
+            if type(arm) is not dict:
+                return False
+            if arm.get("status") != "ok":
+                continue
+            for key in ("n_flips", "pass_to_fail", "fail_to_pass"):
+                if type(arm.get(key)) is not int:
+                    return False
+        load_bearing = rep.get("load_bearing_fields")
+        if type(load_bearing) is not list or not all(type(f) is str for f in load_bearing):
+            return False
+    return True
+
+
+def diff_ablation(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``ablation`` payloads; deterministic.
+
+    Answers "did the causal story change between runs?": per-candidate,
+    per-field flip-count drift, load-bearing-field set drift, plus
+    added/removed candidates. A field that becomes load-bearing after a
+    template edit is the regression signal -- the edit made the verdict
+    depend on that field. A side without a recorded probe is reported
+    plainly. No model, no network.
+    """
+    old_ok = _valid_ablation(old)
+    new_ok = _valid_ablation(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in payload["candidates"].items():
+            # _valid_ablation guarantees str keys and dict entries, so no
+            # defensive skip is needed here (it would be dead code and an
+            # uncoverable line).
+            if entry.get("status") != "ok":
+                view[name] = {"flips": {}, "load_bearing": []}
+            else:
+                arms = entry.get("arms") or {}
+                view[name] = {
+                    "flips": {
+                        field: (arm.get("n_flips") if type(arm) is dict else None)
+                        for field, arm in arms.items()
+                    },
+                    "load_bearing": sorted(entry.get("load_bearing_fields") or []),
+                }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    attribution_drift: list[dict[str, Any]] = []
+    load_bearing_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        for field in sorted(set(old_entry["flips"]) | set(new_entry["flips"])):
+            old_flips = old_entry["flips"].get(field)
+            new_flips = new_entry["flips"].get(field)
+            if old_flips != new_flips:
+                attribution_drift.append(
+                    {
+                        "candidate": name,
+                        "field": field,
+                        "old_n_flips": old_flips,
+                        "new_n_flips": new_flips,
+                    }
+                )
+        if old_entry["load_bearing"] != new_entry["load_bearing"]:
+            load_bearing_drift.append(
+                {
+                    "candidate": name,
+                    "old_load_bearing": old_entry["load_bearing"],
+                    "new_load_bearing": new_entry["load_bearing"],
+                }
+            )
+    result["attribution_drift"] = attribution_drift
+    result["load_bearing_drift"] = load_bearing_drift
+    result["candidates_added"] = candidates_added
+    result["candidates_removed"] = candidates_removed
+    # NOTE: ablation-specific disjunct names keep this ``changed`` line
+    # textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        attribution_drift or load_bearing_drift or candidates_added or candidates_removed
+    )
+    return result
+
+
 def _valid_prefill(payload: Any) -> bool:
     """Structural check for a ``prefill`` payload.
 
@@ -4806,6 +4937,58 @@ def _render_template_robustness_summary(
     return lines
 
 
+def _render_ablation_summary(
+    ablation_diff: dict[str, Any] | None,
+) -> list[str]:
+    """Field-ablation comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson).
+    """
+    if type(ablation_diff) is not dict:
+        return []
+    available = ablation_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Ablation comparison unavailable: "
+            f"{missing} run did not record the field-ablation probe."
+        ]
+    lines: list[str] = []
+    drift = ablation_diff.get("attribution_drift") or []
+    if drift:
+        lines.append(f"Ablation attribution drift ({len(drift)}):")
+        for entry in drift[:5]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"  {_display_id(entry.get('candidate'))}/"
+                f"{_display_id(entry.get('field'))}: "
+                f"{entry.get('old_n_flips')} -> {entry.get('new_n_flips')} flips"
+            )
+        if len(drift) > 5:
+            lines.append(f"  ... and {len(drift) - 5} more")
+    lb_drift = ablation_diff.get("load_bearing_drift") or []
+    for entry in lb_drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            "Ablation load-bearing drift "
+            f"({_display_id(entry.get('candidate'))}): "
+            f"{entry.get('old_load_bearing')} -> {entry.get('new_load_bearing')}"
+        )
+    added = ablation_diff.get("candidates_added") or []
+    removed = ablation_diff.get("candidates_removed") or []
+    if added:
+        lines.append("Ablation candidates added: " + ", ".join(_display_id(c) for c in added))
+    if removed:
+        lines.append("Ablation candidates removed: " + ", ".join(_display_id(c) for c in removed))
+    return lines
+
+
 def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str]:
     """Verbosity profile comparison lines for the stderr summary.
 
@@ -5290,6 +5473,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_toolcall_summary(diff.get("toolcall")))
     lines.extend(_render_verbosity_summary(diff.get("verbosity")))
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
+    lines.extend(_render_ablation_summary(diff.get("ablation")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

@@ -213,6 +213,28 @@ class TestAuditSearchObservations(unittest.TestCase):
         self.assertFalse(audit["available"])
         self.assertEqual(audit["n_usable"], 0)
 
+    def test_malformed_entries_skipped_fail_closed(self) -> None:
+        # Defensive `continue` guards: entries with a non-str name, a
+        # non-list observations field, or non-dict observations are
+        # skipped without raising, and contribute no candidates.
+        entries = [
+            {"format": {"name": 123}, "observations": []},
+            {"format": {"name": ""}, "observations": []},
+            {"format": {"name": "chatml"}, "observations": "not-a-list"},
+            {
+                "format": {"name": "llama3"},
+                "observations": [
+                    "not-a-dict",
+                    {"input_text": "ab", "input_ids": (97, 98), "output_ids": (99, 100)},
+                ],
+            },
+        ]
+        audit = audit_search_observations(entries, _identity_encode, _identity_decode)
+        # Only llama3 survives, with the single well-formed observation.
+        self.assertIn("llama3", audit["per_candidate"])
+        self.assertNotIn(123, audit["per_candidate"])
+        self.assertEqual(audit["per_candidate"]["llama3"]["n_observations"], 1)
+
 
 class IdentityBackend:
     """Minimal canonical backend: ord/chr, perfectly boundary-canonical."""

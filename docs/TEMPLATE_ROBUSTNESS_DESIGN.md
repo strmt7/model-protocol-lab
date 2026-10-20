@@ -144,9 +144,12 @@ perturbation.py — F9a), the frozen search plan (3 operators, seeds/modes fully
 specified — F9d), fixture ids + hashes (bound at verify time — the wave-5
 finding-1 fix), backend fingerprint. The renderer is per-candidate context:
 protocol records template name + sha256 of the `Format`'s defining fields and
-of the rendered base *and* perturbed inputs (N3). Comparability rule (F9c):
-rankings are only valid across runs with identical (fixtures, backend,
-protocol-fingerprint) triples.
+of the rendered base *and* perturbed inputs (N3). The `subject_span` text
+states the fixture-scope condition explicitly (v1.0.1, wave-6 red-team A
+finding 3: results are conditional on fixtures whose correct answer is
+invariant under the operators; presentation-sensitive fixtures are out of
+scope). Comparability rule (F9c): rankings are only valid across runs with
+identical (fixtures, backend, protocol-fingerprint) triples.
 
 ## Degradation granularity (F8, N5)
 
@@ -188,10 +191,11 @@ validate the machinery, not the concept):
 
 Per candidate: F fixtures × (1 baseline + V variants) generations, plus
 F×(1+V) encodes for verdicts and F×(1+V) encodes for the content-span
-no-op filter/distance (2× encode factor). V = 8 seeds × 3 seeded operators
-(whitespace modes are data-dependent, counted exactly). Total per run ≈
-C × F × (25 + n_whitespace_modes) generations. Opt-in
-(`model-protocol-lab run --template-robustness`); the cost formula is in `--help`.
+no-op filter/distance (2× encode factor). V = 8 seeds × 2 seeded operators
+(case_flip, unicode_variant; whitespace modes are data-dependent, counted
+exactly). Total per run ≈ C × F × (17 + n_whitespace_modes) generations.
+Opt-in (`model-protocol-lab run --template-robustness`); the cost formula
+is in `--help`.
 
 ## Differentiation (F13)
 

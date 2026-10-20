@@ -1253,6 +1253,39 @@ compares which templates hold their correct answers under real-world
 typing noise. Opt-in (about C*F*25 extra generations). The stage never
 fails the run.
 
+### 8.32 Template field ablation (`ablation`)
+
+Your template won -- but what *about* it won? The BOS token, the role
+labels, or the turn terminator? `model-protocol-lab run --ablate-fields`
+answers by making each structural field the independent variable: for
+the top-2 candidates by search accuracy (ties broken by name, so the
+focus is deterministic), it replaces one `Format` field at a time --
+`bos`, `user_prefix`, `assistant_prefix`, `turn_end`, `repeat_bos`,
+`user_turn_end`, `assistant_turn_end`, `open_suffix` -- with its neutral
+value ("" for text, False for repeat_bos, None for the optional
+overrides) and re-evaluates, keeping weights, fixtures, and backend
+fixed. The headline per arm is the **verdict-flip attribution**: how
+many fixture verdicts changed in each direction, and whether the arm
+still clears the conservative selection bar (passes every fixture). A
+field is **load-bearing** when the base passes every search fixture but
+the arm does not -- that field carried the candidate over the bar.
+Three honesty pins: (1) an arm proves causality only within the
+measured (template, fixtures, backend) triple, never universally;
+(2) main effects only -- the 28 pairwise interactions are explicitly
+out of scope; (3) a field already at its neutral value gets no arm
+(a no-op swap proves nothing), and an arm with zero attribution across
+all candidates is a publishable negative ("no single field explains
+the winner"), reported explicitly via `any_attribution`. Each candidate
+is judged under its own boundary (`--boundary-map` honored). The stage
+is informational -- it never changes winner selection. `results.json`
+carries `ablation` with per-candidate arms, flip counts, and
+load-bearing fields. `diff-reports` compares per-field attribution
+drift and load-bearing-set drift (`diff_ablation`; feeds `identical`).
+Monday-morning use: a platform engineer writing the next template asks
+not "which template won" but "what about it won" -- because only the
+causal field transfers to the template they write next. The stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

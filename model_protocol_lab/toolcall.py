@@ -62,6 +62,7 @@ classification, and rate aggregation need no model.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, cast
 
 from .core import Fixture, Message
@@ -404,12 +405,34 @@ def _parse_emitted(text: str) -> tuple[str | None, dict[str, Any] | None, str | 
     if sep == "" or not name.replace("_", "").isalnum():
         return None, None, "bad_shape"
     try:
-        arguments = json.loads(args_text, parse_constant=_reject_constant)
+        arguments = json.loads(
+            args_text,
+            parse_constant=_reject_constant,
+            parse_float=_reject_nonfinite_float,
+        )
     except (json.JSONDecodeError, ValueError):
+        return None, None, "bad_json"
+    except RecursionError:
+        # Deeply nested input: the C scanner recurses per nesting level and
+        # raises outside JSONDecodeError/ValueError. Fail-closed, never escape
+        # (a single degenerate answer must not kill the whole probe).
         return None, None, "bad_json"
     if type(arguments) is not dict:
         return None, None, "args_not_object"
     return name, arguments, None
+
+
+def _reject_nonfinite_float(text: str) -> float:
+    """Reject float literals that overflow to infinity (e.g. ``1e999``).
+
+    ``parse_constant`` only fires for the ``NaN``/``Infinity`` literals;
+    ``float()`` conversion of a huge exponent reaches ``inf`` without ever
+    calling it, so the finiteness guarantee needs this hook too.
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"non-finite float literal {text!r}")
+    return value
 
 
 def _reject_constant(value: str) -> object:

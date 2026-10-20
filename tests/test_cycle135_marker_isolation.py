@@ -178,6 +178,21 @@ class ProbeFormatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             probe_format(lambda m: 123, encode, specials, _fixture().messages)  # type: ignore[return-value]
 
+    def test_hostile_render_must_return_str(self):
+        # The hostile-path type guard (not just the benign one) is a
+        # fail-closed boundary: a render that turns hostile mid-probe must
+        # raise, not silently record garbage ids.
+        encode, specials = _scripted_tokenizer()
+        calls = []
+
+        def render(msgs):
+            calls.append(msgs)
+            return "benign" if len(calls) == 1 else 123
+
+        with self.assertRaises(ValueError):
+            probe_format(render, encode, specials, _fixture().messages, payloads=["<s>"])
+        self.assertEqual(len(calls), 2)
+
     def test_custom_payload_subset(self):
         encode, specials = _scripted_tokenizer()
         out = probe_format(_fmt().render, encode, specials, _fixture().messages, payloads=["<s>"])

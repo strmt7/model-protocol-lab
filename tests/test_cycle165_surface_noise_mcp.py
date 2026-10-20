@@ -339,3 +339,51 @@ class MCPContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MCPPosixGuardTests(unittest.TestCase):
+    """Wave-6 red-team A finding 7: the SIGALRM timeout is POSIX-only."""
+
+    def _load_server(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("surface_noise_mcp_server", str(SERVER))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_probe_without_sigalrm_degrades_to_best_effort(self):
+        # Simulate a platform without SIGALRM (Windows): the probe must
+        # still run instead of raising AttributeError.
+        import signal as real_signal
+
+        server = self._load_server()
+
+        class NoAlarmSignal:
+            ITIMER_REAL = real_signal.ITIMER_REAL
+
+            def __getattr__(self, name):
+                if name == "SIGALRM":
+                    raise AttributeError("no SIGALRM on this platform")
+                return getattr(real_signal, name)
+
+        server.signal = NoAlarmSignal()
+        result = server.tool_probe(
+            {
+                "prompt": "MAGICWORD please",
+                "fixtures": [
+                    {
+                        "id": "f1",
+                        "messages": [{"role": "user", "content": "x"}],
+                        "expected": "BLUE",
+                        "group": "g",
+                    }
+                ],
+                "boundary": [7],
+            }
+        )
+        self.assertEqual(result["structuredContent"]["status"], "ok")
+
+    def test_timeout_doc_mentions_posix_only(self):
+        server = self._load_server()
+        self.assertIn("POSIX-only", server.__doc__)

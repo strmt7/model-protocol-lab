@@ -1357,5 +1357,47 @@ class ToolcallReportIntegrationTests(unittest.TestCase):
         self.assertIn("Tool-call", stderr_lines)
 
 
+class ParseEmittedFailClosedTests(unittest.TestCase):
+    """Wave-6 red-team A findings 1+6: _parse_emitted never raises."""
+
+    def test_deeply_nested_input_is_bad_json(self):
+        # json.loads raises RecursionError (not JSONDecodeError/ValueError)
+        # on deep nesting; it must degrade to bad_json, never escape.
+        from model_protocol_lab.toolcall import _parse_emitted
+
+        evil = "CALL get_weather " + "[" * 10000 + "]" * 10000
+        self.assertEqual(_parse_emitted(evil), (None, None, "bad_json"))
+
+    def test_overflow_float_literal_is_bad_json(self):
+        # 1e999 -> inf via float() without ever calling parse_constant.
+        from model_protocol_lab.toolcall import _parse_emitted
+
+        name, arguments, error = _parse_emitted('CALL get_weather {"city": "Paris", "unit": 1e999}')
+        self.assertEqual((name, arguments, error), (None, None, "bad_json"))
+
+    def test_underflow_float_literal_is_bad_json(self):
+        from model_protocol_lab.toolcall import _parse_emitted
+
+        name, arguments, error = _parse_emitted('CALL get_weather {"x": -1e999}')
+        self.assertEqual((name, arguments, error), (None, None, "bad_json"))
+
+    def test_finite_floats_still_parse(self):
+        from model_protocol_lab.toolcall import _parse_emitted
+
+        name, arguments, error = _parse_emitted('CALL get_weather {"temp": 21.5, "unit": "C"}')
+        self.assertIsNone(error)
+        self.assertEqual(name, "get_weather")
+        self.assertEqual(arguments, {"temp": 21.5, "unit": "C"})
+
+    def test_classify_never_raises_on_degenerate_answer(self):
+        # One degenerate observation must not kill the stage: classify
+        # degrades to parse_failed.
+        from model_protocol_lab.toolcall import classify_tool_call
+
+        evil = "CALL get_weather " + "[" * 10000 + "]" * 10000
+        result = classify_tool_call(evil, {"name": "get_weather", "arguments": {"city": "Paris"}})
+        self.assertEqual(result["outcome"], "parse_failed")
+
+
 if __name__ == "__main__":
     unittest.main()

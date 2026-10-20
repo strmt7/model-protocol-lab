@@ -50,7 +50,7 @@ class MarkerBackend:
     def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
         prompt = self.decode(input_ids).lower()
         ans = "BLUE" if "say magicword" in prompt else "WRONG"
-        return Generation(tuple(map(ord, ans + chr(7))), "stop")
+        return Generation(tuple(map(ord, ans + chr(7))), "limit")
 
 
 class AlwaysWrongBackend(MarkerBackend):
@@ -59,7 +59,7 @@ class AlwaysWrongBackend(MarkerBackend):
     fingerprint = "test-always-wrong/v1"
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
-        return Generation(tuple(map(ord, "WRONG" + chr(7))), "stop")
+        return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
 
 
 class AlwaysErrorBackend(MarkerBackend):
@@ -176,7 +176,15 @@ class OperatorSetTests(unittest.TestCase):
 
     def test_probe_name_and_version_pinned(self):
         self.assertEqual(sn.TEMPLATE_ROBUSTNESS_PROBE_NAME, "template-surface-noise-robustness")
-        self.assertEqual(sn.TEMPLATE_ROBUSTNESS_PROBE_VERSION, "1.0.0")
+        self.assertEqual(sn.TEMPLATE_ROBUSTNESS_PROBE_VERSION, "1.0.1")
+
+    def test_subject_span_carries_fixture_scope(self):
+        # Wave-6 red-team A finding 3: the frozen protocol must not claim the
+        # operators "cannot change the task's correct answer" unconditionally.
+        protocol, _, _ = _protocol()
+        span = protocol["subject_span"]
+        self.assertIn("out of scope", span)
+        self.assertNotIn("cannot change the task's correct answer", span)
 
 
 class FrozenProtocolTests(unittest.TestCase):
@@ -290,11 +298,45 @@ class VariantEnumerationTests(unittest.TestCase):
         )
         variants = sn._enumerate_template_variants(case)
         _vid, _op, _detail, perturbed = variants[0]
-        # Three contents returned (one per message, order preserved)...
-        self.assertEqual(len(perturbed), 3)
-        # ...assistant content untouched (F10 is enforced at render level;
-        # here the helper returns all contents positionally).
-        self.assertEqual(perturbed[1], "MAGICWORD")
+        # Two contents returned (one per USER message, in order) — the
+        # helper's documented user-only contract (F10). Assistant content
+        # is never perturbed and is not represented in the tuple; the
+        # all-message shape was the B-NEW-1 bug (user turn 2 rebuilt with
+        # the assistant's content).
+        self.assertEqual(len(perturbed), 2)
+        self.assertEqual(
+            perturbed,
+            (
+                sn.perturb_text("Say MAGICWORD", "case_flip", seed=0),
+                sn.perturb_text("Again MAGICWORD", "case_flip", seed=0),
+            ),
+        )
+
+    def test_multi_message_user_turns_keep_own_content(self):
+        # B-NEW-1 regression: rebuilding messages from the perturbed tuple
+        # must give each user turn its OWN perturbed content, never another
+        # message's content.
+        case = Fixture(
+            id="m0",
+            messages=(
+                Message(role="user", content="Say MAGICWORD"),
+                Message(role="assistant", content="MAGICWORD"),
+                Message(role="user", content="Again MAGICWORD"),
+            ),
+            expected="BLUE",
+            group="g",
+        )
+        _vid, _op, _detail, perturbed = sn._enumerate_template_variants(case)[0]
+        rebuilt = sn._with_perturbed_contents(case, perturbed)
+        self.assertEqual(
+            [m.content for m in rebuilt],
+            [
+                sn.perturb_text("Say MAGICWORD", "case_flip", seed=0),
+                "MAGICWORD",
+                sn.perturb_text("Again MAGICWORD", "case_flip", seed=0),
+            ],
+        )
+        self.assertEqual([m.role for m in rebuilt], ["user", "assistant", "user"])
 
 
 class NoOpFilterTests(unittest.TestCase):
@@ -354,14 +396,20 @@ class DistanceTests(unittest.TestCase):
 
     def test_distance_matches_content_span_computation(self):
         # The reported distance equals the normalized indel rate on the
-        # content-span token IDs (not the rendered input). Uses whitespace
-        # flips, which deterministically flip the fragile template.
+        # content-span token IDs (not the rendered input). Whitespace mode
+        # texts are hardcoded here (wave-6 finding 5): the test must not
+        # re-derive them from the private _enumerate_template_variants, or a
+        # bug in the enumeration would be invisible by construction.
+        # token_edit_distance itself is covered by the 300-case brute-force
+        # oracle in test_cycle165_surfacenoise.py.
         backend = MarkerBackend()
         protocol, _, fixtures = _protocol(backend)
         case = fixtures[0]
+        self.assertEqual(case.messages[0].content, "Say MAGICWORD")
         base_ids = tuple(backend.encode("Say MAGICWORD"))
-        variants = sn._enumerate_template_variants(case)
-        pert_by_id = {v[0]: v[3] for v in variants}
+        # Hardcoded from the documented whitespace modes (collapse / double /
+        # newline-split) applied to "Say MAGICWORD".
+        mode_texts = ("Say MAGICWORD", "Say  MAGICWORD", "Say\nMAGICWORD")
         rep = sn.probe_template_robustness(
             _fragile_render,
             "t",
@@ -372,8 +420,12 @@ class DistanceTests(unittest.TestCase):
         )
         flips = rep["operators"]["whitespace"]["nearest_flips"]
         self.assertTrue(flips, "expected whitespace flips")
+        flip_ids = {flip["variant_id"] for flip in flips}
+        # mode_index=0 (collapse) is text-identical -> no-op filtered.
+        self.assertNotIn("whitespace/mode_index=0", flip_ids)
         for flip in flips:
-            pert_ids = tuple(backend.encode(pert_by_id[flip["variant_id"]][0]))
+            mode_index = int(flip["variant_id"].split("=")[1])
+            pert_ids = tuple(backend.encode(mode_texts[mode_index]))
             denom = len(base_ids) + len(pert_ids)
             expected = sn.token_edit_distance(base_ids, pert_ids) / denom
             self.assertAlmostEqual(flip["distance"], expected, places=9)
@@ -534,6 +586,34 @@ class MultiMessageTests(unittest.TestCase):
         # The baseline render contains the assistant turn verbatim.
         self.assertIn("ASSISTANT: MAGICWORD", base_render)
 
+    def test_abstain_baseline_excluded_from_nearest_flips(self):
+        # B-NEW-2: an abstain baseline has no verdict to flip from (the
+        # flip_predicate requires both sides non-abstain). The nearest-flip
+        # loop must not record abstain-baseline pairs as flips.
+        calls = {"n": 0}
+
+        def flaky_render(messages):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("first baseline render fails")
+            return _fragile_render(messages)
+
+        protocol, backend, fixtures = _protocol()
+        rep = sn.probe_template_robustness(
+            flaky_render, "t", fixtures, backend, protocol, boundary=BOUNDARY
+        )
+        self.assertEqual(rep["status"], "ok")
+        baselines = {f["id"]: f.get("baseline") for f in rep["per_fixture"]}
+        self.assertEqual(baselines["r0"], "abstain")
+        self.assertEqual(baselines["r1"], "pass")
+        for op_rep in rep["operators"].values():
+            for flip in op_rep["nearest_flips"]:
+                self.assertNotEqual(
+                    flip["baseline"],
+                    "abstain",
+                    f"abstain baseline recorded as flip: {flip}",
+                )
+
     def test_fixture_without_user_messages_excluded(self):
         case = Fixture(
             id="nu0",
@@ -656,7 +736,7 @@ class EvaluateCaseTests(unittest.TestCase):
     def test_invalid_gen_ids_abstain(self):
         class BadGenIds(MarkerBackend):
             def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
-                return Generation((1, -5), "stop")
+                return Generation((1, -5), "limit")
 
         self.assertEqual(self._call(_fragile_render, BadGenIds()), "abstain")
 
@@ -775,7 +855,7 @@ class EdgeCaseTests(unittest.TestCase):
             def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
                 prompt = self.decode(input_ids)
                 ans = "BLUE" if "Say  MAGICWORD" in prompt else "WRONG"
-                return Generation(tuple(map(ord, ans + chr(7))), "stop")
+                return Generation(tuple(map(ord, ans + chr(7))), "limit")
 
         backend = RepairBackend()
         fixtures = _fixtures()
@@ -862,6 +942,33 @@ class StageTests(unittest.TestCase):
             self.assertEqual(report["status"], "ok")
         # One frozen protocol covers all candidates (comparability).
         self.assertIn("template_robustness_code_sha256", stage["protocol"])
+
+    def test_stage_honors_boundary_map(self):
+        # Wave-6 red-team A finding 2: each candidate is judged under its own
+        # boundary, and the boundary used is recorded in the report.
+        from model_protocol_lab import experiments
+        from model_protocol_lab.core import Format
+
+        def _fmt(name):
+            return Format(
+                name=name,
+                bos="",
+                user_prefix="U: ",
+                assistant_prefix="A: ",
+                turn_end="\n",
+                repeat_bos=False,
+            )
+
+        formats = (_fmt("robust-a"), _fmt("fragile-b"))
+        stage = experiments.template_robustness_stage(
+            formats,
+            _fixtures(),
+            MarkerBackend(),
+            boundary=BOUNDARY,
+            boundary_map={"robust-a": (7,), "fragile-b": (8,)},
+        )
+        self.assertEqual(stage["candidates"]["robust-a"]["boundary"], [7])
+        self.assertEqual(stage["candidates"]["fragile-b"]["boundary"], [8])
 
     def test_stage_marks_failed_candidate_unavailable(self):
         from model_protocol_lab import experiments
@@ -968,6 +1075,7 @@ class CliTests(unittest.TestCase):
             backend=None,
             search_fixtures=(),
             boundary=BOUNDARY,
+            boundary_map=None,
             max_new_tokens=8,
             seed=0,
         )
@@ -994,6 +1102,7 @@ class CliTests(unittest.TestCase):
             backend=MarkerBackend(),
             search_fixtures=_fixtures(),
             boundary=BOUNDARY,
+            boundary_map=None,
             max_new_tokens=8,
             seed=0,
         )
@@ -1251,3 +1360,453 @@ class TemplateRobustnessMutationGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FailClosedCoverageTests(unittest.TestCase):
+    """Cover fail-closed defensive paths the wave-6 verifier found uncovered."""
+
+    def test_verify_protocol_rejects_tampered_hashes(self):
+        protocol, backend, fixtures = _protocol()
+        p165 = sn.freeze_surface_noise_protocol(
+            backend_fingerprint=backend.fingerprint, fixtures=fixtures
+        )
+        bad = dict(p165)
+        bad["surfacenoise_code_sha256"] = "0" * 64
+        with self.assertRaises(ValueError):
+            sn.verify_protocol(bad, backend_fingerprint=backend.fingerprint, fixtures=fixtures)
+
+    def test_verify_template_protocol_rejects_tampered_hashes(self):
+        protocol, backend, fixtures = _protocol()
+        for key in ("perturbation_code_sha256", "template_robustness_code_sha256"):
+            bad = dict(protocol)
+            bad[key] = "0" * 64
+            with self.assertRaises(ValueError):
+                sn.verify_template_robustness_protocol(
+                    bad,
+                    backend_fingerprint=backend.fingerprint,
+                    fixtures=fixtures,
+                )
+        bad = dict(protocol)
+        with self.assertRaises(ValueError):
+            sn.verify_template_robustness_protocol(bad, backend_fingerprint="", fixtures=fixtures)
+
+    def test_baseline_all_abstained_is_unavailable(self):
+        protocol, _, fixtures = _protocol(backend=AlwaysErrorBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            AlwaysErrorBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "unavailable")
+        self.assertEqual(rep["reason"], "baseline_all_abstained")
+
+    def test_pre_cancelled_control_backend_generate(self):
+        import threading
+
+        backend = sn._ControlCalibrationBackend()
+        event = threading.Event()
+        event.set()
+        gen = backend.generate((65,), max_new_tokens=8, seed=0, cancel=event)
+        self.assertEqual(gen.reason, "cancelled")
+
+    def test_whitespace_helper_message_without_whitespace(self):
+        case = Fixture(
+            id="w0",
+            messages=(Message(role="user", content="ABC"),),
+            expected="BLUE",
+            group="g",
+        )
+        out = sn._whitespace_fixture_contents(case, 0)
+        self.assertEqual(out, ("ABC",))
+
+    def test_keyboard_interrupt_propagates(self):
+        class KbdBackend(MarkerBackend):
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                raise KeyboardInterrupt()
+
+        protocol, _, fixtures = _protocol(backend=KbdBackend())
+        with self.assertRaises(KeyboardInterrupt):
+            sn.probe_template_robustness(
+                _fragile_render,
+                "t",
+                fixtures,
+                KbdBackend(),
+                protocol,
+                boundary=BOUNDARY,
+            )
+
+    def test_decode_exception_abstains(self):
+        class BadDecodeBackend(MarkerBackend):
+            @staticmethod
+            def decode(ids):
+                raise ValueError("nope")
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                # Bypass generate's own decode call: the failure under test
+                # is the answer-decode after generation.
+                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+
+        protocol, _, fixtures = _protocol(backend=BadDecodeBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            BadDecodeBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        # Every baseline abstains -> unavailable, but no crash.
+        self.assertEqual(rep["status"], "unavailable")
+
+    def test_decode_non_string_abstains(self):
+        class NonStrDecodeBackend(MarkerBackend):
+            @staticmethod
+            def decode(ids):
+                return 42
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+
+        protocol, _, fixtures = _protocol(backend=NonStrDecodeBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            NonStrDecodeBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "unavailable")
+
+    def test_content_encode_failed_is_unevaluable(self):
+        class ContentFailBackend(MarkerBackend):
+            @staticmethod
+            def encode(text):
+                if text == "Say MAGICWORD":
+                    raise ValueError("content span refuses")
+                return tuple(map(ord, text))
+
+        protocol, _, fixtures = _protocol(backend=ContentFailBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            ContentFailBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertTrue(all(d == "content_encode_failed" for d in details.values()))
+
+    def test_content_encode_invalid_is_unevaluable(self):
+        class InvalidIdsBackend(MarkerBackend):
+            @staticmethod
+            def encode(text):
+                if text == "Say MAGICWORD":
+                    return (-1,)
+                return tuple(map(ord, text))
+
+        protocol, _, fixtures = _protocol(backend=InvalidIdsBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            InvalidIdsBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertTrue(all(d == "content_encode_invalid" for d in details.values()))
+
+    def test_variant_encode_exception_abstains_variant(self):
+        class PerturbedFailBackend(MarkerBackend):
+            @staticmethod
+            def encode(text):
+                # Fullwidth text only arises from unicode_variant perturbations.
+                if any(ord(c) > 0xFF00 for c in text):
+                    raise ValueError("perturbed span refuses")
+                return tuple(map(ord, text))
+
+        protocol, _, fixtures = _protocol(backend=PerturbedFailBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            PerturbedFailBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        # unicode_variant verdicts all abstained; other operators unaffected.
+        self.assertEqual(rep["operators"]["unicode_variant"]["n_unevaluable"], 2)
+
+    def test_all_variants_noop_is_unevaluable(self):
+        class ConstantBackend(MarkerBackend):
+            fingerprint = "test-constant/v1"
+
+            @staticmethod
+            def encode(text):
+                return (1,)
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+
+        protocol, _, fixtures = _protocol(backend=ConstantBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            ConstantBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertTrue(all(d == "unevaluable" for d in details.values()))
+        self.assertEqual(rep["n_unevaluable"], 2)
+
+    def _cancel_probe(self, fire_on):
+        import threading
+
+        class CancelBackend(MarkerBackend):
+            def __init__(self):
+                self.event = threading.Event()
+                self.calls = 0
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                self.calls += 1
+                if self.calls == fire_on:
+                    self.event.set()
+                return super().generate(
+                    input_ids,
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                    cancel=cancel,
+                )
+
+        backend = CancelBackend()
+        protocol, _, fixtures = _protocol(backend=backend)
+        return sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            backend,
+            protocol,
+            boundary=BOUNDARY,
+            cancel=backend.event,
+        )
+
+    def test_cancel_during_last_baseline_is_cancelled(self):
+        # Wave-6 red-team A finding 4: a cancel landing during the last
+        # baseline evaluation must report "cancelled", not "unavailable".
+        from model_protocol_lab.core import Generation
+
+        event = threading.Event()
+
+        class CancelOnLastBackend(MarkerBackend):
+            fingerprint = "test-cancel-on-last/v1"
+
+            def __init__(self):
+                self.calls = 0
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                self.calls += 1
+                if self.calls == 2:
+                    event.set()
+                return Generation((), "error", error="diag")
+
+        backend = CancelOnLastBackend()
+        protocol = sn.freeze_template_robustness_protocol(backend.fingerprint, _fixtures())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            _fixtures(),
+            backend,
+            protocol,
+            boundary=BOUNDARY,
+            cancel=event,
+        )
+        self.assertEqual(rep["status"], "cancelled")
+        self.assertEqual(rep["reason"], "cancelled_during_baseline")
+
+    def test_cancel_during_sweep_fixture_loop(self):
+        # Event fires between the post-baseline check and the first sweep
+        # iteration: the fixture-loop top check reports cancelled_during_sweep.
+        # is_set() calls before the sweep: pre-baseline (1) + baseline tops
+        # (2) + backend cancel checks during baseline generates (2) +
+        # post-baseline check (1); the sweep's first top check is #7.
+        import threading
+
+        class CountingEvent(threading.Event):
+            def __init__(self, fire_at):
+                super().__init__()
+                self.calls = 0
+                self.fire_at = fire_at
+
+            def is_set(self):
+                self.calls += 1
+                return self.calls >= self.fire_at
+
+        event = CountingEvent(fire_at=7)
+        protocol, _, fixtures = _protocol()
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            MarkerBackend(),
+            protocol,
+            boundary=BOUNDARY,
+            cancel=event,
+        )
+        self.assertEqual(rep["status"], "cancelled")
+        self.assertEqual(rep["reason"], "cancelled_during_sweep")
+
+    def test_cancel_during_sweep_variant_loop(self):
+        # Event fires mid-variant: the variant loop observes it.
+        rep = self._cancel_probe(fire_on=3)
+        self.assertEqual(rep["status"], "cancelled")
+
+    def _mixed_fixtures(self):
+        # r0: baseline passes; r1: baseline fails ("Hello" has no marker).
+        return (
+            Fixture(
+                id="r0",
+                messages=(Message(role="user", content="Say MAGICWORD"),),
+                expected="BLUE",
+                group="g",
+            ),
+            Fixture(
+                id="r1",
+                messages=(Message(role="user", content="Hello"),),
+                expected="BLUE",
+                group="g",
+            ),
+        )
+
+    def test_content_encode_failed_fail_baseline_branch(self):
+        # The encode-failed handler's `if base_v == "pass"` false arc:
+        # a fail-baseline fixture is recorded without touching n_unevaluable.
+        class ContentFailBackend(MarkerBackend):
+            @staticmethod
+            def encode(text):
+                if not text.startswith("USER:"):
+                    raise ValueError("content span refuses")
+                return tuple(map(ord, text))
+
+        fixtures = self._mixed_fixtures()
+        protocol = sn.freeze_template_robustness_protocol(ContentFailBackend.fingerprint, fixtures)
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            ContentFailBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertEqual(details["r0"], "content_encode_failed")
+        self.assertEqual(details["r1"], "content_encode_failed")
+        # Only the pass-baseline fixture counted toward n_unevaluable.
+        self.assertEqual(rep["n_unevaluable"], 1)
+
+    def test_content_encode_invalid_fail_baseline_branch(self):
+        class InvalidIdsBackend(MarkerBackend):
+            @staticmethod
+            def encode(text):
+                if not text.startswith("USER:"):
+                    return (-1,)
+                return tuple(map(ord, text))
+
+        fixtures = self._mixed_fixtures()
+        protocol = sn.freeze_template_robustness_protocol(InvalidIdsBackend.fingerprint, fixtures)
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            InvalidIdsBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertEqual(details["r0"], "content_encode_invalid")
+        self.assertEqual(details["r1"], "content_encode_invalid")
+        self.assertEqual(rep["n_unevaluable"], 1)
+
+    def test_noise_repair_empty_evaluable_branch(self):
+        # Fail-baseline fixture whose variants are all no-ops (constant
+        # tokenizer): variant_verdicts is empty, so the `if evaluable` false
+        # arc is taken — no repair-denominator contribution.
+        class ConstantWrongBackend(MarkerBackend):
+            fingerprint = "test-constant-wrong/v1"
+
+            @staticmethod
+            def encode(text):
+                return (1,)
+
+            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+                return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
+
+        protocol, _, fixtures = _protocol(backend=ConstantWrongBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            ConstantWrongBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        details = {f["id"]: f.get("detail") for f in rep["per_fixture"]}
+        self.assertTrue(all(d == "fail_baseline" for d in details.values()))
+        self.assertEqual(rep["n_repair_denominator"], 0)
+        self.assertEqual(rep["n_noise_repairs"], 0)
+
+    def test_noise_repair_no_pass_variant_branch(self):
+        # Fail-baseline fixture whose evaluable variants never pass: the
+        # repair counter's inner `any(...)` false arc.
+        protocol, _, fixtures = _protocol(backend=AlwaysWrongBackend())
+        rep = sn.probe_template_robustness(
+            _fragile_render,
+            "t",
+            fixtures,
+            AlwaysWrongBackend(),
+            protocol,
+            boundary=BOUNDARY,
+        )
+        self.assertEqual(rep["status"], "ok")
+        self.assertEqual(rep["n_noise_repairs"], 0)
+        self.assertEqual(rep["n_repair_denominator"], 2)
+
+    def test_stage_probe_exception_degrades(self):
+        # The stage-level except: probe_template_robustness itself raises.
+        from unittest import mock
+
+        from model_protocol_lab import experiments
+        from model_protocol_lab.core import Format
+
+        fmt = Format(
+            name="t1",
+            bos="",
+            user_prefix="U: ",
+            assistant_prefix="A: ",
+            turn_end="\n",
+            repeat_bos=False,
+        )
+        with mock.patch(
+            "model_protocol_lab.surfacenoise.probe_template_robustness",
+            side_effect=RuntimeError("probe boom"),
+        ):
+            stage = experiments.template_robustness_stage(
+                (fmt,), _fixtures(), MarkerBackend(), boundary=BOUNDARY
+            )
+        rep = stage["candidates"]["t1"]
+        self.assertEqual(rep["status"], "unavailable")
+        self.assertEqual(rep["reason"], "candidate_probe_failed")
+        self.assertEqual(rep["boundary"], list(BOUNDARY))
