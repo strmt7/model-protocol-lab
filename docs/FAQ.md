@@ -140,6 +140,57 @@ ranges like "budgets 1–9: no_candidate" mean the winner only emerges once it
 gets enough tokens — the verdict is budget-contingent and a larger
 `--max-new-tokens` (or a cheaper winner) deserves a thought (USAGE §8.6).
 
+## There are dozens of `run --…` probes — where do I start?
+
+Run the base experiment first; every probe is opt-in and answers one
+question the base run leaves open (which stop semantics, which template
+field, which serving stack). USAGE §8 gives each probe its own subsection,
+and each opens with the decision it informs. The probes split by cost:
+the portfolio, verbosity, refusal and cache-profile readouts are computed
+from the recorded answers after the run and cost no extra model calls,
+while the re-evaluation stages (perturbation, hierarchy, ablation and the
+rest) re-run the search split under their treatment.
+
+## Can I prove a result file wasn't altered after the run?
+
+You can seal it: `model-protocol-lab pack` writes a bundle whose manifest
+hashes every file in the report directory, and
+`model-protocol-lab verify --bundle` re-hashes everything offline, then
+replays the decision from the sealed results as a second, independent
+layer. The seal is unsigned — it proves the bits are unchanged *since
+packing* only if you keep the bundle digest somewhere else
+(`verify --expect-digest`); it is not an attestation and says nothing
+about who packed it (USAGE §13.1).
+
+## Can I check whether my checkpoint actually reproduces its own runs?
+
+`model-protocol-lab verify --determinism --model DIR` re-executes the
+recorded search observations token-for-token and compares. If every cell
+reproduces, it issues an unsigned determinism certificate bound to those
+cells; if a cell diverges, the divergence is reported as a finding about
+the backend's determinism — the audit proves the re-execution, never the
+original run (USAGE §13.2).
+
+## My fixture file is hand-written — how do I know the loader reads it as intended?
+
+`inspect` validates the file against the strict schema and runs the
+search/held-out contamination check (USAGE §1). For the loaders
+themselves, `model-protocol-lab fixtures fuzz` runs a fixed, published
+133-case mutator table against the documented accept/reject contract —
+same seed, same report, byte-for-byte — so a loader behavior change
+shows up as a contract diff instead of a surprise mid-run (USAGE §9).
+
+## The model repeats things it was told to keep internal / refuses benign prompts — can the lab measure that?
+
+Two probes, both per template. The labeled-block confidentiality probe
+(USAGE §8.34) folds a privilege-marked block with a secret marker into
+the user turn and measures whether frozen elicitation prompts can pull
+the marker out, verbatim or in fragments. The suspected-refusal profile
+(USAGE §8.36) scans the recorded answers with a frozen refusal-opener
+detector and reports a per-template suspected-refusal rate on benign
+fixtures — *suspected*, because opener matching is a weak baseline, and
+the rate travels with exact counts so you can judge it yourself.
+
 ## Where is the evidence that any of this was actually verified?
 
 [VALIDATION.md](../VALIDATION.md): exact commands, counts, dates and

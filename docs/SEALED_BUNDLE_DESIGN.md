@@ -94,8 +94,11 @@ types throughout (`type(x) is int` / `is str`; booleans are not ints):
 
 The container is strict: the first local header is at offset 0 (no
 prepended data), the file ends exactly at the end of the EOCD record (no
-trailing data), disk fields are zero, and ZIP64 is rejected (a format-1
-bundle is far below ZIP64 sizes; needing it would be a format bump).
+trailing data), the EOCD disk fields are zero, and ZIP64 sentinel
+values in the EOCD are rejected (a format-1 bundle is far below ZIP64
+sizes; needing it would be a format bump). The disk and ZIP64 checks
+are EOCD-level — the pre-parse reads the end-of-central-directory
+record, not a ZIP64 extended record or per-entry extra fields.
 Duplicate archive entry names and duplicate manifest paths are rejected
 before any entry data is read; all reads iterate `infolist()` entries and
 stream in bounded chunks, asserting the hashed length equals the declared
