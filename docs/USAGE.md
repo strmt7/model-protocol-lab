@@ -218,7 +218,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), a prompt-repetition section (see §8.39), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation, scorer-lens and candidate-aliasing sections are absent from the sample even though real runs render them.
 
@@ -1683,6 +1683,57 @@ binds device, context limit, and dependency versions), never
 in `docs/ALIASING_AUDIT_DESIGN.md`. Informational only: the
 audit never affects selection, and the stage never fails the
 run.
+
+### 8.39 Prompt repetition (`repetition`)
+
+Opt-in with `model-protocol-lab run --repeat`. A generation
+stage over the search split: each fixture's last user message
+is repeated verbatim inside the same user turn (the x2 arm),
+and, as a control, followed by neutral filler sized to the
+exact same rendered token length (the pad arm); the x1 arm is
+the recorded native search, reused with zero extra model
+calls. Monday-morning use: before shipping a prompt that asks
+twice, learn per candidate template whether repeating the
+request changes verdicts once prompt length is held constant
+-- and whether the winner survives repetition.
+
+The report's headline number is the *repetition effect* (x2
+pass rate minus pad pass rate over fixtures completed in both
+arms): the two treated arms have identical token lengths, so
+the difference is not explained by length alone (content
+position and repetition-specific attention are not separated;
+the section says so). The *length effect* (pad minus x1) and
+the joiner-inclusive *raw gain* (x2 minus x1) travel with it,
+each with its paired denominator. Pairs whose pad cannot be
+matched exactly are never shipped mismatched -- they leave
+the denominator, and the per-candidate pad-evaluable share is
+reported beside the effect. A fixture whose expected answer
+occurs inside the filler is pad-screened for the same reason.
+Fixtures that were already repeated verbatim are flagged by a
+frozen exact detector and also reported as an
+excluding-flagged subpopulation; vacuous (whitespace-only)
+fixtures are excluded by predicate and counted. Degradation
+is per fixture: one overlong treated render records
+`arm_context_exceeded` for that fixture alone.
+
+The conservative selection rule is re-applied per arm, and an
+arm's winner/flip readout is *withheld* whenever the completed
+fixture sets differ across candidates -- a flip the
+denominators cannot explain is not published. The x1 arm never
+reports a flip (it is the recorded run). Cost: two generations
+per (candidate, fixture), 4,800 at the run caps, at full-prefix
+recompute prices -- this lab has no KV cache, so doubled
+prompts cost real compute, and the section says so.
+`diff-reports` recomputes every aggregate from the payload's
+per-fixture ground records (the full recompute standard) and
+compares effect/arm drift, flagging protocol, fixture-set, or
+backend drift as `comparable: false` (`diff_repetition`,
+`repetition_changed` / `repetition_asymmetric` feed
+`identical`). The full contract is in
+`docs/REPETITION_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the run
+(a failed or cancelled native search gates it to zero
+generations instead).
 
 ## 9. Authoring fixtures (`fixtures build`)
 

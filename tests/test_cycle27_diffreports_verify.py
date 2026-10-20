@@ -2042,6 +2042,363 @@ def oracle_diff_reports(
         )
         return all(payload.get(key) == expected for key, expected in checks)
 
+    def _or_repetition_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_repetition exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too, including every recompute identity.
+        import hashlib as _hashlib
+        import json as _json
+
+        _details = {
+            "",
+            "vacuous",
+            "arm_context_exceeded",
+            "arm_evaluation_failed",
+            "pad_screened",
+            "pad_unmatchable",
+        }
+        _contrasts = (
+            ("x2", "x1", "raw_gain"),
+            ("pad", "x1", "length_effect"),
+            ("x2", "pad", "repetition_effect"),
+        )
+
+        def _recompute(payload: dict) -> dict | None:
+            protocol = payload.get("protocol")
+            if type(protocol) is not dict:
+                return None
+            for key in (
+                "joiner",
+                "filler_unit_sha256",
+                "sizing_rule",
+                "fixture_set_sha256",
+                "backend_fingerprint",
+                "fingerprint",
+            ):
+                if type(protocol.get(key)) is not str or not protocol.get(key):
+                    return None
+            for key in ("version", "detector_version"):
+                if type(protocol.get(key)) is not int:
+                    return None
+            candidates = payload.get("candidates")
+            if type(candidates) is not dict or not candidates:
+                return None
+            total_records = 0
+            fixture_ids: list | None = None
+            per_candidate: dict = {}
+            for name, entry in candidates.items():
+                if type(name) is not str or type(entry) is not dict:
+                    return None
+                if entry.get("status") not in ("available", "unavailable"):
+                    return None
+                if type(entry.get("think_channel")) is not bool:
+                    return None
+                signature = entry.get("render_signature")
+                if signature is not None and type(signature) is not str:
+                    return None
+                if entry["status"] == "unavailable":
+                    if entry.get("records") != []:
+                        return None
+                    per_candidate[name] = None
+                    continue
+                records = entry.get("records")
+                if type(records) is not list or not records:
+                    return None
+                total_records += len(records)
+                ids = [r.get("fixture") for r in records if type(r) is dict]
+                if len(ids) != len(records) or any(type(i) is not str for i in ids):
+                    return None
+                if len(set(ids)) != len(ids):
+                    return None
+                if fixture_ids is None:
+                    fixture_ids = sorted(ids)
+                elif sorted(ids) != fixture_ids:
+                    return None
+                for r in records:
+                    if (
+                        type(r.get("vacuous")) is not bool
+                        or type(r.get("pre_repeated")) is not bool
+                    ):
+                        return None
+                    if (
+                        type(r.get("echo_fixture")) is not bool
+                        or type(r.get("pad_evaluable")) is not bool
+                    ):
+                        return None
+                    if r.get("construction") not in ("id_exact", "text_level", "vacuous"):
+                        return None
+                    if r["vacuous"] != (r["construction"] == "vacuous"):
+                        return None
+                    seam = r.get("seam_ids")
+                    if type(seam) is not list or any(type(s) is not int for s in seam):
+                        return None
+                    delta = r.get("delta_tokens")
+                    if delta is not None and type(delta) is not int:
+                        return None
+                    filler = r.get("filler_tokens")
+                    if filler is not None and (type(filler) is not int or filler <= 0):
+                        return None
+                    arms = r.get("arms")
+                    details = r.get("arm_details")
+                    if type(arms) is not dict or type(details) is not dict:
+                        return None
+                    for arm in ("x1", "x2", "pad"):
+                        cell = arms.get(arm, "missing")
+                        if cell == "missing":
+                            return None
+                        if cell is not None:
+                            if type(cell) is not dict:
+                                return None
+                            if (
+                                type(cell.get("verdict")) is not bool
+                                or type(cell.get("boundary_found")) is not bool
+                            ):
+                                return None
+                            btm = cell.get("boundary_text_match")
+                            if btm is not None and type(btm) is not bool:
+                                return None
+                            tokens = cell.get("input_tokens")
+                            if type(tokens) is not int or tokens < 0:
+                                return None
+                    if arms["x1"] is None:
+                        return None
+                    for arm in ("x2", "pad"):
+                        detail = details.get(arm)
+                        if detail not in _details:
+                            return None
+                        if r["vacuous"]:
+                            if arms[arm] is not None or detail != "vacuous":
+                                return None
+                        elif arms[arm] is None:
+                            if detail not in (
+                                "arm_context_exceeded",
+                                "arm_evaluation_failed",
+                                "pad_screened",
+                                "pad_unmatchable",
+                            ):
+                                return None
+                        elif detail != "":
+                            return None
+                    if r["pad_evaluable"]:
+                        if filler is None:
+                            return None
+                    elif arms["pad"] is not None:
+                        return None
+                per_candidate[name] = records
+            if total_records > 2400 or fixture_ids is None:
+                return None
+            fixture_hash = _hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
+            if protocol["fixture_set_sha256"] != fixture_hash:
+                return None
+            table = {
+                "version": protocol["version"],
+                "joiner": protocol["joiner"],
+                "filler_unit_sha256": protocol["filler_unit_sha256"],
+                "detector_version": protocol["detector_version"],
+                "sizing_rule": protocol["sizing_rule"],
+                "fixture_set_sha256": protocol["fixture_set_sha256"],
+                "backend_fingerprint": protocol["backend_fingerprint"],
+            }
+            canonical = _json.dumps(table, sort_keys=True, separators=(",", ":"))
+            if protocol["fingerprint"] != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+                return None
+
+            def _verdict(record: dict, arm: str) -> bool | None:
+                cell = record["arms"][arm]
+                return None if cell is None else bool(cell["verdict"])
+
+            def _contrast(recs: list, arm_a: str, arm_b: str, effect: str) -> dict:
+                paired = [
+                    r
+                    for r in recs
+                    if not r["vacuous"]
+                    and _verdict(r, arm_a) is not None
+                    and _verdict(r, arm_b) is not None
+                ]
+                n = len(paired)
+                if n == 0:
+                    return {
+                        "n_paired": 0,
+                        f"rate_{arm_a}": None,
+                        f"rate_{arm_b}": None,
+                        effect: None,
+                    }
+                rate_a = sum(1 for r in paired if _verdict(r, arm_a)) / n
+                rate_b = sum(1 for r in paired if _verdict(r, arm_b)) / n
+                return {
+                    "n_paired": n,
+                    f"rate_{arm_a}": rate_a,
+                    f"rate_{arm_b}": rate_b,
+                    effect: rate_a - rate_b,
+                }
+
+            aggregates: dict = {}
+            for name, records in per_candidate.items():
+                if records is None:
+                    continue
+                contrasts: dict = {}
+                mismatches: dict = {}
+                for arm_a, arm_b, effect in _contrasts:
+                    key = f"{arm_a}_vs_{arm_b}"
+                    contrasts[key] = _contrast(records, arm_a, arm_b, effect)
+                    set_a = {
+                        r["fixture"]
+                        for r in records
+                        if not r["vacuous"] and _verdict(r, arm_a) is not None
+                    }
+                    set_b = {
+                        r["fixture"]
+                        for r in records
+                        if not r["vacuous"] and _verdict(r, arm_b) is not None
+                    }
+                    mismatches[key] = set_a != set_b
+                clean = [r for r in records if not r["pre_repeated"]]
+                contrasts_excl = {
+                    f"{a}_vs_{b}": _contrast(clean, a, b, e) for a, b, e in _contrasts
+                }
+                boundary_rates: dict = {}
+                for arm in ("x1", "x2", "pad"):
+                    cells = [r["arms"][arm] for r in records if r["arms"][arm] is not None]
+                    boundary_rates[arm] = (
+                        sum(1 for c in cells if c["boundary_found"]) / len(cells) if cells else None
+                    )
+                signs = {"negative": 0, "zero": 0, "positive": 0}
+                for r in records:
+                    d = r["delta_tokens"]
+                    if d is None:
+                        continue
+                    signs["negative" if d < 0 else "zero" if d == 0 else "positive"] += 1
+                n_pad = sum(1 for r in records if r["pad_evaluable"])
+                aggregates[name] = {
+                    "n_fixtures": len(records),
+                    "n_vacuous": sum(1 for r in records if r["vacuous"]),
+                    "n_pre_repeated": sum(1 for r in records if r["pre_repeated"]),
+                    "n_echo": sum(1 for r in records if r["echo_fixture"]),
+                    "n_pad_evaluable": n_pad,
+                    "pad_evaluable_share": n_pad / len(records),
+                    "delta_sign_counts": signs,
+                    "contrasts": contrasts,
+                    "contrasts_excluding_pre_repeated": contrasts_excl,
+                    "evaluable_mismatch": mismatches,
+                    "boundary_found_rates": boundary_rates,
+                }
+            primary_decision = payload.get("primary_decision")
+            primary_winner = payload.get("primary_winner")
+            if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+                mapped = ("selected", primary_winner)
+            else:
+                mapped = (primary_decision, primary_winner)
+            arms_out: dict = {}
+            for arm in ("x1", "x2", "pad"):
+                withheld = False
+                all_pass: dict = {}
+                completed_sets: list = []
+                for name, records in per_candidate.items():
+                    if records is None:
+                        withheld = True
+                        all_pass[name] = None
+                        continue
+                    verdicts = [
+                        _verdict(r, arm)
+                        for r in records
+                        if not r["vacuous"] and _verdict(r, arm) is not None
+                    ]
+                    all_pass[name] = all(verdicts) if verdicts else None
+                    if all_pass[name] is None:
+                        withheld = True
+                    completed_sets.append(
+                        frozenset(
+                            r["fixture"]
+                            for r in records
+                            if not r["vacuous"] and _verdict(r, arm) is not None
+                        )
+                    )
+                if len(set(completed_sets)) > 1:
+                    withheld = True
+                if withheld:
+                    arms_out[arm] = {
+                        "decision": "unavailable",
+                        "winner": None,
+                        "withheld": True,
+                        "detail": "selection_withheld_mismatched_sets",
+                        "flip": None,
+                    }
+                    continue
+                passers = [n for n, v in all_pass.items() if v]
+                if len(passers) == 1:
+                    decision, winner = "selected", passers[0]
+                elif len(passers) > 1:
+                    decision, winner = "ambiguous", None
+                else:
+                    decision, winner = "no_candidate", None
+                arms_out[arm] = {
+                    "decision": decision,
+                    "winner": winner,
+                    "withheld": False,
+                    "detail": "",
+                    "flip": None if arm == "x1" else (decision, winner) != mapped,
+                }
+            think_groups: dict = {}
+            for label, key in ((True, "think"), (False, "no_think")):
+                effects: list = []
+                for name, records in per_candidate.items():
+                    if records is None:
+                        continue
+                    entry = candidates[name]
+                    if entry.get("think_channel") is not label:
+                        continue
+                    effect = aggregates[name]["contrasts"]["x2_vs_pad"]["repetition_effect"]
+                    if effect is not None:
+                        effects.append((name, float(effect), entry.get("render_signature")))
+                dedup: dict = {}
+                for cand_name, effect, signature in sorted(effects):
+                    dedup.setdefault(signature or cand_name, effect)
+                think_groups[key] = {
+                    "n_candidates": len(effects),
+                    "n_distinct_renders": len(dedup),
+                    "mean_repetition_effect": (
+                        sum(e for _n, e, _s in effects) / len(effects) if effects else None
+                    ),
+                    "mean_repetition_effect_dedup": (
+                        sum(dedup.values()) / len(dedup) if dedup else None
+                    ),
+                }
+            signatures = {
+                candidates[name].get("render_signature")
+                for name, records in per_candidate.items()
+                if records is not None
+            }
+            return {
+                "aggregates": aggregates,
+                "arms": arms_out,
+                "think_groups": think_groups,
+                "n_candidates": len(candidates),
+                "n_distinct_renders": len(signatures),
+            }
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        for key in ("primary_decision", "primary_winner"):
+            v = value.get(key)
+            if v is not None and type(v) is not str:
+                return False
+        recomputed = _recompute(value)
+        if recomputed is None:
+            return False
+        candidates = value["candidates"]
+        for name, expected in recomputed["aggregates"].items():
+            entry = candidates[name]
+            for key, expected_value in expected.items():
+                if entry.get(key) != expected_value:
+                    return False
+        if value.get("arms") != recomputed["arms"]:
+            return False
+        if value.get("think_groups") != recomputed["think_groups"]:
+            return False
+        if value.get("n_candidates") != recomputed["n_candidates"]:
+            return False
+        return value.get("n_distinct_renders") == recomputed["n_distinct_renders"]
+
     def _or_confidentiality_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
@@ -2529,6 +2886,18 @@ def oracle_diff_reports(
         _o_al_available = "neither"
     _o_al_asymmetric = _o_al_available not in ("both", "neither")
 
+    _rep_old_ok = _or_repetition_valid(old.get("repetition"))
+    _rep_new_ok = _or_repetition_valid(new.get("repetition"))
+    if _rep_old_ok and _rep_new_ok:
+        _o_rep_available = "both"
+    elif _rep_old_ok:
+        _o_rep_available = "old"
+    elif _rep_new_ok:
+        _o_rep_available = "new"
+    else:
+        _o_rep_available = "neither"
+    _o_rep_asymmetric = _o_rep_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -2595,6 +2964,7 @@ def oracle_diff_reports(
         and not _o_rf_asymmetric
         and not _o_sl_asymmetric
         and not _o_al_asymmetric
+        and not _o_rep_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -2658,6 +3028,8 @@ def oracle_diff_reports(
         "scorerlens_asymmetric": _o_sl_asymmetric,
         "aliasing_changed": False,
         "aliasing_asymmetric": _o_al_asymmetric,
+        "repetition_changed": False,
+        "repetition_asymmetric": _o_rep_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -2701,6 +3073,7 @@ def oracle_diff_reports(
         "refusals": {"available": _o_rf_available, "changed": False},
         "scorerlens": {"available": _o_sl_available, "changed": False},
         "aliasing": {"available": _o_al_available, "changed": False},
+        "repetition": {"available": _o_rep_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

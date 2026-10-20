@@ -102,6 +102,7 @@ STAGE_FLAGS = [
     ("--refusals", "refusals", None),
     ("--scorer-lens", "scorer_lens", None),
     ("--aliasing", "aliasing", None),
+    ("--repeat", "repeat", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -155,8 +156,10 @@ def _call_helper(helper, result):  # noqa: ANN001, ANN202
         "eos_id": 2,
         "token_bytes": None,
         "max_new_tokens": 8,
+        "max_context": 4096,
         "seed": 0,
         "block_size": 16,
+        "cancel": None,
     }
     params = inspect.signature(helper).parameters
     kwargs = {name: pool[name] for name in params if name in pool}
@@ -227,6 +230,12 @@ HELPER_DISPATCH = [
         "aliasing",
         "aliasing_unavailable",
         ["aliasing_profile"],
+    ),
+    (
+        "_run_repeat_probe",
+        "repetition",
+        "repetition_unavailable",
+        ["repetition_stage", "repetition_analysis"],
     ),
     (
         "_run_cache_profile_probe",
