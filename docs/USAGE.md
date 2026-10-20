@@ -218,7 +218,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), a prompt-repetition section (see §8.39), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), a prompt-repetition section (see §8.39), a distractor-dilution section (see §8.40), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
 A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation, scorer-lens and candidate-aliasing sections are absent from the sample even though real runs render them.
 
@@ -1733,6 +1733,54 @@ backend drift as `comparable: false` (`diff_repetition`,
 `docs/REPETITION_DESIGN.md`. Informational only: the probe
 never affects selection, and the stage never fails the run
 (a failed or cancelled native search gates it to zero
+generations instead).
+
+### 8.40 Distractor dilution (`distraction`)
+
+Opt-in with `model-protocol-lab run --distract`. A generation
+stage over the search split: irrelevant filler is spliced into
+each fixture's last user message at exact rendered token doses
+(64, 256, and 1024 tokens of a frozen neutral corpus; 64 and
+256 tokens of near-miss filler carrying a planted wrong answer
+derived from the fixture's own expected answer by a frozen
+digit-increment rule), placed before or after the real content;
+the dose-0 arm is the recorded native search, reused with zero
+extra model calls. Monday-morning use: before a retrieval or
+long-context deployment, learn per candidate template how much
+irrelevant context the winner tolerates — and whether
+answer-shaped filler captures it outright.
+
+The report's headline numbers are the per-dose paired pass
+rates, the first-flip distribution with its *returns* counter
+(passing levels above the first flip — recovery under more load
+means the flip was noise, not a threshold), and the near-miss
+*capture excess over neutral*: records whose answer became the
+planted string under near-miss filler but not under the same
+dose of neutral filler. The raw capture rate is labelled an
+upper bound, because byte-exact scoring cannot see a captured
+answer with stray formatting. Capture is defined only where the
+expected answer is a plain ASCII number; on other answer sets
+the near-miss arm is empty by construction and only the neutral
+dose curves report. Every cell records its construction
+(`id_exact` when the treated token ids decompose exactly into
+native prefix + span + suffix, `text_level` when only the text
+does, with seam token ids), and filler carrying special-token
+literals or a candidate's boundary texts is screened per cell,
+never generated. The conservative selection rule is re-applied
+per condition, withheld for that condition whenever completed
+fixture sets differ across candidates. Cost: ten conditions
+over the native records, 24,000 generations at the run caps, at
+full-prefix recompute prices — the CLI help states the count
+and the forwards formula before the run. `diff-reports`
+recomputes every derived value from the payload's per-fixture
+ground records (the full recompute standard) and compares
+curve, first-flip, capture, and per-condition selection drift,
+flagging protocol, fixture-set, or backend drift as
+`comparable: false` (`diff_distraction`, `distraction_changed`
+/ `distraction_asymmetric` feed `identical`). The full contract
+is in `docs/DISTRACTION_DESIGN.md`. Informational only: the
+probe never affects selection, and the stage never fails the
+run (a failed or cancelled native search gates it to zero
 generations instead).
 
 ## 9. Authoring fixtures (`fixtures build`)

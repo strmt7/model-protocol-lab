@@ -103,6 +103,7 @@ STAGE_FLAGS = [
     ("--scorer-lens", "scorer_lens", None),
     ("--aliasing", "aliasing", None),
     ("--repeat", "repeat", None),
+    ("--distract", "distract", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -236,6 +237,12 @@ HELPER_DISPATCH = [
         "repetition",
         "repetition_unavailable",
         ["repetition_stage", "repetition_analysis"],
+    ),
+    (
+        "_run_distract_probe",
+        "distraction",
+        "distraction_unavailable",
+        ["distraction_stage", "distraction_analysis"],
     ),
     (
         "_run_cache_profile_probe",

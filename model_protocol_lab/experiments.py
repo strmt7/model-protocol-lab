@@ -6680,6 +6680,391 @@ def repetition_analysis(
     }
 
 
+def _answer_digest(value: Any) -> str | None:
+    """SHA-256 of an answer string; None when there is no answer."""
+    if type(value) is not str:
+        return None
+    return sha256(value.encode("utf-8")).hexdigest()
+
+
+def distraction_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    search_entries: Any,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Distractor-dilution stage (cycle 184): filler cells per candidate.
+
+    The native arm is the recorded search (reused, never
+    regenerated). Each treated cell inserts a filler span into
+    the last user message's content before render — neutral
+    corpus prose at 64/256/1024 rendered tokens, or a frozen
+    near-miss template carrying a planted wrong answer at
+    64/256 — sized per (candidate, fixture) by a bounded search
+    over whole sentences plus one truncated suffix, verified on
+    the rendered ids. Cells degrade individually (screened,
+    unmatchable, context-exceeded, near-miss undefined); one bad
+    fixture never takes a candidate's whole curve with it.
+    Design: docs/DISTRACTION_DESIGN.md.
+    """
+    from . import distraction as _dis
+    from . import repetition as _rep
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    fixture_ids = [case.id for case in cases]
+    protocol: dict[str, Any] = dict(_dis.protocol_object(fixture_ids, str(backend.fingerprint)))
+    protocol["fingerprint"] = _dis.protocol_fingerprint(fixture_ids, str(backend.fingerprint))
+    if len(formats) * len(cases) > _dis.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "distraction_cell_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    corpus_text = "".join(_dis.NEUTRAL_CORPUS)
+    template_text = "".join(
+        template.replace("{planted}", "") for template in _dis.NEARMISS_TEMPLATES
+    )
+    if audit_special_token_literals(corpus_text, formats) or (
+        audit_special_token_literals(template_text, formats)
+    ):
+        # A special-token literal in the frozen texts would forge
+        # turn structure in every cell of every run; there is no
+        # honest per-cell version of that arm, so the stage fails
+        # closed before any generation.
+        return {
+            "available": False,
+            "detail": "filler_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    entries: dict[str, Any] = {}
+    if type(search_entries) is list:
+        for entry in search_entries:
+            if type(entry) is not dict:
+                continue
+            fmt_dict = entry.get("format")
+            entry_name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+            if type(entry_name) is str and entry_name:
+                entries[entry_name] = entry
+    expected_values = {case.expected for case in cases}
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    corpus_tokens = max(1, len(backend.encode(corpus_text)))
+    chars_per_token = len(corpus_text) / corpus_tokens
+    order_cache: dict[tuple[tuple[str, ...], int], list[tuple[int, int, int]]] = {}
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    def _size_span(
+        sentences: tuple[str, ...],
+        kind: str,
+        level: int,
+        placement: str,
+        case: Any,
+        fmt: Any,
+        native_len: int,
+        planted: str | None,
+    ) -> tuple[str, Any, tuple[int, ...]] | None:
+        cache_key = (sentences, level)
+        order = order_cache.get(cache_key)
+        if order is None:
+            order = _dis.span_candidates(sentences, target=level, chars_per_token=chars_per_token)[
+                : _dis.SIZING_ENCODE_BUDGET
+            ]
+            order_cache[cache_key] = order
+        for whole, suffix, _chars in order:
+            if suffix and kind == "near-miss" and planted is not None:
+                sentence = sentences[whole]
+                if _dis.suffix_cuts_plant(sentence[:suffix], sentence[suffix:], planted):
+                    continue
+            span = _dis.span_text(sentences, whole, suffix)
+            if not span:
+                continue
+            cell_fixture = _dis.build_cell_fixture(case, span, placement)
+            ids = tuple(backend.encode(fmt.render(cell_fixture.messages)))
+            if len(ids) - native_len == level:
+                return span, cell_fixture, ids
+        return None
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        entry = entries.get(name)
+        summary = entry.get("summary") if type(entry) is dict else None
+        observations = entry.get("observations") if type(entry) is dict else None
+        if (
+            type(entry) is not dict
+            or type(observations) is not list
+            or not observations
+            or (type(summary) is dict and summary.get("aggregate_eligible") is False)
+        ):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        obs_by_fixture: dict[str, Any] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict or type(obs.get("fixture")) is not str:
+                usable = False
+                break
+            obs_by_fixture[obs["fixture"]] = obs
+        if not usable or any(case.id not in obs_by_fixture for case in cases):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        records: list[dict[str, Any]] = []
+        for case in cases:
+            if _cancelled():
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+            obs = obs_by_fixture[case.id]
+            ids_x1 = tuple(obs["input_ids"])
+            native_answer = obs.get("answer")
+            native_cell = {
+                "verdict": bool(obs["exact_match"] and obs["boundary_found"]),
+                "boundary_found": bool(obs["boundary_found"]),
+                "boundary_text_match": obs["boundary_text_match"],
+                "input_tokens": len(ids_x1),
+                "answer_digest": _answer_digest(native_answer),
+            }
+            content = _rep.target_content(case)
+            vacuous = _rep.is_vacuous(content)
+            planted = _dis.planted_answer(case.expected)
+            near_miss_defined = (
+                planted is not None and planted not in expected_values and native_answer != planted
+            )
+            record: dict[str, Any] = {
+                "fixture": case.id,
+                "vacuous": vacuous,
+                "echo_fixture": _rep.is_echo_fixture(case),
+                "near_miss_defined": near_miss_defined,
+                "planted_digest": (_answer_digest(planted) if near_miss_defined else None),
+                "native": native_cell,
+                "cells": dict.fromkeys(_dis.CONDITION_KEYS),
+                "cell_details": dict.fromkeys(_dis.CONDITION_KEYS, ""),
+            }
+            records.append(record)
+            if vacuous:
+                record["cell_details"] = dict.fromkeys(_dis.CONDITION_KEYS, "vacuous")
+                continue
+            sentences_by_kind: dict[str, tuple[str, ...]] = {
+                "neutral": _dis.NEUTRAL_CORPUS,
+            }
+            if near_miss_defined and planted is not None:
+                sentences_by_kind["near-miss"] = _dis.nearmiss_sentences(planted)
+            for kind, level, placement in _dis.CONDITIONS:
+                key = _dis.cell_condition(kind, level, placement)
+                if kind == "near-miss" and not near_miss_defined:
+                    record["cell_details"][key] = "near_miss_undefined"
+                    continue
+                sized = _size_span(
+                    sentences_by_kind[kind],
+                    kind,
+                    level,
+                    placement,
+                    case,
+                    fmt,
+                    len(ids_x1),
+                    planted if kind == "near-miss" else None,
+                )
+                if sized is None:
+                    record["cell_details"][key] = "arm_unmatchable"
+                    continue
+                span, cell_fixture, ids_arm = sized
+                if _dis.span_screened(span, case.expected, [boundary_text[name]]):
+                    record["cell_details"][key] = "arm_screened"
+                    continue
+                if len(ids_arm) + max_new_tokens > max_context:
+                    record["cell_details"][key] = "arm_context_exceeded"
+                    continue
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                report = evaluate(
+                    backend,
+                    fmt,
+                    (cell_fixture,),
+                    boundary=boundaries[name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                    cancel=cancel,
+                )
+                if report.aggregate_eligible and report.observations:
+                    cell_obs = report.observations[0]
+                    construction, seam = _dis.classify_cell_construction(
+                        fmt,
+                        case,
+                        span,
+                        placement,
+                        ids_x1,
+                        tuple(cell_obs.input_ids),
+                        backend.encode,
+                    )
+                    record["cells"][key] = {
+                        "verdict": bool(cell_obs.exact_match and cell_obs.boundary_found),
+                        "boundary_found": bool(cell_obs.boundary_found),
+                        "boundary_text_match": cell_obs.boundary_text_match,
+                        "input_tokens": len(cell_obs.input_ids),
+                        "answer_digest": _answer_digest(cell_obs.answer),
+                        "construction": construction,
+                        "seam_ids": seam,
+                        "planted_occurrences": (
+                            _dis.planted_occurrences(span, planted)
+                            if kind == "near-miss" and planted is not None
+                            else None
+                        ),
+                    }
+                else:
+                    record["cell_details"][key] = "arm_evaluation_failed"
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def _condition_all_pass(records: list[dict[str, Any]], key: str) -> bool | None:
+    """All-pass over a condition's completed fixtures, or None.
+
+    Completed means non-vacuous with an evaluable cell; an empty
+    completed set returns None (the caller withholds selection).
+    """
+    completed = [
+        record for record in records if not record["vacuous"] and record["cells"][key] is not None
+    ]
+    if not completed:
+        return None
+    return all(record["cells"][key]["verdict"] for record in completed)
+
+
+def distraction_analysis(
+    stage: dict[str, Any],
+    primary_decision: Any,
+    primary_winner: Any,
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a distraction stage into the stored payload (cycle 184).
+
+    Per-condition winners follow the conservative rule over each
+    condition's completed, non-vacuous fixtures — withheld per
+    condition whenever any candidate is unavailable, has no
+    completed fixtures, or the completed sets differ across
+    candidates. There is no grouping readout in v1 (closed by
+    decision, not silence). Design: docs/DISTRACTION_DESIGN.md.
+    """
+    from . import distraction as _dis
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "distraction_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped_primary = ("selected", primary_winner)
+    else:
+        mapped_primary = (primary_decision, primary_winner)
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _dis.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    conditions_out: dict[str, Any] = {}
+    for key in _dis.CONDITION_KEYS:
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for name in candidate_names:
+            entry = stage_candidates[name]
+            if entry["status"] != "available":
+                withheld = True
+                all_pass[name] = None
+                continue
+            all_pass[name] = _condition_all_pass(entry["records"], key)
+            completed_sets.append(
+                frozenset(
+                    record["fixture"]
+                    for record in entry["records"]
+                    if not record["vacuous"] and record["cells"][key] is not None
+                )
+            )
+            if all_pass[name] is None:
+                withheld = True
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            conditions_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidate_names if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        conditions_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped_primary,
+        }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "primary_decision": primary_decision,
+        "primary_winner": primary_winner,
+        "candidates": candidates_out,
+        "conditions": conditions_out,
+        "n_candidates": len(candidate_names),
+    }
+
+
 def cache_profile_stage(
     *,
     observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],

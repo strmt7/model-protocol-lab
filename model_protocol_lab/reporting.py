@@ -5739,6 +5739,200 @@ def _repetition_section(result: dict[str, Any]) -> str:
     )
 
 
+def _distraction_section(result: dict[str, Any]) -> str:
+    """Distractor-dilution probe: verdict curves over filler doses.
+
+    Renders the ``distraction`` payload (see
+    experiments.distraction_analysis): per candidate, the verdict
+    counts per (kind, placement) curve over paired denominators,
+    first-flip counts, and near-miss capture — labelled an upper
+    bound wherever it appears, beside the neutral-control excess.
+    Withheld condition selections lead the section: a flip
+    computed over mismatched completed sets is not published.
+    No curve is pooled and nothing is called decay: a rise at
+    any dose is reported as-is. Every interpolation is escaped
+    at this boundary.
+    """
+    probe: Any = result.get("distraction")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    conditions = probe.get("conditions")
+    withheld_keys: list[str] = []
+    condition_lines: list[str] = []
+    if type(conditions) is dict:
+        for key in sorted(conditions, key=str):
+            entry = conditions[key]
+            if type(entry) is not dict:
+                continue
+            if entry.get("withheld") is True:
+                withheld_keys.append(str(key))
+                continue
+            winner = entry.get("winner")
+            flip = entry.get("flip")
+            condition_lines.append(
+                "<li>"
+                + escape(str(key))
+                + ": "
+                + escape(str(entry.get("decision")))
+                + (
+                    " · winner " + '<span class="mono">' + escape(winner) + "</span>"
+                    if type(winner) is str and winner
+                    else ""
+                )
+                + (
+                    " · <strong>selection flip</strong> against the recorded run"
+                    if flip is True
+                    else " · no selection flip"
+                    if flip is False
+                    else ""
+                )
+                + "</li>"
+            )
+    withheld_block = ""
+    if withheld_keys:
+        withheld_block = (
+            "<p><strong>Selection withheld</strong> for "
+            + escape(", ".join(withheld_keys))
+            + ": the candidates did not complete the same fixture "
+            "set under those conditions, so no winner or flip is "
+            "published for them.</p>"
+        )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="5">unavailable</td></tr>'
+            )
+            continue
+        curves = entry.get("curves")
+        first_flip = entry.get("first_flip")
+        capture = entry.get("capture")
+        curve_bits: list[str] = []
+        if type(curves) is dict:
+            for curve_key in (
+                "neutral_before",
+                "neutral_after",
+                "near-miss_before",
+                "near-miss_after",
+            ):
+                points = curves.get(curve_key)
+                if type(points) is not dict:
+                    continue
+                cells = []
+                for level in sorted(points, key=lambda v: int(v) if str(v).isdigit() else 0):
+                    point = points[level]
+                    if type(point) is not dict:
+                        continue
+                    cells.append(
+                        escape(str(level))
+                        + " tok: "
+                        + _count(point.get("n_pass"))
+                        + "/"
+                        + _count(point.get("n_paired"))
+                        + " ("
+                        + _rate(point.get("rate"))
+                        + ")"
+                    )
+                flip_entry = first_flip.get(curve_key) if type(first_flip) is dict else None
+                flip_bit = ""
+                if type(flip_entry) is dict:
+                    flip_bit = (
+                        " · first flips "
+                        + escape(str(flip_entry.get("flip_counts")))
+                        + " over "
+                        + _count(flip_entry.get("n_population"))
+                        + " native-passing; returns "
+                        + _count(flip_entry.get("n_returns"))
+                        + "; gains "
+                        + _count(flip_entry.get("n_gains"))
+                        + "/"
+                        + _count(flip_entry.get("n_gain_population"))
+                    )
+                curve_bits.append(
+                    "<div>" + escape(curve_key) + " — " + "; ".join(cells) + flip_bit + "</div>"
+                )
+        capture_bits: list[str] = []
+        if type(capture) is dict:
+            for cap_key in sorted(capture, key=str):
+                cap = capture[cap_key]
+                if type(cap) is not dict:
+                    continue
+                capture_bits.append(
+                    escape(str(cap_key))
+                    + ": "
+                    + _count(cap.get("n_captured"))
+                    + "/"
+                    + _count(cap.get("n_population"))
+                    + " ("
+                    + _rate(cap.get("capture_rate"))
+                    + "), excess over neutral "
+                    + _rate(cap.get("capture_excess_over_neutral"))
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(curve_bits)
+            + "</td><td>"
+            + ("; ".join(capture_bits) if capture_bits else "n/a")
+            + "</td><td>"
+            + _count(entry.get("n_nearmiss_defined"))
+            + " of "
+            + _count(entry.get("n_fixtures"))
+            + " (share "
+            + _rate(entry.get("nearmiss_defined_share"))
+            + ")</td><td>"
+            + _count(entry.get("n_echo"))
+            + "</td><td>"
+            + _count(entry.get("n_vacuous"))
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="distraction">'
+        "<h2>Distractor dilution</h2>"
+        "<p>Does irrelevant bulk around the question change the "
+        "verdict? Each fixture's last user message gained a filler "
+        "span sized in exact rendered tokens — neutral prose at "
+        "64/256/1024 tokens, or a frozen near-miss template "
+        "carrying a planted wrong answer at 64/256 — placed "
+        "before or after the content. Capture counts treated "
+        "answers equal to the plant among fixtures the candidate "
+        "passed natively; it is an <strong>upper bound</strong> "
+        "on caused capture (a coincidental equal answer is "
+        "indistinguishable at this tier), reported beside the "
+        "excess over the same-dose neutral arm. Near-miss covers "
+        "numeric-expected fixtures with plain ASCII formatting "
+        "only, and its curves terminate at 256 tokens: at 1024 "
+        "the plant would repeat dozens of times and the cell "
+        "would measure repetition pressure, not dilution. Counts "
+        "are per curve over paired denominators; no monotonicity "
+        "is assumed.</p>"
+        + withheld_block
+        + ("<ul>" + "".join(condition_lines) + "</ul>" if condition_lines else "")
+        + "<table><thead><tr><th>Candidate</th><th>Verdict curves "
+        "(pass/paired by dose)</th><th>Capture (upper bound)</th>"
+        "<th>Near-miss defined</th><th>Echo fixtures</th>"
+        "<th>Vacuous</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>" + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7060,6 +7254,7 @@ def render_html(result: dict[str, Any]) -> str:
     scorerlens_html = _scorerlens_section(result)
     aliasing_html = _aliasing_section(result)
     repetition_html = _repetition_section(result)
+    distraction_html = _distraction_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7189,6 +7384,11 @@ def render_html(result: dict[str, Any]) -> str:
                 repetition_html,
             ),
             (
+                "distraction",
+                "Distractor dilution",
+                distraction_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -7275,6 +7475,7 @@ def render_html(result: dict[str, Any]) -> str:
         + scorerlens_html
         + aliasing_html
         + repetition_html
+        + distraction_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html
