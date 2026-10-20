@@ -258,6 +258,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
+        "confidentiality": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -324,6 +325,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "template_robustness_asymmetric": False,
             "ablation_changed": False,
             "ablation_asymmetric": False,
+            "confidentiality_changed": False,
+            "confidentiality_asymmetric": False,
             "identical": True,
         },
     }
@@ -3359,6 +3362,9 @@ def _oracle_diff(
         old.get("template_robustness"), new.get("template_robustness")
     )
     o_ab, o_ab_changed, o_ab_asymmetric = _o_ablation(old.get("ablation"), new.get("ablation"))
+    o_cf, o_cf_changed, o_cf_asymmetric = _o_confidentiality(
+        old.get("confidentiality"), new.get("confidentiality")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -3416,6 +3422,8 @@ def _oracle_diff(
         and not o_trob_asymmetric
         and not o_ab_changed
         and not o_ab_asymmetric
+        and not o_cf_changed
+        and not o_cf_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -3448,6 +3456,7 @@ def _oracle_diff(
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
+        "confidentiality": o_cf,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3510,9 +3519,189 @@ def _oracle_diff(
             "template_robustness_asymmetric": o_trob_asymmetric,
             "ablation_changed": o_ab_changed,
             "ablation_asymmetric": o_ab_asymmetric,
+            "confidentiality_changed": o_cf_changed,
+            "confidentiality_asymmetric": o_cf_asymmetric,
             "identical": identical,
         },
     }
+
+
+def _o_confidentiality_cell_valid(entry: Any) -> bool:
+    """Oracle confidentiality-cell check: mirrors _confidentiality_cell_valid."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    n = entry.get("n")
+    if type(n) is not int or n < 0:
+        return False
+    int_keys = (
+        "n_treat_evaluable",
+        "n_ctrl_evaluable",
+        "n_paired_evaluable",
+        "treat_leaks",
+        "ctrl_leaks",
+        "treat_verbatim",
+        "ctrl_verbatim",
+        "discord_ctrl_only",
+        "discord_treat_only",
+    )
+    if any(type(entry.get(k)) is not int or entry[k] < 0 for k in int_keys):
+        return False
+
+    def _unit(v: Any) -> bool:
+        return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
+
+    if any(not _unit(entry.get(k)) for k in ("treat_rate", "ctrl_rate", "mcnemar_p")):
+        return False
+    gap = entry.get("gap")
+    if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+        return False
+    if any(
+        not _unit(entry.get(k))
+        for k in (
+            "mean_run_fraction_treat",
+            "mean_run_fraction_ctrl",
+            "max_run_fraction_treat",
+            "max_run_fraction_ctrl",
+        )
+    ):
+        return False
+
+    def _pos(v: Any) -> bool:
+        return v is None or (type(v) in (int, float) and v > 0)
+
+    if any(not _pos(entry.get(k)) for k in ("marker_offset_treat", "marker_offset_ctrl")):
+        return False
+    bool_keys = (
+        "base_rate_zero",
+        "evaluable",
+        "positive",
+        "evaluable_mismatch",
+        "offset_asymmetry",
+    )
+    if any(type(entry.get(k)) is not bool for k in bool_keys):
+        return False
+    # Generator invariant: gap present exactly when evaluable and the
+    # control base rate is nonzero.
+    if gap is None:
+        if entry["evaluable"] and not entry["base_rate_zero"]:
+            return False
+    elif entry["base_rate_zero"] or not entry["evaluable"]:
+        return False
+    return True
+
+
+def _o_confidentiality_valid(value: Any) -> bool:
+    """Oracle confidentiality validator: mirrors _valid_confidentiality."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    protocol = value.get("protocol")
+    if type(protocol) is not dict or type(protocol.get("fingerprint")) is not str:
+        return False
+    n_fixtures = value.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if not _o_confidentiality_cell_valid(entry):
+            return False
+        if type(entry) is dict:
+            if entry.get("n") != n_fixtures:
+                return False
+            paired = entry["n_paired_evaluable"]
+            if entry["treat_leaks"] > paired or entry["ctrl_leaks"] > paired:
+                return False
+            if entry["treat_verbatim"] > entry["treat_leaks"]:
+                return False
+            if entry["ctrl_verbatim"] > entry["ctrl_leaks"]:
+                return False
+            if (
+                entry["discord_ctrl_only"] + entry["discord_treat_only"]
+                > entry["treat_leaks"] + entry["ctrl_leaks"]
+            ):
+                return False
+            if entry["gap"] is not None and (
+                abs(float(entry["gap"]) - (entry["ctrl_rate"] - entry["treat_rate"])) > 1e-9
+            ):
+                return False
+    if any(type(value.get(k)) is not bool for k in ("uniform_nonpositive", "any_positive")):
+        return False
+    positive = value.get("positive_candidates")
+    if type(positive) is not list or not all(type(x) is str for x in positive):
+        return False
+    for key in ("most_resistant", "least_resistant"):
+        v = value.get(key)
+        if v is not None and type(v) is not str:
+            return False
+    gap = value.get("gap")
+    if gap is None:
+        return True
+    return type(gap) in (int, float) and -1.0 <= gap <= 1.0
+
+
+def _o_confidentiality(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle confidentiality section: protocol/gap/positive drift."""
+    old_ok = _o_confidentiality_valid(old)
+    new_ok = _o_confidentiality_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    old_cells = old.get("per_candidate") or {}
+    new_cells = new.get("per_candidate") or {}
+    added = sorted(set(new_cells) - set(old_cells))
+    removed = sorted(set(old_cells) - set(new_cells))
+    gap_drift = [
+        {
+            "candidate": name,
+            "old": old_cells[name].get("gap") if type(old_cells[name]) is dict else None,
+            "new": new_cells[name].get("gap") if type(new_cells[name]) is dict else None,
+        }
+        for name in sorted(set(old_cells) & set(new_cells))
+        if (old_cells[name].get("gap") if type(old_cells[name]) is dict else None)
+        != (new_cells[name].get("gap") if type(new_cells[name]) is dict else None)
+    ]
+    pos_added = sorted(
+        set(new.get("positive_candidates") or []) - set(old.get("positive_candidates") or [])
+    )
+    pos_removed = sorted(
+        set(old.get("positive_candidates") or []) - set(new.get("positive_candidates") or [])
+    )
+    uniform_changed = old.get("uniform_nonpositive") != new.get("uniform_nonpositive")
+    diff.update(
+        {
+            "protocol_drift": protocol_drift,
+            "gap_drift": gap_drift,
+            "candidates_added": added,
+            "candidates_removed": removed,
+            "positive_added": pos_added,
+            "positive_removed": pos_removed,
+            "uniform_changed": uniform_changed,
+        }
+    )
+    changed = bool(
+        protocol_drift
+        or gap_drift
+        or added
+        or removed
+        or pos_added
+        or pos_removed
+        or uniform_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, False
 
 
 def _o_tr_valid(value: Any) -> bool:
@@ -3882,6 +4071,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "template_robustness_asymmetric": False,
                 "ablation_changed": False,
                 "ablation_asymmetric": False,
+                "confidentiality_changed": False,
+                "confidentiality_asymmetric": False,
                 "identical": False,
             },
         )
@@ -5150,6 +5341,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["verbosity"] = _fuzz_verbosity_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
+    if rng.random() < 0.45:
+        report["confidentiality"] = _fuzz_confidentiality_section(rng)
     return report
 
 
@@ -5528,6 +5721,55 @@ def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     }
 
 
+def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent cells are produced by the real aggregation over random
+    # paired detections (so every identity and invariant holds);
+    # hostile mutations then try to break them, and oracle and
+    # implementation must agree on every rejection.
+    from model_protocol_lab import confidentiality as _cf
+
+    def _det(leak_p: float) -> dict[str, Any]:
+        if rng.random() < leak_p:
+            run = rng.choice([0.75, 1.0])
+            return {"run_fraction": run, "leak": True, "verbatim": run >= 1.0}
+        run = rng.choice([0.0, 0.25, 0.5])
+        return {"run_fraction": run, "leak": False, "verbatim": False}
+
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        pairs = [
+            {
+                "treat": _det(0.3) if rng.random() < 0.95 else None,
+                "ctrl": _det(0.5) if rng.random() < 0.95 else None,
+                "offset_treat": rng.randint(20, 60),
+                "offset_ctrl": rng.randint(0, 10),
+            }
+            for _ in range(12)
+        ]
+        entry = _cf.confidentiality_cell(pairs)
+        if rng.random() < 0.1:
+            entry["gap"] = 0.99  # hostile: stale/inconsistent gap
+        if rng.random() < 0.1:
+            entry["ctrl_leaks"] = 99  # hostile: leaks above denominator
+        if rng.random() < 0.1:
+            entry["treat_rate"] = 1.5  # hostile: rate out of range
+        if rng.random() < 0.1:
+            entry["base_rate_zero"] = not entry["base_rate_zero"]  # hostile: invariant flip
+        if rng.random() < 0.1:
+            entry[rng.choice(["n", 7])] = -1  # hostile: negative / bad key
+        per_candidate[name] = entry
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"n": 12}  # hostile: non-string key
+    profile = _cf.confidentiality_profile(("alpha", "beta"), per_candidate, _cf.protocol_dict())
+    profile["n_fixtures"] = rng.choice([12, 12, 12, 0, -1, "12"])
+    if rng.random() < 0.2:
+        profile["protocol"] = {"fingerprint": rng.choice(["x" * 64, 7, None])}
+    return profile
+
+
 def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
     mutations = ["trailing_space", "leading_space", "trailing_newline"]
     if rng.random() < 0.3:
@@ -5735,7 +5977,9 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             mod_path = os.path.join(tmpdir, f"diffreports_{name}.py")
             with open(mod_path, "w", encoding="utf-8") as handle:
                 handle.write(mutated)
-            spec = importlib.util.spec_from_file_location(f"diffreports_mut_{name}", mod_path)
+            spec = importlib.util.spec_from_file_location(
+                f"model_protocol_lab.diffreports_mut_{name}", mod_path
+            )
             assert spec is not None and spec.loader is not None
             mutant = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mutant)
@@ -5826,6 +6070,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not template_robustness_asymmetric\n"
             '        and not ablation_diff["changed"]\n'
             "        and not ablation_asymmetric\n"
+            '        and not confidentiality_diff["changed"]\n'
+            "        and not confidentiality_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -5876,6 +6122,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or verbosity_asymmetric\n"
             '        or cache_profile_diff["changed"]\n'
             "        or cache_profile_asymmetric\n"
+            '        or confidentiality_diff["changed"]\n'
+            "        or confidentiality_asymmetric\n"
             "    )\n",
             scenario,
         )

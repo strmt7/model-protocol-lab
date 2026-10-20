@@ -126,6 +126,29 @@ class HierarchyDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
+class ConfidentialityDemoBackend(DemoBackend):
+    """Scripted disclosure policy for the confidentiality exercise.
+
+    Quotes the marker whenever the block is unlabeled (the control arm)
+    and -- for the no-bos variant only -- also when the block is
+    privilege-labeled. So the label protects the marker under the base
+    and chatml-style renderings but not under the no-bos one: genuine
+    per-template gap variation, exactly the signal the probe measures.
+    """
+
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        from model_protocol_lab.confidentiality import MARKER
+        from model_protocol_lab.hierarchy import PRIVILEGE_OPEN
+
+        prompt = self.decode(input_ids)
+        labeled = PRIVILEGE_OPEN in prompt
+        rebel = not prompt.startswith("<|begin_of_text|>")
+        leaks = (not labeled) or rebel
+        answer = MARKER if leaks else "I cannot quote that."
+        text = (answer + " |").ljust(max_new_tokens)[:max_new_tokens]
+        return Generation(tuple(map(ord, text)), "limit")
+
+
 class PrefillDemoBackend(DemoBackend):
     """Scripted prefill policy for the prefill exercise.
 
@@ -1319,6 +1342,44 @@ def build_sample_report(output_dir: Path) -> dict:
         result["cache_profile"] = {
             "available": False,
             "detail": "cache_profile_unavailable",
+        }
+
+    # Labeled-block confidentiality probe (research wave-6 idea 3): run
+    # the real confidentiality stage (both arms) against the scripted
+    # disclosure-policy backend, so the committed sample report
+    # exercises the confidentiality section with genuine per-template
+    # gap variation (the label protects the marker except under the
+    # no-bos rendering). Degrades to an "unavailable" marker instead of
+    # failing the build.
+    try:
+        from model_protocol_lab.confidentiality import (
+            CONFIDENTIALITY_SPECS,
+            build_arm_fixtures,
+            validate_confidentiality_specs,
+        )
+        from model_protocol_lab.experiments import (
+            confidentiality_profile,
+            confidentiality_stage,
+        )
+
+        _cf_fmts = candidates("llama3", mutate=True)
+        _cf_specs = validate_confidentiality_specs(CONFIDENTIALITY_SPECS)
+        _cf_stage = confidentiality_stage(
+            ConfidentialityDemoBackend(),
+            _cf_fmts,
+            build_arm_fixtures("treatment", _cf_specs),
+            build_arm_fixtures("control", _cf_specs),
+            boundary=BOUNDARY,
+            max_new_tokens=64,
+            seed=20261012,
+        )
+        result["confidentiality"] = confidentiality_profile(
+            tuple(f.name for f in _cf_fmts), _cf_stage
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["confidentiality"] = {
+            "available": False,
+            "detail": "confidentiality_unavailable",
         }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")

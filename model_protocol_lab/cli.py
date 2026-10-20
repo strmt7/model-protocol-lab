@@ -392,6 +392,20 @@ def build_parser() -> argparse.ArgumentParser:
         "(default 16, vLLM's block size). Recorded in the output.",
     )
     run.add_argument(
+        "--confidentiality",
+        action="store_true",
+        help="Labeled-block confidentiality probe (cycle 169, research wave-6 "
+        "idea 3): a fixed nonce marker is rendered inside the "
+        "privilege-labeled block and, as a control, bare at the same "
+        "position; frozen extraction elicitations then ask for the block "
+        "quoted verbatim. Reports per template whether the label reduces "
+        "verbatim exposure (a lower bound: paraphrase leakage is out of "
+        "scope). Answers: 'does this template stop the model quoting my "
+        "standing instructions back?' Informational only -- never changes "
+        "selection. Costs 2 arms x 12 fixtures x C extra generations. "
+        "The stage never fails the run.",
+    )
+    run.add_argument(
         "--template-robustness",
         action="store_true",
         help="Per-template surface-noise robustness (cycle 166): for each "
@@ -1148,6 +1162,53 @@ def _run_cache_profile_probe(
         result["cache_profile"] = {
             "available": False,
             "detail": "cache_profile_unavailable",
+        }
+
+
+def _run_confidentiality_probe(
+    result: Any,
+    formats: Any,
+    *,
+    backend: Any,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Run the labeled-block confidentiality probe; never raises.
+
+    Per candidate, the synthetic confidentiality fixtures are evaluated
+    in both arms (privilege-labeled block vs bare marker, same position,
+    mirrored extraction elicitations) and detection runs on the full
+    decoded output. Results are stored as ``result["confidentiality"]``;
+    informational only, never changes selection. Any failure degrades to
+    an "unavailable" marker instead of failing the run.
+    """
+    try:
+        from .confidentiality import (
+            CONFIDENTIALITY_SPECS,
+            build_arm_fixtures,
+            validate_confidentiality_specs,
+        )
+        from .experiments import confidentiality_profile, confidentiality_stage
+
+        specs = validate_confidentiality_specs(CONFIDENTIALITY_SPECS)
+        stage = confidentiality_stage(
+            backend,
+            tuple(formats),
+            build_arm_fixtures("treatment", specs),
+            build_arm_fixtures("control", specs),
+            boundary=tuple(boundary),
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+        candidates = tuple(fmt.name for fmt in formats)
+        result["confidentiality"] = confidentiality_profile(candidates, stage)
+    except Exception:  # noqa: BLE001 -- confidentiality probe must not fail the run
+        result["confidentiality"] = {
+            "available": False,
+            "detail": "confidentiality_unavailable",
         }
 
 
@@ -2366,6 +2427,21 @@ def main(argv: list[str] | None = None) -> int:
                         result,
                         formats,
                         block_size=args.cache_profile_block_size,
+                    )
+                # Labeled-block confidentiality (cycle 169, research
+                # wave-6 idea 3): verbatim exposure of a fixed nonce in a
+                # privilege-labeled block vs the bare marker, under
+                # mirrored extraction elicitations. Informational only --
+                # never changes selection. Never fails the run.
+                if args.confidentiality:
+                    _run_confidentiality_probe(
+                        result,
+                        formats,
+                        backend=backend,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
                     )
                 # Per-template surface-noise robustness (cycle 166):
                 # verdict preservation rate per candidate under

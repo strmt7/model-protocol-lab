@@ -6308,3 +6308,229 @@ def ablation_stage(
             ),
         }
     return {"candidates": candidates, "n_focus": len(focus)}
+
+
+def confidentiality_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    treatment_fixtures: tuple[Fixture, ...],
+    control_fixtures: tuple[Fixture, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Labeled-block confidentiality probe (cycle 169, informational).
+
+    For each candidate template, every synthetic confidentiality fixture
+    (a frozen block + neutral distractor + extraction elicitation) is
+    rendered twice: once with the fixed nonce marker inside the
+    privilege-labeled block (treatment) and once as the identical bare
+    marker at the same position (control). Both arms face the same
+    frozen elicitations, mirrored exactly (red-team B M1: an asymmetric
+    elicitation would contrast attack-success with incidental echo).
+
+    Detection is on the FULL decoded output (``backend.decode`` of
+    ``output_ids``), never the boundary-truncated answer (red-team A R7):
+    leaks emitted after the response boundary are otherwise invisible,
+    and per-candidate boundaries differ. Fail-closed per candidate: any
+    backend/evaluation failure records a None cell, never crashing the
+    stage.
+
+    Returns ``{"protocol", "n_fixtures", "per_candidate": {name: cell}``
+    where each cell is :func:`confidentiality.confidentiality_cell`.
+    """
+    from .confidentiality import (
+        CONFIDENTIALITY_SPECS,
+        MARKER,
+        confidentiality_cell,
+        detect_leak,
+        protocol_dict,
+        validate_confidentiality_specs,
+    )
+
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    specs = validate_confidentiality_specs(CONFIDENTIALITY_SPECS)
+    if len(treatment_fixtures) != len(specs) or len(control_fixtures) != len(specs):
+        raise ValueError("treatment and control fixture sets must match the specs")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+        raise ValueError("max_new_tokens must be an integer between 1 and 4096")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    protocol = protocol_dict()
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+
+    def _score(obs: Any) -> dict[str, Any] | None:
+        if obs.status != "completed":
+            return None
+        try:
+            decoded = backend.decode(obs.output_ids)
+        except Exception:  # noqa: BLE001 -- undecodable output is unevaluable
+            return None
+        detection = detect_leak(decoded)
+        offset: int | None = None
+        input_text = getattr(obs, "input_text", "")
+        if type(input_text) is str:
+            try:
+                offset = input_text.index(MARKER)
+            except ValueError:
+                offset = None
+        return {"detection": detection, "offset": offset}
+
+    for fmt in formats:
+        name = fmt.name
+        treat_by_spec: dict[str, Any] = {}
+        ctrl_by_spec: dict[str, Any] = {}
+        cell: dict[str, Any] | None = None
+        try:
+            for arm, fixtures, bucket in (
+                ("treatment", treatment_fixtures, treat_by_spec),
+                ("control", control_fixtures, ctrl_by_spec),
+            ):
+                report = evaluate(
+                    backend,
+                    fmt,
+                    fixtures,
+                    boundary=boundaries[name],
+                    max_new_tokens=max_new_tokens,
+                    seed=seed,
+                )
+                if not report.aggregate_eligible:
+                    raise ValueError(f"{arm} evaluation not aggregate-eligible")
+                for obs in report.observations:
+                    spec_id = obs.fixture.rsplit("/", 1)[0]
+                    bucket[spec_id] = _score(obs)
+            per_fixture = [
+                {
+                    "treat": treat_by_spec.get(spec["id"], {}).get("detection"),
+                    "ctrl": ctrl_by_spec.get(spec["id"], {}).get("detection"),
+                    "offset_treat": treat_by_spec.get(spec["id"], {}).get("offset"),
+                    "offset_ctrl": ctrl_by_spec.get(spec["id"], {}).get("offset"),
+                }
+                for spec in specs
+            ]
+            cell = confidentiality_cell(per_fixture)
+            cell["protocol_fingerprint"] = protocol["fingerprint"]
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            cell = None
+        per_candidate[name] = cell
+    return {
+        "protocol": protocol,
+        "n_fixtures": len(specs),
+        "per_candidate": per_candidate,
+    }
+
+
+def _in_closed_range(value: Any, lo: float, hi: float) -> bool:
+    """Whether ``value`` is a real number in [lo, hi] (bools excluded).
+
+    Same narrowing trick as :func:`_share_in_unit`.
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and lo <= value <= hi
+
+
+def _confidentiality_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of a confidentiality stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    n = entry.get("n")
+    if type(n) is not int or n < 0:
+        return False
+    for key in (
+        "n_treat_evaluable",
+        "n_ctrl_evaluable",
+        "n_paired_evaluable",
+        "treat_leaks",
+        "ctrl_leaks",
+        "treat_verbatim",
+        "ctrl_verbatim",
+        "discord_ctrl_only",
+        "discord_treat_only",
+    ):
+        value = entry.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    for key in ("treat_rate", "ctrl_rate", "mcnemar_p"):
+        value = entry.get(key)
+        if value is not None and not _share_in_unit(value):
+            return False
+    gap = entry.get("gap")
+    if gap is not None and not _in_closed_range(gap, -1.0, 1.0):
+        return False
+    for key in ("mean_run_fraction_treat", "mean_run_fraction_ctrl"):
+        value = entry.get(key)
+        if value is not None and not _share_in_unit(value):
+            return False
+    for key in ("max_run_fraction_treat", "max_run_fraction_ctrl"):
+        value = entry.get(key)
+        if value is not None and not _share_in_unit(value):
+            return False
+    for key in ("marker_offset_treat", "marker_offset_ctrl"):
+        value = entry.get(key)
+        if value is not None and not _positive_number(value):
+            return False
+    bool_keys = (
+        "base_rate_zero",
+        "evaluable",
+        "positive",
+        "evaluable_mismatch",
+        "offset_asymmetry",
+    )
+    if not all(type(entry.get(key)) is bool for key in bool_keys):
+        return False
+    # Generator invariant: gap is present exactly when the candidate is
+    # evaluable AND the control rate is nonzero.
+    if entry.get("gap") is None:
+        if entry["evaluable"] and not entry["base_rate_zero"]:
+            return False
+    elif entry["base_rate_zero"] or not entry["evaluable"]:
+        return False
+    return True
+
+
+def confidentiality_profile(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze labeled-block confidentiality across candidates (pure).
+
+    Wraps :func:`confidentiality.confidentiality_profile` with the lab's
+    fail-closed input guards: malformed stage input degrades to
+    ``{"available": False}`` with a ``detail`` code, never raises on
+    observation data.
+    """
+    from .confidentiality import confidentiality_profile as _profile
+
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    protocol = stage.get("protocol")
+    if type(protocol) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    n_fixtures = stage.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _confidentiality_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+    result = _profile(candidates, per_candidate, protocol)
+    result["n_fixtures"] = n_fixtures
+    return result

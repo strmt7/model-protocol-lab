@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 169 — labeled-block confidentiality probe, 2026-10-20)
+
+- New research instrument `mpl run --confidentiality` (wave-6 idea 3):
+  per candidate template, whether the privilege label on a prepended
+  block reduces verbatim exposure of its content under frozen extraction
+  elicitations. A fixed nonce marker is rendered inside the
+  privilege-labeled block (treatment; the lab has no system role, so the
+  construct is labeled-block exposure, reusing hierarchy's
+  `privilege_block` verbatim) and as the identical bare marker at the
+  same position (control); direct / authority-claim / memory-reframe
+  elicitations are mirrored exactly across arms. Detection runs on the
+  full decoded output (token-subsequence, NFC + casefold), headline leak
+  at 3 of 4 marker tokens contiguous; paired statistics (discordant
+  counts, exact McNemar p), fail-closed `None` gaps for zero control
+  rates and under-floor candidates, and `uniform_nonpositive` as the
+  publishable null (Tensor Trust Appendix H reading). Reported quantity
+  is a **verbatim-exposure lower bound** -- paraphrase leakage is out of
+  scope and it is never a "safe to ship secrets" claim. Pure
+  `confidentiality.py`, `experiments.confidentiality_stage` /
+  `confidentiality_profile`, HTML section (`id="confidentiality"`),
+  `diff_confidentiality` with protocol-fingerprint drift
+  (`confidentiality_changed` / `confidentiality_asymmetric` feed
+  `identical`), oracles in test_cycle67/test_cycle27, sample exercise
+  with genuine per-template gap variation, and `docs/USAGE.md` 8.34.
+  Red-team A 15 findings (3 CRITICAL: no system role, position confound,
+  per-candidate markers) cross-checked by red-team B (12 confirmed; new
+  M1 asymmetric-elicitation fixed by mirroring); design and uniqueness
+  pass in `docs/RESEARCH_LOG.md`.
+
 ### Added (cycle 168 — prefix-cache sharability profile, 2026-10-20)
 
 - New research instrument `mpl run --cache-profile` (wave-6 idea 2): per
