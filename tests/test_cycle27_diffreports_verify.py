@@ -2042,6 +2042,410 @@ def oracle_diff_reports(
         )
         return all(payload.get(key) == expected for key, expected in checks)
 
+    def _or_distraction_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_distraction exactly: shape
+        # pre-checks, record structure, aggregates, conditions,
+        # and the protocol fingerprint all recomputed.
+        import hashlib as _hashlib
+        import json as _json
+
+        _details = {
+            "",
+            "vacuous",
+            "arm_context_exceeded",
+            "arm_evaluation_failed",
+            "arm_screened",
+            "arm_unmatchable",
+            "near_miss_undefined",
+        }
+        _hex = frozenset("0123456789abcdef")
+
+        def _digest(item: Any) -> bool:
+            return item is None or (
+                type(item) is str and len(item) == 64 and all(c in _hex for c in item)
+            )
+
+        def _int(item: Any) -> bool:
+            return type(item) is int and not isinstance(item, bool) and item >= 0
+
+        def _recompute(payload: dict) -> dict | None:
+            protocol = payload.get("protocol")
+            if type(protocol) is not dict:
+                return None
+            raw_conditions = protocol.get("conditions")
+            if type(raw_conditions) is not list or not raw_conditions:
+                return None
+            cond_keys: list[str] = []
+            level_of: dict[str, int] = {}
+            kind_of: dict[str, str] = {}
+            for raw in raw_conditions:
+                if type(raw) is not list or len(raw) != 3:
+                    return None
+                kind, level, placement = raw
+                if kind not in ("neutral", "near-miss"):
+                    return None
+                if type(level) is not int or isinstance(level, bool) or level <= 0:
+                    return None
+                if placement not in ("before", "after"):
+                    return None
+                key = f"{kind}_{level}_{placement}"
+                if key in cond_keys:
+                    return None
+                cond_keys.append(key)
+                level_of[key] = level
+                kind_of[key] = kind
+            key_set = frozenset(cond_keys)
+            candidates = payload.get("candidates")
+            if type(candidates) is not dict or not candidates:
+                return None
+            total = 0
+            n_bytes = 0
+            fixture_ids: list[str] | None = None
+            aggregates: dict[str, Any] = {}
+            raw_records: dict[str, list] = {}
+            for name, entry in candidates.items():
+                if type(name) is not str or type(entry) is not dict:
+                    return None
+                status = entry.get("status")
+                if status not in ("available", "unavailable"):
+                    return None
+                records = entry.get("records")
+                if type(records) is not list:
+                    return None
+                if status == "unavailable":
+                    if records != []:
+                        return None
+                    continue
+                if len(records) > 100:
+                    return None
+                total += len(records)
+                if total > 2400:
+                    return None
+                n_bytes += len(
+                    _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                )
+                if n_bytes > 12 * 1024 * 1024:
+                    return None
+                ids: list[str] = []
+                for record in records:
+                    if type(record) is not dict:
+                        return None
+                    fixture = record.get("fixture")
+                    if type(fixture) is not str or not fixture or fixture in ids:
+                        return None
+                    ids.append(fixture)
+                    for flag in ("vacuous", "echo_fixture", "near_miss_defined"):
+                        if type(record.get(flag)) is not bool:
+                            return None
+                    if not _digest(record.get("planted_digest")):
+                        return None
+                    if record["near_miss_defined"] != (record.get("planted_digest") is not None):
+                        return None
+                    native = record.get("native")
+                    if type(native) is not dict:
+                        return None
+                    if type(native.get("verdict")) is not bool:
+                        return None
+                    if type(native.get("boundary_found")) is not bool:
+                        return None
+                    if native.get("boundary_text_match") not in (True, False, None):
+                        return None
+                    if not _int(native.get("input_tokens")):
+                        return None
+                    if not _digest(native.get("answer_digest")):
+                        return None
+                    cells = record.get("cells")
+                    details = record.get("cell_details")
+                    if type(cells) is not dict or set(cells) != key_set:
+                        return None
+                    if type(details) is not dict or set(details) != key_set:
+                        return None
+                    for key in cond_keys:
+                        detail = details[key]
+                        if detail not in _details:
+                            return None
+                        cell = cells[key]
+                        if record["vacuous"]:
+                            if cell is not None or detail != "vacuous":
+                                return None
+                            continue
+                        if detail == "vacuous":
+                            return None
+                        if kind_of[key] == "near-miss" and not record["near_miss_defined"]:
+                            if cell is not None or detail != "near_miss_undefined":
+                                return None
+                            continue
+                        if detail == "near_miss_undefined":
+                            return None
+                        if (cell is None) != (detail != ""):
+                            return None
+                        if cell is None:
+                            continue
+                        if type(cell) is not dict:
+                            return None
+                        if type(cell.get("verdict")) is not bool:
+                            return None
+                        if type(cell.get("boundary_found")) is not bool:
+                            return None
+                        if cell.get("boundary_text_match") not in (True, False, None):
+                            return None
+                        if not _int(cell.get("input_tokens")):
+                            return None
+                        if cell["input_tokens"] - native["input_tokens"] != level_of[key]:
+                            return None
+                        if not _digest(cell.get("answer_digest")):
+                            return None
+                        if cell.get("construction") not in ("id_exact", "text_level"):
+                            return None
+                        seam = cell.get("seam_ids")
+                        if type(seam) is not list or len(seam) > 2:
+                            return None
+                        if any(not _int(token) for token in seam):
+                            return None
+                        occurrences = cell.get("planted_occurrences")
+                        if kind_of[key] == "neutral":
+                            if occurrences is not None:
+                                return None
+                        elif not _int(occurrences):
+                            return None
+                if fixture_ids is None:
+                    fixture_ids = ids
+                elif fixture_ids != ids:
+                    return None
+                raw_records[name] = records
+                live = [r for r in records if not r["vacuous"]]
+                curves: dict[str, Any] = {}
+                first_flip: dict[str, Any] = {}
+                curve_defs: list[tuple[str, str, list[int]]] = []
+                seen: set[tuple[str, str]] = set()
+                for kind, _lv, placement in raw_conditions:
+                    if (kind, placement) not in seen:
+                        seen.add((kind, placement))
+                        curve_defs.append(
+                            (
+                                kind,
+                                placement,
+                                sorted(
+                                    lv
+                                    for k2, lv, p2 in raw_conditions
+                                    if k2 == kind and p2 == placement
+                                ),
+                            )
+                        )
+                for kind, placement, levels in curve_defs:
+                    curve_key = f"{kind}_{placement}"
+                    points: dict[str, Any] = {}
+                    for level in levels:
+                        key = f"{kind}_{level}_{placement}"
+                        paired = [r for r in live if r["cells"][key] is not None]
+                        n_pass = sum(1 for r in paired if r["cells"][key]["verdict"])
+                        points[str(level)] = {
+                            "n_paired": len(paired),
+                            "n_pass": n_pass,
+                            "rate": (n_pass / len(paired)) if paired else None,
+                        }
+                    flip_counts = {str(level): 0 for level in levels}
+                    n_population = 0
+                    n_no_flip = 0
+                    n_returns = 0
+                    n_gain_population = 0
+                    n_gains = 0
+                    for record in live:
+                        verdicts = []
+                        for level in levels:
+                            cell = record["cells"][f"{kind}_{level}_{placement}"]
+                            verdicts.append(cell["verdict"] if cell is not None else None)
+                        if any(v is None for v in verdicts):
+                            continue
+                        if record["native"]["verdict"]:
+                            n_population += 1
+                            flipped_at = None
+                            for level, verdict in zip(levels, verdicts, strict=True):
+                                if not verdict:
+                                    flipped_at = level
+                                    break
+                            if flipped_at is None:
+                                n_no_flip += 1
+                            else:
+                                flip_counts[str(flipped_at)] += 1
+                                n_returns += sum(
+                                    1
+                                    for level, verdict in zip(levels, verdicts, strict=True)
+                                    if level > flipped_at and verdict
+                                )
+                        else:
+                            n_gain_population += 1
+                            if any(verdicts):
+                                n_gains += 1
+                    curves[curve_key] = points
+                    first_flip[curve_key] = {
+                        "n_population": n_population,
+                        "flip_counts": flip_counts,
+                        "n_no_flip": n_no_flip,
+                        "n_returns": n_returns,
+                        "n_gain_population": n_gain_population,
+                        "n_gains": n_gains,
+                    }
+                capture: dict[str, Any] = {}
+                for kind, level, placement in raw_conditions:
+                    if kind != "near-miss":
+                        continue
+                    key = f"{kind}_{level}_{placement}"
+                    neutral_key = f"neutral_{level}_{placement}"
+                    n_population = 0
+                    n_captured = 0
+                    n_excess_population = 0
+                    n_excess = 0
+                    for record in live:
+                        if not record["near_miss_defined"] or not record["native"]["verdict"]:
+                            continue
+                        cell = record["cells"][key]
+                        if cell is None:
+                            continue
+                        n_population += 1
+                        captured = cell["answer_digest"] == record["planted_digest"]
+                        if captured:
+                            n_captured += 1
+                        neutral_cell = record["cells"].get(neutral_key)
+                        if neutral_cell is not None:
+                            n_excess_population += 1
+                            if (
+                                captured
+                                and neutral_cell["answer_digest"] != record["planted_digest"]
+                            ):
+                                n_excess += 1
+                    capture[f"{placement}_{level}"] = {
+                        "n_population": n_population,
+                        "n_captured": n_captured,
+                        "capture_rate": (n_captured / n_population) if n_population else None,
+                        "n_excess_population": n_excess_population,
+                        "n_excess": n_excess,
+                        "capture_excess_over_neutral": (
+                            (n_excess / n_excess_population) if n_excess_population else None
+                        ),
+                    }
+                n_defined = sum(1 for r in live if r["near_miss_defined"])
+                aggregates[name] = {
+                    "curves": curves,
+                    "first_flip": first_flip,
+                    "capture": capture,
+                    "n_fixtures": len(records),
+                    "n_vacuous": len(records) - len(live),
+                    "n_echo": sum(1 for r in live if r["echo_fixture"]),
+                    "n_nearmiss_defined": n_defined,
+                    "nearmiss_defined_share": (n_defined / len(live)) if live else None,
+                }
+            if fixture_ids is None:
+                return None
+            fixture_sha = _hashlib.sha256(
+                "\n".join(sorted(fixture_ids)).encode("utf-8")
+            ).hexdigest()
+            if protocol.get("fixture_set_sha256") != fixture_sha:
+                return None
+            rebuilt = {
+                "version": protocol.get("version"),
+                "joiner": protocol.get("joiner"),
+                "conditions": protocol.get("conditions"),
+                "neutral_corpus_sha256": protocol.get("neutral_corpus_sha256"),
+                "nearmiss_templates_sha256": protocol.get("nearmiss_templates_sha256"),
+                "nearmiss_rule": protocol.get("nearmiss_rule"),
+                "sizing_rule": protocol.get("sizing_rule"),
+                "sizing_encode_budget": protocol.get("sizing_encode_budget"),
+                "screening_rule_version": protocol.get("screening_rule_version"),
+                "generation_budget": protocol.get("generation_budget"),
+                "max_ground_records": protocol.get("max_ground_records"),
+                "fixture_set_sha256": fixture_sha,
+                "backend_fingerprint": protocol.get("backend_fingerprint"),
+            }
+            canonical = _json.dumps(
+                rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            )
+            if (
+                protocol.get("fingerprint")
+                != _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            ):
+                return None
+            primary_decision = payload.get("primary_decision")
+            primary_winner = payload.get("primary_winner")
+            if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+                mapped = ("selected", primary_winner)
+            else:
+                mapped = (primary_decision, primary_winner)
+            conditions_out: dict[str, Any] = {}
+            for key in cond_keys:
+                completed_sets: list[frozenset] = []
+                all_pass: dict[str, bool | None] = {}
+                withheld = False
+                for cand_name, entry in candidates.items():
+                    if entry.get("status") != "available":
+                        withheld = True
+                        all_pass[cand_name] = None
+                        continue
+                    completed = frozenset(
+                        r["fixture"]
+                        for r in raw_records[cand_name]
+                        if not r["vacuous"] and r["cells"][key] is not None
+                    )
+                    completed_sets.append(completed)
+                    if not completed:
+                        all_pass[cand_name] = None
+                        withheld = True
+                    else:
+                        all_pass[cand_name] = all(
+                            r["cells"][key]["verdict"]
+                            for r in raw_records[cand_name]
+                            if not r["vacuous"] and r["cells"][key] is not None
+                        )
+                if len(set(completed_sets)) > 1:
+                    withheld = True
+                if withheld:
+                    conditions_out[key] = {
+                        "decision": "unavailable",
+                        "detail": "selection_withheld_mismatched_sets",
+                        "winner": None,
+                        "withheld": True,
+                        "flip": None,
+                    }
+                    continue
+                passers = [n for n in candidates if all_pass[n]]
+                if len(passers) == 1:
+                    decision, winner = "selected", passers[0]
+                elif len(passers) > 1:
+                    decision, winner = "ambiguous", None
+                else:
+                    decision, winner = "no_candidate", None
+                conditions_out[key] = {
+                    "decision": decision,
+                    "winner": winner,
+                    "withheld": False,
+                    "detail": "",
+                    "flip": (decision, winner) != mapped,
+                }
+            return {
+                "aggregates": aggregates,
+                "conditions": conditions_out,
+                "n_candidates": len(candidates),
+            }
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        for key in ("primary_decision", "primary_winner"):
+            item = value.get(key)
+            if item is not None and type(item) is not str:
+                return False
+        recomputed = _recompute(value)
+        if recomputed is None:
+            return False
+        candidates = value["candidates"]
+        for name, expected in recomputed["aggregates"].items():
+            entry = candidates[name]
+            for key, item in expected.items():
+                if entry.get(key) != item:
+                    return False
+        if value.get("conditions") != recomputed["conditions"]:
+            return False
+        return bool(value.get("n_candidates") == recomputed["n_candidates"])
+
     def _or_repetition_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_repetition exactly: the
         # availability-level oracle must agree with the implementation
@@ -2898,6 +3302,18 @@ def oracle_diff_reports(
         _o_rep_available = "neither"
     _o_rep_asymmetric = _o_rep_available not in ("both", "neither")
 
+    _dst_old_ok = _or_distraction_valid(old.get("distraction"))
+    _dst_new_ok = _or_distraction_valid(new.get("distraction"))
+    if _dst_old_ok and _dst_new_ok:
+        _o_dst_available = "both"
+    elif _dst_old_ok:
+        _o_dst_available = "old"
+    elif _dst_new_ok:
+        _o_dst_available = "new"
+    else:
+        _o_dst_available = "neither"
+    _o_dst_asymmetric = _o_dst_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -2965,6 +3381,7 @@ def oracle_diff_reports(
         and not _o_sl_asymmetric
         and not _o_al_asymmetric
         and not _o_rep_asymmetric
+        and not _o_dst_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -3030,6 +3447,8 @@ def oracle_diff_reports(
         "aliasing_asymmetric": _o_al_asymmetric,
         "repetition_changed": False,
         "repetition_asymmetric": _o_rep_asymmetric,
+        "distraction_changed": False,
+        "distraction_asymmetric": _o_dst_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -3074,6 +3493,7 @@ def oracle_diff_reports(
         "scorerlens": {"available": _o_sl_available, "changed": False},
         "aliasing": {"available": _o_al_available, "changed": False},
         "repetition": {"available": _o_rep_available, "changed": False},
+        "distraction": {"available": _o_dst_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

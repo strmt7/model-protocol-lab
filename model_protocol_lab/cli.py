@@ -455,6 +455,31 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--distract",
+        action="store_true",
+        help="Distractor-dilution probe (cycle 184, research wave-7 "
+        "rank 5): deterministic irrelevant filler is inserted into "
+        "each search fixture's last user message at exact rendered-"
+        "token doses -- neutral prose at 64/256/1024 tokens and a "
+        "frozen near-miss template carrying a planted wrong answer "
+        "at 64/256, before or after the content -- with verdict "
+        "curves, first-flip counts, and the conservative selection "
+        "re-applied per condition. Monday morning: 'which template "
+        "keeps my checkpoint accurate as retrieved bulk grows "
+        "around the question?' Near-miss capture is reported as an "
+        "upper bound beside a neutral-control excess; near-miss "
+        "covers numeric-expected fixtures with plain ASCII "
+        "formatting only and is empty by construction on "
+        "instruction/copy fixture sets; near-miss curves terminate "
+        "at 256 tokens (no capture rate at 1024). Costs 10 extra "
+        "generations per candidate per fixture (24,000 at the "
+        "legal maximum), each at up to ~1024 extra prompt tokens "
+        "under full-prefix recompute (forwards per generation "
+        "scale as M*L + M(M-1)/2 in the generated length M and "
+        "prompt length L; no KV cache). Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1363,6 +1388,67 @@ def _run_repeat_probe(
         result["repetition"] = {
             "available": False,
             "detail": "repetition_unavailable",
+        }
+
+
+def _run_distract_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the distractor-dilution probe; never raises.
+
+    The native arm is the recorded native search, so a failed,
+    cancelled, or truncated search gates the probe to zero
+    generations. The run's cancel event is threaded dispatch ->
+    wrapper -> stage -> evaluate, so SIGINT/SIGTERM stop the
+    stage cooperatively.
+    """
+    try:
+        from .experiments import distraction_analysis, distraction_stage
+
+        search = result.get("search")
+        names = tuple(fmt.name for fmt in formats)
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["distraction"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        stage = distraction_stage(
+            backend,
+            formats,
+            cases,
+            search,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["distraction"] = distraction_analysis(
+            stage,
+            result.get("decision"),
+            result.get("selected_candidate"),
+            names,
+        )
+    except Exception:  # noqa: BLE001 -- distraction must not fail the run
+        result["distraction"] = {
+            "available": False,
+            "detail": "distraction_unavailable",
         }
 
 
@@ -2741,6 +2827,24 @@ def main(argv: list[str] | None = None) -> int:
                 # Never fails the run.
                 if args.repeat:
                     _run_repeat_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Distractor-dilution probe (cycle 184, research wave-7
+                # rank 5): exact-dose filler arms against the recorded
+                # native run, per-cell degradation, the run's cancel
+                # event threaded into the stage. Informational only --
+                # never changes selection. Never fails the run.
+                if args.distract:
+                    _run_distract_probe(
                         backend,
                         formats,
                         result,

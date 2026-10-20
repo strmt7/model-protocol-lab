@@ -601,6 +601,7 @@ def diff_reports(
     scorerlens_diff = diff_scorerlens(old.get("scorerlens"), new.get("scorerlens"))
     aliasing_diff = diff_aliasing(old.get("aliasing"), new.get("aliasing"))
     repetition_diff = diff_repetition(old.get("repetition"), new.get("repetition"))
+    distraction_diff = diff_distraction(old.get("distraction"), new.get("distraction"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -641,6 +642,10 @@ def diff_reports(
         "neither",
     )
     repetition_asymmetric = repetition_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    distraction_asymmetric = distraction_diff["available"] not in (
         "both",
         "neither",
     )
@@ -721,6 +726,8 @@ def diff_reports(
         and not aliasing_asymmetric
         and not repetition_diff["changed"]
         and not repetition_asymmetric
+        and not distraction_diff["changed"]
+        and not distraction_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -791,6 +798,8 @@ def diff_reports(
         "aliasing_asymmetric": aliasing_asymmetric,
         "repetition_changed": repetition_diff["changed"],
         "repetition_asymmetric": repetition_asymmetric,
+        "distraction_changed": distraction_diff["changed"],
+        "distraction_asymmetric": distraction_asymmetric,
         "identical": identical,
     }
     return {
@@ -825,6 +834,7 @@ def diff_reports(
         "scorerlens": scorerlens_diff,
         "aliasing": aliasing_diff,
         "repetition": repetition_diff,
+        "distraction": distraction_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -4732,6 +4742,554 @@ def diff_repetition(old: Any, new: Any) -> dict[str, Any]:
         or repetition_protocol_drift
         or repetition_fixture_set_drift
         or repetition_backend_drift
+    )
+    return result
+
+
+_DISTRACTION_CELL_DETAILS = frozenset(
+    {
+        "",
+        "vacuous",
+        "arm_context_exceeded",
+        "arm_evaluation_failed",
+        "arm_screened",
+        "arm_unmatchable",
+        "near_miss_undefined",
+    }
+)
+_DISTRACTION_HEX = frozenset("0123456789abcdef")
+
+
+def _distraction_digest_ok(value: Any) -> bool:
+    return value is None or (
+        type(value) is str and len(value) == 64 and all(char in _DISTRACTION_HEX for char in value)
+    )
+
+
+def _distraction_int_ok(value: Any) -> bool:
+    return type(value) is int and not isinstance(value, bool) and value >= 0
+
+
+def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a distraction payload from its ground records.
+
+    Shape pre-checks run before any recompute loop (cycle-184
+    G25): a hostile payload is rejected on its silhouette, not
+    after its records have been accumulated. Everything derived
+    — curves, first-flip state machine, capture and its neutral
+    excess, per-condition selection with withholding, the
+    protocol fingerprint — is then rebuilt with independent
+    arithmetic and compared by _valid_distraction.
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    raw_conditions = protocol.get("conditions")
+    if type(raw_conditions) is not list or not raw_conditions:
+        return None
+    conditions: list[tuple[str, int, str]] = []
+    cond_keys: list[str] = []
+    for raw in raw_conditions:
+        if type(raw) is not list or len(raw) != 3:
+            return None
+        kind, level, placement = raw
+        if kind not in ("neutral", "near-miss"):
+            return None
+        if type(level) is not int or isinstance(level, bool) or level <= 0:
+            return None
+        if placement not in ("before", "after"):
+            return None
+        key = f"{kind}_{level}_{placement}"
+        if key in cond_keys:
+            return None
+        conditions.append((kind, level, placement))
+        cond_keys.append(key)
+    cond_key_set = frozenset(cond_keys)
+    level_by_key = {f"{k}_{lv}_{p}": lv for k, lv, p in conditions}
+    kind_by_key = {f"{k}_{lv}_{p}": k for k, lv, p in conditions}
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total_records = 0
+    records_bytes = 0
+    fixture_ids: list[str] | None = None
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(name) is not str or type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status not in ("available", "unavailable"):
+            return None
+        records = entry.get("records")
+        if type(records) is not list:
+            return None
+        if status == "unavailable":
+            if records != []:
+                return None
+            continue
+        if len(records) > 100:
+            return None
+        total_records += len(records)
+        if total_records > 2400:
+            return None
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > 12 * 1024 * 1024:
+            return None
+        ids: list[str] = []
+        for record in records:
+            if type(record) is not dict:
+                return None
+            fixture = record.get("fixture")
+            if type(fixture) is not str or not fixture or fixture in ids:
+                return None
+            ids.append(fixture)
+            for flag in ("vacuous", "echo_fixture", "near_miss_defined"):
+                if type(record.get(flag)) is not bool:
+                    return None
+            if not _distraction_digest_ok(record.get("planted_digest")):
+                return None
+            if record["near_miss_defined"] != (record.get("planted_digest") is not None):
+                return None
+            native = record.get("native")
+            if type(native) is not dict:
+                return None
+            if type(native.get("verdict")) is not bool:
+                return None
+            if type(native.get("boundary_found")) is not bool:
+                return None
+            if native.get("boundary_text_match") not in (True, False, None):
+                return None
+            if not _distraction_int_ok(native.get("input_tokens")):
+                return None
+            if not _distraction_digest_ok(native.get("answer_digest")):
+                return None
+            cells = record.get("cells")
+            details = record.get("cell_details")
+            if type(cells) is not dict or set(cells) != cond_key_set:
+                return None
+            if type(details) is not dict or set(details) != cond_key_set:
+                return None
+            for key in cond_keys:
+                detail = details[key]
+                if detail not in _DISTRACTION_CELL_DETAILS:
+                    return None
+                cell = cells[key]
+                if record["vacuous"]:
+                    if cell is not None or detail != "vacuous":
+                        return None
+                    continue
+                if detail == "vacuous":
+                    return None
+                if kind_by_key[key] == "near-miss" and not record["near_miss_defined"]:
+                    if cell is not None or detail != "near_miss_undefined":
+                        return None
+                    continue
+                if detail == "near_miss_undefined":
+                    return None
+                if (cell is None) != (detail != ""):
+                    return None
+                if cell is None:
+                    continue
+                if type(cell) is not dict:
+                    return None
+                if type(cell.get("verdict")) is not bool:
+                    return None
+                if type(cell.get("boundary_found")) is not bool:
+                    return None
+                if cell.get("boundary_text_match") not in (True, False, None):
+                    return None
+                if not _distraction_int_ok(cell.get("input_tokens")):
+                    return None
+                if cell["input_tokens"] - native["input_tokens"] != level_by_key[key]:
+                    return None
+                if not _distraction_digest_ok(cell.get("answer_digest")):
+                    return None
+                if cell.get("construction") not in ("id_exact", "text_level"):
+                    return None
+                seam = cell.get("seam_ids")
+                if type(seam) is not list or len(seam) > 2:
+                    return None
+                if any(not _distraction_int_ok(token) for token in seam):
+                    return None
+                occurrences = cell.get("planted_occurrences")
+                if kind_by_key[key] == "neutral":
+                    if occurrences is not None:
+                        return None
+                elif not _distraction_int_ok(occurrences):
+                    return None
+        if fixture_ids is None:
+            fixture_ids = ids
+        elif fixture_ids != ids:
+            return None
+        raw_records[name] = records
+        live = [r for r in records if not r["vacuous"]]
+        curves: dict[str, Any] = {}
+        first_flip: dict[str, Any] = {}
+        curve_defs: list[tuple[str, str, list[int]]] = []
+        seen_curves: set[tuple[str, str]] = set()
+        for kind, _level, placement in conditions:
+            if (kind, placement) not in seen_curves:
+                seen_curves.add((kind, placement))
+                curve_defs.append(
+                    (
+                        kind,
+                        placement,
+                        sorted(lv for k2, lv, p2 in conditions if k2 == kind and p2 == placement),
+                    )
+                )
+        for kind, placement, levels in curve_defs:
+            curve_key = f"{kind}_{placement}"
+            points: dict[str, Any] = {}
+            for level in levels:
+                key = f"{kind}_{level}_{placement}"
+                n_paired = 0
+                n_pass = 0
+                for record in live:
+                    cell = record["cells"][key]
+                    if cell is None:
+                        continue
+                    n_paired += 1
+                    if cell["verdict"]:
+                        n_pass += 1
+                points[str(level)] = {
+                    "n_paired": n_paired,
+                    "n_pass": n_pass,
+                    "rate": (n_pass / n_paired) if n_paired else None,
+                }
+            flip_counts = {str(level): 0 for level in levels}
+            n_population = 0
+            n_no_flip = 0
+            n_returns = 0
+            n_gain_population = 0
+            n_gains = 0
+            for record in live:
+                verdicts: list[bool | None] = []
+                for level in levels:
+                    cell = record["cells"][f"{kind}_{level}_{placement}"]
+                    verdicts.append(cell["verdict"] if cell is not None else None)
+                if any(v is None for v in verdicts):
+                    continue
+                if record["native"]["verdict"]:
+                    n_population += 1
+                    flipped_at: int | None = None
+                    for level, verdict in zip(levels, verdicts, strict=True):
+                        if not verdict:
+                            flipped_at = level
+                            break
+                    if flipped_at is None:
+                        n_no_flip += 1
+                    else:
+                        flip_counts[str(flipped_at)] += 1
+                        for level, verdict in zip(levels, verdicts, strict=True):
+                            if level > flipped_at and verdict:
+                                n_returns += 1
+                else:
+                    n_gain_population += 1
+                    if any(verdicts):
+                        n_gains += 1
+            curves[curve_key] = points
+            first_flip[curve_key] = {
+                "n_population": n_population,
+                "flip_counts": flip_counts,
+                "n_no_flip": n_no_flip,
+                "n_returns": n_returns,
+                "n_gain_population": n_gain_population,
+                "n_gains": n_gains,
+            }
+        capture: dict[str, Any] = {}
+        for kind, level, placement in conditions:
+            if kind != "near-miss":
+                continue
+            key = f"{kind}_{level}_{placement}"
+            neutral_key = f"neutral_{level}_{placement}"
+            n_population = 0
+            n_captured = 0
+            n_excess_population = 0
+            n_excess = 0
+            for record in live:
+                if not record["near_miss_defined"]:
+                    continue
+                if not record["native"]["verdict"]:
+                    continue
+                cell = record["cells"][key]
+                if cell is None:
+                    continue
+                n_population += 1
+                captured = cell["answer_digest"] == record["planted_digest"]
+                if captured:
+                    n_captured += 1
+                neutral_cell = record["cells"].get(neutral_key)
+                if neutral_cell is not None:
+                    n_excess_population += 1
+                    if captured and neutral_cell["answer_digest"] != record["planted_digest"]:
+                        n_excess += 1
+            capture[f"{placement}_{level}"] = {
+                "n_population": n_population,
+                "n_captured": n_captured,
+                "capture_rate": (n_captured / n_population) if n_population else None,
+                "n_excess_population": n_excess_population,
+                "n_excess": n_excess,
+                "capture_excess_over_neutral": (
+                    (n_excess / n_excess_population) if n_excess_population else None
+                ),
+            }
+        n_defined = sum(1 for r in live if r["near_miss_defined"])
+        aggregates[name] = {
+            "curves": curves,
+            "first_flip": first_flip,
+            "capture": capture,
+            "n_fixtures": len(records),
+            "n_vacuous": len(records) - len(live),
+            "n_echo": sum(1 for r in live if r["echo_fixture"]),
+            "n_nearmiss_defined": n_defined,
+            "nearmiss_defined_share": (n_defined / len(live)) if live else None,
+        }
+    if fixture_ids is None:
+        return None
+    expected_fixture_sha = _hashlib.sha256(
+        "\n".join(sorted(fixture_ids)).encode("utf-8")
+    ).hexdigest()
+    if protocol.get("fixture_set_sha256") != expected_fixture_sha:
+        return None
+    protocol_rebuilt = {
+        "version": protocol.get("version"),
+        "joiner": protocol.get("joiner"),
+        "conditions": protocol.get("conditions"),
+        "neutral_corpus_sha256": protocol.get("neutral_corpus_sha256"),
+        "nearmiss_templates_sha256": protocol.get("nearmiss_templates_sha256"),
+        "nearmiss_rule": protocol.get("nearmiss_rule"),
+        "sizing_rule": protocol.get("sizing_rule"),
+        "sizing_encode_budget": protocol.get("sizing_encode_budget"),
+        "screening_rule_version": protocol.get("screening_rule_version"),
+        "generation_budget": protocol.get("generation_budget"),
+        "max_ground_records": protocol.get("max_ground_records"),
+        "fixture_set_sha256": expected_fixture_sha,
+        "backend_fingerprint": protocol.get("backend_fingerprint"),
+    }
+    canonical = _json.dumps(
+        protocol_rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    if protocol.get("fingerprint") != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        return None
+    primary_decision = payload.get("primary_decision")
+    primary_winner = payload.get("primary_winner")
+    mapped: tuple[Any, Any]
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped = ("selected", primary_winner)
+    else:
+        mapped = (primary_decision, primary_winner)
+    conditions_out: dict[str, Any] = {}
+    for key in cond_keys:
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for cand_name, entry in candidates.items():
+            if entry.get("status") != "available":
+                withheld = True
+                all_pass[cand_name] = None
+                continue
+            completed = frozenset(
+                record["fixture"]
+                for record in raw_records[cand_name]
+                if not record["vacuous"] and record["cells"][key] is not None
+            )
+            completed_sets.append(completed)
+            if not completed:
+                all_pass[cand_name] = None
+                withheld = True
+            else:
+                all_pass[cand_name] = all(
+                    record["cells"][key]["verdict"]
+                    for record in raw_records[cand_name]
+                    if not record["vacuous"] and record["cells"][key] is not None
+                )
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            conditions_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidates if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        conditions_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped,
+        }
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions_out,
+        "n_candidates": len(candidates),
+    }
+
+
+def _valid_distraction(payload: Any) -> bool:
+    """Structural check for a ``distraction`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    for key in ("primary_decision", "primary_winner"):
+        value = payload.get(key)
+        if value is not None and type(value) is not str:
+            return False
+    recomputed = _distraction_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if entry.get(key) != value:
+                return False
+    if payload.get("conditions") != recomputed["conditions"]:
+        return False
+    return bool(payload.get("n_candidates") == recomputed["n_candidates"])
+
+
+def diff_distraction(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``distraction`` probe payloads; deterministic.
+
+    Answers "did the dilution story change between runs?":
+    per-candidate curve-point and capture drift, per-condition
+    selection drift, candidates added/removed, and protocol /
+    fixture-set / backend drift (any of which marks the
+    comparison not comparable, with the drift still listed). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_distraction(old)
+    new_ok = _valid_distraction(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    distraction_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    distraction_fixture_set_drift = old["protocol"].get("fixture_set_sha256") != new[
+        "protocol"
+    ].get("fixture_set_sha256")
+    distraction_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    distraction_comparable = (
+        not distraction_protocol_drift
+        and not distraction_fixture_set_drift
+        and not distraction_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    distraction_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    distraction_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    distraction_curve_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                distraction_curve_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        for curve_key, points in old_entry["curves"].items():
+            for level, point in points.items():
+                old_rate = point["rate"]
+                new_rate = new_entry["curves"][curve_key][level]["rate"]
+                if old_rate != new_rate:
+                    distraction_curve_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{curve_key}_{level}_rate",
+                            "old": old_rate,
+                            "new": new_rate,
+                        }
+                    )
+        for cap_key, cap in old_entry["capture"].items():
+            new_cap = new_entry["capture"][cap_key]
+            if cap["capture_rate"] != new_cap["capture_rate"]:
+                distraction_curve_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"capture_{cap_key}",
+                        "old": cap["capture_rate"],
+                        "new": new_cap["capture_rate"],
+                    }
+                )
+            if cap["capture_excess_over_neutral"] != new_cap["capture_excess_over_neutral"]:
+                distraction_curve_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"capture_excess_{cap_key}",
+                        "old": cap["capture_excess_over_neutral"],
+                        "new": new_cap["capture_excess_over_neutral"],
+                    }
+                )
+        if old_entry.get("nearmiss_defined_share") != new_entry.get("nearmiss_defined_share"):
+            distraction_curve_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "nearmiss_defined_share",
+                    "old": old_entry.get("nearmiss_defined_share"),
+                    "new": new_entry.get("nearmiss_defined_share"),
+                }
+            )
+    distraction_condition_drift: list[dict[str, Any]] = []
+    for key in old["conditions"]:
+        if old["conditions"][key] != new["conditions"].get(key):
+            distraction_condition_drift.append(
+                {
+                    "condition": key,
+                    "old": old["conditions"][key],
+                    "new": new["conditions"].get(key),
+                }
+            )
+    result["curve_drift"] = distraction_curve_drift
+    result["condition_drift"] = distraction_condition_drift
+    result["candidates_added"] = distraction_candidates_added
+    result["candidates_removed"] = distraction_candidates_removed
+    result["protocol_drift"] = distraction_protocol_drift
+    result["fixture_set_drift"] = distraction_fixture_set_drift
+    result["backend_drift"] = distraction_backend_drift
+    result["comparable"] = distraction_comparable
+    # NOTE: distraction-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        distraction_curve_drift
+        or distraction_condition_drift
+        or distraction_candidates_added
+        or distraction_candidates_removed
+        or distraction_protocol_drift
+        or distraction_fixture_set_drift
+        or distraction_backend_drift
     )
     return result
 

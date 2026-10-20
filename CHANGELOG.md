@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 184 — distractor dilution, 2026-10-20)
+
+- `model-protocol-lab run --distract`: distractor-dilution probe
+  (wave-7 rank 5). Irrelevant filler is spliced into each search
+  fixture's last user message at exact rendered token doses —
+  64/256/1024 tokens of a frozen neutral corpus and 64/256 of
+  near-miss filler, before and after the real content — against
+  the recorded native run as dose 0. The near-miss arm plants a
+  wrong answer derived from the fixture's expected answer by a
+  frozen ASCII digit-increment rule (digit-string surgery v2,
+  adopted after the red-team cross-check refuted the original
+  Decimal-based plant rule as non-total), and the headline
+  capture number is the excess over the same-dose neutral arm,
+  with the raw rate labelled an upper bound. Per-dose paired
+  pass curves, a first-flip state machine with returns and gains
+  counters, per-cell construction classification (id-exact vs
+  text-level with seam ids), per-span filler screening,
+  per-condition selection withheld over mismatched completed
+  sets, and a full-recompute `diff-reports` validator with shape
+  pre-checks. The wave-7 scope cut is recorded in the design
+  doc: ten conditions, 24,000 generations at the run caps, no
+  capture claim at 1024. The pre-build cross-check upheld
+  red-team A's DO NOT BUILD verdict on the original sketch (the
+  named mirror stage records none of the required per-fixture
+  data) and red-team B then found A's corrected design still
+  unbuildable (the near-miss filler text was never constructed);
+  the shipped design is A's skeleton as amended by B.
+
 ### Added (cycle 183 — prompt repetition × template, 2026-10-20)
 
 - `model-protocol-lab run --repeat`: repetition probe crossing

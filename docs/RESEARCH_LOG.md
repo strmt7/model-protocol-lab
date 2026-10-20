@@ -7445,3 +7445,87 @@ now runs the fixture audit against the candidate formats'
 inventories, as designed. The shipped filler is clean against
 the shipped catalog, so that branch is proven with a stubbed
 hostile unit rather than left as decoration.
+
+## Cycle 184 — distractor dilution × template (wave-7 rank 5, pre-build)
+
+Uniqueness pass (wave-7 researcher §5, sources logged there):
+GSM-IC (Shi et al., ICML 2023) varies distractibility across
+prompting techniques, never across chat templates; Chroma's
+Context Rot report varies length on API models through their own
+formats; NIAH varies needle depth. The combination this probe
+ships — verdict curves over exact-token filler doses as a
+function of the chat-template rendering, on a local checkpoint,
+with the conservative selection re-applied per condition — is
+what no surveyed work measures. Framing stays "the combination".
+
+Cross-check (two red teams, briefs in the wave-7 series):
+red-team A returned DO NOT BUILD AS SPECIFIED (D1–D10, U1–U12).
+Its headline findings, all executed: the design's named mirror
+(`perturbation_stage`) records only aggregate pass booleans, so
+the decay curve, first-flip, and capture metrics are underivable
+from it; the span invariant (§5-D1) is false at both seams in
+both placements (identical filler text renders +2 tokens for one
+candidate, +1 for another); §5-D2's capture partition is vacuous
+under byte-exact scoring; near-miss generation is undefined for
+this lab's fixture universe (expected answers are arbitrary
+strings, not scene inventories); the full factorial is 28,800
+generations at the run caps with the 1024 arm destroyed
+wholesale by the mirror's batched overflow. Red-team B upheld A
+in substance (no finding refuted; D6's cost figure amended to
+travel with its prompt-length formula) — and found A's corrected
+design STILL NOT BUILDABLE on two load-bearing points: §13
+defines a planted string but never constructs near-miss filler
+text (no sentence template, so the capture arm has no
+instrument), and its Decimal-based plant rule contradicts its
+own gate (a plant is required for "1,000", which Decimal cannot
+parse), is non-total (inf/NaN), and is not deterministic under
+the ambient Decimal context for inputs over 28 digits.
+
+The build therefore follows A's skeleton as amended by B:
+repetition-mirror stage with native reuse and per-fixture
+degradation; the plant is produced by frozen ASCII digit-string
+surgery (increment the mantissa's last digit with carry,
+format-preserving by construction; exact-plant test battery),
+never Decimal arithmetic; near-miss filler is a frozen,
+digested sentence template with one plant slot; capture ships
+as an upper bound plus a neutral-control excess readout (the
+same-dose neutral arm is the paired coincidence baseline);
+first-flip is a state machine over 0-passing fixtures with gain
+counts for fail-at-0 fixtures; the neutral corpus is a frozen
+sentence sequence consumed as nested prefix spans with per-span
+screening; and the factorial is cut to 10 treated conditions
+(neutral at 64/256/1024, near-miss at 64/256, both placements;
+24,000 generations at the caps). The claim lost by the cut is
+stated wherever near-miss curves appear: no capture rate at
+1024 tokens, and near-miss curves terminate at 256, because at
+1024 the plant's repetition count makes the cell measure
+repetition pressure rather than dilution.
+
+**Build outcome (cycle 184, shipped).** Built as amended:
+`model_protocol_lab/distraction.py` (50th source file, 100%
+line+branch) holds the frozen protocol — both corpus digests,
+the digit-surgery plant rule with B's exact-plant battery
+passing (`"9,999"` → `"10,000"`, `"-0"` → `"-1"`, 40-digit
+exact), nested-prefix span construction, per-span screening,
+construction classification, and the aggregate state machine
+whose "returns" counter counts passing levels above the first
+flip (B's G17 semantics). The stage mirrors repetition_stage
+and threads the run's cancel event end-to-end; the CLI help
+states the 24,000-generation worst case and the forwards
+formula before the run. The diff validator passed G25's shape
+pre-checks plus a two-round structural battery (50+ one-break
+mutations) after the full-suite coverage run named every
+unfired reject branch — the gap pass is recorded here because
+the first scoped coverage reading (pytest, four files) reported
+the validator ranges covered while two unittest measurements
+disagreed; the unittest numbers were right, and the battery now
+pins the branches in the probe's own test file. The cycle-67
+fuzz oracle for the section caught nothing new after wiring
+(848 subtests), which is itself the expected result given the
+validator and both oracles implement the same recompute
+independently. Two build-time findings worth keeping: a literal
+NUL byte slipped into the new test file through a marker string
+during chunked writes (purged; source now uses escapes only),
+and the fake backend's first scripting draft was level-blind —
+dose-sensitive scripting needs a prompt-length band, recorded
+in the test file's docstring.
