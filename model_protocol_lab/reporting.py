@@ -5325,6 +5325,123 @@ def _confidentiality_section(result: dict[str, Any]) -> str:
     )
 
 
+def _answer_collision_section(result: dict[str, Any]) -> str:
+    """Answer-collision audit: the lab's own detector vs correct answers.
+
+    Renders the ``answer_collision`` payload (see
+    experiments.answer_collision_profile) as a per-boundary-configuration
+    table: for the reserved-token arm and the subword control arm, how
+    many verbatim-emitted correct answers the detector truncated
+    (collision), how many it ended at the marker (ends-at-marker), and
+    how many it left intact. The measured quantity is a detector
+    property: scripted emission measures the detector, never a model,
+    and only the configured boundaries are in scope. Marker text itself
+    is never rendered here -- marker-bearing fixtures are hostile input
+    to the report path by design (red-team A R11), so the section shows
+    counts and rates only. Every interpolated identifier is escaped at
+    this boundary; no raw model outputs are rendered.
+    """
+    audit: Any = result.get("answer_collision")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _pct(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1%}"
+        return "n/a"
+
+    def _int(value: Any) -> str:
+        if type(value) is int:
+            return str(value)
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td colspan="6">unavailable</td></tr>'
+            )
+            continue
+        reserved = entry.get("reserved") or {}
+        subword = entry.get("subword") or {}
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(_int(entry.get("boundary_ids")))
+            + "</td><td>"
+            + escape(_int(reserved.get("n_scored")))
+            + "</td><td>"
+            + escape(_int(reserved.get("n_collision")))
+            + "</td><td>"
+            + escape(_int(reserved.get("n_ends_at_marker")))
+            + "</td><td>"
+            + escape(_pct(reserved.get("collision_rate")))
+            + "</td><td>"
+            + escape(_int(subword.get("n_collision")))
+            + "</td></tr>"
+        )
+    intact_line = ""
+    if audit.get("uniform_intact") is True:
+        intact_line = (
+            "<p><strong>Null result</strong>: on this fixture set the "
+            "detector left every marker-bearing correct answer intact in "
+            "every measurable configuration -- no truncation of a "
+            "verbatim-correct answer was observed. This is the "
+            "regression-guard pass: it says the detector is "
+            "collision-clean here, not that real answers never contain "
+            "marker text.</p>"
+        )
+    colliding = audit.get("colliding_candidates")
+    colliding_line = ""
+    if type(colliding) is list and colliding:
+        colliding_line = (
+            "<p>Configurations whose detector provably truncated a "
+            "verbatim-correct answer (reserved arm): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in colliding
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="answer-collision">'
+        "<h2>Answer-collision audit</h2>"
+        "<p>The lab audits its own boundary detector: synthetic expected "
+        "answers embedding marker-like text were emitted verbatim through "
+        "the evaluation path, once in the backend's natural encoding "
+        "(reserved arm) and once with every marker occurrence re-encoded "
+        "in subword ids (subword control arm). A <strong>collision</strong> "
+        "means the detector cut a correct answer and discarded content; "
+        "<strong>ends-at-marker</strong> means the scripted emission "
+        "simply ended at the marker -- a distinct bookkeeping cell, not "
+        "evidence of early stopping. The unit is the boundary "
+        "configuration: configurations sharing a boundary produce "
+        "identical cells by construction. Scope is the configured "
+        "boundaries and this tokenizer only; this measures the detector, "
+        "never any model, and says nothing about how often real answers "
+        "contain marker text.</p>"
+        + intact_line
+        + colliding_line
+        + '<div class="table-wrap"><table>'
+        + "<thead><tr><th>Candidate</th><th>Boundary ids</th>"
+        + "<th>Reserved scored</th><th>Reserved collisions</th>"
+        + "<th>Ends-at-marker</th><th>Collision rate</th>"
+        + "<th>Subword collisions</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -6250,6 +6367,7 @@ def render_html(result: dict[str, Any]) -> str:
     verbosity_html = _verbosity_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
+    answer_collision_html = _answer_collision_section(result)
     template_robustness_html = _template_robustness_section(result)
     ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
@@ -6366,6 +6484,11 @@ def render_html(result: dict[str, Any]) -> str:
                 confidentiality_html,
             ),
             (
+                "answer-collision",
+                "Answer-collision audit",
+                answer_collision_html,
+            ),
+            (
                 "template-robustness",
                 "Template surface-noise robustness",
                 template_robustness_html,
@@ -6435,6 +6558,7 @@ def render_html(result: dict[str, Any]) -> str:
         + verbosity_html
         + cache_profile_html
         + confidentiality_html
+        + answer_collision_html
         + template_robustness_html
         + ablation_html
         + sweep_html

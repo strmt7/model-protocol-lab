@@ -1432,6 +1432,81 @@ def oracle_diff_reports(
             return True
         return type(gap) in (int, float) and -1.0 <= gap <= 1.0
 
+    def _or_answer_collision_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_answer_collision exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        from model_protocol_lab.experiments import _answer_collision_cell_valid
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        if type(protocol.get("fingerprint")) is not str:
+            return False
+        n_fixtures = value.get("n_fixtures")
+        if type(n_fixtures) is not int or n_fixtures < 1:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if not _answer_collision_cell_valid(entry):
+                return False
+            if type(entry) is dict and entry.get("n") != n_fixtures:
+                return False
+        if value.get("n_candidates") != len(per_candidate):
+            return False
+        cells = {k: v for k, v in per_candidate.items() if type(v) is dict}
+        if value.get("n_cells") != len(cells):
+            return False
+        measurable = {
+            name: entry
+            for name, entry in per_candidate.items()
+            if type(entry) is dict
+            and type(entry.get("reserved")) is dict
+            and type(entry["reserved"].get("n_scored")) is int
+            and entry["reserved"]["n_scored"] >= 1
+        }
+        if value.get("n_measurable") != len(measurable):
+            return False
+        if type(value.get("any_collision")) is not bool:
+            return False
+        if type(value.get("uniform_intact")) is not bool:
+            return False
+        colliding = value.get("colliding_candidates")
+        if type(colliding) is not list or not all(type(x) is str for x in colliding):
+            return False
+        expected_colliding = sorted(
+            name for name, cell in measurable.items() if cell.get("any_collision") is True
+        )
+        if colliding != expected_colliding:
+            return False
+        if value["any_collision"] != bool(expected_colliding):
+            return False
+        if value["uniform_intact"] != (
+            bool(measurable)
+            and all(cell.get("uniform_intact") is True for cell in measurable.values())
+        ):
+            return False
+        rates = {
+            name: cell["reserved"]["collision_rate"]
+            for name, cell in measurable.items()
+            if type(cell.get("reserved")) is dict
+        }
+        max_rate = value.get("max_collision_rate")
+        if not rates:
+            return max_rate is None and value.get("worst_candidate") is None
+        if max_rate is None or not (
+            type(max_rate) in (int, float) and isinstance(max_rate, (int, float))
+        ):
+            return False
+        if abs(float(max_rate) - max(float(r) for r in rates.values())) > 1e-9:
+            return False
+        worst = max(rates, key=lambda name: (float(rates[name]), name))
+        return value.get("worst_candidate") == worst
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -1640,6 +1715,17 @@ def oracle_diff_reports(
     else:
         _o_cf_available = "neither"
     _o_cf_asymmetric = _o_cf_available not in ("both", "neither")
+    _ac_old_ok = _or_answer_collision_valid(old.get("answer_collision"))
+    _ac_new_ok = _or_answer_collision_valid(new.get("answer_collision"))
+    if _ac_old_ok and _ac_new_ok:
+        _o_ac_available = "both"
+    elif _ac_old_ok:
+        _o_ac_available = "old"
+    elif _ac_new_ok:
+        _o_ac_available = "new"
+    else:
+        _o_ac_available = "neither"
+    _o_ac_asymmetric = _o_ac_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1673,6 +1759,7 @@ def oracle_diff_reports(
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
         and not _o_cf_asymmetric
+        and not _o_ac_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1733,6 +1820,8 @@ def oracle_diff_reports(
         "ablation_asymmetric": _o_ab_asymmetric,
         "confidentiality_changed": False,
         "confidentiality_asymmetric": _o_cf_asymmetric,
+        "answer_collision_changed": False,
+        "answer_collision_asymmetric": _o_ac_asymmetric,
         "identical": identical,
     }
     return {
@@ -1767,6 +1856,7 @@ def oracle_diff_reports(
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},
         "confidentiality": {"available": _o_cf_available, "changed": False},
+        "answer_collision": {"available": _o_ac_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

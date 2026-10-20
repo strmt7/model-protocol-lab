@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 170 — answer-collision audit, 2026-10-20)
+
+- New research instrument `mpl run --answer-collision` (wave-6 idea 4):
+  the lab audits its OWN token-ID boundary detector. Synthetic expected
+  answers embedding marker-like text (the boundary configuration's own
+  marker at start / interior / end / repeated positions, every hostile
+  marker string, one clean control) are emitted verbatim through the
+  evaluation path by scripted backends (per-fixture caps) and classified
+  by a total order — collision (the detector cut a correct answer and
+  discarded content) vs ends-at-marker (the emission simply ended
+  there; never conflated, and "model stopped early" is unobservable
+  under scripting, so the phrase is not used) vs intact — in a reserved
+  arm (natural encoding; the measurement) and a subword control arm
+  (decode-identical re-encoding via `deliforge.find_encoding_pair`;
+  `no_encoding_pair` recorded where no pair exists). The unit is the
+  boundary configuration, not the template (boundaries are
+  operator-supplied; shared-boundary cells are identical by
+  construction). Scope is stated in CLI help, docs, and report copy:
+  configured boundaries and this tokenizer only; the audit measures the
+  detector, never a model. Pure `collision.py`,
+  `experiments.answer_collision_stage` / `answer_collision_profile`,
+  HTML section (`id="answer-collision"`, counts and rates only — marker
+  text is never rendered), `diff_answer_collision` with
+  protocol-fingerprint drift (`answer_collision_changed` /
+  `answer_collision_asymmetric` feed `identical`). Pre-registered
+  falsifiable claims F1–F3 logged in `docs/RESEARCH_LOG.md` (cycle 170);
+  `uniform_intact` is the regression-guard pass. Sample report exercises
+  the audit with genuine collisions under the demo `|` boundary.
+
 ### Added (cycle 169 — labeled-block confidentiality probe, 2026-10-20)
 
 - New research instrument `mpl run --confidentiality` (wave-6 idea 3):

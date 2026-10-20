@@ -592,11 +592,18 @@ def diff_reports(
     confidentiality_diff = diff_confidentiality(
         old.get("confidentiality"), new.get("confidentiality")
     )
+    answer_collision_diff = diff_answer_collision(
+        old.get("answer_collision"), new.get("answer_collision")
+    )
     ablation_asymmetric = ablation_diff["available"] not in (
         "both",
         "neither",
     )
     confidentiality_asymmetric = confidentiality_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    answer_collision_asymmetric = answer_collision_diff["available"] not in (
         "both",
         "neither",
     )
@@ -671,6 +678,8 @@ def diff_reports(
         and not ablation_asymmetric
         and not confidentiality_diff["changed"]
         and not confidentiality_asymmetric
+        and not answer_collision_diff["changed"]
+        and not answer_collision_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -731,6 +740,8 @@ def diff_reports(
         "ablation_asymmetric": ablation_asymmetric,
         "confidentiality_changed": confidentiality_diff["changed"],
         "confidentiality_asymmetric": confidentiality_asymmetric,
+        "answer_collision_changed": answer_collision_diff["changed"],
+        "answer_collision_asymmetric": answer_collision_asymmetric,
         "identical": identical,
     }
     return {
@@ -765,6 +776,7 @@ def diff_reports(
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
         "confidentiality": confidentiality_diff,
+        "answer_collision": answer_collision_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -3452,6 +3464,176 @@ def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _measurable_collision_cells(
+    per_candidate: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """The measurable cells of an answer-collision payload: dict cells
+    whose reserved arm scored at least one observation."""
+    out: dict[str, dict[str, Any]] = {}
+    for name, entry in per_candidate.items():
+        if type(entry) is not dict:
+            continue
+        reserved = entry.get("reserved")
+        if (
+            type(reserved) is dict
+            and type(reserved.get("n_scored")) is int
+            and reserved["n_scored"] >= 1
+        ):
+            out[name] = entry
+    return out
+
+
+def _valid_answer_collision(payload: Any) -> bool:
+    """Structural check for an ``answer_collision`` payload.
+
+    Cells are validated by experiments._answer_collision_cell_valid,
+    every stored rate is recomputed from its counts with a float
+    tolerance, and the profile-level fields are recomputed from the
+    measurable cells -- a stale or inconsistent stored value is a
+    hostile-payload trap, never rendered. Counts must be consistent
+    with the fixture denominator, so the renderers never hit a
+    TypeError or a lie.
+    """
+    from .experiments import _answer_collision_cell_valid
+
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return False
+    if type(protocol.get("fingerprint")) is not str:
+        return False
+    n_fixtures = payload.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if not _answer_collision_cell_valid(entry):
+            return False
+        if type(entry) is dict and entry.get("n") != n_fixtures:
+            return False
+    if payload.get("n_candidates") != len(per_candidate):
+        return False
+    cells = {k: v for k, v in per_candidate.items() if type(v) is dict}
+    if payload.get("n_cells") != len(cells):
+        return False
+    measurable = _measurable_collision_cells(per_candidate)
+    if payload.get("n_measurable") != len(measurable):
+        return False
+    if type(payload.get("any_collision")) is not bool:
+        return False
+    if type(payload.get("uniform_intact")) is not bool:
+        return False
+    colliding = payload.get("colliding_candidates")
+    if type(colliding) is not list or not all(type(x) is str for x in colliding):
+        return False
+    expected_colliding = sorted(
+        name for name, cell in measurable.items() if cell.get("any_collision") is True
+    )
+    if colliding != expected_colliding:
+        return False
+    if payload["any_collision"] != bool(expected_colliding):
+        return False
+    if payload["uniform_intact"] != (
+        bool(measurable) and all(cell.get("uniform_intact") is True for cell in measurable.values())
+    ):
+        return False
+    rates = {
+        name: cell["reserved"]["collision_rate"]
+        for name, cell in measurable.items()
+        if type(cell.get("reserved")) is dict
+    }
+    max_rate = payload.get("max_collision_rate")
+    if not rates:
+        return max_rate is None and payload.get("worst_candidate") is None
+    if (
+        max_rate is None
+        or not (type(max_rate) in (int, float) and isinstance(max_rate, (int, float)))
+        or abs(float(max_rate) - max(float(r) for r in rates.values())) > 1e-9
+    ):
+        return False
+    worst = max(rates, key=lambda name: (float(rates[name]), name))
+    return payload.get("worst_candidate") == worst
+
+
+def diff_answer_collision(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``answer_collision`` payloads; deterministic.
+
+    Answers "did the detector-collision story change between runs?":
+    protocol-fingerprint drift, per-configuration reserved-arm
+    collision-rate drift, the colliding set, and the uniform-intact
+    (regression-guard) flag. A tokenizer or boundary edit that starts
+    truncating marker-bearing correct answers is the regression signal.
+    A side without a recorded audit is reported plainly. No model, no
+    network.
+    """
+    old_ok = _valid_answer_collision(old)
+    new_ok = _valid_answer_collision(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    old_cells = old.get("per_candidate") or {}
+    new_cells = new.get("per_candidate") or {}
+    answer_collision_candidates_added = sorted(set(new_cells) - set(old_cells))
+    answer_collision_candidates_removed = sorted(set(old_cells) - set(new_cells))
+    answer_collision_rate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_cells) & set(new_cells)):
+        old_entry = old_cells[name]
+        new_entry = new_cells[name]
+        old_rate = (
+            old_entry["reserved"].get("collision_rate")
+            if type(old_entry) is dict and type(old_entry.get("reserved")) is dict
+            else None
+        )
+        new_rate = (
+            new_entry["reserved"].get("collision_rate")
+            if type(new_entry) is dict and type(new_entry.get("reserved")) is dict
+            else None
+        )
+        if old_rate != new_rate:
+            answer_collision_rate_drift.append(
+                {"candidate": name, "old": old_rate, "new": new_rate}
+            )
+    answer_collision_colliding_added = sorted(
+        set(new.get("colliding_candidates") or []) - set(old.get("colliding_candidates") or [])
+    )
+    answer_collision_colliding_removed = sorted(
+        set(old.get("colliding_candidates") or []) - set(new.get("colliding_candidates") or [])
+    )
+    answer_collision_uniform_changed = old.get("uniform_intact") != new.get("uniform_intact")
+    result["protocol_drift"] = protocol_drift
+    result["rate_drift"] = answer_collision_rate_drift
+    result["candidates_added"] = answer_collision_candidates_added
+    result["candidates_removed"] = answer_collision_candidates_removed
+    result["colliding_added"] = answer_collision_colliding_added
+    result["colliding_removed"] = answer_collision_colliding_removed
+    result["uniform_changed"] = answer_collision_uniform_changed
+    # NOTE: answer-collision-specific disjunct names keep this
+    # ``changed`` line textually distinct from every other diff
+    # section's anchor (mutation-gate uniqueness).
+    result["changed"] = bool(
+        protocol_drift
+        or answer_collision_rate_drift
+        or answer_collision_candidates_added
+        or answer_collision_candidates_removed
+        or answer_collision_colliding_added
+        or answer_collision_colliding_removed
+        or answer_collision_uniform_changed
+    )
+    return result
+
+
 def _valid_template_robustness(payload: Any) -> bool:
     """Structural check for a ``template_robustness`` payload.
 
@@ -5325,6 +5507,75 @@ def _render_confidentiality_summary(
     return lines
 
 
+def _render_answer_collision_summary(
+    answer_collision_diff: dict[str, Any] | None,
+) -> list[str]:
+    """Answer-collision comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes. Collision
+    rates are rendered as percentages; a protocol drift (fixture/
+    classification-rule change) is reported first because it
+    invalidates rate comparisons.
+    """
+    if type(answer_collision_diff) is not dict:
+        return []
+    available = answer_collision_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Answer-collision comparison unavailable: "
+            f"{missing} run did not record the answer-collision audit."
+        ]
+    lines: list[str] = []
+    if answer_collision_diff.get("protocol_drift"):
+        lines.append(
+            "Answer-collision protocol drift: the frozen audit protocol "
+            "(fixtures/classification rule) changed between runs; "
+            "collision-rate comparisons are not like-for-like."
+        )
+
+    def _fmt_rate(value: Any) -> str:
+        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+
+    drift = answer_collision_diff.get("rate_drift") or []
+    for entry in drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            f"Answer-collision rate drift ({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_rate(entry.get('old'))} -> {_fmt_rate(entry.get('new'))}"
+        )
+    if len(drift) > 3:
+        lines.append(f"  ... and {len(drift) - 3} more rate drifts")
+    added = answer_collision_diff.get("colliding_added") or []
+    removed = answer_collision_diff.get("colliding_removed") or []
+    if added:
+        lines.append(
+            "Answer-collision newly colliding: " + ", ".join(_display_id(c) for c in added)
+        )
+    if removed:
+        lines.append(
+            "Answer-collision no longer colliding: " + ", ".join(_display_id(c) for c in removed)
+        )
+    if answer_collision_diff.get("uniform_changed"):
+        lines.append("Answer-collision uniform-intact (regression-guard) flag changed.")
+    cand_added = answer_collision_diff.get("candidates_added") or []
+    cand_removed = answer_collision_diff.get("candidates_removed") or []
+    if cand_added:
+        lines.append(
+            "Answer-collision candidates added: " + ", ".join(_display_id(c) for c in cand_added)
+        )
+    if cand_removed:
+        lines.append(
+            "Answer-collision candidates removed: "
+            + ", ".join(_display_id(c) for c in cand_removed)
+        )
+    return lines
+
+
 def _render_template_robustness_summary(
     tr_diff: dict[str, Any] | None,
 ) -> list[str]:
@@ -5980,6 +6231,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     lines.extend(_render_ablation_summary(diff.get("ablation")))
     lines.extend(_render_confidentiality_summary(diff.get("confidentiality")))
+    lines.extend(_render_answer_collision_summary(diff.get("answer_collision")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

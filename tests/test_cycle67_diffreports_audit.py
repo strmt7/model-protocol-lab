@@ -259,6 +259,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
         "confidentiality": {"available": "neither", "changed": False},
+        "answer_collision": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -327,6 +328,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "ablation_asymmetric": False,
             "confidentiality_changed": False,
             "confidentiality_asymmetric": False,
+            "answer_collision_changed": False,
+            "answer_collision_asymmetric": False,
             "identical": True,
         },
     }
@@ -3365,6 +3368,9 @@ def _oracle_diff(
     o_cf, o_cf_changed, o_cf_asymmetric = _o_confidentiality(
         old.get("confidentiality"), new.get("confidentiality")
     )
+    o_ac, o_ac_changed, o_ac_asymmetric = _o_answer_collision(
+        old.get("answer_collision"), new.get("answer_collision")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -3424,6 +3430,8 @@ def _oracle_diff(
         and not o_ab_asymmetric
         and not o_cf_changed
         and not o_cf_asymmetric
+        and not o_ac_changed
+        and not o_ac_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -3457,6 +3465,7 @@ def _oracle_diff(
         "template_robustness": o_trob,
         "ablation": o_ab,
         "confidentiality": o_cf,
+        "answer_collision": o_ac,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -3521,6 +3530,8 @@ def _oracle_diff(
             "ablation_asymmetric": o_ab_asymmetric,
             "confidentiality_changed": o_cf_changed,
             "confidentiality_asymmetric": o_cf_asymmetric,
+            "answer_collision_changed": o_ac_changed,
+            "answer_collision_asymmetric": o_ac_asymmetric,
             "identical": identical,
         },
     }
@@ -3698,6 +3709,226 @@ def _o_confidentiality(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or removed
         or pos_added
         or pos_removed
+        or uniform_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, False
+
+
+def _o_answer_collision_arm_valid(arm: Any, control: bool) -> bool:
+    """Oracle answer-collision arm check: mirrors _answer_collision_arm_valid."""
+    if type(arm) is not dict:
+        return False
+    int_keys = (
+        "n_evaluable",
+        "n_scored",
+        "n_collision",
+        "n_ends_at_marker",
+        "n_intact",
+        "n_anomalous",
+        "n_failed",
+        "n_roundtrip_excluded",
+        "n_no_pair",
+        "n_not_applicable",
+    )
+    if any(type(arm.get(k)) is not int or arm[k] < 0 for k in int_keys):
+        return False
+    if not control and (arm["n_no_pair"] != 0 or arm["n_not_applicable"] != 0):
+        return False
+    if arm["n_evaluable"] != (
+        arm["n_collision"] + arm["n_ends_at_marker"] + arm["n_intact"] + arm["n_anomalous"]
+    ):
+        return False
+    if arm["n_scored"] != arm["n_evaluable"] - arm["n_anomalous"]:
+        return False
+    rate_pairs = (("collision_rate", "n_collision"), ("ends_rate", "n_ends_at_marker"))
+    for key, count_key in rate_pairs:
+        rate = arm.get(key)
+        if arm["n_scored"] == 0:
+            if rate is not None:
+                return False
+            continue
+        if rate is None or not (type(rate) in (int, float) and 0.0 <= rate <= 1.0):
+            return False
+        if abs(float(rate) - arm[count_key] / arm["n_scored"]) > 1e-9:
+            return False
+    return True
+
+
+def _o_answer_collision_cell_valid(entry: Any) -> bool:
+    """Oracle answer-collision cell check: mirrors _answer_collision_cell_valid."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    n = entry.get("n")
+    if type(n) is not int or n < 0:
+        return False
+    if type(entry.get("boundary_ids")) is not int or entry["boundary_ids"] < 1:
+        return False
+    reserved = entry.get("reserved")
+    subword = entry.get("subword")
+    if not _o_answer_collision_arm_valid(reserved, False):
+        return False
+    if not _o_answer_collision_arm_valid(subword, True):
+        return False
+    if reserved["n_failed"] + reserved["n_roundtrip_excluded"] + reserved["n_evaluable"] != n:
+        return False
+    sub_total = (
+        subword["n_failed"]
+        + subword["n_roundtrip_excluded"]
+        + subword["n_no_pair"]
+        + subword["n_not_applicable"]
+        + subword["n_evaluable"]
+    )
+    if sub_total != n:
+        return False
+    bool_keys = ("any_collision", "uniform_intact", "evaluable")
+    if any(type(entry.get(k)) is not bool for k in bool_keys):
+        return False
+    if entry["any_collision"] != (reserved["n_collision"] + subword["n_collision"] > 0):
+        return False
+    total_scored = reserved["n_scored"] + subword["n_scored"]
+    expected_uniform = (
+        total_scored > 0
+        and reserved["n_collision"] == 0
+        and reserved["n_ends_at_marker"] == 0
+        and subword["n_collision"] == 0
+        and subword["n_ends_at_marker"] == 0
+    )
+    if entry["uniform_intact"] != expected_uniform:
+        return False
+    return entry["evaluable"] == (reserved["n_evaluable"] >= 1)
+
+
+def _o_answer_collision_measurable(per_candidate: dict) -> dict:
+    return {
+        name: entry
+        for name, entry in per_candidate.items()
+        if type(entry) is dict
+        and type(entry.get("reserved")) is dict
+        and type(entry["reserved"].get("n_scored")) is int
+        and entry["reserved"]["n_scored"] >= 1
+    }
+
+
+def _o_answer_collision_valid(value: Any) -> bool:
+    """Oracle answer-collision validator: mirrors _valid_answer_collision."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    protocol = value.get("protocol")
+    if type(protocol) is not dict or type(protocol.get("fingerprint")) is not str:
+        return False
+    n_fixtures = value.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return False
+    per_candidate = value.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if not _o_answer_collision_cell_valid(entry):
+            return False
+        if type(entry) is dict and entry.get("n") != n_fixtures:
+            return False
+    if value.get("n_candidates") != len(per_candidate):
+        return False
+    if value.get("n_cells") != sum(1 for v in per_candidate.values() if type(v) is dict):
+        return False
+    measurable = _o_answer_collision_measurable(per_candidate)
+    if value.get("n_measurable") != len(measurable):
+        return False
+    if type(value.get("any_collision")) is not bool:
+        return False
+    if type(value.get("uniform_intact")) is not bool:
+        return False
+    colliding = value.get("colliding_candidates")
+    if type(colliding) is not list or not all(type(x) is str for x in colliding):
+        return False
+    expected_colliding = sorted(
+        name for name, cell in measurable.items() if cell.get("any_collision") is True
+    )
+    if colliding != expected_colliding:
+        return False
+    if value["any_collision"] != bool(expected_colliding):
+        return False
+    expected_uniform = bool(measurable) and all(
+        cell.get("uniform_intact") is True for cell in measurable.values()
+    )
+    if value["uniform_intact"] != expected_uniform:
+        return False
+    rates = {
+        name: cell["reserved"]["collision_rate"]
+        for name, cell in measurable.items()
+        if type(cell.get("reserved")) is dict
+    }
+    max_rate = value.get("max_collision_rate")
+    if not rates:
+        return max_rate is None and value.get("worst_candidate") is None
+    if max_rate is None or type(max_rate) not in (int, float):
+        return False
+    if abs(float(max_rate) - max(float(r) for r in rates.values())) > 1e-9:
+        return False
+    worst = max(rates, key=lambda name: (float(rates[name]), name))
+    return value.get("worst_candidate") == worst
+
+
+def _o_answer_collision(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle answer-collision section: rate/colliding/uniform drift."""
+    old_ok = _o_answer_collision_valid(old)
+    new_ok = _o_answer_collision_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    old_cells = old.get("per_candidate") or {}
+    new_cells = new.get("per_candidate") or {}
+    added = sorted(set(new_cells) - set(old_cells))
+    removed = sorted(set(old_cells) - set(new_cells))
+
+    def _rate(entry: Any) -> Any:
+        if type(entry) is dict and type(entry.get("reserved")) is dict:
+            return entry["reserved"].get("collision_rate")
+        return None
+
+    rate_drift = [
+        {"candidate": name, "old": _rate(old_cells[name]), "new": _rate(new_cells[name])}
+        for name in sorted(set(old_cells) & set(new_cells))
+        if _rate(old_cells[name]) != _rate(new_cells[name])
+    ]
+    col_added = sorted(
+        set(new.get("colliding_candidates") or []) - set(old.get("colliding_candidates") or [])
+    )
+    col_removed = sorted(
+        set(old.get("colliding_candidates") or []) - set(new.get("colliding_candidates") or [])
+    )
+    uniform_changed = old.get("uniform_intact") != new.get("uniform_intact")
+    diff.update(
+        {
+            "protocol_drift": protocol_drift,
+            "rate_drift": rate_drift,
+            "candidates_added": added,
+            "candidates_removed": removed,
+            "colliding_added": col_added,
+            "colliding_removed": col_removed,
+            "uniform_changed": uniform_changed,
+        }
+    )
+    changed = bool(
+        protocol_drift
+        or rate_drift
+        or added
+        or removed
+        or col_added
+        or col_removed
         or uniform_changed
     )
     diff["changed"] = changed
@@ -4073,6 +4304,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "ablation_asymmetric": False,
                 "confidentiality_changed": False,
                 "confidentiality_asymmetric": False,
+                "answer_collision_changed": False,
+                "answer_collision_asymmetric": False,
                 "identical": False,
             },
         )
@@ -5343,6 +5576,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
+    if rng.random() < 0.45:
+        report["answer_collision"] = _fuzz_answer_collision_section(rng)
     return report
 
 
@@ -5770,6 +6005,66 @@ def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
     return profile
 
 
+def _fuzz_answer_collision_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent cells are produced by the real aggregation over random
+    # scored observations (so every identity and invariant holds);
+    # hostile mutations then try to break them, and oracle and
+    # implementation must agree on every rejection.
+    from model_protocol_lab import collision as _ac
+
+    classes = ("collision", "ends_at_marker", "intact", "anomalous")
+
+    def _obs(cls: str) -> dict[str, Any]:
+        return {
+            "class": cls,
+            "cut": rng.randint(0, 40),
+            "exact_match": cls == "intact",
+            "verbatim": True,
+            "occurrences": rng.choice([0, 1, 2]),
+        }
+
+    per_candidate = {}
+    for name in ("alpha", "beta"):
+        if rng.random() < 0.1:
+            per_candidate[name] = None
+            continue
+        per_fixture = []
+        for index in range(21):
+            reserved_cls = rng.choice(classes)
+            subword_state = rng.choice(["scored", "no_pair", "not_applicable"])
+            per_fixture.append(
+                {
+                    "id": f"f{index}",
+                    "reserved": _obs(reserved_cls),
+                    "subword": _obs(rng.choice(classes)) if subword_state == "scored" else None,
+                    "arm_state": {"reserved": "scored", "subword": subword_state},
+                }
+            )
+        entry = _ac.collision_cell(per_fixture, n_fixtures=21, boundary_len=rng.choice([1, 2]))
+        if rng.random() < 0.1:
+            entry["reserved"]["collision_rate"] = 0.99  # hostile: stale rate
+        if rng.random() < 0.1:
+            entry["reserved"]["n_collision"] = True  # hostile: bool count
+        if rng.random() < 0.1:
+            entry["uniform_intact"] = not entry["uniform_intact"]  # hostile: invariant flip
+        if rng.random() < 0.1:
+            entry[rng.choice(["n", 7])] = -1  # hostile: negative / bad key
+        per_candidate[name] = entry
+    if rng.random() < 0.15:
+        per_candidate[rng.choice([7, 8.5])] = {"n": 21}  # hostile: non-string key
+    profile = _ac.answer_collision_profile(("alpha", "beta"), per_candidate, _ac.protocol_dict())
+    profile["n_fixtures"] = rng.choice([21, 21, 21, 0, -1, "21"])
+    if rng.random() < 0.1:
+        profile["colliding_candidates"] = ["ghost"]  # hostile: stale colliding set
+    if rng.random() < 0.1:
+        profile["max_collision_rate"] = 0.01  # hostile: stale max rate
+    if rng.random() < 0.1:
+        profile["worst_candidate"] = "ghost"  # hostile: stale worst candidate
+    if rng.random() < 0.2:
+        profile["protocol"] = {"fingerprint": rng.choice(["x" * 64, 7, None])}
+    return profile
+
+
 def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
     mutations = ["trailing_space", "leading_space", "trailing_newline"]
     if rng.random() < 0.3:
@@ -6072,6 +6367,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not ablation_asymmetric\n"
             '        and not confidentiality_diff["changed"]\n'
             "        and not confidentiality_asymmetric\n"
+            '        and not answer_collision_diff["changed"]\n'
+            "        and not answer_collision_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -6124,6 +6421,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or cache_profile_asymmetric\n"
             '        or confidentiality_diff["changed"]\n'
             "        or confidentiality_asymmetric\n"
+            '        or answer_collision_diff["changed"]\n'
+            "        or answer_collision_asymmetric\n"
             "    )\n",
             scenario,
         )

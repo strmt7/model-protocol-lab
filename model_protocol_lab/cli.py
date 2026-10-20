@@ -406,6 +406,22 @@ def build_parser() -> argparse.ArgumentParser:
         "The stage never fails the run.",
     )
     run.add_argument(
+        "--answer-collision",
+        action="store_true",
+        help="Answer-collision audit (cycle 170, research wave-6 idea 4): "
+        "the lab audits its OWN boundary detector. Synthetic expected "
+        "answers embedding marker-like text are emitted verbatim through "
+        "the evaluation path, and each is classified collision (the "
+        "detector cut a correct answer and discarded content), "
+        "ends-at-marker, or intact -- per boundary configuration, in a "
+        "reserved-token arm and a subword control arm. Answers: 'could "
+        "my boundary marker silently truncate correct answers that quote "
+        "the marker?' Scope: configured boundaries and this tokenizer "
+        "only; scripted emission measures the detector, never a model. "
+        "Informational only -- never changes selection. The stage never "
+        "fails the run.",
+    )
+    run.add_argument(
         "--template-robustness",
         action="store_true",
         help="Per-template surface-noise robustness (cycle 166): for each "
@@ -1209,6 +1225,45 @@ def _run_confidentiality_probe(
         result["confidentiality"] = {
             "available": False,
             "detail": "confidentiality_unavailable",
+        }
+
+
+def _run_answer_collision_probe(
+    result: Any,
+    formats: Any,
+    *,
+    backend: Any,
+    boundary: Any,
+    boundary_map: Any,
+    seed: int,
+) -> None:
+    """Run the answer-collision audit; never raises.
+
+    Per candidate boundary configuration, synthetic marker-bearing
+    expected answers are emitted verbatim (scripted backends wrapping
+    the run backend's encode/decode) through the evaluation path, and
+    the detector's effect on each is classified collision /
+    ends-at-marker / intact. Results are stored as
+    ``result["answer_collision"]``; informational only, never changes
+    selection. Any failure degrades to an "unavailable" marker instead
+    of failing the run.
+    """
+    try:
+        from .experiments import answer_collision_profile, answer_collision_stage
+
+        stage = answer_collision_stage(
+            backend,
+            tuple(formats),
+            boundary=tuple(boundary),
+            boundary_map=boundary_map,
+            seed=seed,
+        )
+        candidates = tuple(fmt.name for fmt in formats)
+        result["answer_collision"] = answer_collision_profile(candidates, stage)
+    except Exception:  # noqa: BLE001 -- answer-collision audit must not fail the run
+        result["answer_collision"] = {
+            "available": False,
+            "detail": "answer_collision_unavailable",
         }
 
 
@@ -2441,6 +2496,20 @@ def main(argv: list[str] | None = None) -> int:
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                    )
+                # Answer-collision audit (cycle 170, research wave-6
+                # idea 4): the lab's own boundary detector vs verbatim
+                # marker-bearing expected answers, per boundary
+                # configuration. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.answer_collision:
+                    _run_answer_collision_probe(
+                        result,
+                        formats,
+                        backend=backend,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
                         seed=args.seed,
                     )
                 # Per-template surface-noise robustness (cycle 166):

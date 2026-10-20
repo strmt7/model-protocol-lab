@@ -1845,3 +1845,45 @@ whether their chosen template's labeling actually reduces verbatim
 exposure under direct asking, before trusting the label. Opt-in: costs
 2 arms x 12 fixtures x C extra generations. The stage never fails the
 run and never touches selection.
+
+### 8.35 Answer-collision audit (`answer_collision`)
+
+Could your boundary marker silently truncate correct answers that quote
+the marker? `model-protocol-lab run --answer-collision` audits the lab's
+own token-ID boundary detector: synthetic expected answers embedding
+marker-like text (the configuration's own marker at the start, inside,
+at the end of, and repeated in the answer; every hostile protocol
+marker from the control-token catalogue; one clean control) are emitted
+verbatim through the evaluation path by scripted backends, and each is
+classified by a total order -- **collision** (the detector cut a correct
+answer and discarded content that followed the marker),
+**ends-at-marker** (the scripted emission simply ended at the marker; a
+distinct bookkeeping cell, never evidence of early stopping), or
+**intact** (the detector did not fire). Each fixture runs in two arms:
+the reserved arm (the backend's natural encoding -- the measurement)
+and a subword control arm (the same decoded text with every marker
+occurrence re-encoded in subword ids, where the detector is blind; a
+collision there means the boundary matches non-reserved encodings).
+Where no encoding pair exists the arm records `no_encoding_pair`; where
+the backend's encode/decode does not round-trip an answer exactly, the
+fixture leaves the denominator and is counted, never silently dropped.
+
+The unit is the **boundary configuration**, not the template:
+boundaries are operator-supplied ids (shared by default, overridden per
+candidate by `--boundary-map`), and configurations sharing a boundary
+produce identical cells by construction. Scope is the configured
+boundaries and this tokenizer only; scripted emission measures the
+detector, never any model, and says nothing about how often real
+answers contain marker text. Fail-closed throughout: if no
+configuration is measurable the payload is `{"available": false,
+"detail": "answer_collision_unavailable"}`, and `uniform_intact` -- the
+detector truncated nothing anywhere -- is the regression-guard pass.
+`diff-reports` compares reserved-arm collision-rate drift, the colliding
+set, the intact flag, and protocol-fingerprint drift
+(`diff_answer_collision`, `answer_collision_changed` /
+`answer_collision_asymmetric` feed `identical`). Monday-morning use:
+before trusting exact-match scores on a new checkpoint or boundary
+setup, check whether your boundary marker can manufacture failures out
+of correct answers. Opt-in: runs entirely on scripted emissions (no
+extra model generations, but `model-protocol-lab run` itself loads the
+checkpoint as usual). The stage never fails the run and never touches selection.

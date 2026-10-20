@@ -7,10 +7,10 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **6405 tests collected**
-  (cycle 168, 2026-10-20). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **6484 tests collected**
+  (cycle 170, 2026-10-20). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **6405 tests (cycle 169,
+- `python -m unittest discover -s tests -t .` — **6484 tests (cycle 170,
   2026-10-20; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -22,8 +22,8 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   `diff-reports`, `doctor --portability-matrix`, the teacher-forced
   log-likelihood diagnostic, and differential-verification suites with
   mutation gates for every module.
-- `ruff check` — clean; `ruff format --check` — clean (214 files).
-- `mypy model_protocol_lab` — clean (36 source files).
+- `ruff check` — clean; `ruff format --check` — clean (254 files).
+- `mypy model_protocol_lab` — clean (41 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).
