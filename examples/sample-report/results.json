@@ -5656,6 +5656,221 @@
     ],
     "n_fixtures": 12
   },
+  "answer_collision": {
+    "available": true,
+    "n_candidates": 5,
+    "n_cells": 5,
+    "n_measurable": 5,
+    "protocol": {
+      "version": "answer-collision/1",
+      "fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69",
+      "n_fixtures": 21,
+      "arms": [
+        "reserved",
+        "subword"
+      ],
+      "classes": [
+        "collision",
+        "ends_at_marker",
+        "intact",
+        "anomalous"
+      ]
+    },
+    "per_candidate": {
+      "llama3": {
+        "n": 21,
+        "boundary_ids": 1,
+        "reserved": {
+          "n_evaluable": 21,
+          "n_scored": 21,
+          "n_collision": 13,
+          "n_ends_at_marker": 1,
+          "n_intact": 7,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 0,
+          "n_not_applicable": 0,
+          "collision_rate": 0.6190476190476191,
+          "ends_rate": 0.047619047619047616
+        },
+        "subword": {
+          "n_evaluable": 0,
+          "n_scored": 0,
+          "n_collision": 0,
+          "n_ends_at_marker": 0,
+          "n_intact": 0,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 20,
+          "n_not_applicable": 1,
+          "collision_rate": null,
+          "ends_rate": null
+        },
+        "any_collision": true,
+        "uniform_intact": false,
+        "evaluable": true,
+        "protocol_fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69"
+      },
+      "llama3/toggle-bos": {
+        "n": 21,
+        "boundary_ids": 1,
+        "reserved": {
+          "n_evaluable": 21,
+          "n_scored": 21,
+          "n_collision": 13,
+          "n_ends_at_marker": 1,
+          "n_intact": 7,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 0,
+          "n_not_applicable": 0,
+          "collision_rate": 0.6190476190476191,
+          "ends_rate": 0.047619047619047616
+        },
+        "subword": {
+          "n_evaluable": 0,
+          "n_scored": 0,
+          "n_collision": 0,
+          "n_ends_at_marker": 0,
+          "n_intact": 0,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 20,
+          "n_not_applicable": 1,
+          "collision_rate": null,
+          "ends_rate": null
+        },
+        "any_collision": true,
+        "uniform_intact": false,
+        "evaluable": true,
+        "protocol_fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69"
+      },
+      "llama3/no-bos": {
+        "n": 21,
+        "boundary_ids": 1,
+        "reserved": {
+          "n_evaluable": 21,
+          "n_scored": 21,
+          "n_collision": 13,
+          "n_ends_at_marker": 1,
+          "n_intact": 7,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 0,
+          "n_not_applicable": 0,
+          "collision_rate": 0.6190476190476191,
+          "ends_rate": 0.047619047619047616
+        },
+        "subword": {
+          "n_evaluable": 0,
+          "n_scored": 0,
+          "n_collision": 0,
+          "n_ends_at_marker": 0,
+          "n_intact": 0,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 20,
+          "n_not_applicable": 1,
+          "collision_rate": null,
+          "ends_rate": null
+        },
+        "any_collision": true,
+        "uniform_intact": false,
+        "evaluable": true,
+        "protocol_fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69"
+      },
+      "llama3/prefix-newline": {
+        "n": 21,
+        "boundary_ids": 1,
+        "reserved": {
+          "n_evaluable": 21,
+          "n_scored": 21,
+          "n_collision": 13,
+          "n_ends_at_marker": 1,
+          "n_intact": 7,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 0,
+          "n_not_applicable": 0,
+          "collision_rate": 0.6190476190476191,
+          "ends_rate": 0.047619047619047616
+        },
+        "subword": {
+          "n_evaluable": 0,
+          "n_scored": 0,
+          "n_collision": 0,
+          "n_ends_at_marker": 0,
+          "n_intact": 0,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 20,
+          "n_not_applicable": 1,
+          "collision_rate": null,
+          "ends_rate": null
+        },
+        "any_collision": true,
+        "uniform_intact": false,
+        "evaluable": true,
+        "protocol_fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69"
+      },
+      "llama3/prefix-trim": {
+        "n": 21,
+        "boundary_ids": 1,
+        "reserved": {
+          "n_evaluable": 21,
+          "n_scored": 21,
+          "n_collision": 13,
+          "n_ends_at_marker": 1,
+          "n_intact": 7,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 0,
+          "n_not_applicable": 0,
+          "collision_rate": 0.6190476190476191,
+          "ends_rate": 0.047619047619047616
+        },
+        "subword": {
+          "n_evaluable": 0,
+          "n_scored": 0,
+          "n_collision": 0,
+          "n_ends_at_marker": 0,
+          "n_intact": 0,
+          "n_anomalous": 0,
+          "n_failed": 0,
+          "n_roundtrip_excluded": 0,
+          "n_no_pair": 20,
+          "n_not_applicable": 1,
+          "collision_rate": null,
+          "ends_rate": null
+        },
+        "any_collision": true,
+        "uniform_intact": false,
+        "evaluable": true,
+        "protocol_fingerprint": "74f22d18ec12fdef11a377617ebec51b7a82ecebae0718a544d8756998576c69"
+      }
+    },
+    "any_collision": true,
+    "uniform_intact": false,
+    "colliding_candidates": [
+      "llama3",
+      "llama3/no-bos",
+      "llama3/prefix-newline",
+      "llama3/prefix-trim",
+      "llama3/toggle-bos"
+    ],
+    "max_collision_rate": 0.6190476190476191,
+    "worst_candidate": "llama3/toggle-bos",
+    "n_fixtures": 21
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",

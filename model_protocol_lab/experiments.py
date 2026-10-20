@@ -6534,3 +6534,325 @@ def confidentiality_profile(
     result = _profile(candidates, per_candidate, protocol)
     result["n_fixtures"] = n_fixtures
     return result
+
+
+class _ScriptedEmissionBackend:
+    """Scripted backend emitting one fixed token sequence verbatim.
+
+    Encode/decode delegate to the wrapped run backend, so the audit
+    measures the run tokenizer's encode regime; generate returns the
+    fixed emission. The stage passes a generation cap equal to the
+    emission length, so the Backend contract's "limit means exactly
+    the cap" rule holds by construction.
+    """
+
+    fingerprint = "answer-collision-scripted-v1"
+
+    def __init__(self, base: Backend, emission: tuple[int, ...]) -> None:
+        self._base = base
+        self._emission = tuple(emission)
+
+    def encode(self, text: str) -> tuple[int, ...]:
+        return self._base.encode(text)
+
+    def decode(self, token_ids: tuple[int, ...]) -> str:
+        return self._base.decode(token_ids)
+
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Any
+    ) -> Any:
+        from .core import Generation
+
+        return Generation(tuple(self._emission[:max_new_tokens]), "limit")
+
+
+def answer_collision_stage(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Answer-collision audit (cycle 170, informational).
+
+    For each candidate's resolved boundary CONFIGURATION (the audit's
+    unit -- boundaries are operator-supplied and shared by default, so
+    candidates sharing a boundary produce identical cells by
+    construction), the frozen marker-bearing fixtures are emitted
+    verbatim through :func:`core.evaluate` by scripted backends wrapping
+    this run's backend: the reserved arm is the backend's natural
+    encoding of the expected answer, the subword arm re-encodes every
+    marker occurrence via ``deliforge.find_encoding_pair``. The
+    detector's effect on each verbatim-correct answer is classified by
+    :func:`collision.classify_observation`'s total order (collision /
+    ends_at_marker / intact). Per-fixture generation caps keep the
+    Backend contract's limit rule intact. Fail-closed per candidate:
+    any failure records a None cell, never crashing the stage.
+
+    Returns ``{"protocol", "n_fixtures", "per_candidate": {name: cell}}``
+    where each cell is :func:`collision.collision_cell`.
+    """
+    from .collision import (
+        build_answer_fixtures,
+        collision_cell,
+        protocol_dict,
+        reserved_emission,
+        score_observation,
+        subword_emission,
+    )
+    from .core import Fixture, Message, first_boundary
+
+    if backend is None:
+        raise ValueError("backend must not be None")
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if not _valid_token_ids(boundary, nonempty=True):
+        raise ValueError("Boundary must be a nonempty tuple of token IDs")
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    protocol = protocol_dict()
+    per_candidate: dict[str, dict[str, Any] | None] = {}
+    for fmt in formats:
+        name = fmt.name
+        cell: dict[str, Any] | None = None
+        try:
+            boundary_ids = boundaries[name]
+            try:
+                marker_text = backend.decode(boundary_ids)
+            except Exception:  # noqa: BLE001 -- undecodable boundary: no cell
+                marker_text = None
+            if type(marker_text) is not str:
+                raise ValueError("boundary does not decode to text")
+            specs = build_answer_fixtures(marker_text)
+            per_fixture: list[dict[str, Any]] = []
+            for spec in specs:
+                entry: dict[str, Any] = {
+                    "id": spec["id"],
+                    "reserved": None,
+                    "subword": None,
+                    "arm_state": {"reserved": "failed", "subword": "not_applicable"},
+                }
+                for arm in ("reserved", "subword"):
+                    if arm == "subword" and spec["marker"] is None:
+                        entry["arm_state"]["subword"] = "not_applicable"
+                        continue
+                    if arm == "reserved":
+                        emission = reserved_emission(
+                            backend.encode, backend.decode, spec["expected"]
+                        )
+                        if emission is None:
+                            entry["arm_state"]["reserved"] = "roundtrip"
+                            continue
+                    else:
+                        emission = subword_emission(
+                            backend.encode,
+                            backend.decode,
+                            spec["expected"],
+                            spec["marker"],
+                            boundary_ids,
+                        )
+                        if emission is None:
+                            entry["arm_state"]["subword"] = "no_pair"
+                            continue
+                    entry["arm_state"][arm] = "failed"
+                    try:
+                        fixture = Fixture(
+                            id=f"ac/{spec['id']}",
+                            messages=(Message("user", "Which token ends the turn?"),),
+                            expected=spec["expected"],
+                            group="answer-collision",
+                        )
+                        scripted = _ScriptedEmissionBackend(backend, emission)
+                        report = evaluate(
+                            scripted,
+                            fmt,
+                            (fixture,),
+                            boundary=boundary_ids,
+                            max_new_tokens=len(emission),
+                            seed=seed,
+                        )
+                        obs = report.observations[0] if report.observations else None
+                        if obs is None or obs.status != "completed":
+                            continue
+                        cut = first_boundary(obs.output_ids, boundary_ids)
+                        suffix_nonempty = cut is not None and bool(
+                            obs.output_ids[cut + len(boundary_ids) :]
+                        )
+                        try:
+                            decoded_full = backend.decode(obs.output_ids)
+                        except Exception:  # noqa: BLE001 -- undecodable: anomalous
+                            decoded_full = None
+                        occurrences = (
+                            spec["expected"].count(spec["marker"])
+                            if type(spec["marker"]) is str
+                            else 0
+                        )
+                        entry[arm] = score_observation(
+                            status_ok=True,
+                            boundary_found=obs.boundary_found,
+                            cut=cut,
+                            suffix_nonempty=suffix_nonempty,
+                            exact_match=obs.exact_match,
+                            verbatim=(decoded_full == spec["expected"]),
+                            occurrences=occurrences,
+                        )
+                        entry["arm_state"][arm] = "scored"
+                    except Exception:  # noqa: BLE001 -- one fixture degrades, not the cell
+                        entry[arm] = None
+                        entry["arm_state"][arm] = "failed"
+                per_fixture.append(entry)
+            cell = collision_cell(
+                per_fixture,
+                n_fixtures=len(specs),
+                boundary_len=len(boundary_ids),
+            )
+            cell["protocol_fingerprint"] = protocol["fingerprint"]
+        except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+            cell = None
+        per_candidate[name] = cell
+    return {
+        "protocol": protocol,
+        "n_fixtures": protocol["n_fixtures"],
+        "per_candidate": per_candidate,
+    }
+
+
+def _answer_collision_arm_valid(arm: Any, *, control: bool) -> bool:
+    """Structural + invariant check for one arm of an answer-collision cell."""
+    if type(arm) is not dict:
+        return False
+    int_keys = (
+        "n_evaluable",
+        "n_scored",
+        "n_collision",
+        "n_ends_at_marker",
+        "n_intact",
+        "n_anomalous",
+        "n_failed",
+        "n_roundtrip_excluded",
+        "n_no_pair",
+        "n_not_applicable",
+    )
+    for key in int_keys:
+        value = arm.get(key)
+        if type(value) is not int or value < 0:
+            return False
+    if not control and (arm["n_no_pair"] != 0 or arm["n_not_applicable"] != 0):
+        # The reserved arm always has an emission attempt per fixture.
+        return False
+    if arm["n_evaluable"] != (
+        arm["n_collision"] + arm["n_ends_at_marker"] + arm["n_intact"] + arm["n_anomalous"]
+    ):
+        return False
+    if arm["n_scored"] != arm["n_evaluable"] - arm["n_anomalous"]:
+        return False
+    rate_pairs = (("collision_rate", "n_collision"), ("ends_rate", "n_ends_at_marker"))
+    for key, count_key in rate_pairs:
+        rate = arm.get(key)
+        if arm["n_scored"] == 0:
+            if rate is not None:
+                return False
+            continue
+        if rate is None or not _share_in_unit(rate):
+            return False
+        if abs(float(rate) - arm[count_key] / arm["n_scored"]) > 1e-9:
+            return False
+    return True
+
+
+def _answer_collision_cell_valid(entry: Any) -> bool:
+    """Structural check for one candidate cell of an answer-collision stage."""
+    if entry is None:
+        return True
+    if type(entry) is not dict:
+        return False
+    n = entry.get("n")
+    if type(n) is not int or n < 0:
+        return False
+    boundary_ids = entry.get("boundary_ids")
+    if type(boundary_ids) is not int or boundary_ids < 1:
+        return False
+    reserved = entry.get("reserved")
+    subword = entry.get("subword")
+    if not _answer_collision_arm_valid(reserved, control=False):
+        return False
+    if not _answer_collision_arm_valid(subword, control=True):
+        return False
+    if type(reserved) is not dict or type(subword) is not dict:
+        return False
+    if reserved["n_failed"] + reserved["n_roundtrip_excluded"] + reserved["n_evaluable"] != n:
+        return False
+    if (
+        subword["n_failed"]
+        + subword["n_roundtrip_excluded"]
+        + subword["n_no_pair"]
+        + subword["n_not_applicable"]
+        + subword["n_evaluable"]
+        != n
+    ):
+        return False
+    for key in ("any_collision", "uniform_intact", "evaluable"):
+        if type(entry.get(key)) is not bool:
+            return False
+    if entry["any_collision"] != (reserved["n_collision"] + subword["n_collision"] > 0):
+        return False
+    total_scored = reserved["n_scored"] + subword["n_scored"]
+    expected_uniform = (
+        total_scored > 0
+        and reserved["n_collision"] == 0
+        and reserved["n_ends_at_marker"] == 0
+        and subword["n_collision"] == 0
+        and subword["n_ends_at_marker"] == 0
+    )
+    if entry["uniform_intact"] != expected_uniform:
+        return False
+    evaluable = entry.get("evaluable")
+    if type(evaluable) is not bool:
+        return False
+    n_evaluable = reserved.get("n_evaluable")
+    if type(n_evaluable) is not int:
+        return False
+    return evaluable == (n_evaluable >= 1)
+
+
+def answer_collision_profile(
+    candidates: tuple[str, ...],
+    stage: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze the answer-collision audit across candidates (pure).
+
+    Wraps :func:`collision.answer_collision_profile` with the lab's
+    fail-closed input guards: malformed stage input degrades to
+    ``{"available": False}`` with a ``detail`` code, never raises on
+    observation data.
+    """
+    from .collision import answer_collision_profile as _profile
+
+    if (
+        not isinstance(candidates, tuple)
+        or not candidates
+        or not all(type(c) is str and c.strip() for c in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return {"available": False, "detail": "invalid_candidates"}
+    if type(stage) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    protocol = stage.get("protocol")
+    if type(protocol) is not dict:
+        return {"available": False, "detail": "stage_invalid"}
+    n_fixtures = stage.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return {"available": False, "detail": "stage_invalid"}
+    per_candidate = stage.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return {"available": False, "detail": "stage_invalid"}
+    for entry in per_candidate.values():
+        if not _answer_collision_cell_valid(entry):
+            return {"available": False, "detail": "stage_invalid"}
+        if type(entry) is dict and entry.get("n") != n_fixtures:
+            return {"available": False, "detail": "stage_invalid"}
+    result = _profile(candidates, per_candidate, protocol)
+    result["n_fixtures"] = n_fixtures
+    return result

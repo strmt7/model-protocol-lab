@@ -1381,6 +1381,35 @@ def build_sample_report(output_dir: Path) -> dict:
             "available": False,
             "detail": "confidentiality_unavailable",
         }
+
+    # Answer-collision audit (research wave-6 idea 4): run the real
+    # answer-collision stage against the scripted demo backend, so the
+    # committed sample report exercises the answer-collision section
+    # with genuine detector activity (the sample's "|" boundary makes
+    # marker-bearing answers collide interior, per boundary
+    # configuration). Degrades to an "unavailable" marker instead of
+    # failing the build.
+    try:
+        from model_protocol_lab.experiments import (
+            answer_collision_profile,
+            answer_collision_stage,
+        )
+
+        _ac_fmts = candidates("llama3", mutate=True)
+        _ac_stage = answer_collision_stage(
+            DemoBackend(),
+            _ac_fmts,
+            boundary=BOUNDARY,
+            seed=20261012,
+        )
+        result["answer_collision"] = answer_collision_profile(
+            tuple(f.name for f in _ac_fmts), _ac_stage
+        )
+    except Exception:  # noqa: BLE001 -- sample build must not fail on diagnostics
+        result["answer_collision"] = {
+            "available": False,
+            "detail": "answer_collision_unavailable",
+        }
     json_path, html_path = save_report(result, output_dir)
     print(f"decision: {result['decision']}")
     print(f"wrote {json_path} and {html_path}")

@@ -6292,3 +6292,169 @@ measurement).
 3. The mutation-gate anchor for McNemar had to move after the mypy fix
    reshaped the anchored line -- anchors pin exact text; any refactor
    of an anchored line requires updating the gate in the same pass.
+
+## Cycle 170 (2026-10-20) -- answer-collision audit (`mpl run --answer-collision`)
+
+Wave-6 idea #4: the lab audits its OWN token-ID boundary detector. When a
+correct answer legitimately contains marker-like text (a ChatML answer
+quoting `<|im_end|>`, a Llama answer quoting `<|eot_id|>`), the lab's
+post-hoc first-occurrence detector (`core.first_boundary`, applied at
+core.py:894) can cut the answer at the marker and manufacture an
+exact-match failure out of a correct answer. The audit emits
+marker-bearing expected answers verbatim through `core.evaluate` with
+scripted backends and classifies what the detector did to them.
+
+**Monday-morning sentence:** run `--answer-collision` before trusting
+exact-match scores on a new checkpoint/boundary setup; it tells you,
+per boundary configuration, whether your boundary marker can silently
+truncate correct answers that quote the marker.
+
+**Uniqueness (researcher pass, cycle-170 research.md; sources logged
+there).** No shipped self-audit found: lm-eval / HELM / OpenAI evals /
+vLLM / HF treat stop strings as configuration; vLLM tests that its
+detector fires, never that it does not fire on legitimate answers;
+promptfoo's special-token-injection checks are input-side (the opposite
+direction). The lab's detector is post-hoc / token-ID / first-occurrence
+-- strictly more aggressive than HF StopStringCriteria (trailing-edge
+only) and vLLM (incremental, min_tokens-gated, PR #22014) -- so
+collisions are expected by construction. The combination that is new:
+{marker-bearing expected-answer fixtures} x {scripted verbatim-emission
+backends} x {the lab's own per-configuration token-ID boundary detector
+as the system under test} x {pre-registered falsifiability, shipped as a
+diffable regression guard}. "The combination", never "first".
+
+**Red-team adjudication (A: 11 findings; B cross-check, all live demos
+independently reproduced; coordinator re-verified R1/R2/R3/R5 against
+the tree and re-ran the R1/R2 demonstrations).**
+- R1 (HIGH after B downgrade from CRITICAL): the brief's two headline
+  cells overlap at marker-at-end fixtures, and "model stopped early" is
+  never observable under scripted emission. FIX ADOPTED: a total order
+  over emission shape -- `collision` := the cut fires AND tokens follow
+  the marker in the emitted ids (content was discarded); `ends_at_marker`
+  := the cut fires and nothing follows (scripted end-of-answer, its own
+  cell); the phrase "model stopped early" is dropped everywhere.
+- R2 (MEDIUM after downgrade): a naive scripted backend returning fewer
+  ids than the cap fails `core._valid_generation` (`invalid_generation`,
+  reproduced). FIX ADOPTED: per-fixture cap (cap == len(emission ids)),
+  chosen over padding deliberately -- B demonstrated padding completes
+  boundaries across the expected/padding seam, manufacturing collisions
+  the fixture never contained. The static-scan reduction (calling
+  `first_boundary` on encode(expected) directly) was REJECTED: it tests
+  the predicate but loses the manufactured-failure evidence (evaluate
+  recording exact_match=False on a verbatim-correct answer), which is
+  the audit's headline.
+- R3 (HIGH): one emission mode is not enough. The lab's encode parses
+  literal marker text to the reserved id (split_special_tokens=False);
+  the same decoded text spelled in subword ids is invisible to the
+  detector. FIX ADOPTED: two arms per fixture -- the reserved arm
+  (natural encode; the measurement) and the subword arm (text-level
+  construction via `deliforge.find_encoding_pair`; a control -- a
+  collision there means the boundary matches non-reserved encodings, a
+  different detector property). Where no encoding pair exists the arm
+  records `no_encoding_pair`, never a silent skip. The encode regime a
+  checkpoint exercises is already measured by `doctor.marker_isolation`;
+  the audit cross-references it rather than re-measuring it.
+- R4 (MEDIUM): `mpl run` constructs the HF backend unconditionally, so
+  run placement pays the weight load; accepted -- the operator chose
+  the run, and the audit itself needs only encode/decode (the
+  marker_isolation precedent: tokenizer-level instrument, run-path
+  called). Placement does NOT force a diff section (B, refuting A's
+  blast-radius claim); the diff section is taken deliberately because
+  the brief's falsification clause makes this a regression guard, and
+  regression guards belong in `mpl diff-reports`.
+- R5 (HIGH, strengthened by B): boundaries are operator-supplied ids,
+  shared across candidates by default (`_resolve_boundaries`); no code
+  path derives a boundary from a candidate's rendering. The wave-6
+  brief's "template as independent variable" framing is FALSE in-tree
+  and is dropped. The honest unit is the boundary CONFIGURATION; cells
+  are keyed by candidate (each candidate's resolved boundary), and
+  cells under a shared boundary are identical by construction -- stated
+  in the report copy, not hidden.
+- R6/R7 (from A's summary): headline rates are over n_evaluable
+  (round-trip-excluded and failed emissions leave the denominator and
+  are counted, never silent); the exclusion axis is the backend's
+  encode/decode round-trip: an emission whose decode differs from the
+  expected answer is not evidence about the detector.
+- R8 (LOW, double-count per B): cell names stay inside the tree's
+  fixed fail-closed vocabulary and do not reuse stopcause's stop-cause
+  names; cross-referenced, not merged (stopcause classifies real
+  observations; this audit classifies scripted ones).
+- R9: scope statement is mandatory in module docstring, CLI help, and
+  report copy: configured boundaries only, this tokenizer's
+  encode/decode, the frozen fixture set, scripted emission measures the
+  detector -- it says nothing about any model and nothing about how
+  often real answers contain marker text.
+- R11 (LOW): marker text is never rendered into HTML (counts and rates
+  only); candidate names pass through the established escaping.
+
+**Design (frozen before code).** Pure `collision.py`: fixture templates
+(own marker at start / interior / end / repeated; every
+`control_tokens.HOSTILE_MARKER_STRINGS` entry interior; one clean
+control), emission builders, the total-order classifier, cell
+aggregation, profile. `experiments.answer_collision_stage` runs each
+fixture/arm through `core.evaluate` with a scripted backend wrapping
+the run backend's encode/decode, per-fixture cap, fail-closed per
+candidate. `experiments.answer_collision_profile` mirrors cycle 169's
+guards. Reporting section + `diff_answer_collision` follow the cycle-169
+pattern end to end.
+
+**Pre-registered falsifiable claims.**
+- F1: for a single-id reserved boundary (e.g. ChatML `<|im_end|>` under
+  a specials-parsing tokenizer), the reserved arm produces at least one
+  interior collision. Falsified if every reserved-arm fixture is intact
+  or ends_at_marker across configurations -- the audit then stands as a
+  passing regression guard.
+- F2: the subword arm never collides when the boundary equals the
+  marker's reserved encoding. Falsified by any such collision.
+- F3: the clean fixture never collides in either arm. Falsified by any
+  clean-fixture boundary firing (a detector false positive on
+  marker-free text).
+
+Specialists this cycle: wave-6 researcher (idea + uniqueness sources),
+cycle-170 researcher (detector/encode-regime corrections), verifier
+(detector map, extension points, doctor-placement rejection),
+red-team A (11 findings), red-team B (cross-check: R1/R2 downgraded,
+R3/R5 confirmed, R4 partly refuted, R8/R11 downgraded as double-count /
+standing discipline; A's on-disk brief is truncated mid-R4 -- R5-R11
+were adjudicated from A's summary plus B's code re-derivation, and the
+coordinator re-verified the load-bearing claims directly).
+
+### Build record (cycle 170)
+
+**Coverage (measured under the CI command, coverage json):**
+94.5961% precise (gate compares the rounded display: 95% >= 95%; margin
+0.096 above the rounding edge). collision.py at 100% line+branch
+(79 tests across the spec file and the gap file: fixtures/validation,
+total-order classification, emission builders incl. both subword
+construction guards, cell/profile aggregation, stage in two tokenizer
+regimes plus boundary_map and three failure taxonomies, CLI wrapper,
+reporting (incl. marker-text-never-rendered), diff validator/renderer,
+and 3 tempdir mutation gates). The full-run coverage measurement also
+flagged the new sections' defensive lines in experiments / reporting /
+diffreports; closed in the same cycle by the gap file rather than
+relying on subset measurements.
+
+**Reality checks during the build (tests were wrong, code was right --
+the cycle-169 lesson applied three times):** the special-token test
+backend's counts had to include the hostile fixtures that ARE or
+CONTAIN the boundary marker itself (5 reserved collisions, not 3); a
+"!" boundary still collides on its own fixtures because own-marker
+fixtures embed decode(boundary) by construction (a genuinely intact
+configuration needs an encode regime that never emits the reserved
+id -- covered by the blind-backend test); and a lossy decode that drops
+"m" excludes exactly the 19 templates containing one.
+
+**Incidents:**
+1. The first full-suite run's exit code was masked by a
+   `2>&1 | tail` pipeline (tail's exit code, not the suite's). Two real
+   failures hid behind it: the README test-count claim and a
+   `mpl run` shorthand in the new USAGE section (cycle-133's docs test
+   bans the shorthand in docs/*.md). Durable fixes: capture the suite
+   exit code to a log file on every full run, and write
+   `model-protocol-lab run` in user docs.
+2. Two subword-guard gap tests passed vacuously for one round: they
+   used marker "<|m|>" against a backend whose decode maps the
+   reserved id to "<|im_end|>", so the encoding-pair lookup failed
+   before the guarded construction ran. Caught by scoped coverage on
+   collision.py, not by the tests themselves -- a passing test is not
+   proof the guarded line executed.
