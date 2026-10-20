@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 182 — behavioural template probe, 2026-10-20)
+
+- `model-protocol-lab doctor --template-probe`: behavioural probe
+  of a checkpoint's chat template — the dynamic tier next to the
+  static template firewall, which proves the absence of RCE
+  primitives but cannot see content-conditional logic in legal
+  Jinja. Frozen sentinel-bracketed probe conversations (protocol
+  v1, SHA-256 fingerprint in the payload) are rendered in
+  word-swap pairs through the checkpoint's own tokenizer, each
+  member twice; pairs are classified by where the renders change
+  (change envelope vs the swapped message's sentinel span, plus a
+  within-span substitution check), and role arms report
+  render-diff facts only. Findings are per-pair facts with capped,
+  control-stripped excerpts — never a template verdict, and the
+  doctor verdict and exit code are unchanged. Budgets (128
+  renders, 120 s cooperative deadline) fail closed with partial
+  counts; a probe that mostly cannot see the template reports
+  `template_probe_inconclusive`, not a quiet pass. The probe
+  conversations are published constants and a template can detect
+  and evade them; the design doc states that limit with the
+  capability. Design: `docs/TEMPLATE_PROBE_DESIGN.md`; the
+  definitions survived a red-team pair cross-check that refuted
+  both the research design's span notion and the first corrected
+  draft's exercised-pair rule.
+
 ### Added (cycle 181 — candidate aliasing audit, 2026-10-20)
 
 - `model-protocol-lab run --aliasing`: post-hoc audit of the

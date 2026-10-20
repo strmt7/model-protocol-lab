@@ -415,6 +415,7 @@ class TestHandlerDispatch(unittest.TestCase):
                 boundary_map=None,
                 reference_model_path=None,
                 portability_matrix_path=None,
+                template_probe=False,
             ):
                 seen.update(
                     model=model,
@@ -423,6 +424,7 @@ class TestHandlerDispatch(unittest.TestCase):
                     boundary_map=boundary_map,
                     reference_model_path=reference_model_path,
                     portability_matrix_path=portability_matrix_path,
+                    template_probe=template_probe,
                 )
                 return {"verdict": "ok"}
 
@@ -449,6 +451,7 @@ class TestHandlerDispatch(unittest.TestCase):
             self.assertEqual(seen["boundary_map"], {"x": (3,)})
             self.assertEqual(seen["reference_model_path"], Path("ref-dir"))
             self.assertIsNone(seen["portability_matrix_path"])
+            self.assertIs(seen["template_probe"], False)
             self.assertEqual(json.loads(out)["verdict"], "ok")
 
     def test_doctor_verdict_not_ok_returns_one(self):

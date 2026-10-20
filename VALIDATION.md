@@ -1,16 +1,16 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–181 (executed 2026-10-14 → 2026-10-20, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–182 (executed 2026-10-14 → 2026-10-20, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-20). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **6983 tests collected**
-  (cycle 181, 2026-10-20). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **7040 tests collected**
+  (cycle 182, 2026-10-20). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **6983 tests (cycle 181,
+- `python -m unittest discover -s tests -t .` — **7040 tests (cycle 182,
   2026-10-20; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -23,14 +23,15 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   log-likelihood diagnostic, the fixture-loader contract fuzzer
   (`fixtures fuzz`), the scorer-lens regrade (`run --scorer-lens`),
   the candidate aliasing audit (`run --aliasing`),
+  the behavioural template probe (`doctor --template-probe`),
   and differential-verification suites with
   mutation gates for every module.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (247 files in that CI scope; the repo-root scope counts more.
+  (249 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (47 source files).
+- `mypy model_protocol_lab` — clean (48 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

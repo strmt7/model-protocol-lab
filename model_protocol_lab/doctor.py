@@ -1061,6 +1061,179 @@ def template_conformance(
     return {"status": "ok", "diffs": diffs}
 
 
+class _TemplateProbeBudgetExceeded(Exception):
+    """The probe's global render / wall-clock budget ran out."""
+
+
+def template_probe_section(model_path: str | Path) -> dict[str, Any]:
+    """Behavioural probe of the checkpoint's chat template (cycle 182).
+
+    The static firewall proves the template has no RCE primitives; it
+    cannot see content-conditional logic in legal Jinja. This probe
+    renders the frozen sentinel-bracketed conversations from
+    :mod:`model_protocol_lab.templateprobe` through the checkpoint's
+    own tokenizer and reports per-pair facts about where the renders
+    change. Triage, never verdict: findings do not touch the doctor
+    report's verdict, and no outcome is a template-level "safe" or
+    "backdoored" claim.
+
+    Firewall first: a denied template is never rendered, and the
+    extraction scope is the ``tokenizer_config.json`` string only —
+    list-form templates and a separate ``chat_template.jinja`` file
+    report ``no_template`` here, never a quiet pass. Never raises.
+    """
+    import hashlib
+    import time
+    from datetime import UTC, datetime
+    from importlib import metadata
+
+    from . import templateprobe as tp
+
+    def _versions() -> dict[str, str]:
+        out: dict[str, str] = {}
+        for package in ("transformers", "jinja2"):
+            try:
+                out[package] = metadata.version(package)
+            except metadata.PackageNotFoundError:
+                out[package] = "unavailable"
+        return out
+
+    protocol = tp.protocol_block()
+    protocol["versions"] = _versions()
+    protocol["run_date_utc"] = datetime.now(UTC).date().isoformat()
+    section: dict[str, Any] = {
+        "status": "unavailable",
+        "detail": "template_probe_failed",
+        "protocol": protocol,
+        "template_sha256": None,
+        "sentinel_in_template_source": False,
+        "renders_used": 0,
+        "counts": dict.fromkeys(tp.PAIR_OUTCOMES, 0),
+        "role_arms": [],
+        "findings": [],
+        "findings_overflow": 0,
+    }
+    firewall = template_firewall(model_path)
+    if firewall["status"] == "denied":
+        section["status"] = "denied"
+        section["detail"] = "template_firewall_denied"
+        section["firewall_findings"] = len(firewall["findings"])
+        return section
+    if firewall["status"] == "no_template":
+        section["status"] = "no_template"
+        section["detail"] = str(firewall["detail"])
+        return section
+    if firewall["status"] != "allowed":
+        section["detail"] = str(firewall.get("detail", "firewall_unavailable"))
+        return section
+    try:
+        root = _directory(model_path)
+        config_doc = _read_json(_member(root, "tokenizer_config.json"))
+        # The firewall's "allowed" guarantees a str template; anything
+        # else raises below and lands in the outer fail-closed handler.
+        template = config_doc["chat_template"]
+        section["template_sha256"] = hashlib.sha256(template.encode("utf-8")).hexdigest()
+        section["sentinel_in_template_source"] = any(
+            sentinel in template for sentinel in tp.all_sentinels()
+        )
+        try:
+            from transformers import PreTrainedTokenizerFast
+
+            _factory: Callable[..., Any] = PreTrainedTokenizerFast
+            tokenizer: Any = _factory(
+                tokenizer_file=str(_tokenizer_file(root)),
+                clean_up_tokenization_spaces=False,
+            )
+        except ImportError:
+            section["detail"] = "transformers_not_installed"
+            return section
+        except Exception:  # noqa: BLE001 -- an unloadable tokenizer degrades
+            section["detail"] = "tokenizer_load_failed"
+            return section
+        tokenizer.chat_template = template
+        bos_token = config_doc.get("bos_token")
+        if type(bos_token) is dict:
+            bos_token = bos_token.get("content")
+        if type(bos_token) is str and bos_token:
+            with contextlib.suppress(Exception):
+                tokenizer.bos_token = bos_token
+
+        deadline = time.monotonic() + tp.WALL_CLOCK_S
+        renders = 0
+
+        def _render(conversation: list[dict[str, str]]) -> str:
+            nonlocal renders
+            if renders >= tp.MAX_RENDERS or time.monotonic() > deadline:
+                raise _TemplateProbeBudgetExceeded
+            renders += 1
+            return _render_with_time_budget(tokenizer, conversation)
+
+        outcomes: list[dict[str, Any]] = []
+        budget_hit = False
+        for spec in tp.PAIRS:
+            base, swapped = tp.build_pair(spec)
+            try:
+                base_a = _render(base)
+                base_b = _render(base)
+                swapped_a = _render(swapped)
+                swapped_b = _render(swapped)
+            except _TemplateProbeBudgetExceeded:
+                budget_hit = True
+                break
+            except Exception:  # noqa: BLE001 -- one bad pair degrades
+                outcomes.append(
+                    {
+                        "pair_id": str(spec["id"]),
+                        "message_index": int(spec["swap_index"]),
+                        "outcome": "render_error",
+                    }
+                )
+                continue
+            outcomes.append(tp.classify_pair(spec, base_a, base_b, swapped_a, swapped_b))
+        role_results: list[dict[str, Any]] = []
+        if not budget_hit:
+            for arm in tp.ROLE_ARMS:
+                baseline, arm_conv = tp.build_role_arm(arm)
+                try:
+                    base_a = _render(baseline)
+                    base_b = _render(baseline)
+                    arm_a = _render(arm_conv)
+                    arm_b = _render(arm_conv)
+                except _TemplateProbeBudgetExceeded:
+                    budget_hit = True
+                    break
+                except Exception:  # noqa: BLE001 -- a role arm degrades alone
+                    role_results.append({"arm_id": str(arm["id"]), "facts": ["role_render_error"]})
+                    continue
+                if base_a != base_b or arm_a != arm_b:
+                    role_results.append(
+                        {"arm_id": str(arm["id"]), "facts": ["nondeterministic_render"]}
+                    )
+                    continue
+                role_results.append(tp.role_arm_facts(arm, base_a, arm_a))
+        summary = tp.summarize(outcomes)
+        section["counts"] = summary["counts"]
+        section["findings"] = summary["findings"]
+        section["findings_overflow"] = summary["findings_overflow"]
+        section["role_arms"] = role_results
+        section["renders_used"] = renders
+        if budget_hit:
+            section["detail"] = "template_probe_budget_exceeded"
+            return section
+        total = sum(summary["counts"].values())
+        if total and summary["inconclusive_pairs"] * 2 > total:
+            # The probe could not see this template; that must not
+            # read as a quiet pass.
+            section["detail"] = "template_probe_inconclusive"
+            return section
+        section["status"] = "ok"
+        section["detail"] = ""
+        return section
+    except Exception:  # noqa: BLE001 -- the probe must never fail the report
+        section["detail"] = "template_probe_failed"
+        return section
+
+
 def marker_isolation(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -1351,6 +1524,7 @@ def doctor(
     boundary_map: dict[str, tuple[int, ...]] | None = None,
     reference_model_path: str | Path | None = None,
     portability_matrix_path: str | Path | None = None,
+    template_probe: bool = False,
 ) -> dict[str, Any]:
     """Combined pre-flight report for a model directory and fixture file."""
     report = examine_model(
@@ -1376,6 +1550,16 @@ def doctor(
                 "second_checkpoint": str(portability_matrix_path),
                 "asymmetry": _PORTABILITY_ASYMMETRY,
                 "rows": [],
+            }
+    if template_probe:
+        # Triage, never verdict: probe findings degrade the section,
+        # never the pre-flight report.
+        try:
+            report["template_probe"] = template_probe_section(model_path)
+        except Exception:  # noqa: BLE001 -- probe must never fail the report
+            report["template_probe"] = {
+                "status": "unavailable",
+                "detail": "template_probe_failed",
             }
     report["suggestion"] = _next_command(
         model_path,

@@ -152,6 +152,20 @@ def build_parser() -> argparse.ArgumentParser:
         "'incompatible' rules the checkpoint out; 'compatible' predicts "
         "nothing about experimental success (see docs/USAGE.md section 2).",
     )
+    doctor_cmd.add_argument(
+        "--template-probe",
+        action="store_true",
+        default=False,
+        help="Behavioural probe of the checkpoint's chat template: renders "
+        "frozen sentinel-bracketed probe conversations in word-swap pairs "
+        "through the checkpoint's own tokenizer and reports per-pair "
+        "facts about content-conditional template logic the static "
+        "firewall cannot see (an injected instruction that only appears "
+        "for some user messages). Monday-morning use: run it on a "
+        "downloaded checkpoint before trusting its template. Findings "
+        "only; never changes the doctor verdict (see docs/USAGE.md "
+        "section 2).",
+    )
     run = sub.add_parser(
         "run", help="Evaluate a local checkpoint and save a report", allow_abbrev=False
     )
@@ -1778,6 +1792,7 @@ def main(argv: list[str] | None = None) -> int:
                 boundary_map=_resolve_boundary_map(args.boundary_map, None, parser),
                 reference_model_path=args.reference_model,
                 portability_matrix_path=args.portability_matrix,
+                template_probe=args.template_probe,
             )
             print(json.dumps(result, indent=2))
             if args.portability_matrix is not None:
