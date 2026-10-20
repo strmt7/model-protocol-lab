@@ -6051,8 +6051,18 @@ def _nonnegative_number(value: Any) -> bool:
     return type(value) in (int, float) and isinstance(value, (int, float)) and value >= 0
 
 
-def _cache_profile_cell_valid(entry: Any) -> bool:
-    """Structural check for one candidate cell of a cache-profile stage."""
+def _cache_profile_cell_valid(entry: Any, block_size: int | None = None) -> bool:
+    """Structural check for one candidate cell of a cache-profile stage.
+
+    Derived values are recomputed from the stored counts (cycle 177,
+    wave-7 F6b; the answer-collision validator's standard): the mean
+    and the token fractions are the counts' ratios, bit-exact
+    because the producer computes the same divisions. The block
+    fractions need the stage's ``block_size``, which is not a cell
+    field: callers that have it (the profile assembler) pass it and
+    get the block recompute too; direct callers without it skip
+    only that pair.
+    """
     if type(entry) is not dict:
         return False
     for key in ("n", "n_evaluable"):
@@ -6105,6 +6115,30 @@ def _cache_profile_cell_valid(entry: Any) -> bool:
             return False
     elif not _positive_number(mean):
         return False
+    if entry["n_evaluable"] > 0:
+        # Recompute (F6b): evaluable prompts are non-empty by the
+        # pinned predicate, so total_tokens is positive here and
+        # every division below is the producer's own.
+        total = entry["total_tokens"]
+        if total <= 0:
+            return False
+        if mean != total / entry["n_evaluable"]:
+            return False
+        if entry["potential_token_fraction"] != entry["cacheable_tokens"] / total:
+            return False
+        if entry["achievable_token_fraction"] != entry["achievable_tokens"] / total:
+            return False
+        if block_size is not None:
+            if (
+                entry["potential_block_fraction"]
+                != block_size * entry["block_cacheable_blocks"] / total
+            ):
+                return False
+            if (
+                entry["achievable_block_fraction"]
+                != block_size * entry["achievable_blocks"] / total
+            ):
+                return False
     # Ordering invariants (cycle-168 red-team R8/S5): block <= token at
     # both levels, achievable <= potential at both levels.
     achievable_token = entry.get("achievable_token_fraction")
@@ -6163,7 +6197,7 @@ def cache_profile_profile(
     if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
         return {"available": False, "detail": "stage_invalid"}
     for entry in per_candidate.values():
-        if not _cache_profile_cell_valid(entry):
+        if not _cache_profile_cell_valid(entry, block_size):
             return {"available": False, "detail": "stage_invalid"}
     evaluable: dict[str, float] = {}
     excluded: list[str] = []
@@ -6578,6 +6612,90 @@ def _confidentiality_cell_valid(entry: Any) -> bool:
         if entry["evaluable"] and not entry["base_rate_zero"]:
             return False
     elif entry["base_rate_zero"] or not entry["evaluable"]:
+        return False
+    # Derived-value recomputation (cycle 177, wave-7 F6c; the
+    # answer-collision validator's standard). Rates are the counts'
+    # ratios over the paired denominator, the McNemar p-value is a
+    # deterministic function of the discordant counts, the flags
+    # are the producer's definitions, and the run-fraction fields
+    # must be consistent with the leak counts they summarize.
+    from .confidentiality import (
+        LEAK_RUN_THRESHOLD,
+        MIN_DISCORDANT,
+        MIN_PAIRED_EVALUABLE,
+        control_block,
+        mcnemar_exact_p,
+        treatment_block,
+    )
+
+    n = entry["n"]
+    paired = entry["n_paired_evaluable"]
+    if paired > entry["n_treat_evaluable"] or paired > entry["n_ctrl_evaluable"]:
+        return False
+    if entry["n_treat_evaluable"] > n or entry["n_ctrl_evaluable"] > n:
+        return False
+    if entry["evaluable_mismatch"] != (
+        entry["n_treat_evaluable"] != n or entry["n_ctrl_evaluable"] != n or paired != n
+    ):
+        return False
+    if entry["evaluable"] != (paired >= MIN_PAIRED_EVALUABLE):
+        return False
+    for rate_key, count_key in (("treat_rate", "treat_leaks"), ("ctrl_rate", "ctrl_leaks")):
+        rate = entry[rate_key]
+        if paired == 0:
+            if rate is not None:
+                return False
+        elif rate != entry[count_key] / paired:
+            return False
+    ctrl_rate = entry["ctrl_rate"]
+    if entry["base_rate_zero"] != (ctrl_rate == 0.0 if ctrl_rate is not None else False):
+        return False
+    if entry["treat_leaks"] - entry["discord_treat_only"] != (
+        entry["ctrl_leaks"] - entry["discord_ctrl_only"]
+    ):
+        return False
+    if entry["discord_ctrl_only"] > entry["ctrl_leaks"]:
+        return False
+    # The treat-side bound needs no check of its own: the identity
+    # above plus this bound imply discord_treat_only <= treat_leaks.
+    gap = entry["gap"]
+    if entry["positive"] != (
+        gap is not None and gap > 0 and entry["discord_ctrl_only"] >= MIN_DISCORDANT
+    ):
+        return False
+    if entry["mcnemar_p"] != mcnemar_exact_p(
+        entry["discord_ctrl_only"], entry["discord_treat_only"]
+    ):
+        return False
+    for arm, leaks_key, verbatim_key in (
+        ("treat", "treat_leaks", "treat_verbatim"),
+        ("ctrl", "ctrl_leaks", "ctrl_verbatim"),
+    ):
+        mean_run = entry[f"mean_run_fraction_{arm}"]
+        max_run = entry[f"max_run_fraction_{arm}"]
+        if paired == 0:
+            if mean_run is not None or max_run is not None:
+                return False
+            continue
+        if mean_run is None or max_run is None:
+            return False
+        leaks = entry[leaks_key]
+        if leaks > 0:
+            if max_run < LEAK_RUN_THRESHOLD:
+                return False
+            if mean_run < leaks * LEAK_RUN_THRESHOLD / paired - 1e-9:
+                return False
+        elif max_run >= LEAK_RUN_THRESHOLD:
+            return False
+        if entry[verbatim_key] > 0 and max_run != 1.0:
+            return False
+    offset_treat = entry["marker_offset_treat"]
+    offset_ctrl = entry["marker_offset_ctrl"]
+    if offset_treat is not None and offset_ctrl is not None:
+        label_len = len(treatment_block()) - len(control_block())
+        if entry["offset_asymmetry"] != (abs(offset_treat - offset_ctrl) > label_len + 2):
+            return False
+    elif entry["offset_asymmetry"]:
         return False
     return True
 

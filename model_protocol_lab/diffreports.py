@@ -3472,6 +3472,30 @@ def _valid_cache_profile(payload: Any) -> bool:
                 return False
         elif not _positive_number(mean):
             return False
+        if entry["n_evaluable"] > 0:
+            # Recompute (cycle 177, wave-7 F6b): the mean and all
+            # four fractions are the stored counts' ratios under
+            # the payload's own block_size -- bit-exact, because the
+            # producer computes the same expressions.
+            total = entry["total_tokens"]
+            if total <= 0:
+                return False
+            if mean != total / entry["n_evaluable"]:
+                return False
+            if entry["potential_token_fraction"] != entry["cacheable_tokens"] / total:
+                return False
+            if entry["achievable_token_fraction"] != entry["achievable_tokens"] / total:
+                return False
+            if (
+                entry["potential_block_fraction"]
+                != block_size * entry["block_cacheable_blocks"] / total
+            ):
+                return False
+            if (
+                entry["achievable_block_fraction"]
+                != block_size * entry["achievable_blocks"] / total
+            ):
+                return False
         achievable_token = entry.get("achievable_token_fraction")
         potential_token = entry.get("potential_token_fraction")
         achievable_block = entry.get("achievable_block_fraction")
@@ -3498,7 +3522,53 @@ def _valid_cache_profile(payload: Any) -> bool:
         return False
     if payload.get("uniform") is not None and type(payload.get("uniform")) is not bool:
         return False
-    return type(payload.get("evaluable_mismatch")) is bool
+    if type(payload.get("evaluable_mismatch")) is not bool:
+        return False
+    # Profile-level recomputation (cycle 177, wave-7 F6b): the
+    # evaluable set, exclusions, gap, extremes, uniformity, and
+    # the mismatch flag are all functions of the cells above,
+    # recomputed with the producer's own definitions.
+    evaluable: dict[str, float] = {}
+    excluded: list[str] = []
+    evaluable_counts: list[int] = []
+    for name, entry in per_candidate.items():
+        if entry is None or entry["n_evaluable"] == 0:
+            excluded.append(name)
+            continue
+        evaluable[name] = float(entry["achievable_block_fraction"])
+        evaluable_counts.append(entry["n_evaluable"])
+    if payload.get("excluded_candidates") != sorted(excluded):
+        return False
+    if payload.get("evaluable_mismatch") != (len(set(evaluable_counts)) > 1):
+        return False
+    if not evaluable:
+        return (
+            gap is None
+            and payload.get("uniform") is None
+            and not payload["most_sharable"]
+            and not payload["least_sharable"]
+        )
+    values = list(evaluable.values())
+    if gap != max(values) - min(values):
+        return False
+    top = max(values)
+    bottom = min(values)
+    if payload["most_sharable"] != sorted(n for n, v in evaluable.items() if v == top):
+        return False
+    if payload["least_sharable"] != sorted(n for n, v in evaluable.items() if v == bottom):
+        return False
+    fraction_keys = (
+        "achievable_block_fraction",
+        "achievable_token_fraction",
+        "potential_block_fraction",
+        "potential_token_fraction",
+    )
+    first = per_candidate[next(iter(evaluable))]
+    expected_uniform = all(
+        all(per_candidate[name].get(key) == first.get(key) for name in evaluable)
+        for key in fraction_keys
+    )
+    return payload.get("uniform") == expected_uniform
 
 
 def diff_cache_profile(old: Any, new: Any) -> dict[str, Any]:
@@ -3663,9 +3733,42 @@ def _valid_confidentiality(payload: Any) -> bool:
         if value is not None and type(value) is not str:
             return False
     gap = payload.get("gap")
-    if gap is None:
-        return True
-    return type(gap) in (int, float) and isinstance(gap, (int, float)) and -1.0 <= gap <= 1.0
+    if gap is not None and not (
+        type(gap) in (int, float) and isinstance(gap, (int, float)) and -1.0 <= gap <= 1.0
+    ):
+        return False
+    # Profile-level recomputation (cycle 177, wave-7 F6c): the
+    # counts, extremes, spread, uniformity, and positive set are
+    # functions of the cells, recomputed with the producer's own
+    # definitions (measurable = dict cell with a gap; extremes
+    # break ties by name, max-side last, min-side first).
+    dict_cells = {name: e for name, e in per_candidate.items() if type(e) is dict}
+    if payload.get("n_candidates") != len(per_candidate):
+        return False
+    if payload.get("n_cells") != len(dict_cells):
+        return False
+    measurable = {name: e for name, e in dict_cells.items() if e.get("gap") is not None}
+    if payload.get("n_measurable") != len(measurable):
+        return False
+    if not measurable:
+        # An available profile always has a measurable cell; the
+        # producer reports unavailable otherwise.
+        return False
+    gaps = {name: float(e["gap"]) for name, e in measurable.items()}
+    most = max(gaps, key=lambda name: (gaps[name], name))
+    least = min(gaps, key=lambda name: (gaps[name], name))
+    if payload.get("most_resistant") != most:
+        return False
+    if payload.get("least_resistant") != least:
+        return False
+    if gap != gaps[most] - gaps[least]:
+        return False
+    if payload.get("uniform_nonpositive") != all(g <= 0 for g in gaps.values()):
+        return False
+    expected_positive = sorted(name for name, e in measurable.items() if e.get("positive") is True)
+    if positive != expected_positive:
+        return False
+    return payload.get("any_positive") == bool(expected_positive)
 
 
 def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:

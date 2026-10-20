@@ -598,7 +598,13 @@ class DiffTests(unittest.TestCase):
         new = _payload()
         new["per_candidate"] = {"cand": dict(_payload()["per_candidate"]["cand"])}
         new["per_candidate"]["cand"].update(
-            {"gap": 0.25, "ctrl_rate": 0.25, "ctrl_leaks": 3, "discord_ctrl_only": 3}
+            {
+                "gap": 0.25,
+                "ctrl_rate": 0.25,
+                "ctrl_leaks": 3,
+                "discord_ctrl_only": 3,
+                "mcnemar_p": 0.25,
+            }
         )
         result = diffreports.diff_confidentiality(_payload(), new)
         self.assertTrue(result["changed"])
@@ -640,7 +646,13 @@ class DiffTests(unittest.TestCase):
         new = _payload()
         new["per_candidate"] = {"cand": dict(_payload()["per_candidate"]["cand"])}
         new["per_candidate"]["cand"].update(
-            {"gap": 0.25, "ctrl_rate": 0.25, "ctrl_leaks": 3, "discord_ctrl_only": 3}
+            {
+                "gap": 0.25,
+                "ctrl_rate": 0.25,
+                "ctrl_leaks": 3,
+                "discord_ctrl_only": 3,
+                "mcnemar_p": 0.25,
+            }
         )
         lines = diffreports._render_confidentiality_summary(
             diffreports.diff_confidentiality(_payload(), new)

@@ -6984,3 +6984,53 @@ Remaining F6 sub-items (cache-profile and confidentiality
 validators) are scheduled next; their recompute sets are larger
 (fraction/mean identities, McNemar from discordant counts) and
 get their own cycle rather than a rushed tail here.
+
+## Cycle 177 — wave-7 fixes round 3: F6b/F6c validator recomputation (2026-10-20)
+
+The remaining F6 sub-items. Both validators now recompute every
+derived value that is a deterministic function of stored counts,
+to the answer-collision standard:
+
+- Cache profile (experiments cell validator + diffreports): the
+  mean is total_tokens / n_evaluable and all four fractions are
+  the stored counts' ratios — bit-exact, because the producer
+  computes the same expressions. The block fractions need the
+  block size, which is a payload/stage field, not a cell field:
+  the diff validator and the profile assembler pass it in; the
+  cell validator documents the skip for direct callers without
+  it. Profile level: the evaluable set, excluded list, gap,
+  most/least sharable, uniformity across all four fractions, and
+  the evaluable-mismatch flag are recomputed from the cells.
+- Confidentiality (experiments cell validator + diffreports):
+  rates are leaks / n_paired_evaluable; the discordant counts
+  must satisfy the both-leak identity (treat − discord_treat =
+  ctrl − discord_ctrl ≥ 0); base_rate_zero, evaluable (the
+  MIN_PAIRED floor), evaluable_mismatch, and positive (gap > 0 ∧
+  discord_ctrl_only ≥ MIN_DISCORDANT) are the producer's
+  definitions recomputed; mcnemar_p is recomputed from the
+  discordant counts; run-fraction fields must be consistent with
+  the leak counts (leaks > 0 ⇒ max ≥ LEAK_RUN_THRESHOLD and the
+  mean respects the threshold bound; verbatim > 0 ⇒ max = 1.0);
+  offset_asymmetry is recomputed from the stored mean offsets
+  and the label length. Profile level: n_candidates / n_cells /
+  n_measurable, most/least resistant (producer tie-breaking by
+  name), the spread, uniform_nonpositive, and the positive set
+  are recomputed from the measurable cells.
+
+Fixture fallout, all of the same kind as cycle 176: hand-built
+diff-test payloads in cycles 168/169 asserted stories the
+producer cannot emit (a bare fraction edit, a None cell beside
+non-empty extremes, a gap change without its McNemar
+consequence). The builders now derive fractions from count
+stories, and two new regression tests were proven non-vacuous by
+the fix-only-one-field check (rejected as built; valid after
+repairing exactly the targeted identity). The cycle-67 oracle's
+confidentiality cell mirror still used the pre-F5 positive
+offset check; corrected to non-negative in this pass. With this
+cycle the wave-7 F6 cluster is closed: all four wave-6 diff
+validators (refusals, ablation, cache profile, confidentiality)
+recompute, matching answer-collision.
+One defensive gap test from cycle 169 asserted the old
+validator *accepted* a None profile gap ("must not crash"); it
+now asserts rejection without a crash — the no-crash property is
+kept, the acceptance is not.

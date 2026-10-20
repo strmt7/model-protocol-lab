@@ -1599,6 +1599,27 @@ def _o_cache_profile_valid(value: Any) -> bool:
                 return False
         elif not (type(mean) in (int, float) and mean > 0):
             return False
+        if entry["n_evaluable"] > 0:
+            # Recompute mirror (cycle 177, F6b).
+            total = entry["total_tokens"]
+            if total <= 0:
+                return False
+            if mean != total / entry["n_evaluable"]:
+                return False
+            if entry["potential_token_fraction"] != entry["cacheable_tokens"] / total:
+                return False
+            if entry["achievable_token_fraction"] != entry["achievable_tokens"] / total:
+                return False
+            if (
+                entry["potential_block_fraction"]
+                != block_size * entry["block_cacheable_blocks"] / total
+            ):
+                return False
+            if (
+                entry["achievable_block_fraction"]
+                != block_size * entry["achievable_blocks"] / total
+            ):
+                return False
         achievable_token = entry.get("achievable_token_fraction")
         potential_token = entry.get("potential_token_fraction")
         achievable_block = entry.get("achievable_block_fraction")
@@ -1624,7 +1645,54 @@ def _o_cache_profile_valid(value: Any) -> bool:
         return False
     if value.get("uniform") is not None and type(value.get("uniform")) is not bool:
         return False
-    return type(value.get("evaluable_mismatch")) is bool
+    if type(value.get("evaluable_mismatch")) is not bool:
+        return False
+    # Profile-level recomputation mirror (cycle 177, F6b).
+    evaluable = {
+        name: float(entry["achievable_block_fraction"])
+        for name, entry in per_candidate.items()
+        if entry is not None and entry["n_evaluable"] > 0
+    }
+    excluded = sorted(
+        name for name, entry in per_candidate.items() if entry is None or entry["n_evaluable"] == 0
+    )
+    if value.get("excluded_candidates") != excluded:
+        return False
+    counts = {
+        entry["n_evaluable"]
+        for entry in per_candidate.values()
+        if entry is not None and entry["n_evaluable"] > 0
+    }
+    if value.get("evaluable_mismatch") != (len(counts) > 1):
+        return False
+    if not evaluable:
+        return (
+            gap is None
+            and value.get("uniform") is None
+            and not value["most_sharable"]
+            and not value["least_sharable"]
+        )
+    values = list(evaluable.values())
+    if gap != max(values) - min(values):
+        return False
+    top = max(values)
+    bottom = min(values)
+    if value["most_sharable"] != sorted(n for n, v in evaluable.items() if v == top):
+        return False
+    if value["least_sharable"] != sorted(n for n, v in evaluable.items() if v == bottom):
+        return False
+    fraction_keys = (
+        "achievable_block_fraction",
+        "achievable_token_fraction",
+        "potential_block_fraction",
+        "potential_token_fraction",
+    )
+    first = per_candidate[next(iter(evaluable))]
+    expected_uniform = all(
+        all(per_candidate[name].get(key) == first.get(key) for name in evaluable)
+        for key in fraction_keys
+    )
+    return value.get("uniform") == expected_uniform
 
 
 def _o_cache_profile(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
@@ -3801,7 +3869,8 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
         return False
 
     def _pos(v: Any) -> bool:
-        return v is None or (type(v) in (int, float) and v > 0)
+        # Cycle 176 F5: offsets are positions; 0 is valid.
+        return v is None or (type(v) in (int, float) and v >= 0)
 
     if any(not _pos(entry.get(k)) for k in ("marker_offset_treat", "marker_offset_ctrl")):
         return False
@@ -3820,6 +3889,82 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
         if entry["evaluable"] and not entry["base_rate_zero"]:
             return False
     elif entry["base_rate_zero"] or not entry["evaluable"]:
+        return False
+    # Derived-value recomputation (cycle 177, F6c mirror). The
+    # McNemar p-value is recomputed from the binomial definition
+    # here, not by calling the producer's function.
+    import math
+
+    from model_protocol_lab.confidentiality import control_block, treatment_block
+
+    paired = entry["n_paired_evaluable"]
+    if paired > entry["n_treat_evaluable"] or paired > entry["n_ctrl_evaluable"]:
+        return False
+    if entry["n_treat_evaluable"] > n or entry["n_ctrl_evaluable"] > n:
+        return False
+    if entry["evaluable_mismatch"] != (
+        entry["n_treat_evaluable"] != n or entry["n_ctrl_evaluable"] != n or paired != n
+    ):
+        return False
+    if entry["evaluable"] != (paired >= 6):
+        return False
+    for rate_key, count_key in (("treat_rate", "treat_leaks"), ("ctrl_rate", "ctrl_leaks")):
+        rate = entry[rate_key]
+        if paired == 0:
+            if rate is not None:
+                return False
+        elif rate != entry[count_key] / paired:
+            return False
+    ctrl_rate = entry["ctrl_rate"]
+    if entry["base_rate_zero"] != (ctrl_rate == 0.0 if ctrl_rate is not None else False):
+        return False
+    if entry["treat_leaks"] - entry["discord_treat_only"] != (
+        entry["ctrl_leaks"] - entry["discord_ctrl_only"]
+    ):
+        return False
+    if entry["discord_ctrl_only"] > entry["ctrl_leaks"]:
+        return False
+    if entry["positive"] != (gap is not None and gap > 0 and entry["discord_ctrl_only"] >= 2):
+        return False
+    d_c, d_t = entry["discord_ctrl_only"], entry["discord_treat_only"]
+    total_d = d_c + d_t
+    if total_d == 0:
+        expected_p = None
+    else:
+        k = min(d_c, d_t)
+        tail = sum(math.comb(total_d, i) for i in range(k + 1)) / (2**total_d)
+        expected_p = min(1.0, 2.0 * tail)
+    if entry["mcnemar_p"] != expected_p:
+        return False
+    for arm, leaks_key, verbatim_key in (
+        ("treat", "treat_leaks", "treat_verbatim"),
+        ("ctrl", "ctrl_leaks", "ctrl_verbatim"),
+    ):
+        mean_run = entry[f"mean_run_fraction_{arm}"]
+        max_run = entry[f"max_run_fraction_{arm}"]
+        if paired == 0:
+            if mean_run is not None or max_run is not None:
+                return False
+            continue
+        if mean_run is None or max_run is None:
+            return False
+        leaks = entry[leaks_key]
+        if leaks > 0:
+            if max_run < 0.75:
+                return False
+            if mean_run < leaks * 0.75 / paired - 1e-9:
+                return False
+        elif max_run >= 0.75:
+            return False
+        if entry[verbatim_key] > 0 and max_run != 1.0:
+            return False
+    offset_treat = entry["marker_offset_treat"]
+    offset_ctrl = entry["marker_offset_ctrl"]
+    if offset_treat is not None and offset_ctrl is not None:
+        label_len = len(treatment_block()) - len(control_block())
+        if entry["offset_asymmetry"] != (abs(offset_treat - offset_ctrl) > label_len + 2):
+            return False
+    elif entry["offset_asymmetry"]:
         return False
     return True
 
@@ -3869,9 +4014,34 @@ def _o_confidentiality_valid(value: Any) -> bool:
         if v is not None and type(v) is not str:
             return False
     gap = value.get("gap")
-    if gap is None:
-        return True
-    return type(gap) in (int, float) and -1.0 <= gap <= 1.0
+    if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+        return False
+    # Profile-level recomputation (cycle 177, F6c mirror).
+    dict_cells = {name: e for name, e in per_candidate.items() if type(e) is dict}
+    if value.get("n_candidates") != len(per_candidate):
+        return False
+    if value.get("n_cells") != len(dict_cells):
+        return False
+    measurable = {name: e for name, e in dict_cells.items() if e.get("gap") is not None}
+    if value.get("n_measurable") != len(measurable):
+        return False
+    if not measurable:
+        return False
+    gaps = {name: float(e["gap"]) for name, e in measurable.items()}
+    most = max(gaps, key=lambda name: (gaps[name], name))
+    least = min(gaps, key=lambda name: (gaps[name], name))
+    if value.get("most_resistant") != most:
+        return False
+    if value.get("least_resistant") != least:
+        return False
+    if gap != gaps[most] - gaps[least]:
+        return False
+    if value.get("uniform_nonpositive") != all(g <= 0 for g in gaps.values()):
+        return False
+    expected_positive = sorted(name for name, e in measurable.items() if e.get("positive") is True)
+    if positive != expected_positive:
+        return False
+    return value.get("any_positive") == bool(expected_positive)
 
 
 def _o_confidentiality(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
