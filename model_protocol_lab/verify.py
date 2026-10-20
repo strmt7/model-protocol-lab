@@ -20,7 +20,11 @@ observation-dependent checks report ``"unavailable"`` instead of
 pretending. A check is ``"failed"`` only when the artifact positively
 contradicts what the pipeline would have written.
 
-No model is loaded and no network is used; verification is deterministic.
+Plain verification loads no model and uses no network, and is
+deterministic. The one exception is the opt-in ``--determinism``
+audit: it loads the operator's local checkpoint through the same
+backend ``run`` uses and re-executes the recorded search observations
+(see ``determinism.py`` and ``docs/DETERMINISM_AUDIT_DESIGN.md``).
 """
 
 from __future__ import annotations
@@ -576,18 +580,80 @@ def _render_summary(report: dict[str, Any], label: str) -> str:
     return "\n".join(lines)
 
 
+def _append_determinism_check(report: dict[str, Any], audit: dict[str, Any]) -> None:
+    """Map a determinism audit onto verify's check vocabulary.
+
+    ``diverged`` is ``failed``: the recorded outputs positively
+    contradict the re-execution, which is verify's standing doctrine
+    for a failed check. Every other non-deterministic outcome is
+    ``unavailable`` -- the audit could not establish the claim either
+    way; the JSON ``determinism`` section carries the full result.
+    """
+    checks = report["checks"]
+    if not audit["available"]:
+        _record(checks, "determinism_replay", _UNAVAILABLE, audit["detail"])
+    elif audit["verdict"] == "deterministic":
+        _record(
+            checks,
+            "determinism_replay",
+            _PASSED,
+            str(audit["n_reproduced"]) + " re-executed search cells reproduced token-identically",
+        )
+    elif audit["verdict"] == "diverged":
+        _record(
+            checks,
+            "determinism_replay",
+            _FAILED,
+            str(audit["n_diverged"])
+            + " of "
+            + str(audit["n_attempted"])
+            + " re-executed search cells diverged (backend-determinism "
+            "finding; see the determinism section)",
+        )
+    else:
+        detail = (
+            "determinism not established: "
+            + str(audit["n_error"])
+            + " error cells, "
+            + str(audit["n_skipped"])
+            + " skipped cells"
+        )
+        if audit["search_incomplete"]:
+            detail += ", search incomplete"
+        _record(checks, "determinism_replay", _UNAVAILABLE, detail)
+    report["determinism"] = audit
+    report["verdict"] = "ok" if all(c["status"] != _FAILED for c in checks) else "failed"
+
+
 def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     """Implement ``mpl verify``; returns the process exit code.
 
     JSON goes to stdout, the human-readable summary to stderr (mirroring
     ``diff-reports``). Exit 0 when every applicable check passes, 2 when
     any check fails, 1 for unreadable/invalid input. With ``--bundle`` the
-    bundle path is verified by ``pack.run_verify_bundle`` instead.
+    bundle path is verified by ``pack.run_verify_bundle`` instead. With
+    ``--determinism`` the recorded search observations are additionally
+    re-executed against the ``--model`` checkpoint (see
+    ``determinism.py``); the audit's check is appended before the
+    verdict is recomputed, and backend construction is skipped entirely
+    when the artifact precheck fails.
     """
     from .diffreports import load_results
 
     if args.bundle is not None and args.results is not None:
         print("verify: exactly one of results and --bundle", file=sys.stderr)
+        return 1
+    if args.determinism and args.bundle is not None:
+        print("verify: --determinism cannot be combined with --bundle", file=sys.stderr)
+        return 1
+    if args.determinism and args.expect_digest is not None:
+        print(
+            "verify: --determinism cannot be combined with --expect-digest",
+            file=sys.stderr,
+        )
+        return 1
+    if args.model is not None and not args.determinism:
+        print("verify: --model requires --determinism", file=sys.stderr)
         return 1
     if args.bundle is not None:
         from .pack import run_verify_bundle
@@ -595,6 +661,12 @@ def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
         return run_verify_bundle(args)
     if args.expect_digest is not None:
         print("verify: --expect-digest requires --bundle", file=sys.stderr)
+        return 1
+    if args.determinism and args.results is None:
+        print("verify: --determinism requires a results path", file=sys.stderr)
+        return 1
+    if args.determinism and args.model is None:
+        print("verify: --determinism requires --model", file=sys.stderr)
         return 1
     if args.results is None:
         print("verify: exactly one of results and --bundle", file=sys.stderr)
@@ -607,6 +679,33 @@ def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
         print(f"verify: {exc}", file=sys.stderr)
         return 1
     report = verify_results(data)
+    if args.determinism:
+        from .determinism import audit_determinism, precheck
+
+        if precheck(data) is not None:
+            # audit_determinism returns the unavailable report without
+            # touching the backend when planning fails, so no
+            # checkpoint is constructed (or loaded) for it.
+            audit = audit_determinism(data, None)
+        else:
+            from .backends import LocalHFBackend
+
+            try:
+                backend = LocalHFBackend(
+                    args.model, device=args.device, max_context=args.max_context
+                )
+            except Exception:  # noqa: BLE001 -- fixed message, never a traceback
+                print(
+                    "verify: determinism audit unavailable: local backend could not be initialized",
+                    file=sys.stderr,
+                )
+                return 1
+            audit = audit_determinism(
+                data,
+                backend,
+                replay={"device": args.device, "max_context": args.max_context},
+            )
+        _append_determinism_check(report, audit)
     print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
     print(_render_summary(report, str(args.results)), file=sys.stderr)
     return 0 if report["verdict"] == "ok" else 2
@@ -647,4 +746,31 @@ def build_verify_parser(sub: Any) -> None:
         default=None,
         help="64-char hex bundle digest obtained through an independent "
         "channel (only with --bundle)",
+    )
+    verify_cmd.add_argument(
+        "--determinism",
+        action="store_true",
+        help="Re-execute the recorded search observations against a local "
+        "checkpoint and audit token-exact reproduction. Monday morning, a "
+        "reviewer asks 'prove the backend actually generated those tokens "
+        "deterministically' — this answers with a certificate or a "
+        "per-cell divergence table (requires a results path and --model)",
+    )
+    verify_cmd.add_argument(
+        "--model",
+        type=Path,
+        default=None,
+        help="Local checkpoint for --determinism (requires --determinism)",
+    )
+    verify_cmd.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="Replay device for --determinism (default cpu)",
+    )
+    verify_cmd.add_argument(
+        "--max-context",
+        type=int,
+        default=2048,
+        help="Replay context limit for --determinism (default 2048)",
     )

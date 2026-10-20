@@ -368,6 +368,20 @@ def _valid_generation(result: object, cap: int) -> bool:
     return True
 
 
+def request_seed_for(seed: int, case_id: str) -> int:
+    """Per-request seed for one fixture, derived from the run seed.
+
+    Extracted from :func:`evaluate` so the determinism self-audit
+    (``determinism.py``) re-derives the identical seed through the same
+    code path: a second derivation would silently drift from the first,
+    and the audit would then report false divergences for seed-using
+    backends. The case ID is used byte-exactly as recorded
+    (``surrogatepass``); no normalisation is applied anywhere.
+    """
+    material = f"{seed}\0{case_id}".encode("utf-8", errors="surrogatepass")
+    return int.from_bytes(sha256(material).digest()[:4], "big")
+
+
 def first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None:
     """Index of the first occurrence of ``stop`` as a contiguous subsequence.
 
@@ -853,8 +867,7 @@ def evaluate(
                 raw_reason,
                 input_text=prompt_text,
             )
-        material = f"{seed}\0{case.id}".encode("utf-8", errors="surrogatepass")
-        request_seed = int.from_bytes(sha256(material).digest()[:4], "big")
+        request_seed = request_seed_for(seed, case.id)
         try:
             result = backend.generate(
                 input_ids, max_new_tokens=max_new_tokens, seed=request_seed, cancel=event
