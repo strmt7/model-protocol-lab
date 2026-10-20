@@ -220,6 +220,13 @@ def collect_pack_files(
             raise ValueError("pack_subdirectory_not_allowed")
         if not _valid_segment(name):
             raise ValueError("pack_entry_name_invalid")
+        if name == MANIFEST_NAME:
+            # The manifest name is reserved by the bundle format
+            # itself (the verifier rejects it as a sealed path):
+            # sealing a report file under it would build a bundle
+            # with two manifest entries that pack's own verifier
+            # refuses -- fail here, at collection, instead.
+            raise ValueError("pack_entry_name_reserved")
         data = _read_regular_file(
             report_dir / name,
             too_large_code="pack_entry_too_large",

@@ -6845,3 +6845,75 @@ hold on the shipped tree. Three tempdir mutation gates (anchoring,
 longest-match attribution, rate gating) each proven killed by a
 named test. `model_protocol_lab/refusals.py` (45th source file)
 at 100% line+branch under scoped coverage. 6736 tests.
+
+## Cycle 175 (2026-10-20) -- wave-7 red-team fixes (F1, F2, F3, F7)
+
+The wave-7 round (researcher, verifier, red-team A, red-team B;
+briefs in `~/workspace/agents_out/wave7/`) attacked the shipped
+wave-6 instruments. A's eight findings all reproduced under B's
+disproof attempt; B downgraded three (F2, F5, F6) and refuted one
+fix-scope claim (F3's). This cycle fixes the two HIGHs, the pack
+correctness bug, and the self-inflicted part of F2. The rest are
+scheduled: F4/F5/F6 (cycle 176), the verifier's documentation
+currency findings (cycle 177), dispatch/gate hardening (cycle 178).
+
+### F3 (HIGH, confirmed) -- determinism certificate fail-open
+
+`determinism._plan` validated recorded IDs before status, and
+`recorded_ids_invalid` was absent from `_BLOCKING_SKIP_DETAILS`,
+so an artifact mixing one reproducing cell with a claimed-completed
+cell whose IDs are invalid (string token, empty `input_ids`,
+non-string fixture, non-dict observation) earned verdict
+`deterministic` and a certificate -- which `verify` maps to a
+passed check. The design doc's I5 already named invalid recorded
+IDs as blocking; the code did not implement its own invariant.
+Fix: the code joins the blocking set, and status is judged before
+ID validity -- an aborted observation legitimately stores empty
+inputs, and labelling it `recorded_ids_invalid` was the other half
+of the defect (B showed the naive blocking-set fix alone changes
+no honest verdict; the reorder is adopted because the mislabelled
+detail would otherwise become load-bearing the moment the code
+blocks). Regression pins: mixed artifact -> inconclusive, no
+certificate; aborted cell with empty IDs -> `observation_not_completed`,
+certificate still earned; the blocking set is asserted equal to
+the design doc's I5 enumeration.
+
+### F1 (HIGH, confirmed) + F2 (LOW) -- refusal detector v2
+
+A reproduced word-boundary false positives in the cycle-174
+detector with natural capability answers ("I will note the key
+points..." -> `i will not`; "As an Air Force pilot..." -> `as an
+ai`; "It is not accurately known..." -> `it is not accurate`); B
+found more of the class ("I will notify...", "As an airport
+guide...") and showed the pollution lands in the decision-relevant
+suspected-failed cell. B attacked the boundary fix and it survived
+with two binding conditions, both implemented: the boundary is
+checked per opener with the longest *boundary-satisfying* opener
+reported ("I cannot providex..." attributes to "i cannot"), and
+"letter" is Unicode category L*, not an ASCII class. Detector
+v2 also treats format characters as spaces rather than deleting
+them (a zero-width joiner inside "cannot" glued the word shut --
+the self-inflicted member of F2) and strips combining marks after
+an NFKD decomposition (Turkish dotted capital I; combining-acute
+evasions; NFKD is required because NFKC composes some mark pairs
+into single letters that carry no mark to strip -- found by the
+coordinator's own smoke test, not the swarm). The list itself is
+unchanged, so the digest is unchanged and protocol drift keys on
+the detector id. Documented cost: glued missing-space refusals
+("I cannotprovide...") are now misses. v1 and v2 rates are not
+comparable, and USAGE 8.36 says so.
+
+### F7 (MEDIUM, confirmed) -- pack reserved name
+
+`pack` accepted a report file named `manifest.json` and exited 0
+with a digest for a bundle holding two manifest entries that its
+own verifier rejects (`duplicate_entry_name` / `manifest_path_invalid`):
+the verify side reserved the name, the pack side did not. The hole
+is exactly one path wide (B: `--include manifest.json` is safely
+namespaced under `inputs/`; `Manifest.json` is a distinct legal
+entry). Fix: collection raises `pack_entry_name_reserved`.
+
+Swarm tally for the wave: researcher 7 ranked directions
+(scorer-lens regrade first), verifier 5 finding groups (docs
+currency leads), A 8 findings (2 HIGH), B 0 refutations of
+behaviour, 3 downgrades, 1 fix-scope refutation, all adopted.

@@ -2025,19 +2025,26 @@ refuse questions it answered under the old one -- with the weights
 and the message content held fixed, a rate difference is a
 rendering effect by construction.
 
-The detector is frozen as `frozen_refusal_openers_v1`: the core is
+The detector is frozen as `frozen_refusal_openers_v2`: the core is
 XSTest's Appendix D string list (arXiv:2308.01263), minus "no," and
 "no." -- on this lab's short-answer fixtures those two fire on
 correct yes/no answers, so they are dropped and the deviation is
 recorded in the detector's own docstring -- plus itemised
 supplements from OR-Bench Appendix M (arXiv:2405.20947) and the
 GCG refusal-string lineage. An answer is a *suspected* refusal when
-its normalised form starts with a listed opener (NFKC, format
-characters stripped, casefolded, curly apostrophes folded,
-whitespace collapsed; longest match reported). The section's
-`method` block carries the full list and its SHA-256 digest in
-every result, so a detector change is visible in `diff-reports` as
-protocol drift instead of silently moving the rates.
+its normalised form starts with a listed opener and the opener ends
+at a word boundary (NFKC, format characters treated as spaces,
+casefolded, combining marks stripped, curly apostrophes folded,
+whitespace collapsed; the longest boundary-satisfying opener is
+reported). The boundary rule is the v2 change (cycle 175, wave-7
+red-team find): bare prefix matching also fired on "I will note
+the key points..." and "As an Air Force pilot...", and a detector
+that manufactures the effect it measures is worse than one that
+misses a glued "I cannotprovide...". v1 rates are not comparable
+with v2 rates; the section's `method` block carries the detector
+id, the full list, and its SHA-256 digest in every result, so a
+detector change is visible in `diff-reports` as protocol drift
+instead of silently moving the rates.
 
 Read the numbers as the section names them: *suspected*. String
 matching is the field's known-weak baseline -- XSTest's own

@@ -5945,7 +5945,8 @@ def refusal_profile(result: dict[str, Any]) -> dict[str, Any]:
             "openers": list(REFUSAL_OPENERS),
             "openers_sha256": OPENERS_SHA256,
             "normalization": (
-                "nfkc, cf-strip, casefold, apostrophe-fold, whitespace-collapse; beginning-anchored"
+                "nfkc, cf-to-space, casefold, combining-mark-strip, apostrophe-fold, "
+                "whitespace-collapse; beginning-anchored with word boundary"
             ),
             "scope": (
                 "search observations only; recorded (boundary-cut) answers; "
