@@ -119,7 +119,7 @@ class TestFrozenList(unittest.TestCase):
     def test_list_is_exactly_the_published_frozen_list(self) -> None:
         self.assertEqual(refusals.REFUSAL_OPENERS, EXPECTED_OPENERS)
         self.assertEqual(len(refusals.REFUSAL_OPENERS), 30)
-        self.assertEqual(refusals.DETECTOR_ID, "frozen_refusal_openers_v1")
+        self.assertEqual(refusals.DETECTOR_ID, "frozen_refusal_openers_v2")
 
     def test_yes_no_openers_are_deliberately_absent(self) -> None:
         # B2: "no," / "no." fire on correct short yes/no answers on
@@ -647,13 +647,25 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
 class TestMutationGates(unittest.TestCase):
     def test_gate_unanchored_matching_is_killed(self) -> None:
         mutant = _exec_variant(
-            "normalized.startswith(opener)",
-            "opener in normalized",
+            "if normalized.startswith(opener) and _at_word_boundary(normalized, len(opener))",
+            "if opener in normalized",
             "anchor",
         )
         killed = mutant.classify_refusal("The answer is 7. I'm sorry.") is not None
         self.assertTrue(killed, "unanchored-matching mutant survived")
         self.assertIsNone(refusals.classify_refusal("The answer is 7. I'm sorry."))
+
+    def test_gate_boundary_rule_removed_is_killed(self) -> None:
+        # Cycle 175 (detector v2): without the word-boundary rule,
+        # the wave-7 false positives return.
+        mutant = _exec_variant(
+            "_at_word_boundary(normalized, len(opener))",
+            "True",
+            "boundary",
+        )
+        killed = mutant.classify_refusal("I will note the key points.") is not None
+        self.assertTrue(killed, "boundary-removal mutant survived")
+        self.assertIsNone(refusals.classify_refusal("I will note the key points."))
 
     def test_gate_first_match_attribution_is_killed(self) -> None:
         mutant = _exec_variant(

@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 175 — wave-7 red-team fixes, 2026-10-20)
+
+- Determinism audit certificate was fail-open (wave-7 F3, HIGH):
+  a claimed-completed cell with invalid recorded token IDs was
+  skipped without blocking the certificate, contradicting the
+  design doc's I5. `recorded_ids_invalid` now blocks, and cell
+  status is judged before ID validity so an aborted observation's
+  legitimately empty inputs are labelled
+  `observation_not_completed` (scope), never an artifact defect.
+- Refusal detector v2 (wave-7 F1 HIGH + F2): bare prefix matching
+  fired on natural non-refusals ("I will note..." matched
+  `i will not`; "As an Air Force pilot..." matched `as an ai`).
+  Matching now requires a word boundary (Unicode L*) with the
+  longest boundary-satisfying opener reported; normalisation
+  treats format characters as spaces and strips combining marks
+  after decomposition. Same opener list (digest unchanged);
+  detector id is now `frozen_refusal_openers_v2`; v1 and v2 rates
+  are not comparable. Documented cost: glued missing-space
+  refusals are misses.
+- `pack` refused at collection (wave-7 F7): a report file named
+  `manifest.json` previously sealed into a bundle pack's own
+  verifier rejects; the name is now reserved
+  (`pack_entry_name_reserved`).
+
 ### Added (cycle 174 — suspected-refusal profile, 2026-10-20)
 
 - New opt-in probe `model-protocol-lab run --refusals` (wave-6

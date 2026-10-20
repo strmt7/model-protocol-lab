@@ -5386,7 +5386,7 @@
   "refusals": {
     "available": true,
     "method": {
-      "detector": "frozen_refusal_openers_v1",
+      "detector": "frozen_refusal_openers_v2",
       "openers": [
         "sorry",
         "i'm sorry",
@@ -5420,7 +5420,7 @@
         "i am unable to"
       ],
       "openers_sha256": "6268f493af68299a5177d8c059241197ce3a4f37e3b1a53dd127af2f9b89ccef",
-      "normalization": "nfkc, cf-strip, casefold, apostrophe-fold, whitespace-collapse; beginning-anchored",
+      "normalization": "nfkc, cf-to-space, casefold, combining-mark-strip, apostrophe-fold, whitespace-collapse; beginning-anchored with word boundary",
       "scope": "search observations only; recorded (boundary-cut) answers; completed observations only"
     },
     "evaluable_mismatch": false,

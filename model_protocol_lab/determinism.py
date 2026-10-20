@@ -49,6 +49,7 @@ _SKIPPED = "skipped"
 #: deliberately absent: the original run never claimed that cell.
 _BLOCKING_SKIP_DETAILS = frozenset(
     {
+        "recorded_ids_invalid",
         "recorded_length_inconsistent",
         "recorded_ids_out_of_vocab",
         "replay_context_limit_exceeded",
@@ -189,13 +190,17 @@ def _plan(
             fixture = observation.get("fixture")
             if type(fixture) is str:
                 cell["fixture"] = fixture
+            if observation.get("status") != "completed":
+                # Status first: a cell the run never claimed is scope
+                # whatever its stored IDs look like (an aborted
+                # observation legitimately stores empty inputs) --
+                # ID validity is judged only for claimed cells.
+                cell["detail"] = "observation_not_completed"
+                continue
             input_ids = _id_tuple(observation.get("input_ids"), nonempty=True)
             output_ids = _id_tuple(observation.get("output_ids"), nonempty=False)
             if type(fixture) is not str or input_ids is None or output_ids is None:
                 cell["detail"] = "recorded_ids_invalid"
-                continue
-            if observation.get("status") != "completed":
-                cell["detail"] = "observation_not_completed"
                 continue
             if len(output_ids) != cap:
                 # A completed generation reached the token cap exactly
