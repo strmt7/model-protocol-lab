@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 168 — prefix-cache sharability profile, 2026-10-20)
+
+- New research instrument `mpl run --cache-profile` (wave-6 idea 2): per
+  template family, the fraction of the run's recorded prompt tokens that
+  exact-prefix KV-cache reuse (vLLM automatic prefix caching) could skip,
+  computed offline from the recorded `input_ids` with zero extra model
+  calls and block-quantized to full blocks (default 16, vLLM's block
+  size; `--cache-profile-block-size` re-quantizes for other engines).
+  The headline metric is the **achievable block fraction** -- exact, not
+  a bound: every shared prefix costs exactly one first-occurrence miss
+  in every request order (proven pre-code; brute-force simulation over
+  all permutations of random prompt sets in the test suite), so the
+  instrument also reports the token-level diagnostic and the
+  eviction-robust "potential" upper bounds with their closed-world
+  scope labeled. Pure `cacheprofile.py`, post-hoc
+  `experiments.cache_profile_stage` / `cache_profile_profile`, HTML
+  section (`id="cache-profile"`), `diff_cache_profile` (`cache_profile_changed`
+  / `cache_profile_asymmetric` feed `identical`), oracles in
+  test_cycle67/test_cycle27, sample exercise with genuine signal, and
+  `docs/USAGE.md` 8.33. Pre-registered falsifiable claims and scope
+  limits in `cacheprofile.py`; terminology fence ("prefix sharability",
+  a cost input never a cost verdict, no "efficiency" term). Red-team A
+  (13 findings; the design-defining R1: the naive "cacheable fraction"
+  headline provably misranks templates against *every* realizable order,
+  hence the achievable quantity; R3: pairwise LCP dropped as
+  length-confounded/quadratic/redundant) and red-team B (0 refutations,
+  13 survive, independent simulation agreement) reviewed the design
+  pre-code. Informational only -- never touches selection.
+
+### Fixed (cycle 168 — HTML body missing two sections)
+
+- Two report sections were registered in the sticky table of contents
+  but never concatenated into the HTML body: the template-robustness
+  (`#template-robustness`) and field-ablation (`#field-ablation`)
+  sections, so their TOC links pointed at missing anchors. The body now
+  renders them in TOC order; a regression test asserts every TOC href
+  resolves to a body id.
+
 ### Fixed (cycle 165 — mutation-gate recursion + Codecov badge, 2026-10-19)
 
 - Mutation-gate self-recursion eliminated in all four in-place gates

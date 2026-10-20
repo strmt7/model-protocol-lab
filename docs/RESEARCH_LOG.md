@@ -5881,3 +5881,265 @@ both fixed); wave-6 A findings were coordinator-verified (B finished before
 A's brief landed). Verifier: 8 claims checked, 2 refuted (F18 cost formula —
 fixed; surfacenoise "100% coverage" — was 96%, corrected to genuine 100%
 line+branch via 14 gap tests).
+
+## Cycle 168 (2026-10-20): prefix-cache efficiency instrument — uniqueness pass + design (pre-code)
+
+**Idea.** Wave-6 research idea #2: `mpl run --cache-profile` — per-template
+KV-cache friendliness computed offline from the run's recorded `input_ids`,
+zero model calls. Monday-morning utility: an ops team has two templates tied
+on accuracy and asks "which one is cheaper to serve?" — this reports, per
+template, the fraction of prompt tokens that exact-prefix KV-cache reuse
+(vLLM automatic prefix caching) could skip.
+
+**Uniqueness pass (web research, 2026-10-20, sources logged):**
+- vLLM automatic prefix caching (APC): per-request, exact-token-prefix KV
+  block reuse; 16-token blocks, content-addressed chained hashes, LRU
+  eviction; partial blocks cached only once completed. Sources:
+  https://www.shakudo.io/blog/predict-vllm-kv-cache-hits (FAQ: 16-token
+  blocks, chained parent hashes), https://discuss.vllm.ai/t/how-should-i-set-kv-cache-in-vllm/1947
+  (reuse keyed solely on matching token prefixes, never conversation/session
+  identity), https://www.dailydoseofds.com/p/kv-cache-engineering-for-llm-serving/
+  (block-key chaining worked example).
+- Shakudo's cache-preflight sidecar predicts *per-request* hits via a ZMQ
+  sidecar for replica routing — not per-template, not offline, not a
+  template-scoring tool. Source: https://www.shakudo.io/blog/predict-vllm-kv-cache-hits.
+- The practitioner literature explicitly names the template as the
+  independent variable nobody measures: "A timestamp in the system prompt,
+  reordered JSON keys in a tool schema, or different chat-template
+  whitespace can break the match. Stable prompt templates therefore improve
+  the hit rate." Source: https://www.dailydoseofds.com/p/kv-cache-engineering-for-llm-serving/.
+  Prompt-structure guides (https://www.aicassindra.com/blogs/llm/prefix_caching_prompt_reuse_large_scale_inference.html,
+  https://practiceoverflow.substack.com/p/treat-your-prompt-like-a-memory-hierarchy)
+  give layout rules but ship no measuring tool.
+- HELM's "efficiency" metric is accuracy/compute-cost (inference time,
+  model-level) — not format-driven. Sources:
+  https://www.geeksforgeeks.org/artificial-intelligence/holistic-evaluation-of-language-models-helm/,
+  https://picovoice.ai/blog/evaluating-large-language-models-llms/.
+  lm-eval, PromptBench, ctxray (static 0–100 prompt scoring) have no
+  serving-cost dimension.
+- Provider billing (Anthropic/OpenAI cached-token discounts) shares the
+  exact-prefix economics but offers no offline template analyzer. Source:
+  https://ai.studybydoing.in/oap2-caching.
+- **Verdict:** the combination — offline, deterministic, stdlib-only,
+  per-template prefix-sharability computed from exact recorded id sequences,
+  with block-quantized vLLM-APC modeling — does not exist as a tool.
+  Framed as "the combination", never "first".
+
+**Pinned definitions (invariants, written before code):**
+- D1. Evaluable prompts for one candidate: non-empty tuples of
+  non-negative ints. Empty/malformed excluded fail-closed (visible via
+  n vs n_evaluable).
+- D2. `lcp(a, b)` = longest common token-prefix length. `mean_pairwise_lcp`
+  / `max_pairwise_lcp` over unordered prompt pairs (n<2 → None).
+- D3. Trie cacheability: token at position k of prompt p_i is cacheable iff
+  the trie node for prefix p_i[:k+1] is shared by ≥2 prompts.
+  `cacheable_fraction` = cacheable tokens / total tokens. Order-independent:
+  measures *potential* sharability (upper bound on realizable hits for any
+  request order), labeled as such.
+- D4. Block quantization (vLLM APC model, block size B default 16,
+  parameter): block b of p_i is block-cacheable iff prefix p_i[:(b+1)B] is
+  shared (all B tokens cacheable). `block_cacheable_fraction` =
+  B × (#block-cacheable blocks) / total tokens. Models chained block
+  hashes; partial trailing blocks never count.
+- D5. `uniform` = (max-min gap == 0.0) exactly — values derive
+  deterministically from ints, so exact equality is meaningful (no
+  measurement noise).
+- D6. Informational only: never touches winner selection.
+
+**Pre-registered falsifiable claims:**
+- F1. If `block_cacheable_fraction` is ~uniform across candidates, the
+  honest report is "templates do not differ in prefix-sharability on these
+  fixtures" (publishable negative).
+- F2. If production vLLM `prefix_cache_hits`/`prefix_cache_queries`
+  counters do not track the ranking, the block model stays documented as
+  an approximation (LRU eviction, request interleaving, multi-tenant
+  isolation, and ordering are not modeled).
+
+**Scope limits (documented in code + docs):** prefix-sharability, NOT
+latency/TTFT (no timing claims, per the standing lesson on timing-flaky
+tests); block model approximates vLLM APC only; opt-in; never a "this
+template is cheaper in production" guarantee.
+
+## Cycle 168: design amendment (post red-team A, pre-code) — R1 is design-defining
+
+Red-team A (brief `~/workspace/agents_out/cycle168/redteam_a.md`) attacked the
+pre-code design from first principles and found a design-defining flaw in the
+headline metric, which the coordinator independently re-verified numerically
+(simulated all request orders; arithmetic reproduced exactly):
+
+- **R1 [HIGH, accepted]:** "potential" cacheable_fraction provably *misranks*
+  templates against *every* realizable request order (inversion example
+  recomputed: D3 ranks A 0.909 > B 0.727 while every order yields A 0.455 <
+  B 0.545). Root cause: for each shared trie node v with k_v sharing prompts,
+  every order yields exactly k_v−1 hits + 1 miss, so
+  hits(order) = potential − #shared_nodes **for every order** (cold, infinite,
+  dedicated cache). The exact achievable quantity is order-independent and
+  costs nothing extra:
+  `achievable_token_fraction = (cacheable_tokens − n_shared_trie_nodes) / total_tokens`;
+  `achievable_block_fraction = B × (block_occurrences − n_distinct_shared_block_identities) / total_tokens`.
+  The instrument now headlines the **achievable** fractions; "potential" is
+  retained only as a labeled eviction-robust upper bound (the bound proof
+  survives: hits(order) ≤ potential under LRU too). F1's uniformity test
+  applies to the achievable fractions.
+- **R3+R6 [HIGH/MEDIUM, accepted]:** raw mean/max pairwise LCP is
+  length-confounded (100× ranking inversion demonstrated), outlier-brittle,
+  redundant, and O(n²·L) with no guard. Pairwise LCP is DROPPED from the
+  metric set; replaced by the linear-time diagnostic `n_duplicate_prompts`
+  (full sequences occurring ≥2 times, from the trie).
+- **R4 [MEDIUM, accepted]:** upper-bound labels carry closed-world scope:
+  "over request orders of these prompts, cold/infinite/dedicated cache —
+  not a production ceiling" (cross-workload warming can exceed it).
+- **R5 [MEDIUM, accepted]:** n_evaluable = 0 → all fractions None (never
+  0.0/nan); None vs 0.0 distinguished in every surface; uniformity never
+  fires on all-None.
+- **R7 [MEDIUM, accepted]:** terminology fence — "prefix sharability"
+  everywhere (headline concept, labels, docs); "efficiency" reserved for
+  nothing (HELM term collision). Monday-morning sentence rewritten honestly:
+  "which template's prompts share more exact prefixes (block-quantized) —
+  a cost *input*, not a cost verdict." Identical-prompts (1.0 potential →
+  0.5 achievable) and boilerplate-inflation demos documented as framing
+  guards.
+- **R8 [LOW, accepted]:** block-achievable is primary; token-level is the
+  diagnostic; `D4 ≤ D3` asserted in code as a sanity invariant.
+- **R9 [LOW, accepted]:** iteration order pinned to fixture order;
+  uniformity is exact 0.0 (no "~").
+- **R10 [MEDIUM, accepted]:** tree-grounded and confirmed by the
+  coordinator (experiments.py:4250 serializes input_ids as *lists*;
+  reporting.py:1583 and verbosity_stage accept (list, tuple)). Pinned:
+  evaluable iff type in (list, tuple), non-empty, all type(t) is int and
+  t >= 0 (bools excluded by exact-type check), canonicalized to tuple.
+  n vs n_evaluable visible in JSON + HTML + CLI; loud warning when
+  n_evaluable < n.
+- **R11 [LOW, accepted]:** vLLM-fidelity assumptions written down in code +
+  docs (adapter/multimodal/salt keys folded into real block hashes;
+  collisions ignored; sliding-window out of scope; B recorded in output).
+- **R12 [LOW, accepted]:** non-interference is mechanical — stage runs after
+  selection, reads only recorded input_ids, writes only result["cache_profile"],
+  exceptions contained by the probe pattern; a dedicated test pins that a
+  failing stage leaves selection bit-identical.
+- **R13 [LOW, accepted]:** predicate pinned exactly as in R10.
+- **R14 [LOW, accepted]:** warn when n_evaluable differs across candidates;
+  metrics reflect recorded id sequences (post any truncation in the record
+  path), not raw rendered prompts.
+- A's attack on D4's partial-block rule was refuted by five independent
+  sources (S2): vLLM caches full blocks only — no change.
+- A's S1 (upper-bound proof) confirmed: retained as the labeled bound.
+- Deviation from the wave-6 brief recorded: pairwise LCP dropped per R3/R6
+  (the brief is a proposal; the red-team process exists to correct it).
+
+Red-team B is cross-checking A's findings (disproof attempt) before code.
+Deviation log: none yet beyond the above; any B-forced change will be
+amended here.
+
+## Cycle 168: red-team B cross-check — design final
+
+Red-team B (brief `~/workspace/agents_out/cycle168/redteam_b.md`) attempted to
+disprove every A finding with independent brute-force simulation (300 random
+prompt sets × all orders, 0 mismatches vs the R1 formulas), tree checks, and
+primary-source vLLM reads. Result: **0 refutations, 1 downgrade, 13 survive.**
+
+- R1's exact-formula proof is airtight (per-node argument: the earliest sharer
+  misses, every later sharer hits — order can only permute *which* occurrence
+  misses, never *how many*). A's severity calibration (HIGH, not CRITICAL —
+  D6 informational-only caps the blast radius) also survived challenge.
+- R6 downgraded MEDIUM→LOW: the O(n²) hang premise is unreachable in-repo
+  (`datasets.py: MAX_CASES_PER_SPLIT = 100` hard-caps n per split). Moot:
+  pairwise LCP was already dropped per R3.
+- B strengthened R4: repeated requests (not permutations) can exceed
+  "potential" — the label must scope to "a permutation of the recorded
+  prompts, each served once, cold/infinite/dedicated cache".
+- **B's new finding (accepted, joins R11's assumptions list):** vLLM's
+  `get_computed_blocks` caps cache hits at `prompt_length − 1` (logits for
+  the last token must be recomputed), and because allocation is
+  block-aligned, an exactly-duplicated prompt whose length is a multiple of
+  B loses its *whole final block* relative to the model. Real hits ≤ model
+  by up to one block in that case only; direction is conservative (model
+  never overstates by more, and only there). Documented as an assumption.
+- B confirmed S2 from the vLLM design doc verbatim ("We only cache full
+  blocks"), plus R11(a)'s extra hash keys (LoRA IDs, multimodal hashes,
+  cache salts) verbatim.
+
+Design is final. Building now: pure `cacheprofile.py` (achievable fractions
+primary, potential as labeled bound, duplicate diagnostic), experiments
+stage/profile, `--cache-profile` flag, HTML section, `diff_cache_profile`,
+oracles in test_cycle67/test_cycle27, sample exercise, docs.
+
+## Cycle 168: build record -- prefix-cache sharability instrument
+
+**Shipped:** `model_protocol_lab/cacheprofile.py` (pure; DEFAULT_BLOCK_SIZE=16),
+`experiments.cache_profile_stage` / `cache_profile_profile` / `_cache_profile_cell_valid`,
+CLI `mpl run --cache-profile` (+ `--cache-profile-block-size`),
+`reporting._cache_profile_section` (`id="cache-profile"`, TOC-registered),
+`diffreports._valid_cache_profile` / `diff_cache_profile` /
+`_render_cache_profile_summary` (summary keys `cache_profile_changed` /
+`cache_profile_asymmetric` feed `identical`), `tests/test_cycle168_cacheprofile.py`
+(66 tests), oracle mirrors in test_cycle67 (`_o_cache_profile_valid` /
+`_o_cache_profile` / `_fuzz_cache_profile_section`, 45%-coverage fuzz with
+hostile payloads) and test_cycle27 (`_or_cache_profile_valid`),
+sample exercise in `examples/make_sample_report.py` (byte-identical
+regeneration verified twice), `docs/USAGE.md` 8.33.
+
+**Specialists:** red-team A (13 findings: R1 HIGH design-defining caught
+pre-code -- the headline metric was provably backwards; R3 HIGH raw-LCP
+length-confound; R10 MEDIUM list-vs-tuple live wire; rest LOW/MEDIUM),
+red-team B (0 refutations, 1 downgrade R6->LOW, 13 survive, independent
+brute-force simulation of 300 random prompt sets x all orders with 0
+mismatches, + one new assumption: vLLM's logits last-token cap can cost
+one final block on exactly-duplicated block-aligned prompts), plus the
+coordinator's own numerical re-verification of R1's inversion.
+
+**Genuine finds (self-caught/fixed in-cycle):**
+1. The pre-code headline metric was backwards (R1) -- the shipped
+   instrument headlines exact achievable fractions instead of "potential".
+2. Pairwise LCP was dropped entirely (length-confounded, quadratic, redundant).
+3. A real pre-existing bug found while registering the new HTML section:
+   `_template_robustness_section` and `_ablation_section` were in the TOC
+   but never concatenated into the report body, so their TOC links pointed
+   at missing anchors -- fixed (body concatenation restored), with a
+   dedicated regression test asserting every TOC href resolves to a body id.
+4. Terminology fence: "prefix sharability" everywhere; "efficiency" banned
+   (HELM collision), "cost input not cost verdict" in CLI help, docs, and
+   the HTML section.
+
+**Sample signal (genuine):** base llama3 achievable-block 0.1435 vs
+no-bos 0.1165 vs prefix-trim 0.1455 -- BOS/prefix mutations visibly move
+prefix sharing; gap 0.0289, uniform False. Zero model calls beyond the
+verbosity exercise's observations.
+
+**Deviations from the wave-6 brief:** pairwise LCP dropped per R3/R6
+(the brief is a proposal; the red-team process exists to correct it);
+the achievable-fraction exactness replaced "potential" as the headline.
+
+**Coverage (measured under the CI command, coverage json):**
+cacheprofile.py at 100% line+branch (73 tests); the validator/rendering
+fail-closed branches in experiments/diffreports/reporting needed a
+follow-up gap test file (7 tests: per-key-loop rejections, both
+integer identities, cacheable>total, duplicates>n_evaluable,
+zero-evaluable None-discipline, non-positive mean, reporting degraded
+paths) -- final total 94.592% (gate compares the rounded display:
+95% >= 95%, margin 0.092 above the rounding edge). Dedicated tests:
+73 feature tests + 7 gap tests + 4 tempdir mutation gates (achievable
+subtraction dropped; block subtraction dropped; empty-prompt
+acceptance; partial-block counting) + brute-force simulation oracles
+over all request orders of random prompt sets.
+
+**Cycle incidents (process fixes):**
+1. The coordinator launched the full pytest suite before all linters
+   were clean, then kept editing sources during the run (lesson existed
+   and was violated). Consequences were exactly as documented: the
+   in-suite mypy pin test failed transiently on a mid-edit state and the
+   run's result was discarded as contaminated. Process fix recorded:
+   the full-suite pytest is the LAST verification step, launched only
+   after ruff/mypy/bandit are clean and no further source edits are
+   pending.
+2. The diff-section blast radius in test_cycle67 now has a third element:
+   beyond the fuzz oracle and flip_identical anchor, `_identical_expected`
+   hardcodes the full section key set, and the flip_identical gate's
+   anchor textually spans the whole `identical` conjunction -- a new
+   section requires updating the gate anchor's original AND mutant
+   texts (the mutant ends at verbosity in the current text; both need
+   the new lines, keeping the escaped-newline convention exact).
+3. test_cycle27's oracle return dict needs the new section's stub entry
+   (`"cache_profile": {"available": ..., "changed": False}`), not just
+   the summary keys.
+4. Newest ruff re-flagged SIM114 (the "trust the newest" rule held).

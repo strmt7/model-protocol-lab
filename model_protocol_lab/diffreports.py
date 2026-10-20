@@ -584,6 +584,7 @@ def diff_reports(
         "neither",
     )
     verbosity_diff = diff_verbosity(old.get("verbosity"), new.get("verbosity"))
+    cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
     )
@@ -593,6 +594,10 @@ def diff_reports(
         "neither",
     )
     verbosity_asymmetric = verbosity_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    cache_profile_asymmetric = cache_profile_diff["available"] not in (
         "both",
         "neither",
     )
@@ -651,6 +656,8 @@ def diff_reports(
         and not toolcall_asymmetric
         and not verbosity_diff["changed"]
         and not verbosity_asymmetric
+        and not cache_profile_diff["changed"]
+        and not cache_profile_asymmetric
         and not template_robustness_diff["changed"]
         and not template_robustness_asymmetric
         and not ablation_diff["changed"]
@@ -707,6 +714,8 @@ def diff_reports(
         "toolcall_asymmetric": toolcall_asymmetric,
         "verbosity_changed": verbosity_diff["changed"],
         "verbosity_asymmetric": verbosity_asymmetric,
+        "cache_profile_changed": cache_profile_diff["changed"],
+        "cache_profile_asymmetric": cache_profile_asymmetric,
         "template_robustness_changed": template_robustness_diff["changed"],
         "template_robustness_asymmetric": template_robustness_asymmetric,
         "ablation_changed": ablation_diff["changed"],
@@ -741,6 +750,7 @@ def diff_reports(
         "faketurn": faketurn_diff,
         "toolcall": toolcall_diff,
         "verbosity": verbosity_diff,
+        "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
         "config_drift": config_drift,
@@ -3073,6 +3083,226 @@ def diff_verbosity(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _share_in_unit(value: Any) -> bool:
+    """Whether ``value`` is a real number in [0, 1] (bools excluded).
+
+    mypy does not narrow ``type(value) in (int, float)``; the explicit
+    ``isinstance`` gives the narrowing. The exact-type check runs first
+    so bools (``isinstance(True, int)``) are never accepted.
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and 0.0 <= value <= 1.0
+
+
+def _positive_number(value: Any) -> bool:
+    """Whether ``value`` is a real number > 0 (bools excluded).
+
+    Same narrowing trick as :func:`_share_in_unit`.
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and value > 0
+
+
+def _valid_cache_profile(payload: Any) -> bool:
+    """Structural check for a ``cache_profile`` payload.
+
+    Enforces the wave-2 C3 lesson at the value level: fractions must
+    be numbers/None in [0, 1] (None exactly when nothing was
+    evaluable), the integer identities the producer guarantees must
+    hold (achievable = potential count - first occurrences), ordering
+    invariants (block <= token, achievable <= potential) must hold,
+    and map keys must be strings, so the renderers never hit a
+    TypeError on a hostile payload.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    block_size = payload.get("block_size")
+    if type(block_size) is not int or block_size < 1:
+        return False
+    n_observations = payload.get("n_observations")
+    if type(n_observations) is not int or n_observations < 0:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if entry is None:
+            continue
+        if type(entry) is not dict:
+            return False
+        for key in ("n", "n_evaluable"):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+        if entry["n_evaluable"] > entry["n"]:
+            return False
+        for key in (
+            "total_tokens",
+            "cacheable_tokens",
+            "shared_prefixes",
+            "achievable_tokens",
+            "block_cacheable_blocks",
+            "distinct_block_prefixes",
+            "achievable_blocks",
+            "n_duplicate_prompts",
+        ):
+            value = entry.get(key)
+            if type(value) is not int or value < 0:
+                return False
+        if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
+            return False
+        if (
+            entry["achievable_blocks"]
+            != entry["block_cacheable_blocks"] - entry["distinct_block_prefixes"]
+        ):
+            return False
+        if entry["cacheable_tokens"] > entry["total_tokens"]:
+            return False
+        if entry["n_duplicate_prompts"] > entry["n_evaluable"]:
+            return False
+        for key in (
+            "potential_token_fraction",
+            "achievable_token_fraction",
+            "potential_block_fraction",
+            "achievable_block_fraction",
+        ):
+            value = entry.get(key)
+            if entry["n_evaluable"] == 0:
+                if value is not None:
+                    return False
+            elif not _share_in_unit(value):
+                return False
+        mean = entry.get("mean_prompt_tokens")
+        if entry["n_evaluable"] == 0:
+            if mean is not None:
+                return False
+        elif not _positive_number(mean):
+            return False
+        achievable_token = entry.get("achievable_token_fraction")
+        potential_token = entry.get("potential_token_fraction")
+        achievable_block = entry.get("achievable_block_fraction")
+        potential_block = entry.get("potential_block_fraction")
+        # isinstance narrows for mypy where type() in (...) does not;
+        # bools were already rejected by the per-key loops above.
+        if (
+            isinstance(achievable_token, (int, float))
+            and isinstance(potential_token, (int, float))
+            and isinstance(achievable_block, (int, float))
+            and isinstance(potential_block, (int, float))
+            and not (
+                achievable_block <= achievable_token <= potential_token
+                and achievable_block <= potential_block <= potential_token
+            )
+        ):
+            return False
+    for key in ("most_sharable", "least_sharable", "excluded_candidates"):
+        value = payload.get(key)
+        if type(value) is not list or not all(type(c) is str for c in value):
+            return False
+    gap = payload.get("sharability_gap")
+    if gap is not None and not (type(gap) in (int, float) and gap >= 0):
+        return False
+    if payload.get("uniform") is not None and type(payload.get("uniform")) is not bool:
+        return False
+    return type(payload.get("evaluable_mismatch")) is bool
+
+
+def diff_cache_profile(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``cache_profile`` payloads; deterministic.
+
+    Answers "did the prefix-sharability story change between runs?":
+    per-candidate drift on the headline metric (achievable block
+    fraction) plus the token-level and potential diagnostics, and
+    added/removed candidates and changes in the excluded set. A
+    template edit that silently destroys prefix sharing is the
+    regression signal -- prefill a prefix cache could have skipped
+    comes back. A side without a recorded probe is reported plainly.
+    No model, no network.
+    """
+    old_ok = _valid_cache_profile(old)
+    new_ok = _valid_cache_profile(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+
+    def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        view: dict[str, dict[str, Any]] = {}
+        for name, entry in (payload.get("per_candidate") or {}).items():
+            # _valid_cache_profile guarantees str keys and dict/None
+            # entries, so no defensive skip is needed here (it would
+            # be dead code and an uncoverable line).
+            if entry is None:
+                view[name] = {
+                    "achievable_block_fraction": None,
+                    # nosec B105 -- view field default, never a credential
+                    "achievable_token_fraction": None,  # nosec B105
+                    "potential_block_fraction": None,
+                    "excluded": True,
+                }
+            else:
+                view[name] = {
+                    "achievable_block_fraction": entry.get("achievable_block_fraction"),
+                    "achievable_token_fraction": entry.get("achievable_token_fraction"),
+                    "potential_block_fraction": entry.get("potential_block_fraction"),
+                    "excluded": name in set(payload.get("excluded_candidates") or []),
+                }
+        return view
+
+    old_view = _candidate_view(old)
+    new_view = _candidate_view(new)
+    cache_profile_candidates_added = sorted(set(new_view) - set(old_view))
+    cache_profile_candidates_removed = sorted(set(old_view) - set(new_view))
+    cache_profile_block_drift: list[dict[str, Any]] = []
+    cache_profile_token_drift: list[dict[str, Any]] = []
+    cache_profile_potential_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_view) & set(new_view)):
+        old_entry = old_view[name]
+        new_entry = new_view[name]
+        for rate_key, bucket in (
+            ("achievable_block_fraction", cache_profile_block_drift),
+            ("achievable_token_fraction", cache_profile_token_drift),
+            ("potential_block_fraction", cache_profile_potential_drift),
+        ):
+            if old_entry[rate_key] != new_entry[rate_key]:
+                bucket.append(
+                    {
+                        "candidate": name,
+                        "old": old_entry[rate_key],
+                        "new": new_entry[rate_key],
+                    }
+                )
+    old_excluded = {name for name, v in old_view.items() if v["excluded"]}
+    new_excluded = {name for name, v in new_view.items() if v["excluded"]}
+    cache_profile_excluded_added = sorted(new_excluded - old_excluded)
+    cache_profile_excluded_removed = sorted(old_excluded - new_excluded)
+    result["block_drift"] = cache_profile_block_drift
+    result["token_drift"] = cache_profile_token_drift
+    result["potential_drift"] = cache_profile_potential_drift
+    result["candidates_added"] = cache_profile_candidates_added
+    result["candidates_removed"] = cache_profile_candidates_removed
+    result["excluded_added"] = cache_profile_excluded_added
+    result["excluded_removed"] = cache_profile_excluded_removed
+    # NOTE: cache-profile-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        cache_profile_block_drift
+        or cache_profile_token_drift
+        or cache_profile_potential_drift
+        or cache_profile_candidates_added
+        or cache_profile_candidates_removed
+        or cache_profile_excluded_added
+        or cache_profile_excluded_removed
+    )
+    return result
+
+
 def _valid_template_robustness(payload: Any) -> bool:
     """Structural check for a ``template_robustness`` payload.
 
@@ -5044,6 +5274,66 @@ def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str
     return lines
 
 
+def _render_cache_profile_summary(cache_profile_diff: dict[str, Any] | None) -> list[str]:
+    """Cache-profile comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes (the wave-3
+    red-team A lesson). Sharability fractions are rendered as
+    percentages.
+    """
+    if type(cache_profile_diff) is not dict:
+        return []
+    available = cache_profile_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Cache-profile comparison unavailable: "
+            f"{missing} run did not record the cache-profile probe."
+        ]
+    lines: list[str] = []
+
+    def _fmt_share(value: Any) -> str:
+        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+
+    for drift_key, label in (
+        ("block_drift", "achievable-block-share"),
+        ("token_drift", "achievable-token-share"),
+        ("potential_drift", "potential-block-share"),
+    ):
+        drift = cache_profile_diff.get(drift_key) or []
+        for entry in drift[:3]:
+            if type(entry) is not dict:
+                continue
+            lines.append(
+                f"Cache-profile {label} drift ({_display_id(entry.get('candidate'))}): "
+                f"{_fmt_share(entry.get('old'))} -> {_fmt_share(entry.get('new'))}"
+            )
+        if len(drift) > 3:
+            lines.append(f"  ... and {len(drift) - 3} more {label} drifts")
+    added = cache_profile_diff.get("candidates_added") or []
+    removed = cache_profile_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Cache-profile candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(
+            f"Cache-profile candidates removed: {', '.join(_display_id(c) for c in removed)}"
+        )
+    excl_added = cache_profile_diff.get("excluded_added") or []
+    excl_removed = cache_profile_diff.get("excluded_removed") or []
+    if excl_added:
+        lines.append(
+            f"Cache-profile newly excluded: {', '.join(_display_id(c) for c in excl_added)}"
+        )
+    if excl_removed:
+        lines.append(
+            f"Cache-profile no longer excluded: {', '.join(_display_id(c) for c in excl_removed)}"
+        )
+    return lines
+
+
 def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     """Assistant-prefill comparison lines for the stderr summary."""
     if type(prefill_diff) is not dict:
@@ -5472,6 +5762,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_faketurn_summary(diff.get("faketurn")))
     lines.extend(_render_toolcall_summary(diff.get("toolcall")))
     lines.extend(_render_verbosity_summary(diff.get("verbosity")))
+    lines.extend(_render_cache_profile_summary(diff.get("cache_profile")))
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     lines.extend(_render_ablation_summary(diff.get("ablation")))
     verdicts = diff["candidate_verdicts"]

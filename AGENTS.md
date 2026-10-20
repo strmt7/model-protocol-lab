@@ -51,6 +51,47 @@ the mandates above.
   templates, teaching examples) — read-only; never write to anything
   outside model-protocol-lab.
 
+## Scientific and engineering standard (standing owner directive, 2026-10-19)
+
+Everything shipped must be scientific and current-best-practice, in theory
+AND in reality:
+
+1. **Scientific.** Claims state their scope and falsifiability (what would
+   prove this wrong). Methods are reproducible by a third party from the
+   repo alone. No causal claims from correlational evidence.
+   Denominators and abstentions are reported, never silent. Comparisons
+   have controls. The existing honest-framing practice
+   (correlation-not-causation labels, counterfactual framing, falsification
+   blocks) is the floor, not the ceiling.
+2. **Best programming/IT principles as of October 2026.** SOLID, DRY,
+   focused modules, complete typing (mypy strict stays enforced), no
+   placeholders, dependency hygiene (stdlib-first; every new dependency
+   justified in the commit message and docs), security by default
+   (bandit/pip-audit gates stay mandatory). When touching an area, check
+   whether ecosystem practice has moved (ruff/bandit rule changes — CI
+   installs latest for a reason) and adapt deliberately, not accidentally.
+3. **Debugged and tested in theory and in reality.** "In theory" = the
+   design is argued correct before coding (invariants written down, edge
+   cases enumerated, adversarial review by the red-team pair). "In
+   reality" = the full verification protocol (exact CI command, coverage
+   gate, mutation gates that genuinely kill mutants, brute-force oracles
+   vs independent implementations, byte-identical regeneration). A
+   feature is done only when both hold. If theory and reality disagree,
+   reality wins and the theory gets fixed — then both re-verified.
+
+## Collaborative swarm (standing owner requirement, 2026-10-19)
+
+Autonomous development runs with a collaborating agent swarm; this is a
+standing requirement, not optional. The build coordinator is the single
+writer/pusher. Read-only specialists run in parallel and write briefs to
+`~/workspace/agents_out/`; the coordinator consumes their findings and
+independently re-verifies each claim against the current tree before
+acting (briefs audit a point-in-time tree). Wave protocol: researcher
+(pre-build uniqueness pass with sources), red-team A vs red-team B
+(B's explicit job is to DISPROVE A's findings; no finding enters a brief
+on one agent's say-so), verifier. Every cycle's report states which
+specialists ran, what they found, and what survived cross-check.
+
 ## Working rules
 
 - Preserve unrelated working-tree changes. Stage only intentional source/docs/config.

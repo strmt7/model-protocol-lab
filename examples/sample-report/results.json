@@ -5383,6 +5383,108 @@
     ],
     "excluded_candidates": []
   },
+  "cache_profile": {
+    "available": true,
+    "block_size": 16,
+    "n_observations": 10,
+    "per_candidate": {
+      "llama3": {
+        "n": 2,
+        "n_evaluable": 2,
+        "total_tokens": 446,
+        "mean_prompt_tokens": 223.0,
+        "cacheable_tokens": 140,
+        "shared_prefixes": 70,
+        "achievable_tokens": 70,
+        "potential_token_fraction": 0.31390134529147984,
+        "achievable_token_fraction": 0.15695067264573992,
+        "block_cacheable_blocks": 8,
+        "distinct_block_prefixes": 4,
+        "achievable_blocks": 4,
+        "potential_block_fraction": 0.28699551569506726,
+        "achievable_block_fraction": 0.14349775784753363,
+        "n_duplicate_prompts": 0
+      },
+      "llama3/toggle-bos": {
+        "n": 2,
+        "n_evaluable": 2,
+        "total_tokens": 514,
+        "mean_prompt_tokens": 257.0,
+        "cacheable_tokens": 140,
+        "shared_prefixes": 70,
+        "achievable_tokens": 70,
+        "potential_token_fraction": 0.2723735408560311,
+        "achievable_token_fraction": 0.13618677042801555,
+        "block_cacheable_blocks": 8,
+        "distinct_block_prefixes": 4,
+        "achievable_blocks": 4,
+        "potential_block_fraction": 0.2490272373540856,
+        "achievable_block_fraction": 0.1245136186770428,
+        "n_duplicate_prompts": 0
+      },
+      "llama3/no-bos": {
+        "n": 2,
+        "n_evaluable": 2,
+        "total_tokens": 412,
+        "mean_prompt_tokens": 206.0,
+        "cacheable_tokens": 106,
+        "shared_prefixes": 53,
+        "achievable_tokens": 53,
+        "potential_token_fraction": 0.25728155339805825,
+        "achievable_token_fraction": 0.12864077669902912,
+        "block_cacheable_blocks": 6,
+        "distinct_block_prefixes": 3,
+        "achievable_blocks": 3,
+        "potential_block_fraction": 0.23300970873786409,
+        "achievable_block_fraction": 0.11650485436893204,
+        "n_duplicate_prompts": 0
+      },
+      "llama3/prefix-newline": {
+        "n": 2,
+        "n_evaluable": 2,
+        "total_tokens": 449,
+        "mean_prompt_tokens": 224.5,
+        "cacheable_tokens": 140,
+        "shared_prefixes": 70,
+        "achievable_tokens": 70,
+        "potential_token_fraction": 0.311804008908686,
+        "achievable_token_fraction": 0.155902004454343,
+        "block_cacheable_blocks": 8,
+        "distinct_block_prefixes": 4,
+        "achievable_blocks": 4,
+        "potential_block_fraction": 0.28507795100222716,
+        "achievable_block_fraction": 0.14253897550111358,
+        "n_duplicate_prompts": 0
+      },
+      "llama3/prefix-trim": {
+        "n": 2,
+        "n_evaluable": 2,
+        "total_tokens": 440,
+        "mean_prompt_tokens": 220.0,
+        "cacheable_tokens": 140,
+        "shared_prefixes": 70,
+        "achievable_tokens": 70,
+        "potential_token_fraction": 0.3181818181818182,
+        "achievable_token_fraction": 0.1590909090909091,
+        "block_cacheable_blocks": 8,
+        "distinct_block_prefixes": 4,
+        "achievable_blocks": 4,
+        "potential_block_fraction": 0.2909090909090909,
+        "achievable_block_fraction": 0.14545454545454545,
+        "n_duplicate_prompts": 0
+      }
+    },
+    "most_sharable": [
+      "llama3/prefix-trim"
+    ],
+    "least_sharable": [
+      "llama3/no-bos"
+    ],
+    "sharability_gap": 0.028949691085613405,
+    "uniform": false,
+    "excluded_candidates": [],
+    "evaluable_mismatch": false
+  },
   "selection_margin": {
     "value": 2,
     "direction": "to_tie",
