@@ -135,7 +135,14 @@ def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
     """
     if type(text) is not str:
         raise ValueError("CSV source must be text")
-    if len(text.encode("utf-8")) > MAX_BYTES:
+    try:
+        source_size = len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        # A raw lone surrogate cannot be encoded at all; name it in
+        # the module's vocabulary instead of leaking the codec's
+        # error (cycle 172).
+        raise ValueError("CSV source contains a lone surrogate") from None
+    if source_size > MAX_BYTES:
         raise ValueError("CSV source exceeds size limit")
     reader = csv.reader(io.StringIO(text))
     header: list[str] | None = None
@@ -150,12 +157,18 @@ def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
             if not record or all(not cell for cell in record):
                 continue  # blank lines between rows carry no fixture
             rows.append((reader.line_num, record))
-    except csv.Error:
+    except csv.Error as exc:
         # A single field bigger than the csv module's field limit (131072
         # chars) aborts the parser before the per-cell MAX_TEXT check below
-        # can run. Normalize to ValueError so callers (which catch only
-        # ValueError) report a fixed error instead of a traceback.
-        raise ValueError(f"CSV field exceeds the parser limit near row {reader.line_num}") from None
+        # can run; normalize it to ValueError so callers (which catch only
+        # ValueError) report a fixed error instead of a traceback. Other
+        # parse errors (e.g. bare-CR line endings) raise csv.Error too and
+        # must not be misreported as a size problem (cycle 172).
+        if "field larger than field limit" in str(exc):
+            raise ValueError(
+                f"CSV field exceeds the parser limit near row {reader.line_num}"
+            ) from None
+        raise ValueError(f"CSV parse error near row {reader.line_num}") from None
     if header is None:
         raise ValueError("CSV source has no header row")
     if tuple(header[:4]) != _FIXED_COLUMNS:
@@ -195,7 +208,17 @@ def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
                 f"'held_out', got {_safe(partition)!r}"
             )
         texts = cells[4:]
-        if any(len(cell) > MAX_TEXT for cell in texts) or len(expected) > MAX_TEXT:
+        # id and group obey the same MAX_TEXT limit as the message cells
+        # and expected: the JSON schema enforces it on every field, and
+        # split_to_json_text refuses oversized identifiers, so accepting
+        # them here would return a Split its own writer rejects
+        # (red-team A1, cycle 172).
+        if (
+            len(fid) > MAX_TEXT
+            or len(group) > MAX_TEXT
+            or any(len(cell) > MAX_TEXT for cell in texts)
+            or len(expected) > MAX_TEXT
+        ):
             raise ValueError(f"{label} (id {_safe(fid)!r}): text field exceeds size limit")
         if not texts[0]:
             raise ValueError(f"{label} (id {_safe(fid)!r}): fixture needs a user_1 message")

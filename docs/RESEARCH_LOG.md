@@ -6521,3 +6521,120 @@ the F1/F3/F4 honesty sentences in the first section, not an appendix.
 Deviation recorded: no `diff-reports` section this cycle (rationale in
 `docs/SEALED_BUNDLE_DESIGN.md` -- a bundle is a container, not a
 measurement).
+
+## Cycle 172 (2026-10-20) -- fixture-loader contract fuzzer (`fixtures fuzz`)
+
+Wave-6 research idea #7. Design in `docs/FIXTURE_FUZZ_DESIGN.md`
+(amended post-swarm). Pre-build uniqueness pass (verifier-checked
+against primary sources, October 2026): in the harnesses and fuzzing
+tools surveyed (lm-evaluation-harness, HELM, OpenAI evals,
+PromptBench, garak, and Inspect), no shipped first-class command was
+found that fuzz-tests the harness's own fixture or dataset loaders
+against a published accept/reject contract. Two honesty caveats the
+verifier pinned and the docs carry: lm-eval *does* document
+`--check_integrity` (integrity verification during a run is not
+adversarial mutation against a contract), and HELM *does* perturb
+model inputs (typos/casing, for robustness scoring) -- the loader is
+never its target. `promptfuzz` on PyPI fires 165+ attack prompts at
+HTTP endpoints/Python functions; academic PROMPTFUZZ (arXiv
+2409.14729) mutates seed prompt-injections against a target LLM; a
+third "PromptFuzz" (arXiv 2312.17677) generates fuzz drivers for
+C/C++ libraries and *is* coverage-guided -- the name is never cited
+unqualified. Atheris/libFuzzer/AFL++ are coverage-guided engines
+driven by developer-written harnesses; `fixtures fuzz` is explicitly
+not one (fixed published mutator table, seeded parameter variation,
+no instrumentation or corpus evolution) -- weaker exploration,
+stronger auditability. hypothesis-jsonschema generates schema-*valid*
+JSON inside property tests (a library, the opposite oracle); it
+refutes any claim that generation is novel, and no such claim is
+made. The combination claimed is only: a shipped command + a
+published contract table + dual-format (JSON and CSV) loader
+coverage, testing the loaders -- never a model, never fixture
+quality.
+
+### Swarm outcome
+
+Red-team A (line audit + ~90 probes): **no crash found anywhere** --
+the fail-closed claim F1 survived everything probed. 17 findings,
+all contract-table corrections or genuine defects. Red-team B
+(~150 independent probes incl. file cases and PYTHONHASHSEED
+variation) **confirmed every A finding it re-probed and disproved
+none**; A13 (raw NUL in a CSV cell) stayed unresolved -- it accepts
+on CPython 3.12.3 and is unverifiable on 3.11/3.13 from one
+interpreter, so the case is *excluded* from the corpus rather than
+pinned per-version (F3 discipline). B added eight findings of its
+own; the load-bearing ones: **B1** -- outcome-only assertions make
+the raw-surrogate cases vacuous (a bare `UnicodeEncodeError` is a
+`ValueError` subclass, so the case passes before and after the
+fix); the table therefore carries *message pins* wherever the
+loaders' wording is genuinely their own fixed vocabulary, and only
+there (B3: interpreter-owned messages -- nesting guards,
+integer-digit limits, JSON syntax positions -- vary by version and
+would falsify F3, so reports carry fixed detail tokens, never
+message text). **B4** -- corpus parameters derive from SHA-256 over
+(seed, case, parameter), never `random.Random` methods whose
+cross-version reproducibility CPython does not guarantee. **B6** --
+no temp path may enter a case identity, the digest, or the report.
+**B7** -- the surrogate decision reframed honestly: cycle 86 settled
+the *serializer*; rendering/evaluation tolerate surrogates in
+degraded form (B probed this against the initial "cannot render"
+draft claim, and the claim was corrected); the loader extension is
+a new decision whose falsifier is stated in the design doc.
+
+### Genuine loader defects found and fixed
+
+1. **Lone surrogates accepted by the JSON loader** (coordinator
+   probe phase). `parse_dataset` accepted escape-form surrogates
+   (`"\ud800"`) into every fixture field, producing Splits the
+   repo's own serializer refuses; raw-surrogate source text was
+   rejected only by accident, via a bare `UnicodeEncodeError` from
+   the byte-cap encode in both parsers. Fix: `datasets._text`
+   rejects any decoded field containing a lone surrogate (valid
+   pairs decoding to astral characters still accept), and both
+   parsers convert the encode failure into a deliberate
+   `ValueError` naming the surrogate. One existing pin updated by
+   design: cycle 30's `test_lone_surrogate_raises_valueerror` now
+   asserts the deliberate message instead of the codec leak.
+2. **CSV id/group had no length check** (red-team A1, HIGH).
+   `parse_fixture_csv` length-checked message cells and `expected`
+   but never `id`/`group`; a 17,000-char id was accepted and the
+   resulting Split then failed `split_to_json_text`'s round-trip --
+   the authoring path accepting exactly what its own
+   by-construction guarantee refuses. Fix: same `MAX_TEXT` check,
+   same message, extended to `id` and `group`; a boundary test
+   proves a max-length id now round-trips.
+3. **csv.Error mislabel** (red-team A4, found independently by B).
+   Every CSV parse error was reported as "field exceeds the parser
+   limit" -- e.g. bare-CR line endings, which contain no large
+   field. Fix: the size message is kept for the genuine
+   field-limit error (existing pins in cycles 66/68 depend on it);
+   other parse errors report as parse errors.
+
+Also scoped, per A8: the `parse_dataset` docstring claimed a
+"fixed error vocabulary on any malformed input"; JSON *syntax*
+errors keep the standard parser's wording, and the docstring now
+says so.
+
+### Built
+
+Pure `model_protocol_lab/fixturefuzz.py` (43rd source file; 100%
+line+branch under scoped coverage, including stub-proven
+type-invariant guards), `fixtures fuzz` subcommand with `--seed`
+(default 0), JSON report on stdout + summary on stderr, exit 0/1.
+133 cases: 74 JSON text, 44 CSV text, 9 JSON file, 6 CSV file --
+each with a published clause; accept cases pin stored decoded
+values (A17's rescope of F2), reject cases pin messages only where
+the vocabulary is fixed. Five tempdir mutation gates (report
+verdict, message pin, crash blur, digest payload-blindness, stored
+check) each proven non-vacuous. F1-F4 all hold on the shipped tree;
+F3 verified byte-identical across repeated runs and
+PYTHONHASHSEED values on 3.12.3 (CI covers 3.11/3.13). 6642 tests.
+
+Verification note: the first full-suite run caught one more behavior
+pin neither red-team had flagged -- cycle 29's audit had *recorded*
+the CSV id/group gap as a known doc-vs-code divergence and pinned
+the as-is behavior (`test_oversize_id_group_fail_only_at_serialize`).
+The pin and its docstring note were updated in place to assert the
+new parse-time rejection, with the history kept in the note. Rule
+reinforced: behavior-changing fixes must grep the audit files for
+the behavior's descriptive *names*, not only its messages.

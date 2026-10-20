@@ -1328,6 +1328,51 @@ answers warn on stderr exactly like `inspect`, since they pass vacuously.
 See `examples/fixtures.csv`, which builds to the equivalent of
 `examples/fixtures.json`.
 
+### Fuzzing the loaders (`fixtures fuzz`)
+
+Every experiment in this lab stands on two parsers: the JSON loader
+and the CSV authoring reader. If either one quietly accepts a
+malformed file -- or crashes on it instead of refusing it -- every
+measurement downstream inherits the defect. `fixtures fuzz` exists
+for the maintainer who wants proof, on demand, that the loaders
+still keep their contract:
+
+```sh
+python -m model_protocol_lab fixtures fuzz [--seed N]
+```
+
+The command mutates a known-good fixture file from a fixed,
+published table of mutation classes (the full table, with the
+reasoning behind each expected outcome, is
+`docs/FIXTURE_FUZZ_DESIGN.md`) and feeds every mutation to the real
+loaders: homoglyph and NFC-twin identifiers, duplicate keys spelled
+with escapes, lone surrogates, fields past the size limit, bare-CR
+line endings, unterminated quotes, FIFOs and symlinks in place of
+files, and more -- 133 cases across the JSON text, the CSV text,
+and both file readers. Each case expects `accept`, `reject` (a
+`ValueError`, and nothing else), or -- CSV only -- an accept with
+the fixture named in the empty-`expected` warning list. Accepted
+cases also pin the *stored* value, so a loader that silently
+normalizes text fails just as loudly as one that accepts a file it
+should refuse. The report is JSON on stdout with a one-line summary
+on stderr; the exit code is 0 only when every case conforms. The
+seed varies mutation parameters (lengths, padding) but never which
+outcome a case expects, and the corpus digest printed with every
+run makes two runs comparable at a glance.
+
+What this is not: it is not a coverage-guided fuzzer in the
+Atheris/libFuzzer/AFL++ sense -- there is no instrumentation, no
+coverage feedback, and no corpus evolution. That is a deliberate
+trade: weaker exploration, stronger auditability. The whole search
+space is the published table, printed before the run, and a green
+run proves exactly that the table holds for the shipped loaders --
+nothing more. In the harnesses and fuzzing tools surveyed for this
+feature (lm-evaluation-harness, HELM, OpenAI evals, PromptBench,
+garak, and Inspect, checked October 2026), no shipped first-class
+command was found that fuzz-tests the harness's own fixture or
+dataset loaders against a published accept/reject contract; the
+command tests the loaders, never a model and never fixture quality.
+
 ## 10. Interactive protocol debugger (`debug`)
 
 `debug` is an offline, stdlib-only REPL for poking at format hypotheses the

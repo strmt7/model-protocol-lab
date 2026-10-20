@@ -56,6 +56,12 @@ DOCSTRING / CODE DIVERGENCES (code behavior pinned; source untouched)
    round-trip rejects it.  The docstring's "Limits mirror the runtime
    schema" is therefore only true end-to-end, not at parse time.  Pinned
    by ``TestPinnedBehavior::test_oversize_id_group_fail_only_at_serialize``.
+   (CYCLE 172 UPDATE: the fixture-fuzzer red-team flagged this as a
+   genuine defect -- the authoring path accepting exactly what its own
+   writer refuses -- and cycle 172 closed it: ``id``/``group`` now hit
+   the same limit at parse time, and the pin below asserts the new
+   behavior under its original name's successor,
+   ``test_oversize_id_group_rejected_at_parse``.)
 """
 
 from __future__ import annotations
@@ -545,17 +551,18 @@ class TestPinnedBehavior(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "more than 200"):
             fx.parse_fixture_csv(buf.getvalue())
 
-    def test_oversize_id_group_fail_only_at_serialize(self):
+    def test_oversize_id_group_rejected_at_parse(self):
+        # Cycle 172 closed the divergence this pin originally recorded
+        # (oversize id/group used to parse and fail only inside
+        # split_to_json_text): the limit now applies at parse time.
         big = "x" * (MAX_TEXT + 1)
-        text = _simple_csv(
-            [
-                [big, "g1", "search", "", "hi", "", ""],
-                ["b1", "g2", "held_out", "", "yo", "", ""],
-            ]
-        )
-        split, _ = fx.parse_fixture_csv(text)  # parses fine
-        with self.assertRaises(ValueError):
-            fx.split_to_json_text(split)
+        for row in (
+            [big, "g1", "search", "", "hi", "", ""],
+            ["a1", big, "search", "", "hi", "", ""],
+        ):
+            text = _simple_csv([row, ["b1", "g2", "held_out", "", "yo", "", ""]])
+            with self.assertRaisesRegex(ValueError, "text field exceeds size limit"):
+                fx.parse_fixture_csv(text)
 
     def test_oversize_expected_rejected_at_parse(self):
         big = "x" * (MAX_TEXT + 1)
