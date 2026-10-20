@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 179 — `--perturb` dispatch nested inside `--transfer-model`, 2026-10-20)
+
+- `model-protocol-lab run --perturb N` silently did nothing
+  unless `--transfer-model` was also passed: the dispatch block
+  added in cycle 144 was indented inside the
+  `if args.transfer_model:` block in `cli.py`, so the flag
+  parsed, the stage existed and was unit-tested, but on a
+  perturb-only run the branch never fired — no perturbation
+  section in the results, no error, exit 0. The block is now a
+  sibling dispatch at the same level as every other probe
+  branch. Found by the new parametrized dispatch tests below,
+  which exist to fail on exactly this class of wiring error;
+  no existing test pinned the broken nesting.
+
+### Added (cycle 179 — parametrized CLI dispatch e2e + ablation mutation gates, 2026-10-20)
+
+- `tests/test_cycle179_cli_dispatch.py`: all 24 `run` stage
+  flags parse-pinned (dest set with the flag, falsy without);
+  the 19 `_run_*_probe` helpers pinned for both halves of the
+  cycle-174 dispatch pattern — with the stage layer stubbed, the
+  helper attaches a real payload under its result key, and with
+  the stage stubbed to raise, it attaches exactly the
+  `{"available": False, "detail": "<key>_unavailable"}` marker
+  without raising; the five inline flags (`--transfer-model`,
+  `--perturb`, `--token-healing`, `--logprob-diagnostic`,
+  `--sensitivity-sweep`) driven through the real run flow with
+  stubbed stages. Plus five tempdir mutation gates
+  for `ablation.py` (swap dropped, no-op arm included, flip
+  direction swapped, selection bar weakened, inapplicable set
+  inverted) — the last pure module whose exactness-critical
+  lines had no gate.
+
 ### Fixed (cycle 178 — docs currency audit, 2026-10-20)
 
 - README's prompt-boundary canonicality bullet inverted the

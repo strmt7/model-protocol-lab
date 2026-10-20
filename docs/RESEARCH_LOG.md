@@ -7094,3 +7094,66 @@ author mid-cycle: adding the test file moved the live count
 241 → 242, and VALIDATION now states 242. The cycle-44 FAQ pin
 was updated in place (15 → 20 Q&As, history kept in the comment).
 6835 tests.
+
+## Cycle 179 — parametrized CLI dispatch e2e + ablation gates (2026-10-20)
+
+The cycle's test work found a live wiring bug before its own
+tests were finished — the strongest possible argument for the
+dispatch layer it adds.
+
+**The `--perturb` nesting bug (genuine, shipped since cycle 144).**
+In `cli.py`'s run flow, the fixture-perturbation dispatch block
+(comment + `if args.perturb:` + try/except) sat at indent 20,
+inside `if args.transfer_model:` (indent 16) — every sibling
+probe branch sits at indent 16; an indent map of all the dispatch
+branches shows perturb as the only one at 20. Consequence:
+`model-protocol-lab run --perturb N` without `--transfer-model`
+parsed the flag, ran the experiment, and silently skipped the
+perturbation stage entirely — no `perturbation` key in
+results.json, no error, exit 0. The stage itself was thoroughly
+unit-tested from cycle 144 on; what no test did was drive the
+CLI branch on a perturb-only run. The block only references
+outer-scope names (backend, formats, split, boundary_map, args),
+which is why the nesting produced no NameError to betray it.
+Fix: pure dedent of the 39-line block to sibling level; for the
+combined transfer+perturb case the execution order is unchanged.
+The new dispatch e2e fails on the pre-fix tree (KeyError:
+'perturbation') and passes after — the pin bites.
+
+**Built.** `tests/test_cycle179_cli_dispatch.py` (13 tests, 62
+subtests): parse pins for all 24 stage flags; attach +
+never-raises halves for the 19 `_run_*_probe` helpers (stage
+layer stubbed to a sentinel for attach, stubbed to raise for the
+fail-closed half; the unavailable marker is asserted exactly,
+including the two irregular details `stop_unavailable` and
+`ws_scan_unavailable`); inline e2e for the five flags without
+helpers, through the real run flow (cycle-31 harness pattern).
+Five tempdir mutation gates for `ablation.py` (cycle-169
+pattern; the mutant module is registered in `sys.modules`
+before exec because ablation.py defines a dataclass at module
+level — the dataclass machinery resolves the defining module by
+name). With ablation gated, VALIDATION's "mutation gates for
+every module" claim holds for the last ungated pure module.
+6848 tests.
+
+**Research closures (wave-6 deferred items, decided).**
+
+- *Per-template latency profiling — DROPPED.* Wall-clock timing
+  on shared hardware is not reproducible; this repo's own
+  history has timing-sensitive tests flaking under suite
+  contention, and a determinism-first lab cannot ship a metric
+  it cannot reproduce byte-for-byte. Closed, not deferred: do
+  not re-propose without a reproducible timing methodology.
+- *Fixture difficulty calibration / IRT — DROPPED.* Weak payoff
+  for this instrument: the question it answers (which fixtures
+  carry the discriminating signal) is already answered by the
+  decisive-fixture analysis and the portfolio's per-fixture
+  oracle winners. Closed.
+- *Multi-turn drift probe — still DEFERRED, blocker corrected.*
+  The blocker is not the fixture schema (synthetic multi-turn
+  fixtures can be built in memory, per the hierarchy/faketurn
+  precedent) but the incorporation policy: what a "turn" means
+  for the conservative selection rule, and per-turn expectations
+  (which turn's answer is scored, and against what). Deferred
+  until that policy is designed and recorded; no build before
+  then.

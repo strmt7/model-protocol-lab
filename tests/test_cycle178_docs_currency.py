@@ -116,10 +116,12 @@ class DocsCurrencyTests(unittest.TestCase):
         self.assertLess(idx_833, idx_sec9)
         self.assertLess(idx_836, idx_sec9)
 
-    def test_validation_header_covers_cycle_178(self):
+    def test_validation_header_covers_latest_cycle(self):
         # The first "## " section (index 1; index 0 is the title).
+        # Bump the pinned range whenever a cycle updates the top
+        # evidence section (178 -> 179 in cycle 179).
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–178", top)
+        self.assertIn("cycles 10–179", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):
