@@ -379,11 +379,12 @@ class ValidationConfigFileTests(unittest.TestCase):
 
 
 class ValidationDocsTests(unittest.TestCase):
-    def test_faq_has_15_qas_not_12(self):
-        # Doc claims 12 Q&As; the file has grown to 15.
+    def test_faq_has_20_qas_not_12(self):
+        # Doc claims 12 Q&As; the file grew to 15 by cycle 44 and to
+        # 20 in cycle 178 (docs-currency backfill entries).
         lines = (REPO_ROOT / "docs" / "FAQ.md").read_text(encoding="utf-8").splitlines()
         headings = [line for line in lines if line.startswith("## ")]
-        self.assertEqual(len(headings), 15)
+        self.assertEqual(len(headings), 20)
 
     def test_usage_stop_isolation_matrix_section(self):
         text = (REPO_ROOT / "docs" / "USAGE.md").read_text(encoding="utf-8")

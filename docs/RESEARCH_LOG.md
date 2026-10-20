@@ -7034,3 +7034,63 @@ One defensive gap test from cycle 169 asserted the old
 validator *accepted* a None profile gap ("must not crash"); it
 now asserts rejection without a crash — the no-crash property is
 kept, the acceptance is not.
+
+## Cycle 178 — docs currency audit and repair (2026-10-20)
+
+A read-only swarm audit (docs auditor + verifier, briefs in the
+wave-7 round) compared every user-facing doc against the shipped
+tree. The auditor enumerated discrepancies with line references;
+the verifier independently confirmed or refuted the five
+load-bearing claims (5/5 checked against files and live runs); the
+coordinator spot-re-verified the two most consequential before
+editing (README canonicality text vs `boundary_audit.py`, the
+sealed-bundle "strict" sentence vs `pack.py`).
+
+Genuine defects found and fixed:
+
+1. **README inverted the Prompt Boundary Problem rate.** The
+   Capabilities bullet called the fraction of pairs whose text
+   *does* re-encode to the recorded ids "the Prompt Boundary
+   Problem rate"; `boundary_audit` defines the rate as
+   `n_problem / n_usable` — the fraction that does *not*
+   re-encode (USAGE §8.10 already matched the code). Bullet
+   rewritten. An older research note in this log (cycle-134 era)
+   also uses "canonicality rate" as undefined shorthand; the entry
+   is left as written (this log is a record), and this entry is
+   the correction of reference: the PBP rate is the problem
+   fraction.
+2. **F8 (sealed-bundle "strict" sentence).**
+   `docs/SEALED_BUNDLE_DESIGN.md` said "disk fields are zero, and
+   ZIP64 is rejected" without scope; `_preparse_container`
+   enforces both at the EOCD record only (EOCD disk fields, ZIP64
+   sentinel values), as the code's own docstring already said.
+   The sentence now names the EOCD scope.
+
+Currency repairs (all auditor-verified): README Capabilities
+gained the 14 missing probe bullets plus own bullets for the 4
+diff-only probes, `pack`, `fixtures fuzz`, `inspect`,
+`verify --bundle`, `doctor --portability-matrix`,
+`surface-noise diff`, and the 12 omitted `diff-reports`
+comparisons; the sample-report paragraph now describes the 31
+sections the committed sample renders (it had claimed a
+token-healing section the sample does not contain and omitted 19
+rendered sections). USAGE §6 lists all renderer sections and its
+sample claim names the 8 sections the sample omits; §12 lists all
+22 stage keys and the full summary-key pattern; §§8.33–8.36 moved
+from after §14 to inside §8, after §8.32. FAQ gained 5 entries
+(probe catalogue/cost split, pack/verify --bundle,
+verify --determinism, fixtures fuzz, confidentiality/refusals);
+its newest cited section had been §8.6 (cycle ~130). CHANGELOG
+backfilled for cycles 164, 165 (Added), 166, 167, 172.
+VALIDATION's header ran "cycles 10–153" over a section citing
+176–177; now 10–178, and its ruff line names the CI scope.
+
+New pin: `tests/test_cycle178_docs_currency.py` (8 tests) —
+including the mandated VALIDATION ruff-count pin, which compares
+the stated count against a live CI-scope
+`ruff format --check model_protocol_lab tests examples` run and
+ignores the historical snapshot sections. The pin caught its own
+author mid-cycle: adding the test file moved the live count
+241 → 242, and VALIDATION now states 242. The cycle-44 FAQ pin
+was updated in place (15 → 20 Q&As, history kept in the comment).
+6835 tests.

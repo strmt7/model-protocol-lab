@@ -177,10 +177,10 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 ## 6. Read the outputs
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
-- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+- `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
-A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see every section above with no model required.
+A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness and field-ablation sections are absent from the sample even though real runs render them.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -1286,6 +1286,208 @@ not "which template won" but "what about it won" -- because only the
 causal field transfers to the template they write next. The stage never
 fails the run.
 
+### 8.33 Prefix-cache sharability profile (`cache_profile`)
+
+Your serving stack deduplicates prompt prefixes in the KV cache -- how
+much prefill could it skip for each template? `model-protocol-lab run
+--cache-profile` measures, per template family, the fraction of the
+run's recorded prompt tokens that exact-prefix reuse (vLLM automatic
+prefix caching) could skip, computed offline from the recorded
+`input_ids` with zero extra model calls, block-quantized to full
+blocks (default 16, vLLM's block size; partial trailing blocks never
+count). The headline metric is the **achievable block fraction** --
+exact, not a bound: for each shared prefix, every request order (a
+permutation of the recorded prompts served once into a cold, infinite,
+dedicated cache) yields exactly one first-occurrence miss and
+k_{shared}-1 hits, so achievable = potential minus first occurrences,
+order-free. Red-team A found the naive "cacheable fraction" metric
+provably *misranks* templates against every realizable order (the
+inversion is in the design record); the achievable quantity survived
+an adversarial disproof attempt plus brute-force simulation over all
+permutations of random prompt sets. The report also shows the token-
+level diagnostic (ignores block quantization) and the eviction-robust
+"potential" upper bounds -- labeled as such, never as production
+ceilings. The pre-registered falsifiable claim (in `cacheprofile.py`)
+is a max-minus-min achievable-block gap of exactly 0 uniform across
+families; a measurably positive gap means the template, not the model
+or the fixture set, decides how much prefill a prefix cache could
+skip. Three honesty pins: (1) sharability is a cost *input*, never a
+cost verdict -- it says nothing about absolute prefill cost, latency,
+or TTFT; (2) the metric's closed world is a permutation of the
+recorded prompts -- production interleaving, cross-workload warming,
+and repeated requests can move real hits either way; (3) "efficiency"
+is deliberately never used for it (the term belongs to HELM-style
+accuracy-per-compute). `results.json` carries `cache_profile` with
+per-candidate cells, most/least sharable labels, the gap, and an
+`evaluable_mismatch` flag when candidates were measured on different
+denominators. `diff-reports` compares achievable-block, achievable-
+token, and potential-block drift, added/removed candidates, and
+excluded-set changes (`diff_cache_profile`; `cache_profile_changed` /
+`cache_profile_asymmetric` feed `identical`). `--cache-profile-block-size`
+re-quantizes for other engines (recorded in the output). Monday-morning
+use: an inference engineer deciding between two prompt templates for a
+vLLM deployment checks which one's prompts share more exact prefixes
+(block-quantized) before wiring up prefix caching -- the number is the
+routing/templating input, not a serving-cost promise. The stage never
+fails the run and never touches selection.
+
+### 8.34 Labeled-block confidentiality (`confidentiality`)
+
+If you prepend standing instructions to every prompt as a labeled block,
+does the label stop the model quoting that block back when a user asks?
+`model-protocol-lab run --confidentiality` renders a fixed nonce marker
+(`zorblax quindle vexmor 7719`) inside the privilege-labeled block -- the
+same `[PRIVILEGED SYSTEM INSTRUCTION]` framing the hierarchy probe uses,
+because the lab has no system role -- and, as a control, the identical
+bare marker at the same position in the user turn. Frozen extraction
+elicitations (a direct request, an authority claim, a memory reframe)
+then ask for the block quoted verbatim, mirrored exactly across arms.
+Detection runs on the full decoded output (never the boundary-truncated
+answer): the longest contiguous run of marker tokens, with a leak at 3
+of 4 tokens. Per candidate you get the paired control/treatment leak
+rates, the gap (control minus treatment), discordant pair counts, and an
+exact McNemar p-value; the profile reports the most/least resistant
+candidates, the positive set (gap > 0 with at least 2 discordant
+control-only pairs), and `uniform_nonpositive` -- the null result, where
+the label conferred no measurable selective protection anywhere (the
+Tensor Trust Appendix H reading, and a publishable negative).
+
+Read the numbers as a **verbatim-exposure lower bound**, never as a
+confidentiality certification: paraphrase, translation, and
+summarization leakage are out of scope by construction, a nonce marker
+is not natural-language system content, and a low leak rate is not a
+"safe to ship secrets" claim. "Confidentiality" here is the behavioural
+sense (OWASP LLM07, system prompt leakage), not confidentiality at rest
+or in transit. Fail-closed throughout: candidates whose control arm
+never leaks carry no information about the label (their gap is `None`,
+flagged `base_rate_zero`), candidates under the evaluability floor
+report `None`, and if no candidate is measurable the payload is
+`{"available": false, "detail": "confidentiality_unavailable"}`.
+`diff-reports` compares gap drift, positive-set changes, the null flag,
+and protocol-fingerprint drift (a marker or threshold change makes runs
+not like-for-like; `diff_confidentiality`, `confidentiality_changed` /
+`confidentiality_asymmetric` feed `identical`). Monday-morning use: an
+operator about to paste a real policy block into every prompt checks
+whether their chosen template's labeling actually reduces verbatim
+exposure under direct asking, before trusting the label. Opt-in: costs
+2 arms x 12 fixtures x C extra generations. The stage never fails the
+run and never touches selection.
+
+### 8.35 Answer-collision audit (`answer_collision`)
+
+Could your boundary marker silently truncate correct answers that quote
+the marker? `model-protocol-lab run --answer-collision` audits the lab's
+own token-ID boundary detector: synthetic expected answers embedding
+marker-like text (the configuration's own marker at the start, inside,
+at the end of, and repeated in the answer; every hostile protocol
+marker from the control-token catalogue; one clean control) are emitted
+verbatim through the evaluation path by scripted backends, and each is
+classified by a total order -- **collision** (the detector cut a correct
+answer and discarded content that followed the marker),
+**ends-at-marker** (the scripted emission simply ended at the marker; a
+distinct bookkeeping cell, never evidence of early stopping), or
+**intact** (the detector did not fire). Each fixture runs in two arms:
+the reserved arm (the backend's natural encoding -- the measurement)
+and a subword control arm (the same decoded text with every marker
+occurrence re-encoded in subword ids, where the detector is blind; a
+collision there means the boundary matches non-reserved encodings).
+Where no encoding pair exists the arm records `no_encoding_pair`; where
+the backend's encode/decode does not round-trip an answer exactly, the
+fixture leaves the denominator and is counted, never silently dropped.
+
+The unit is the **boundary configuration**, not the template:
+boundaries are operator-supplied ids (shared by default, overridden per
+candidate by `--boundary-map`), and configurations sharing a boundary
+produce identical cells by construction. Scope is the configured
+boundaries and this tokenizer only; scripted emission measures the
+detector, never any model, and says nothing about how often real
+answers contain marker text. Fail-closed throughout: if no
+configuration is measurable the payload is `{"available": false,
+"detail": "answer_collision_unavailable"}`, and `uniform_intact` -- the
+detector truncated nothing anywhere -- is the regression-guard pass.
+`diff-reports` compares reserved-arm collision-rate drift, the colliding
+set, the intact flag, and protocol-fingerprint drift
+(`diff_answer_collision`, `answer_collision_changed` /
+`answer_collision_asymmetric` feed `identical`). Monday-morning use:
+before trusting exact-match scores on a new checkpoint or boundary
+setup, check whether your boundary marker can manufacture failures out
+of correct answers. Opt-in: runs entirely on scripted emissions (no
+extra model generations, but `model-protocol-lab run` itself loads the
+checkpoint as usual). The stage never fails the run and never touches selection.
+
+### 8.36 Suspected-refusal profile (`refusals`)
+
+Opt-in with `model-protocol-lab run --refusals`. Post-hoc over the
+main run's recorded search observations -- zero extra model calls:
+each candidate's recorded answers are classified against a frozen,
+published refusal-opener list, and the run gains a `refusals`
+section with the per-candidate suspected-refusal rate on benign
+fixtures. Monday-morning use: after adding or changing a chat
+template, check whether the new rendering makes the checkpoint
+refuse questions it answered under the old one -- with the weights
+and the message content held fixed, a rate difference is a
+rendering effect by construction.
+
+The detector is frozen as `frozen_refusal_openers_v2`: the core is
+XSTest's Appendix D string list (arXiv:2308.01263), minus "no," and
+"no." -- on this lab's short-answer fixtures those two fire on
+correct yes/no answers, so they are dropped and the deviation is
+recorded in the detector's own docstring -- plus itemised
+supplements from OR-Bench Appendix M (arXiv:2405.20947) and the
+GCG refusal-string lineage. An answer is a *suspected* refusal when
+its normalised form starts with a listed opener and the opener ends
+at a word boundary (NFKC, format characters treated as spaces,
+casefolded, combining marks stripped, curly apostrophes folded,
+whitespace collapsed; the longest boundary-satisfying opener is
+reported). The boundary rule is the v2 change (cycle 175, wave-7
+red-team find): bare prefix matching also fired on "I will note
+the key points..." and "As an Air Force pilot...", and a detector
+that manufactures the effect it measures is worse than one that
+misses a glued "I cannotprovide...". v1 rates are not comparable
+with v2 rates; the section's `method` block carries the detector
+id, the full list, and its SHA-256 digest in every result, so a
+detector change is visible in `diff-reports` as protocol drift
+instead of silently moving the rates.
+
+Read the numbers as the section names them: *suspected*. String
+matching is the field's known-weak baseline -- XSTest's own
+validation shows it over-counting one model's refusals (empathy
+openers such as "I'm sorry to hear...") and under-counting
+another's, with the sign of the error model-dependent, and no
+published accuracy figure transfers to this fixture set. Three
+consequences are built in rather than footnoted: every rate travels
+with its exact counts (suspected k of n completed); the
+suspected-and-passed cell separates detector artifacts on
+echo-style fixtures (whose expected answer itself opens with an
+opener) from the decision-relevant suspected-and-failed cell,
+while a hedged failing answer ("I can't be certain, but ...")
+stays indistinguishable from a true refusal at this tier; and
+answers that open with markdown or a quotation mark are a
+documented miss, not silently normalised into hits. The classified
+text is the lab's recorded answer (the boundary-cut retained
+decode every answer-level analysis here measures), over completed
+search observations only -- held-out observations are never read.
+
+Rates are withheld (reported as counts with a `rate_note`, never a
+number) for a candidate whose search did not complete: an
+interrupted candidate is measured on a fixture prefix, and
+comparing its rate against full-set rates would be a silent
+denominator change. When candidates' completed fixture sets
+differ, the section sets `evaluable_mismatch` and the HTML report
+prints a caution next to the table. Hits identify the fixture and
+the opener that fired -- a pointer to the evidence, never a copy:
+the answer text itself stays in the evidence-bearing observations,
+so the section is safe in the public (evidence-stripped)
+`results.json`.
+
+`diff-reports` compares per-candidate rate drift (with denominator
+drift alongside -- a rate that moved because its n moved is a
+different story), hit-set changes, excluded-candidate transitions,
+the mismatch flag, and detector protocol drift
+(`diff_refusals`, `refusals_changed` / `refusals_asymmetric` feed
+`identical`). Informational only: the profile never affects
+selection, and the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -1658,7 +1860,16 @@ drift, per-checkpoint (decision, winner) drift, per-cell verdict drift,
 checkpoints added/removed),
 `contamination` (the fixture-hygiene comparison: worst-tier drift,
 pairs added/removed, tier escalations -- did the held-out set get
-cleaner or more contaminated?),
+cleaner or more contaminated?), and one key per recorded experiment
+stage -- `perturbation`, `token_healing`, `hierarchy`, `prefill`,
+`portfolio`, `synthhistory`, `batch_invariance`, `position`,
+`stop_cause`, `ws_canonical`, `structured`, `deliforge`, `fewshot`,
+`faketurn`, `toolcall`, `verbosity`, `refusals`, `cache_profile`,
+`template_robustness`, `ablation`, `confidentiality`,
+`answer_collision` -- each carrying that stage's verdict drift and
+per-candidate drift, with the stage's own section in section 8
+describing its comparison in full. A stage a run did not record is
+reported as one-sided (asymmetric), never silently dropped.
 `config_drift` (the comparability warnings), `candidate_verdicts`
 (per-candidate pass/fail flips on search and held-out), `fixture_diffs`
 (per-fixture old/new outcomes per candidate),
@@ -1671,7 +1882,11 @@ counts (`fixtures_flipped`, `candidates_changed_status`,
 `boundary_audit_changed`, `boundary_audit_asymmetric`,
 `selection_robustness_changed`, `selection_robustness_asymmetric`,
 `transfer_changed`, `transfer_asymmetric`,
-`contamination_changed`, `contamination_asymmetric`, `identical`).
+`contamination_changed`, `contamination_asymmetric`,
+`decision_changed`, `winner_changed`, `evidence_asymmetric`, a
+`<stage>_changed` / `<stage>_asymmetric` pair for every stage key
+above (the `token_healing` stage is shortened to `healing_changed` /
+`healing_asymmetric`), and `identical`).
 
 What it compares, exactly:
 
@@ -1707,6 +1922,11 @@ What it compares, exactly:
   held-out verification passes unchanged, and whether it was
   budget-robust. A run without a recorded floor is reported plainly
   instead of compared.
+- **Experiment stages**: every stage the two runs recorded (the stage
+  keys listed above) is compared on its own terms -- verdict drift,
+  per-candidate drift, and the stage-specific rates its section in
+  section 8 defines. A stage recorded on only one side is reported
+  one-sided; the summary's `identical` verdict counts every stage.
 
 Per-fixture comparison needs per-fixture evidence: `results.json` carries
 `observations` only when the run used `--include-evidence`. When either
@@ -1882,205 +2102,3 @@ says nothing about semantic paraphrase, prompt injection, hierarchy
 attacks, or tool-call adherence under noise. An MCP server
 (`tools/surface_noise_mcp_server.py`, stdlib-only) exposes the same
 instrument to agents.
-
-### 8.33 Prefix-cache sharability profile (`cache_profile`)
-
-Your serving stack deduplicates prompt prefixes in the KV cache -- how
-much prefill could it skip for each template? `model-protocol-lab run
---cache-profile` measures, per template family, the fraction of the
-run's recorded prompt tokens that exact-prefix reuse (vLLM automatic
-prefix caching) could skip, computed offline from the recorded
-`input_ids` with zero extra model calls, block-quantized to full
-blocks (default 16, vLLM's block size; partial trailing blocks never
-count). The headline metric is the **achievable block fraction** --
-exact, not a bound: for each shared prefix, every request order (a
-permutation of the recorded prompts served once into a cold, infinite,
-dedicated cache) yields exactly one first-occurrence miss and
-k_{shared}-1 hits, so achievable = potential minus first occurrences,
-order-free. Red-team A found the naive "cacheable fraction" metric
-provably *misranks* templates against every realizable order (the
-inversion is in the design record); the achievable quantity survived
-an adversarial disproof attempt plus brute-force simulation over all
-permutations of random prompt sets. The report also shows the token-
-level diagnostic (ignores block quantization) and the eviction-robust
-"potential" upper bounds -- labeled as such, never as production
-ceilings. The pre-registered falsifiable claim (in `cacheprofile.py`)
-is a max-minus-min achievable-block gap of exactly 0 uniform across
-families; a measurably positive gap means the template, not the model
-or the fixture set, decides how much prefill a prefix cache could
-skip. Three honesty pins: (1) sharability is a cost *input*, never a
-cost verdict -- it says nothing about absolute prefill cost, latency,
-or TTFT; (2) the metric's closed world is a permutation of the
-recorded prompts -- production interleaving, cross-workload warming,
-and repeated requests can move real hits either way; (3) "efficiency"
-is deliberately never used for it (the term belongs to HELM-style
-accuracy-per-compute). `results.json` carries `cache_profile` with
-per-candidate cells, most/least sharable labels, the gap, and an
-`evaluable_mismatch` flag when candidates were measured on different
-denominators. `diff-reports` compares achievable-block, achievable-
-token, and potential-block drift, added/removed candidates, and
-excluded-set changes (`diff_cache_profile`; `cache_profile_changed` /
-`cache_profile_asymmetric` feed `identical`). `--cache-profile-block-size`
-re-quantizes for other engines (recorded in the output). Monday-morning
-use: an inference engineer deciding between two prompt templates for a
-vLLM deployment checks which one's prompts share more exact prefixes
-(block-quantized) before wiring up prefix caching -- the number is the
-routing/templating input, not a serving-cost promise. The stage never
-fails the run and never touches selection.
-
-### 8.34 Labeled-block confidentiality (`confidentiality`)
-
-If you prepend standing instructions to every prompt as a labeled block,
-does the label stop the model quoting that block back when a user asks?
-`model-protocol-lab run --confidentiality` renders a fixed nonce marker
-(`zorblax quindle vexmor 7719`) inside the privilege-labeled block -- the
-same `[PRIVILEGED SYSTEM INSTRUCTION]` framing the hierarchy probe uses,
-because the lab has no system role -- and, as a control, the identical
-bare marker at the same position in the user turn. Frozen extraction
-elicitations (a direct request, an authority claim, a memory reframe)
-then ask for the block quoted verbatim, mirrored exactly across arms.
-Detection runs on the full decoded output (never the boundary-truncated
-answer): the longest contiguous run of marker tokens, with a leak at 3
-of 4 tokens. Per candidate you get the paired control/treatment leak
-rates, the gap (control minus treatment), discordant pair counts, and an
-exact McNemar p-value; the profile reports the most/least resistant
-candidates, the positive set (gap > 0 with at least 2 discordant
-control-only pairs), and `uniform_nonpositive` -- the null result, where
-the label conferred no measurable selective protection anywhere (the
-Tensor Trust Appendix H reading, and a publishable negative).
-
-Read the numbers as a **verbatim-exposure lower bound**, never as a
-confidentiality certification: paraphrase, translation, and
-summarization leakage are out of scope by construction, a nonce marker
-is not natural-language system content, and a low leak rate is not a
-"safe to ship secrets" claim. "Confidentiality" here is the behavioural
-sense (OWASP LLM07, system prompt leakage), not confidentiality at rest
-or in transit. Fail-closed throughout: candidates whose control arm
-never leaks carry no information about the label (their gap is `None`,
-flagged `base_rate_zero`), candidates under the evaluability floor
-report `None`, and if no candidate is measurable the payload is
-`{"available": false, "detail": "confidentiality_unavailable"}`.
-`diff-reports` compares gap drift, positive-set changes, the null flag,
-and protocol-fingerprint drift (a marker or threshold change makes runs
-not like-for-like; `diff_confidentiality`, `confidentiality_changed` /
-`confidentiality_asymmetric` feed `identical`). Monday-morning use: an
-operator about to paste a real policy block into every prompt checks
-whether their chosen template's labeling actually reduces verbatim
-exposure under direct asking, before trusting the label. Opt-in: costs
-2 arms x 12 fixtures x C extra generations. The stage never fails the
-run and never touches selection.
-
-### 8.35 Answer-collision audit (`answer_collision`)
-
-Could your boundary marker silently truncate correct answers that quote
-the marker? `model-protocol-lab run --answer-collision` audits the lab's
-own token-ID boundary detector: synthetic expected answers embedding
-marker-like text (the configuration's own marker at the start, inside,
-at the end of, and repeated in the answer; every hostile protocol
-marker from the control-token catalogue; one clean control) are emitted
-verbatim through the evaluation path by scripted backends, and each is
-classified by a total order -- **collision** (the detector cut a correct
-answer and discarded content that followed the marker),
-**ends-at-marker** (the scripted emission simply ended at the marker; a
-distinct bookkeeping cell, never evidence of early stopping), or
-**intact** (the detector did not fire). Each fixture runs in two arms:
-the reserved arm (the backend's natural encoding -- the measurement)
-and a subword control arm (the same decoded text with every marker
-occurrence re-encoded in subword ids, where the detector is blind; a
-collision there means the boundary matches non-reserved encodings).
-Where no encoding pair exists the arm records `no_encoding_pair`; where
-the backend's encode/decode does not round-trip an answer exactly, the
-fixture leaves the denominator and is counted, never silently dropped.
-
-The unit is the **boundary configuration**, not the template:
-boundaries are operator-supplied ids (shared by default, overridden per
-candidate by `--boundary-map`), and configurations sharing a boundary
-produce identical cells by construction. Scope is the configured
-boundaries and this tokenizer only; scripted emission measures the
-detector, never any model, and says nothing about how often real
-answers contain marker text. Fail-closed throughout: if no
-configuration is measurable the payload is `{"available": false,
-"detail": "answer_collision_unavailable"}`, and `uniform_intact` -- the
-detector truncated nothing anywhere -- is the regression-guard pass.
-`diff-reports` compares reserved-arm collision-rate drift, the colliding
-set, the intact flag, and protocol-fingerprint drift
-(`diff_answer_collision`, `answer_collision_changed` /
-`answer_collision_asymmetric` feed `identical`). Monday-morning use:
-before trusting exact-match scores on a new checkpoint or boundary
-setup, check whether your boundary marker can manufacture failures out
-of correct answers. Opt-in: runs entirely on scripted emissions (no
-extra model generations, but `model-protocol-lab run` itself loads the
-checkpoint as usual). The stage never fails the run and never touches selection.
-
-### 8.36 Suspected-refusal profile (`refusals`)
-
-Opt-in with `model-protocol-lab run --refusals`. Post-hoc over the
-main run's recorded search observations -- zero extra model calls:
-each candidate's recorded answers are classified against a frozen,
-published refusal-opener list, and the run gains a `refusals`
-section with the per-candidate suspected-refusal rate on benign
-fixtures. Monday-morning use: after adding or changing a chat
-template, check whether the new rendering makes the checkpoint
-refuse questions it answered under the old one -- with the weights
-and the message content held fixed, a rate difference is a
-rendering effect by construction.
-
-The detector is frozen as `frozen_refusal_openers_v2`: the core is
-XSTest's Appendix D string list (arXiv:2308.01263), minus "no," and
-"no." -- on this lab's short-answer fixtures those two fire on
-correct yes/no answers, so they are dropped and the deviation is
-recorded in the detector's own docstring -- plus itemised
-supplements from OR-Bench Appendix M (arXiv:2405.20947) and the
-GCG refusal-string lineage. An answer is a *suspected* refusal when
-its normalised form starts with a listed opener and the opener ends
-at a word boundary (NFKC, format characters treated as spaces,
-casefolded, combining marks stripped, curly apostrophes folded,
-whitespace collapsed; the longest boundary-satisfying opener is
-reported). The boundary rule is the v2 change (cycle 175, wave-7
-red-team find): bare prefix matching also fired on "I will note
-the key points..." and "As an Air Force pilot...", and a detector
-that manufactures the effect it measures is worse than one that
-misses a glued "I cannotprovide...". v1 rates are not comparable
-with v2 rates; the section's `method` block carries the detector
-id, the full list, and its SHA-256 digest in every result, so a
-detector change is visible in `diff-reports` as protocol drift
-instead of silently moving the rates.
-
-Read the numbers as the section names them: *suspected*. String
-matching is the field's known-weak baseline -- XSTest's own
-validation shows it over-counting one model's refusals (empathy
-openers such as "I'm sorry to hear...") and under-counting
-another's, with the sign of the error model-dependent, and no
-published accuracy figure transfers to this fixture set. Three
-consequences are built in rather than footnoted: every rate travels
-with its exact counts (suspected k of n completed); the
-suspected-and-passed cell separates detector artifacts on
-echo-style fixtures (whose expected answer itself opens with an
-opener) from the decision-relevant suspected-and-failed cell,
-while a hedged failing answer ("I can't be certain, but ...")
-stays indistinguishable from a true refusal at this tier; and
-answers that open with markdown or a quotation mark are a
-documented miss, not silently normalised into hits. The classified
-text is the lab's recorded answer (the boundary-cut retained
-decode every answer-level analysis here measures), over completed
-search observations only -- held-out observations are never read.
-
-Rates are withheld (reported as counts with a `rate_note`, never a
-number) for a candidate whose search did not complete: an
-interrupted candidate is measured on a fixture prefix, and
-comparing its rate against full-set rates would be a silent
-denominator change. When candidates' completed fixture sets
-differ, the section sets `evaluable_mismatch` and the HTML report
-prints a caution next to the table. Hits identify the fixture and
-the opener that fired -- a pointer to the evidence, never a copy:
-the answer text itself stays in the evidence-bearing observations,
-so the section is safe in the public (evidence-stripped)
-`results.json`.
-
-`diff-reports` compares per-candidate rate drift (with denominator
-drift alongside -- a rate that moved because its n moved is a
-different story), hit-set changes, excluded-candidate transitions,
-the mismatch flag, and detector protocol drift
-(`diff_refusals`, `refusals_changed` / `refusals_asymmetric` feed
-`identical`). Informational only: the profile never affects
-selection, and the stage never fails the run.

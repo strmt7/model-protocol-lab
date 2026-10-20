@@ -6,6 +6,57 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 178 — docs currency audit, 2026-10-20)
+
+- README's prompt-boundary canonicality bullet inverted the
+  rate: it called the fraction of pairs that *do* re-encode to
+  the recorded ids "the Prompt Boundary Problem rate"; the audit
+  (`boundary_audit.py`) defines the rate as the fraction that
+  does *not* re-encode (`n_problem / n_usable`). The bullet now
+  says so.
+- `docs/SEALED_BUNDLE_DESIGN.md` overstated the bundle container
+  pre-parse (wave-7 F8): "disk fields are zero, and ZIP64 is
+  rejected" read as container-wide guarantees; the code enforces
+  both at the EOCD record only (EOCD disk fields, ZIP64 sentinel
+  values). The sentence now names that scope.
+- README Capabilities omitted shipped probes and commands:
+  bullets added for `--structured`, `--deliforge`, `--few-shot`,
+  `--fake-turn`, `--tool-call`, `--verbosity`,
+  `--template-robustness`, `--ablate-fields`, `--cache-profile`,
+  `--confidentiality`, `--answer-collision`, `--refusals`,
+  `--logprob-diagnostic`, `--include-evidence`, `pack`,
+  `fixtures fuzz`, `inspect`, and `verify --bundle`; the
+  diff-only probes (`--synth-history`, `--batch-invariance`,
+  `--position`, `--stop-cause`) got their own bullets, and the
+  `diff-reports` bullet now names the twelve comparisons it had
+  omitted. The "What the report looks like" paragraph claimed a
+  token-healing section the committed sample does not render
+  (and a failure-mode diagnosis its clean-pass banner does not
+  carry); it now describes the 31 sections the sample renders
+  and names the eight it omits.
+- USAGE §6's report inventory omitted fourteen renderer
+  sections and claimed the committed sample shows "every section
+  above" — false in both directions; the inventory is complete
+  and the sample claim now names the absent sections. §12's
+  `diff-reports` inventory omitted 22 stage keys and 44 summary
+  keys; both lists are now complete, with a per-stage comparison
+  bullet. §§8.33–8.36 sat physically after §14; they now follow
+  §8.32 inside §8.
+- FAQ stopped at the token-budget frontier (cycle ~130):
+  entries added for the probe catalogue and its cost split,
+  `pack` / `verify --bundle`, `verify --determinism`, and
+  `fixtures fuzz`, plus the confidentiality and refusal probes.
+- CHANGELOG backfilled for cycles 164, 165 (Added), 166, 167,
+  and 172, which shipped without entries.
+- VALIDATION's top evidence header claimed "cycles 10–153"
+  while its own section cites cycles 176–177; the range now
+  runs to cycle 178. Its ruff line stated "(241 files)" without
+  the scope that produces the number; the line now names the CI
+  scope (`model_protocol_lab tests examples`; 242 files with
+  this cycle's pin test included), and a new pin test compares
+  the stated count against a live CI-scope
+  `ruff format --check` run.
+
 ### Fixed (cycle 177 — wave-7 red-team fixes round 3, 2026-10-20)
 
 - `diff-reports` validators for cache profile and
@@ -110,6 +161,39 @@ All notable changes to this project are documented here. The format follows
   record. Pure `determinism.py`; contract and pre-registered
   falsifiable claims in `docs/DETERMINISM_AUDIT_DESIGN.md`; USAGE
   §13.2.
+
+### Added (cycle 172 — fixture-loader contract fuzzer, 2026-10-20)
+
+- New command `model-protocol-lab fixtures fuzz [--seed N]`
+  (wave-6 idea 7): a seeded contract fuzzer for the fixture
+  loaders — a fixed, published 133-case mutator table (74 JSON
+  text, 44 CSV text, 9 JSON file, 6 CSV file) checked against the
+  loaders' documented accept/reject contract. Mutator parameters
+  derive from SHA-256 (never `random.Random`); reports carry no
+  fixture text, paths, or timestamps, and the same seed
+  reproduces the report byte-for-byte across runs and
+  `PYTHONHASHSEED` values. Accept cases pin stored decoded
+  values; reject cases pin messages only where the loaders'
+  wording is fixed vocabulary. Five tempdir mutation gates, each
+  proven non-vacuous. Pure `fixturefuzz.py`; USAGE §9. The
+  corpus is a fixed table, not coverage-guided fuzzing, and the
+  docs say so.
+
+### Fixed (cycle 172 — loader defects found by the fuzzer, 2026-10-20)
+
+- Lone surrogates accepted by the JSON loader: escape-form
+  `"\ud800"` entered fixture fields, producing splits the repo's
+  own serializer refuses; raw-surrogate text was rejected only
+  via a bare `UnicodeEncodeError` codec leak. Both loaders now
+  reject lone surrogates deliberately in the loaders' own
+  vocabulary; valid surrogate pairs still accept.
+- CSV `id`/`group` had no length check: a 17,000-character id
+  parsed, then failed the round-trip writer — the authoring path
+  accepting what its own writer refuses. The `MAX_TEXT` check
+  now covers every field; a max-length id round-trips.
+- Every `csv.Error` was mislabeled "field exceeds the parser
+  limit". The size message is kept for the genuine limit error;
+  other parse errors now report as parse errors.
 
 ### Added (cycle 171 — sealed result bundle, 2026-10-20)
 
@@ -224,6 +308,48 @@ All notable changes to this project are documented here. The format follows
   renders them in TOC order; a regression test asserts every TOC href
   resolves to a body id.
 
+### Added (cycle 167 — template field ablation, 2026-10-20)
+
+- New opt-in probe `model-protocol-lab run --ablate-fields`
+  (wave-6 research idea 1): single-field causal ablation of the
+  format's structural fields — one field at a time (BOS, role
+  markers, separators, suffix) replaced by its neutral value,
+  the conservative selection rule re-applied per arm — so the
+  winner's verdict is attributed to the fields that actually
+  carry it. Pure `ablation.py`; HTML section and
+  `diff_ablation`; USAGE §8.32. Informational only; never
+  touches selection.
+
+### Added (cycle 166 — per-template surface-noise robustness, 2026-10-20)
+
+- New opt-in probe `model-protocol-lab run --template-robustness`:
+  for each candidate, the fraction of its *correct* search
+  verdicts whose pass survives presentation-level surface noise
+  (whitespace, case, Unicode variants) applied to the user
+  message contents — preservation measured on correct verdicts
+  only, so a template cannot look robust by failing
+  consistently. `surfacenoise.probe_template_robustness` under a
+  frozen protocol; HTML section and
+  `diff_template_robustness`; USAGE §8.31. Informational only;
+  never touches selection.
+
+### Added (cycle 165 — surface-noise self-consistency probe, 2026-10-19)
+
+- New command family `model-protocol-lab surface-noise`
+  (`probe` / `diff` / `protocol`) and a stdlib-only MCP server
+  (`tools/surface_noise_mcp_server.py`, four tools): a
+  self-consistency probe for a single prompt — a frozen set of
+  surface-noise operators (typo, case flip, Unicode variant,
+  whitespace modes, punctuation strip) perturbs the prompt, the
+  fixtures re-score it, and the report gives a per-operator
+  stability vector with minimal-flip counterfactuals plus a
+  self-contained HTML dashboard. The reported nearest observed
+  flip is an upper bound over the searched subset, never a
+  guarantee; academic precedent (CoIPO/NoisyPromptBench decoding
+  radius, PCE minimal-flip counterfactuals) is cited, not
+  claimed over. Pure `surfacenoise.py`; contract in
+  `docs/SURFACE_NOISE_PROBE_DESIGN.md`.
+
 ### Fixed (cycle 165 — mutation-gate recursion + Codecov badge, 2026-10-19)
 
 - Mutation-gate self-recursion eliminated in all four in-place gates
@@ -246,6 +372,18 @@ All notable changes to this project are documented here. The format follows
   (capital C in the rendered image), mirroring the owner's
   rejection-rejector repo; `test_readme_codecov_badge_exact` pins the line
   byte-exact.
+
+### Added (cycle 164 — response verbosity profile, 2026-10-19)
+
+- New opt-in readout `model-protocol-lab run --verbosity`
+  (wave-4 research idea 5): a post-hoc verbosity profile per
+  template family — recorded generation lengths per correct
+  answer, computed from the finished run with zero extra model
+  calls. Framed as a cost/behavior profile, not a quality
+  score; generations cut off by the token cap count as lower
+  bounds. Pure `verbosity.py`; HTML section and
+  `diff_verbosity`; USAGE §8.30. Informational only; never
+  touches selection.
 
 ### Added (cycle 163 — prompt-only tool-call adherence × template, wave-4 research idea #4, 2026-10-19)
 
