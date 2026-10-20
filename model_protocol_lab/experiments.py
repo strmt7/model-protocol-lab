@@ -6039,6 +6039,18 @@ def _positive_number(value: Any) -> bool:
     return type(value) in (int, float) and isinstance(value, (int, float)) and value > 0
 
 
+def _nonnegative_number(value: Any) -> bool:
+    """Whether ``value`` is a real number >= 0 (bools excluded).
+
+    Same narrowing trick as :func:`_share_in_unit`. Marker offsets
+    are positions: 0 is a perfectly defined offset (a prefix-free
+    format puts the marker at the very start of the rendered
+    prompt), so the offset keys must not use the positive check
+    (cycle 176, wave-7 F5).
+    """
+    return type(value) in (int, float) and isinstance(value, (int, float)) and value >= 0
+
+
 def _cache_profile_cell_valid(entry: Any) -> bool:
     """Structural check for one candidate cell of a cache-profile stage."""
     if type(entry) is not dict:
@@ -6549,7 +6561,7 @@ def _confidentiality_cell_valid(entry: Any) -> bool:
             return False
     for key in ("marker_offset_treat", "marker_offset_ctrl"):
         value = entry.get(key)
-        if value is not None and not _positive_number(value):
+        if value is not None and not _nonnegative_number(value):
             return False
     bool_keys = (
         "base_rate_zero",

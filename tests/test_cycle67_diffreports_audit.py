@@ -131,6 +131,7 @@ Deliberately NOT verified here: ``load_results`` hostile inputs
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import os
 import random
@@ -1331,6 +1332,15 @@ def _o_refusals_valid(value: Any) -> bool:
     digest = method.get("openers_sha256")
     if type(digest) is not str or not digest:
         return False
+    openers = method.get("openers")
+    if (
+        type(openers) is not list
+        or not openers
+        or not all(type(opener) is str and opener for opener in openers)
+    ):
+        return False
+    if digest != hashlib.sha256("\n".join(openers).encode("utf-8")).hexdigest():
+        return False
     if type(value.get("evaluable_mismatch")) is not bool:
         return False
     candidates = value.get("candidates")
@@ -1339,12 +1349,17 @@ def _o_refusals_valid(value: Any) -> bool:
     if type(value.get("n_candidates")) is not int or value.get("n_candidates") != len(candidates):
         return False
     n_available = 0
+    seen_names: set = set()
     for entry in candidates:
         if type(entry) is not dict:
             return False
         name = entry.get("candidate")
         if name is not None and type(name) is not str:
             return False
+        if type(name) is str:
+            if name in seen_names:
+                return False
+            seen_names.add(name)
         if type(entry.get("available")) is not bool:
             return False
         if entry.get("available") is not True:
@@ -1389,8 +1404,23 @@ def _o_refusals_valid(value: Any) -> bool:
                 return False
             if type(hit.get("opener")) is not str or not hit.get("opener"):
                 return False
+            if hit.get("opener") not in openers:
+                return False
             if type(hit.get("passed")) is not bool:
                 return False
+        note = entry.get("rate_note")
+        if note not in ("", "candidate_not_eligible", "no_completed_observations"):
+            return False
+        if (rate is None) != (note != ""):
+            return False
+        if rate is not None and (
+            counts["n_completed"] == 0 or rate != counts["n_suspected"] / counts["n_completed"]
+        ):
+            return False
+        if note == "no_completed_observations" and counts["n_completed"] != 0:
+            return False
+        if sum(1 for hit in hits if hit.get("passed") is True) != counts["n_suspected_passed"]:
+            return False
     if type(value.get("n_candidates_available")) is not int:
         return False
     return value.get("n_candidates_available") == n_available
@@ -4236,6 +4266,8 @@ def _o_ablation_valid(value: Any) -> bool:
             return False
         if rep.get("status") != "ok":
             continue
+        if type(rep.get("base_passes_all")) is not bool:
+            return False
         arms = rep.get("arms")
         if type(arms) is not dict:
             return False
@@ -4245,10 +4277,41 @@ def _o_ablation_valid(value: Any) -> bool:
             if arm.get("status") != "ok":
                 continue
             for key in ("n_flips", "pass_to_fail", "fail_to_pass"):
-                if type(arm.get(key)) is not int:
+                count = arm.get(key)
+                if type(count) is not int or count < 0:
                     return False
+            if arm["pass_to_fail"] + arm["fail_to_pass"] != arm["n_flips"]:
+                return False
+            flipped = arm.get("flipped_fixture_ids")
+            if (
+                type(flipped) is not list
+                or not all(type(fid) is str for fid in flipped)
+                or len(flipped) != arm["n_flips"]
+            ):
+                return False
+            n_fixtures = arm.get("n_fixtures")
+            if type(n_fixtures) is not int or n_fixtures < arm["n_flips"]:
+                return False
+            if type(arm.get("selection_bar_held")) is not bool:
+                return False
         load_bearing = rep.get("load_bearing_fields")
         if type(load_bearing) is not list or not all(type(f) is str for f in load_bearing):
+            return False
+        expected_load_bearing = [
+            field
+            for field, arm in arms.items()
+            if type(arm) is dict
+            and arm.get("status") == "ok"
+            and rep["base_passes_all"]
+            and arm.get("selection_bar_held") is False
+        ]
+        if load_bearing != expected_load_bearing:
+            return False
+        any_attribution = rep.get("any_attribution")
+        if type(any_attribution) is not bool or any_attribution != any(
+            type(arm) is dict and arm.get("status") == "ok" and arm.get("n_flips", 0) > 0
+            for arm in arms.values()
+        ):
             return False
     return True
 

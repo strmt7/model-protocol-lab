@@ -574,12 +574,25 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertEqual(diff["hits_added"][0]["opener"], "i'm sorry")
 
     def test_protocol_drift_detected(self) -> None:
+        # Cycle 176 (F6a): drift is a COHERENT foreign detector --
+        # a changed opener list with its own matching digest. A bare
+        # digest edit is list/digest corruption and validates as
+        # neither (asserted below), not drift.
+        import hashlib
+
         old = self._profile()
         new = json.loads(json.dumps(old))
-        new["method"]["openers_sha256"] = "0" * 64
+        foreign = list(new["method"]["openers"]) + ["sorry, but i must decline"]
+        new["method"]["openers"] = foreign
+        new["method"]["openers_sha256"] = hashlib.sha256(
+            "\n".join(foreign).encode("utf-8")
+        ).hexdigest()
         diff = diffreports.diff_refusals(old, new)
         self.assertTrue(diff["protocol_drift"])
         self.assertTrue(diff["changed"])
+        corrupt = json.loads(json.dumps(old))
+        corrupt["method"]["openers_sha256"] = "0" * 64
+        self.assertEqual(diffreports.diff_refusals(old, corrupt)["available"], "old")
 
     def test_availability_states(self) -> None:
         good = self._profile()
