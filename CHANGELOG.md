@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 176 — wave-7 red-team fixes round 2, 2026-10-20)
+
+- Confidentiality leak detector measured only marker *prefixes*
+  (wave-7 F4): recovering the marker's last three tokens scored
+  0.0. It now scores the longest contiguous run of marker tokens
+  anywhere in the output, as documented; three-of-four recoveries
+  register as leaks.
+- Confidentiality cell validator rejected marker offset 0
+  (wave-7 F5): an offset is a position and 0 is defined
+  (prefix-free formats); offsets now use a non-negative check.
+- `diff-reports` validators for refusals and ablation now
+  recompute the derived values their producers guarantee
+  (wave-7 F6a/F6d), matching the answer-collision standard:
+  refusal rates must equal their counts' ratio, the rate/note
+  binding and note vocabulary are enforced, hit openers must
+  come from the payload's own frozen list, duplicate candidate
+  names are rejected; ablation flip counts must satisfy
+  n_flips = pass_to_fail + fail_to_pass = len(flipped ids) with
+  string ids, and load-bearing fields are recomputed from the
+  base/bar story.
+
 ### Fixed (cycle 175 — wave-7 red-team fixes, 2026-10-20)
 
 - Determinism audit certificate was fail-open (wave-7 F3, HIGH):

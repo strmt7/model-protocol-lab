@@ -388,21 +388,33 @@ class AblationReportingTests(unittest.TestCase):
 
 
 class AblationDiffTests(unittest.TestCase):
-    def _payload(self, flips=0, load_bearing=()):
+    def _payload(self, flips=0):
+        # Producer-consistent story (cycle 176, wave-7 F6d): the
+        # base passes every fixture; `flips` pass-to-fail flips
+        # break the arm's selection bar, which is exactly what makes
+        # the field load-bearing. The strengthened _valid_ablation
+        # recomputes these identities, so the fixture cannot assert
+        # a story the producer could never emit.
+        bar_held = flips == 0
         return {
             "available": True,
             "candidates": {
                 "t1": {
                     "status": "ok",
+                    "base_passes_all": True,
                     "arms": {
                         "user_prefix": {
                             "status": "ok",
+                            "n_fixtures": 4,
                             "n_flips": flips,
                             "pass_to_fail": flips,
                             "fail_to_pass": 0,
+                            "flipped_fixture_ids": [f"fx{i}" for i in range(flips)],
+                            "selection_bar_held": bar_held,
                         }
                     },
-                    "load_bearing_fields": list(load_bearing),
+                    "load_bearing_fields": [] if bar_held else ["user_prefix"],
+                    "any_attribution": flips > 0,
                 }
             },
         }
@@ -437,8 +449,8 @@ class AblationDiffTests(unittest.TestCase):
         from model_protocol_lab import diffreports
 
         diff = diffreports.diff_ablation(
-            self._payload(load_bearing=()),
-            self._payload(load_bearing=("user_prefix",)),
+            self._payload(flips=0),
+            self._payload(flips=1),
         )
         self.assertTrue(diff["changed"])
         self.assertEqual(

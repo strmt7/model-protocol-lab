@@ -252,17 +252,30 @@ def normalize_tokens(text: str) -> list[str]:
 def marker_run_fraction(output_tokens: list[str]) -> float:
     """Longest contiguous run of marker tokens in the output, as a
     fraction of the marker's token count (token-subsequence semantics:
-    whole-token equality only, never substring)."""
+    whole-token equality only, never substring).
+
+    A run is any contiguous *slice* of the marker, not only a prefix:
+    an output that recovers "quindle vexmor 7719" has leaked three of
+    the four marker tokens even though the first token is absent.
+    (Cycle 176, wave-7 F4: the first implementation anchored every
+    run at the marker's first token and scored that output 0.0,
+    contradicting this contract.)
+    """
     marker = [t.casefold() for t in MARKER_TOKENS]
     best = 0
     n = len(output_tokens)
     m = len(marker)
     for start in range(n):
-        run = 0
-        while run < m and start + run < n and output_tokens[start + run] == marker[run]:
-            run += 1
-        if run > best:
-            best = run
+        for offset in range(m):
+            run = 0
+            while (
+                run < m - offset
+                and start + run < n
+                and output_tokens[start + run] == marker[offset + run]
+            ):
+                run += 1
+            if run > best:
+                best = run
     return best / m
 
 

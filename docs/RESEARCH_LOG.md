@@ -6917,3 +6917,70 @@ Swarm tally for the wave: researcher 7 ranked directions
 (scorer-lens regrade first), verifier 5 finding groups (docs
 currency leads), A 8 findings (2 HIGH), B 0 refutations of
 behaviour, 3 downgrades, 1 fix-scope refutation, all adopted.
+
+## Cycle 176 — wave-7 fixes round 2: F4, F5, F6a, F6d (2026-10-20)
+
+### F4 (MEDIUM, confirmed) — marker run measured prefixes, not runs
+
+`confidentiality.marker_run_fraction` documented "the longest
+contiguous run of marker tokens" but anchored every candidate run
+at the marker's first token: a recovery of "quindle vexmor 7719"
+(three of the four marker tokens, suffix slice) scored 0.0. The
+detector now scores the longest contiguous *slice* of the marker
+wherever it occurs in the output. The pre-existing DetectionTests
+could not distinguish the two semantics (their split-run case is
+0.5 under both — red-team B's observation); cycle 176 adds the
+distinguishing cases (suffix 0.75 + leak, trailing pair 0.5, last
+token alone 0.25, scattered tokens 0.25). Effect on honest runs:
+the probe can now report leaks it previously missed at the
+three-of-four tier; rates from before and after this fix are not
+directly comparable at that tier.
+
+### F5 (MEDIUM→LOW, confirmed) — offset 0 rejected by its own validator
+
+`_confidentiality_cell_valid` required marker offsets > 0. An
+offset is a position; a prefix-free format puts the marker at
+position 0, and the producer would then emit cells its own
+validator rejects (whole probe `stage_invalid`). B verified the
+shipped catalog cannot reach it (minimum control offset 6), so
+this was library-API-only and fail-closed. Fix: offsets use a
+non-negative check. Pinned at the validator level with a
+producer-shaped cell.
+
+### F6a/F6d (LOW cluster, confirmed) — diff validators recompute
+
+Wave-7 A showed `_valid_refusals` and `_valid_ablation` accepted
+internally impossible payloads that the answer-collision validator
+(the house standard) would reject. Both now recompute the derived
+values their producers guarantee:
+
+- Refusals: the rate is the counts' ratio (bit-exact — the
+  producer computes the same division); a rate is present exactly
+  when no note explains its absence, and the note vocabulary is
+  the producer's three values; hit openers must come from the
+  payload's own method list; the hits' passed tally must equal
+  the cross-tab's passed cell; duplicate candidate names are
+  rejected (the diff view collapses them last-wins). The method
+  digest is checked against the payload's OWN opener list —
+  internal consistency, version-agnostic: a coherent foreign
+  detector still validates and reports as protocol drift, while
+  a bare digest edit is corruption and validates as neither.
+  The cycle-174 drift test now builds the coherent-foreign shape.
+- Ablation: flip counts are non-negative and satisfy
+  n_flips = pass_to_fail + fail_to_pass = len(flipped_fixture_ids)
+  with string ids; load_bearing_fields equals the producer's
+  definition recomputed (base passes all ∧ arm breaks the bar);
+  any_attribution is recomputed. Per red-team B's refutation of
+  the crash framing: the unchecked id list reached a renderer
+  join only through direct library calls on a non-validated
+  payload, so this is a validator-contract fix, not a CLI crash
+  fix — and it closes that path too. Cycle 167's diff fixtures
+  were rewritten to tell producer-possible stories (a
+  load-bearing field now comes with the flip that causes it).
+
+Both oracle mirrors (test_cycle67, test_cycle27) were updated in
+the same change; the fuzz agreement suites are the cross-check.
+Remaining F6 sub-items (cache-profile and confidentiality
+validators) are scheduled next; their recompute sets are larger
+(fraction/mean identities, McNemar from discordant counts) and
+get their own cycle rather than a rushed tail here.

@@ -19,6 +19,7 @@ plainly instead of guessing.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -3148,6 +3149,23 @@ def _valid_refusals(payload: Any) -> bool:
         return False
     if type(method.get("openers_sha256")) is not str or not method.get("openers_sha256"):
         return False
+    # Internal consistency, version-agnostic (cycle 176, wave-7
+    # F6a): the digest must be the digest of the payload's OWN
+    # opener list -- a foreign-but-coherent detector still
+    # validates (protocol drift is the diff's job to report), a
+    # list/digest mismatch is corruption, not drift.
+    openers = method.get("openers")
+    if (
+        type(openers) is not list
+        or not openers
+        or not all(type(opener) is str and opener for opener in openers)
+    ):
+        return False
+    if (
+        method.get("openers_sha256")
+        != hashlib.sha256("\n".join(openers).encode("utf-8")).hexdigest()
+    ):
+        return False
     if type(payload.get("evaluable_mismatch")) is not bool:
         return False
     candidates = payload.get("candidates")
@@ -3157,12 +3175,20 @@ def _valid_refusals(payload: Any) -> bool:
     if type(n_candidates) is not int or n_candidates != len(candidates):
         return False
     n_available = 0
+    seen_names: set[str] = set()
     for entry in candidates:
         if type(entry) is not dict:
             return False
         name = entry.get("candidate")
         if name is not None and type(name) is not str:
             return False
+        if type(name) is str:
+            # Duplicate names would collapse last-wins in the
+            # diff's candidate view and manufacture phantom drift;
+            # the producer never emits them (cycle 176, F6a).
+            if name in seen_names:
+                return False
+            seen_names.add(name)
         if type(entry.get("available")) is not bool:
             return False
         if entry.get("available") is not True:
@@ -3207,8 +3233,28 @@ def _valid_refusals(payload: Any) -> bool:
                 return False
             if type(hit.get("opener")) is not str or not hit.get("opener"):
                 return False
+            if hit.get("opener") not in openers:
+                return False
             if type(hit.get("passed")) is not bool:
                 return False
+        # Derived-value recomputation (cycle 176, wave-7 F6a; the
+        # answer-collision validator's standard): the rate is the
+        # counts' ratio, the note vocabulary is the producer's, a
+        # rate is present exactly when no note explains its absence,
+        # and the hits' passed tally is the cross-tab's passed cell.
+        note = entry.get("rate_note")
+        if note not in ("", "candidate_not_eligible", "no_completed_observations"):
+            return False
+        if (rate is None) != (note != ""):
+            return False
+        if rate is not None and (
+            counts["n_completed"] == 0 or rate != counts["n_suspected"] / counts["n_completed"]
+        ):
+            return False
+        if note == "no_completed_observations" and counts["n_completed"] != 0:
+            return False
+        if sum(1 for hit in hits if hit.get("passed") is True) != counts["n_suspected_passed"]:
+            return False
     n_candidates_available = payload.get("n_candidates_available")
     return type(n_candidates_available) is int and n_candidates_available == n_available
 
@@ -3978,7 +4024,14 @@ def _valid_ablation(payload: Any) -> bool:
 
     Flip counts must be ints, load-bearing lists string lists, candidate
     keys strings, so the renderers never hit a TypeError on a hostile
-    payload (the wave-2 C3 lesson at the value level).
+    payload (the wave-2 C3 lesson at the value level). Derived values
+    are recomputed (cycle 176, wave-7 F6d; the answer-collision
+    validator's standard): flip counts are non-negative and satisfy
+    n_flips = pass_to_fail + fail_to_pass = len(flipped_fixture_ids)
+    with string ids (an unchecked id list is exactly how a hostile
+    payload reached a renderer join), and load_bearing_fields is the
+    producer's definition recomputed -- base passes all, arm does
+    not hold the selection bar.
     """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
@@ -3992,6 +4045,8 @@ def _valid_ablation(payload: Any) -> bool:
             return False
         if rep.get("status") != "ok":
             continue  # unavailable markers pass structurally
+        if type(rep.get("base_passes_all")) is not bool:
+            return False
         arms = rep.get("arms")
         if type(arms) is not dict:
             return False
@@ -4001,10 +4056,41 @@ def _valid_ablation(payload: Any) -> bool:
             if arm.get("status") != "ok":
                 continue
             for key in ("n_flips", "pass_to_fail", "fail_to_pass"):
-                if type(arm.get(key)) is not int:
+                value = arm.get(key)
+                if type(value) is not int or value < 0:
                     return False
+            if arm["pass_to_fail"] + arm["fail_to_pass"] != arm["n_flips"]:
+                return False
+            flipped = arm.get("flipped_fixture_ids")
+            if (
+                type(flipped) is not list
+                or not all(type(fid) is str for fid in flipped)
+                or len(flipped) != arm["n_flips"]
+            ):
+                return False
+            n_fixtures = arm.get("n_fixtures")
+            if type(n_fixtures) is not int or n_fixtures < arm["n_flips"]:
+                return False
+            if type(arm.get("selection_bar_held")) is not bool:
+                return False
         load_bearing = rep.get("load_bearing_fields")
         if type(load_bearing) is not list or not all(type(f) is str for f in load_bearing):
+            return False
+        expected_load_bearing = [
+            field
+            for field, arm in arms.items()
+            if type(arm) is dict
+            and arm.get("status") == "ok"
+            and rep["base_passes_all"]
+            and arm.get("selection_bar_held") is False
+        ]
+        if load_bearing != expected_load_bearing:
+            return False
+        any_attribution = rep.get("any_attribution")
+        if type(any_attribution) is not bool or any_attribution != any(
+            type(arm) is dict and arm.get("status") == "ok" and arm.get("n_flips", 0) > 0
+            for arm in arms.values()
+        ):
             return False
     return True
 
