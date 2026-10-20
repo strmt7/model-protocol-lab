@@ -490,6 +490,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="New fixture JSON file; an existing path is never overwritten",
     )
+    fixtures_fuzz = fixtures_sub.add_parser(
+        "fuzz",
+        help="Fuzz the fixture loaders against their published contract: "
+        + "mutate known-good JSON and CSV fixtures from a fixed table and "
+        "check every outcome (never loads a model)",
+        allow_abbrev=False,
+    )
+    fixtures_fuzz.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Corpus seed (default 0); the same seed reproduces the same "
+        "corpus and report byte-for-byte",
+    )
     # ANCHOR: new top-level subparsers are registered here (one block per command).
     from .surfacenoise import build_surface_noise_parser
 
@@ -1656,6 +1670,10 @@ def main(argv: list[str] | None = None) -> int:
                     print(render_portability_table(section), file=sys.stderr)
             return 0 if result["verdict"] == "ok" else 1
         if args.command == "fixtures":
+            if args.fixtures_command == "fuzz":
+                from .fixturefuzz import run_fixtures_fuzz
+
+                return run_fixtures_fuzz(args, parser)
             from .fixtures import (
                 audit_findings_json,
                 audit_special_token_literals,

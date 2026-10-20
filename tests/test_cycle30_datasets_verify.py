@@ -926,7 +926,11 @@ class TestPinnedBehavior(unittest.TestCase):
         doc = _dump(_base_doc()).replace("fs1", "a\ud800", 1)
         with self.assertRaises(ValueError) as info:
             datasets_mod.parse_dataset(doc)
-        assert isinstance(info.exception, UnicodeEncodeError)
+        # Cycle 172: the loader now rejects raw-surrogate text with a
+        # deliberate ValueError in its own vocabulary, not the codec's
+        # UnicodeEncodeError leak this test originally pinned.
+        assert type(info.exception) is ValueError
+        assert "lone surrogate" in str(info.exception)
 
     def test_duplicate_id_across_splits_rejected(self):
         doc = _base_doc()

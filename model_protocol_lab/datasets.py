@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Any, NoReturn
@@ -27,6 +28,9 @@ def _reject_constant(_value: str) -> NoReturn:
     raise ValueError("Nonfinite JSON")
 
 
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+
 def _fields(value: Any, expected: tuple[str, ...]) -> None:
     if type(value) is not dict or set(value) != set(expected):
         raise ValueError("Unexpected or missing JSON fields")
@@ -35,6 +39,13 @@ def _fields(value: Any, expected: tuple[str, ...]) -> None:
 def _text(value: Any, *, nonblank: bool = False) -> str:
     if type(value) is not str or len(value) > MAX_TEXT:
         raise ValueError("Invalid or oversized text field")
+    if _SURROGATE_RE.search(value) is not None:
+        # Escape-form surrogates in the source decode to lone
+        # surrogates, which no UTF-8 fixture file can store; the
+        # serializer refuses them (cycle 86), so the loader must too
+        # (cycle 172). The check runs on the decoded value, so a
+        # valid surrogate pair (one astral character) is unaffected.
+        raise ValueError("Text field contains a lone surrogate")
     if nonblank and not value.strip():
         raise ValueError("Blank identifier")
     return value
@@ -68,11 +79,21 @@ def parse_dataset(text: str) -> Split:
     Enforces the byte cap, rejects duplicate object keys and non-JSON
     constants, requires the "search"/"held_out" partitions with bounded
     fixture counts, and lets Split enforce the anti-leakage guarantees.
-    Raises ValueError with the module's fixed error vocabulary on any
-    malformed input.
+    Raises ValueError on any malformed input: structural problems use
+    this module's fixed messages, while JSON syntax errors keep the
+    standard parser's wording (still ValueError).
     """
 
-    if type(text) is not str or len(text.encode("utf-8")) > MAX_BYTES:
+    if type(text) is not str:
+        raise ValueError("Dataset exceeds size limit")
+    try:
+        encoded_size = len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        # A raw lone surrogate in the source text cannot be encoded
+        # at all; name it in the module's vocabulary instead of
+        # leaking the codec's error (cycle 172).
+        raise ValueError("Dataset text contains a lone surrogate") from None
+    if encoded_size > MAX_BYTES:
         raise ValueError("Dataset exceeds size limit")
     try:
         raw = json.loads(text, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
