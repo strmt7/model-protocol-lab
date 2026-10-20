@@ -86,6 +86,7 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "toolcall",
     "verbosity",
     "cache_profile",
+    "confidentiality",
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",

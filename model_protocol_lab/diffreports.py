@@ -589,7 +589,14 @@ def diff_reports(
         old.get("template_robustness"), new.get("template_robustness")
     )
     ablation_diff = diff_ablation(old.get("ablation"), new.get("ablation"))
+    confidentiality_diff = diff_confidentiality(
+        old.get("confidentiality"), new.get("confidentiality")
+    )
     ablation_asymmetric = ablation_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    confidentiality_asymmetric = confidentiality_diff["available"] not in (
         "both",
         "neither",
     )
@@ -662,6 +669,8 @@ def diff_reports(
         and not template_robustness_asymmetric
         and not ablation_diff["changed"]
         and not ablation_asymmetric
+        and not confidentiality_diff["changed"]
+        and not confidentiality_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -720,6 +729,8 @@ def diff_reports(
         "template_robustness_asymmetric": template_robustness_asymmetric,
         "ablation_changed": ablation_diff["changed"],
         "ablation_asymmetric": ablation_asymmetric,
+        "confidentiality_changed": confidentiality_diff["changed"],
+        "confidentiality_asymmetric": confidentiality_asymmetric,
         "identical": identical,
     }
     return {
@@ -753,6 +764,7 @@ def diff_reports(
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
+        "confidentiality": confidentiality_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -3303,6 +3315,143 @@ def diff_cache_profile(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+def _valid_confidentiality(payload: Any) -> bool:
+    """Structural check for a ``confidentiality`` payload.
+
+    Cells are validated by experiments._confidentiality_cell_valid, and
+    every stored gap is recomputed from its paired rates with a float
+    tolerance (red-team A R13.7: a stale or inconsistent stored gap is a
+    hostile-payload trap). Counts must be consistent with the paired
+    denominator, so the renderers never hit a TypeError or a lie.
+    """
+    from .experiments import _confidentiality_cell_valid
+
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return False
+    if type(protocol.get("fingerprint")) is not str:
+        return False
+    n_fixtures = payload.get("n_fixtures")
+    if type(n_fixtures) is not int or n_fixtures < 1:
+        return False
+    per_candidate = payload.get("per_candidate")
+    if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+        return False
+    for entry in per_candidate.values():
+        if not _confidentiality_cell_valid(entry):
+            return False
+        if type(entry) is dict:
+            if entry.get("n") != n_fixtures:
+                return False
+            paired = entry["n_paired_evaluable"]
+            if entry["treat_leaks"] > paired or entry["ctrl_leaks"] > paired:
+                return False
+            if entry["treat_verbatim"] > entry["treat_leaks"]:
+                return False
+            if entry["ctrl_verbatim"] > entry["ctrl_leaks"]:
+                return False
+            if (
+                entry["discord_ctrl_only"] + entry["discord_treat_only"]
+                > entry["treat_leaks"] + entry["ctrl_leaks"]
+            ):
+                return False
+            if entry["gap"] is not None:
+                expected = entry["ctrl_rate"] - entry["treat_rate"]
+                if abs(float(entry["gap"]) - expected) > 1e-9:
+                    return False
+            # Generator invariant: gap is present exactly when the
+            # candidate is evaluable AND the control rate is nonzero.
+            if entry["gap"] is None:
+                if entry["evaluable"] and not entry["base_rate_zero"]:
+                    return False
+            elif entry["base_rate_zero"] or not entry["evaluable"]:
+                return False
+    for key in ("uniform_nonpositive", "any_positive"):
+        if type(payload.get(key)) is not bool:
+            return False
+    positive = payload.get("positive_candidates")
+    if type(positive) is not list or not all(type(x) is str for x in positive):
+        return False
+    for key in ("most_resistant", "least_resistant"):
+        value = payload.get(key)
+        if value is not None and type(value) is not str:
+            return False
+    gap = payload.get("gap")
+    if gap is None:
+        return True
+    return type(gap) in (int, float) and isinstance(gap, (int, float)) and -1.0 <= gap <= 1.0
+
+
+def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``confidentiality`` payloads; deterministic.
+
+    Answers "did the labeled-block exposure story change between runs?":
+    protocol-fingerprint drift (a marker/threshold change invalidates
+    the comparison and is reported as its own event), per-candidate gap
+    drift, the positive set, and the uniform-nonpositive (null) flag. A
+    template edit that starts leaking its labeled block is the
+    regression signal. A side without a recorded probe is reported
+    plainly. No model, no network.
+    """
+    old_ok = _valid_confidentiality(old)
+    new_ok = _valid_confidentiality(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    old_cells = old.get("per_candidate") or {}
+    new_cells = new.get("per_candidate") or {}
+    confidentiality_candidates_added = sorted(set(new_cells) - set(old_cells))
+    confidentiality_candidates_removed = sorted(set(old_cells) - set(new_cells))
+    confidentiality_gap_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_cells) & set(new_cells)):
+        old_entry = old_cells[name]
+        new_entry = new_cells[name]
+        old_gap = old_entry.get("gap") if type(old_entry) is dict else None
+        new_gap = new_entry.get("gap") if type(new_entry) is dict else None
+        if old_gap != new_gap:
+            confidentiality_gap_drift.append({"candidate": name, "old": old_gap, "new": new_gap})
+    confidentiality_positive_added = sorted(
+        set(new.get("positive_candidates") or []) - set(old.get("positive_candidates") or [])
+    )
+    confidentiality_positive_removed = sorted(
+        set(old.get("positive_candidates") or []) - set(new.get("positive_candidates") or [])
+    )
+    confidentiality_uniform_changed = old.get("uniform_nonpositive") != new.get(
+        "uniform_nonpositive"
+    )
+    result["protocol_drift"] = protocol_drift
+    result["gap_drift"] = confidentiality_gap_drift
+    result["candidates_added"] = confidentiality_candidates_added
+    result["candidates_removed"] = confidentiality_candidates_removed
+    result["positive_added"] = confidentiality_positive_added
+    result["positive_removed"] = confidentiality_positive_removed
+    result["uniform_changed"] = confidentiality_uniform_changed
+    # NOTE: confidentiality-specific disjunct names keep this ``changed``
+    # line textually distinct from every other diff section's anchor
+    # (mutation-gate uniqueness).
+    result["changed"] = bool(
+        protocol_drift
+        or confidentiality_gap_drift
+        or confidentiality_candidates_added
+        or confidentiality_candidates_removed
+        or confidentiality_positive_added
+        or confidentiality_positive_removed
+        or confidentiality_uniform_changed
+    )
+    return result
+
+
 def _valid_template_robustness(payload: Any) -> bool:
     """Structural check for a ``template_robustness`` payload.
 
@@ -5111,6 +5260,71 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _render_confidentiality_summary(
+    confidentiality_diff: dict[str, Any] | None,
+) -> list[str]:
+    """Confidentiality comparison lines for the stderr summary.
+
+    Every interpolated identifier passes through ``_display_id`` so a
+    hostile candidate name cannot inject terminal escapes. Gaps are
+    rendered as percentages; a protocol drift (marker/threshold change)
+    is reported first because it invalidates gap comparisons.
+    """
+    if type(confidentiality_diff) is not dict:
+        return []
+    available = confidentiality_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            "Confidentiality comparison unavailable: "
+            f"{missing} run did not record the confidentiality probe."
+        ]
+    lines: list[str] = []
+    if confidentiality_diff.get("protocol_drift"):
+        lines.append(
+            "Confidentiality protocol drift: the frozen probe protocol "
+            "(marker/threshold/normalization) changed between runs; gap "
+            "comparisons are not like-for-like."
+        )
+
+    def _fmt_gap(value: Any) -> str:
+        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+
+    drift = confidentiality_diff.get("gap_drift") or []
+    for entry in drift[:3]:
+        if type(entry) is not dict:
+            continue
+        lines.append(
+            f"Confidentiality gap drift ({_display_id(entry.get('candidate'))}): "
+            f"{_fmt_gap(entry.get('old'))} -> {_fmt_gap(entry.get('new'))}"
+        )
+    if len(drift) > 3:
+        lines.append(f"  ... and {len(drift) - 3} more gap drifts")
+    added = confidentiality_diff.get("positive_added") or []
+    removed = confidentiality_diff.get("positive_removed") or []
+    if added:
+        lines.append(f"Confidentiality newly positive: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(
+            f"Confidentiality no longer positive: {', '.join(_display_id(c) for c in removed)}"
+        )
+    if confidentiality_diff.get("uniform_changed"):
+        lines.append("Confidentiality uniform-nonpositive (null) flag changed.")
+    cand_added = confidentiality_diff.get("candidates_added") or []
+    cand_removed = confidentiality_diff.get("candidates_removed") or []
+    if cand_added:
+        lines.append(
+            f"Confidentiality candidates added: {', '.join(_display_id(c) for c in cand_added)}"
+        )
+    if cand_removed:
+        lines.append(
+            f"Confidentiality candidates removed: {', '.join(_display_id(c) for c in cand_removed)}"
+        )
+    return lines
+
+
 def _render_template_robustness_summary(
     tr_diff: dict[str, Any] | None,
 ) -> list[str]:
@@ -5765,6 +5979,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_cache_profile_summary(diff.get("cache_profile")))
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     lines.extend(_render_ablation_summary(diff.get("ablation")))
+    lines.extend(_render_confidentiality_summary(diff.get("confidentiality")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

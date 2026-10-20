@@ -1371,6 +1371,67 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_confidentiality_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_confidentiality exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too.
+        from model_protocol_lab.experiments import _confidentiality_cell_valid
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        if type(protocol.get("fingerprint")) is not str:
+            return False
+        n_fixtures = value.get("n_fixtures")
+        if type(n_fixtures) is not int or n_fixtures < 1:
+            return False
+        per_candidate = value.get("per_candidate")
+        if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
+            return False
+        for entry in per_candidate.values():
+            if not _confidentiality_cell_valid(entry):
+                return False
+            if type(entry) is dict:
+                if entry.get("n") != n_fixtures:
+                    return False
+                paired = entry["n_paired_evaluable"]
+                if entry["treat_leaks"] > paired or entry["ctrl_leaks"] > paired:
+                    return False
+                if entry["treat_verbatim"] > entry["treat_leaks"]:
+                    return False
+                if entry["ctrl_verbatim"] > entry["ctrl_leaks"]:
+                    return False
+                if (
+                    entry["discord_ctrl_only"] + entry["discord_treat_only"]
+                    > entry["treat_leaks"] + entry["ctrl_leaks"]
+                ):
+                    return False
+                if entry["gap"] is not None:
+                    expected = entry["ctrl_rate"] - entry["treat_rate"]
+                    if abs(float(entry["gap"]) - expected) > 1e-9:
+                        return False
+                if entry["gap"] is None:
+                    if entry["evaluable"] and not entry["base_rate_zero"]:
+                        return False
+                elif entry["base_rate_zero"] or not entry["evaluable"]:
+                    return False
+        for key in ("uniform_nonpositive", "any_positive"):
+            if type(value.get(key)) is not bool:
+                return False
+        positive = value.get("positive_candidates")
+        if type(positive) is not list or not all(type(x) is str for x in positive):
+            return False
+        for key in ("most_resistant", "least_resistant"):
+            v = value.get(key)
+            if v is not None and type(v) is not str:
+                return False
+        gap = value.get("gap")
+        if gap is None:
+            return True
+        return type(gap) in (int, float) and -1.0 <= gap <= 1.0
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -1567,6 +1628,18 @@ def oracle_diff_reports(
     else:
         _o_cp_available = "neither"
     _o_cp_asymmetric = _o_cp_available not in ("both", "neither")
+
+    _cf_old_ok = _or_confidentiality_valid(old.get("confidentiality"))
+    _cf_new_ok = _or_confidentiality_valid(new.get("confidentiality"))
+    if _cf_old_ok and _cf_new_ok:
+        _o_cf_available = "both"
+    elif _cf_old_ok:
+        _o_cf_available = "old"
+    elif _cf_new_ok:
+        _o_cf_available = "new"
+    else:
+        _o_cf_available = "neither"
+    _o_cf_asymmetric = _o_cf_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -1599,6 +1672,7 @@ def oracle_diff_reports(
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
+        and not _o_cf_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1657,6 +1731,8 @@ def oracle_diff_reports(
         "template_robustness_asymmetric": _o_trob_asymmetric,
         "ablation_changed": False,
         "ablation_asymmetric": _o_ab_asymmetric,
+        "confidentiality_changed": False,
+        "confidentiality_asymmetric": _o_cf_asymmetric,
         "identical": identical,
     }
     return {
@@ -1690,6 +1766,7 @@ def oracle_diff_reports(
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},
+        "confidentiality": {"available": _o_cf_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

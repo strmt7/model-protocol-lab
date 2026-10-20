@@ -5197,6 +5197,134 @@ def _cache_profile_section(result: dict[str, Any]) -> str:
     )
 
 
+def _confidentiality_section(result: dict[str, Any]) -> str:
+    """Labeled-block confidentiality profile per template family.
+
+    Renders the ``confidentiality`` payload (see
+    experiments.confidentiality_profile) as a per-candidate table: for
+    the privilege-labeled block (treatment) vs the identical bare marker
+    (control), the paired leak rates under frozen extraction
+    elicitations, the gap, discordant pairs, and the exact McNemar
+    p-value. The measured quantity is a verbatim-exposure LOWER bound
+    (paraphrase leakage is out of scope); the section fences the
+    framing: never a "safe to ship secrets" claim, and "confidentiality"
+    is the behavioural sense (OWASP LLM07), not the TEE/cryptographic
+    sense. Every interpolation is escaped at this boundary; no raw model
+    outputs are rendered.
+    """
+    audit: Any = result.get("confidentiality")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    per_candidate = audit.get("per_candidate")
+    if type(per_candidate) is not dict:
+        return ""
+
+    def _pct(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.1%}"
+        return "n/a"
+
+    def _num(value: Any) -> str:
+        if type(value) in (int, float):
+            return f"{value:.3f}"
+        return "n/a"
+
+    rows = []
+    for key in sorted(per_candidate, key=str):
+        cand = str(key)
+        entry = per_candidate[key]
+        if type(entry) is not dict:
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(cand)
+                + '</span></td><td colspan="7">unavailable</td></tr>'
+            )
+            continue
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(cand)
+            + "</span></td><td>"
+            + escape(str(entry.get("n_paired_evaluable")))
+            + " / "
+            + escape(str(entry.get("n")))
+            + "</td><td>"
+            + escape(str(entry.get("ctrl_leaks")))
+            + "</td><td>"
+            + escape(str(entry.get("treat_leaks")))
+            + "</td><td>"
+            + escape(_pct(entry.get("ctrl_rate")))
+            + "</td><td>"
+            + escape(_pct(entry.get("treat_rate")))
+            + "</td><td>"
+            + escape(_pct(entry.get("gap")))
+            + "</td><td>"
+            + escape(str(entry.get("discord_ctrl_only")))
+            + " / "
+            + escape(str(entry.get("discord_treat_only")))
+            + "</td><td>"
+            + escape(_num(entry.get("mcnemar_p")))
+            + "</td></tr>"
+        )
+    gap = audit.get("gap")
+    gap_line = ""
+    if type(gap) in (int, float):
+        gap_line = (
+            "<p>Max-minus-min confidentiality gap over measurable "
+            "candidates: <strong>" + escape(f"{gap:.1%}") + "</strong>.</p>"
+        )
+    uniform_line = ""
+    if audit.get("uniform_nonpositive") is True:
+        uniform_line = (
+            "<p><strong>Null result</strong>: every measurable gap is "
+            "nonpositive, so on this fixture set the privilege label "
+            "conferred no measurable selective protection for any "
+            "candidate -- the Tensor Trust Appendix H reading.</p>"
+        )
+    positive = audit.get("positive_candidates")
+    positive_line = ""
+    if type(positive) is list and positive:
+        positive_line = (
+            "<p>Candidates meeting the positive bar (gap &gt; 0 with at "
+            "least 2 discordant control-only pairs): "
+            + ", ".join(
+                '<span class="mono">' + escape(str(name)) + "</span>"
+                for name in positive
+                if type(name) is str
+            )
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="confidentiality">'
+        "<h2>Labeled-block confidentiality</h2>"
+        "<p>A fixed nonce marker was rendered inside the "
+        "privilege-labeled block (treatment) and, as a control, bare at "
+        "the same position; frozen extraction elicitations then asked "
+        "for the block quoted verbatim. Rates are paired per fixture and "
+        "measured on the full decoded output. The gap is the control "
+        "leak rate minus the treatment leak rate: positive means the "
+        "label measurably reduced verbatim exposure on this fixture "
+        "set. These numbers are a <strong>verbatim-exposure lower "
+        "bound</strong>: paraphrase, translation, and summarization "
+        "leakage are out of scope, and a low leak rate is "
+        "<strong>not</strong> a certification that real secrets are "
+        "safe in the block. Confidentiality here is the behavioural "
+        "sense (OWASP LLM07, system prompt leakage), not confidentiality "
+        "at rest or in transit.</p>"
+        + gap_line
+        + uniform_line
+        + positive_line
+        + '<div class="table-wrap"><table>'
+        + "<thead><tr><th>Candidate</th><th>Paired evaluable</th>"
+        + "<th>Control leaks</th><th>Treatment leaks</th>"
+        + "<th>Control rate</th><th>Treatment rate</th><th>Gap</th>"
+        + "<th>Discordant (ctrl-only / treat-only)</th>"
+        + "<th>McNemar p</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+        + "</section>"
+    )
+
+
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -6121,6 +6249,7 @@ def render_html(result: dict[str, Any]) -> str:
     toolcall_html = _toolcall_section(result)
     verbosity_html = _verbosity_section(result)
     cache_profile_html = _cache_profile_section(result)
+    confidentiality_html = _confidentiality_section(result)
     template_robustness_html = _template_robustness_section(result)
     ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
@@ -6232,6 +6361,11 @@ def render_html(result: dict[str, Any]) -> str:
                 cache_profile_html,
             ),
             (
+                "confidentiality",
+                "Labeled-block confidentiality",
+                confidentiality_html,
+            ),
+            (
                 "template-robustness",
                 "Template surface-noise robustness",
                 template_robustness_html,
@@ -6300,6 +6434,7 @@ def render_html(result: dict[str, Any]) -> str:
         + toolcall_html
         + verbosity_html
         + cache_profile_html
+        + confidentiality_html
         + template_robustness_html
         + ablation_html
         + sweep_html
