@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 173 — determinism self-audit, 2026-10-20)
+
+- New opt-in mode `model-protocol-lab verify --determinism --model
+  <checkpoint>` (wave-6 idea 8): the recorded search observations of
+  a run are re-executed against the local checkpoint — same recorded
+  `input_ids`, same token budget, per-request seeds re-derived
+  through the new shared `core.request_seed_for` — and compared
+  token-for-token. All cells reproduce: an unsigned, self-issued
+  determinism certificate bound by SHA-256 to the exact cells
+  compared. Any cell diverges: a per-cell divergence table, reported
+  as a backend-determinism finding (the audit proves the
+  re-execution, never the original run; divergence is not an
+  artifact-integrity failure). A fingerprint gate runs before any
+  generation (a different checkpoint, device, or context limit is a
+  different experiment), recorded cells are validated against the
+  recording pipeline's own invariants before any blame is assigned,
+  and replay cost is capped at the largest search phase a run can
+  record. Pure `determinism.py`; contract and pre-registered
+  falsifiable claims in `docs/DETERMINISM_AUDIT_DESIGN.md`; USAGE
+  §13.2.
+
 ### Added (cycle 171 — sealed result bundle, 2026-10-20)
 
 - New commands `model-protocol-lab pack` and

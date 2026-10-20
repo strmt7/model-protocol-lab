@@ -1792,6 +1792,55 @@ contract, caps, and check list live in
 2 checks failed, 1 unreadable); scripts should branch on the JSON
 report, not the exit code alone.
 
+### 13.2 Determinism self-audit (`verify --determinism`)
+
+Monday-morning use: a reviewer challenges a published result — "prove
+the backend actually generated those tokens deterministically." Plain
+`verify` replays the *decision* from the stored artifact; the
+determinism audit replays the *generation*. It loads the checkpoint
+(the one exception to the "no model is loaded" rule above), re-derives
+each recorded search observation's per-request seed through the same
+code path the original run used, re-executes the recorded `input_ids`
+at the recorded token budget, and compares the output token-for-token:
+
+```sh
+python -m model_protocol_lab verify run-baseline \
+    --determinism --model path/to/checkpoint
+```
+
+The JSON report gains a `determinism` section and a
+`determinism_replay` check. The audit runs only when the loaded
+checkpoint's fingerprint equals the recorded `backend_fingerprint`
+(the fingerprint binds the checkpoint assets, library versions,
+device, and context limit, so a mismatch means "a different
+experiment", never "nondeterminism"); `--device` and `--max-context`
+select the replay configuration and are gated by that same
+fingerprint. Runs written without `--include-evidence` have no
+observations to re-execute and report `unavailable`.
+
+If every recorded completed search cell reproduces, the section
+carries a determinism certificate: unsigned and self-issued, bound by
+a SHA-256 digest to the exact cells compared, stating its scope
+(search cells only; held-out cells are not re-executed). If some cells
+diverge, the section lists each one with its first divergent token —
+a divergence is a **backend-determinism finding**, not an
+artifact-integrity failure and not proof the original decision was
+wrong. Cells the artifact claims but the audit cannot re-execute
+(tampered lengths, out-of-vocabulary IDs, a search that never
+completed) cap the verdict at `inconclusive`; the audit detects
+divergence but does not diagnose its mechanism. The contract,
+including the falsifiable claims the implementation is tested
+against, is `docs/DETERMINISM_AUDIT_DESIGN.md`.
+
+Re-execution costs a full generation pass over the recorded search
+cells (bounded at 2,400 cells, the largest search phase a run can
+record) — budget for it like a re-run, not like a file check. Exit
+codes mirror `verify` (0 ok, 2 checks failed, 1 unreadable or invalid
+input), with one consequence to know: when the determinism check is
+`unavailable` — for example the backend errors during re-execution —
+the command can still exit 0. Read the `determinism` section, not the
+exit code alone.
+
 ## 14. Surface-noise self-consistency probe (`surface-noise`)
 
 Monday-morning use: you rewrote a prompt over the weekend — the probe

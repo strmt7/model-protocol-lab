@@ -6638,3 +6638,114 @@ The pin and its docstring note were updated in place to assert the
 new parse-time rejection, with the history kept in the note. Rule
 reinforced: behavior-changing fixes must grep the audit files for
 the behavior's descriptive *names*, not only its messages.
+
+## Cycle 173 (2026-10-20) -- determinism self-audit (`verify --determinism`)
+
+### Uniqueness pass (researcher, accessed 2026-10-20)
+
+Question: does any nearby harness ship a post-hoc determinism *audit
+artifact* -- a command that re-executes recorded generations from a
+stored results artifact and certifies or divergence-reports
+token-exact reproduction? Surveyed: EleutherAI lm-evaluation-harness
+(its `--use_cache` goes the other way -- it *avoids* re-execution;
+its `--seed` is a forward control), Stanford HELM (`helm-summarize`
+aggregates stored results; no generation), Hugging Face
+transformers/evaluate, PromptBench, NVIDIA garak, OpenAI evals,
+ctxray (deterministic *scoring* of prompt text; no model execution).
+The near-misses the docs must name: Inspect AI's `eval-retry`
+(re-runs failed samples only, not a token-exact replay of a stored
+artifact), DFAH (arXiv:2601.15322v2; fresh repeated agent trials
+graded at decision level), vLLM's `VLLM_BATCH_INVARIANT=1` and
+SGLang's `--enable-deterministic-inference` (engine *modes* --
+forward controls that enforce, not audits that check), DVC `repro`
+(pipeline re-execution without token comparison), MLflow tracking
+(reproducibility by record-keeping). Conclusion, scoped as always to
+the combination: stored-artifact-bound, exact per-request seed
+re-derivation, in-process re-execution of recorded search
+`input_ids`, token-exact comparison, certificate-or-divergence-table
+as a `verify` mode -- not found in any tool surveyed.
+
+Mechanism literature for the honest framing: He, "Defeating
+Nondeterminism in LLM Inference" (Thinking Machines Lab, Sep 2025,
+DOI 10.64434/tml.20250910) -- temperature-0 nondeterminism in
+serving stacks comes from lack of batch invariance (batch-dependent
+reduction order in RMSNorm/matmul/attention), not atomic-add races;
+1,000 greedy completions of one prompt gave 80 unique outputs, and
+batch-invariant kernels gave 1,000 identical ones. Corroborated by
+vLLM's own docs ("does not guarantee reproducibility by default"),
+SGLang's deterministic-inference notes, and Atil et al.
+(arXiv:2408.04667, up to 15% accuracy swing at temperature 0). The
+lab's backend is sequential batch-1 full-prefix recompute, so that
+mechanism is largely absent in-process; the design doc states that
+divergence here points more at checkpoint/environment/device drift,
+that the fingerprint gate rules most of those out up front, and that
+the audit detects divergence without diagnosing its mechanism.
+
+Terminology rulings: "determinism certificate" is not a term of
+art -- used only as a locally defined label, explicitly unsigned
+and self-issued; "attestation"/"certified" are banned (the cycle-171
+rule), as is "deterministic inference" (a serving-mode term that
+would imply enforcement rather than testing).
+
+### Design decisions (post red-team)
+
+Four-specialist round (researcher, red-team A, red-team B whose job
+was to disprove A, verifier); briefs in
+`~/workspace/agents_out/cycle173/`. Of A's 16 findings, B confirmed
+the load-bearing ones and downgraded three (A2's core claim was
+refuted -- the draft already bound the certificate to a cell digest;
+A5/A10 to LOW). Decisions that changed the design:
+
+1. **Validate recorded cells before blaming the backend** (A1/A3).
+   A legitimately recorded completed cell has
+   `len(output_ids) == max_new_tokens` exactly (the recording
+   pipeline's limit rule) and in-vocabulary IDs. Violations are
+   artifact defects reported as skips (`recorded_length_inconsistent`,
+   `recorded_ids_out_of_vocab`), never as divergence or backend
+   error. F6 tests both shapes.
+2. **No replay memoisation** (B1). An early draft deduplicated
+   identical cells; B showed that hides exactly the call-count-
+   dependent backend class the flaky-double test (F2) exists to
+   catch. Every claimed cell is re-executed individually; cost is
+   bounded by a cell budget instead (A4/B2):
+   `MAX_AUDIT_CELLS = 2400` = 24 candidates x 100 search fixtures,
+   the largest search phase `run_experiment` accepts, so a foreign
+   32 MiB artifact cannot turn the audit into an unbounded job.
+3. **Verify doctrine mapping** (A6). `diverged` is the only failed
+   outcome (the recorded outputs positively contradict the
+   re-execution). Backend errors and every other non-deterministic
+   outcome map to an *unavailable* check; the docs state the
+   consequence (exit 0 is possible; read the `determinism` section).
+4. **Certificate discipline** (A2/A8/B). The certificate binds a
+   SHA-256 digest of exactly the compared cells plus fingerprint,
+   seed, and budget; it issues only when every claimed cell was
+   attempted and reproduced and the recorded search completed --
+   stripped entries, blocking skips, and aborted runs (A8's blind
+   spot: candidates after an abort have no entry at all) all cap
+   the verdict at `inconclusive`. It also states what is *not*
+   certified: recorded prompts are replayed as stored.
+5. **Seeds** (A5/A9/B3). The per-request seed derivation was
+   extracted verbatim from `core.evaluate` into
+   `core.request_seed_for`, shared by the run and the audit; fixture
+   IDs are used byte-exactly (an NFC/NFD repro pair derives different
+   seeds, and that is correct). The built-in backend's fingerprint
+   itself records `seed_used_for_selection: False` -- its greedy
+   path ignores the seed -- so no seed-fidelity claim is made for
+   it; F3 proves evaluate/audit seed equality against a
+   seed-recording double with an independent inline-hashlib oracle.
+   `surfacenoise.py`'s pre-existing private copy of the formula is
+   pinned equal by a drift-guard test rather than refactored.
+
+### Built
+
+`model_protocol_lab/determinism.py` (44th source file; 100%
+line+branch under scoped coverage), `verify --determinism --model
+[--device] [--max-context]`, design contract in
+`docs/DETERMINISM_AUDIT_DESIGN.md` with pre-registered claims
+F1--F7, USAGE section 13.2. All seven claims hold on the shipped
+tree, including F1/F3 end-to-end against `core.evaluate` and a
+real-backend replay against a locally generated tiny GPT-2
+checkpoint (fresh `LocalHFBackend` instance, certificate issued).
+Three tempdir mutation gates (comparison off-by-one, fingerprint
+gate removal, length-invariant removal) each proven killed by a
+named test and non-vacuous against the shipped module. 6681 tests.
