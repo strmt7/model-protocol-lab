@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 181 — candidate aliasing audit, 2026-10-20)
+
+- `model-protocol-lab run --aliasing`: post-hoc audit of the
+  run's candidate set over the recorded search `input_ids`, zero
+  extra model calls — candidates are grouped into render classes
+  (identical prompt token sequences) and measurement classes
+  (identical prompts and identical response boundary) inside
+  cohorts of identical completed fixture sets, reporting
+  effective vs recorded candidate counts for both notions,
+  redundant completed observations under one per-fixture formula
+  (never "wasted": they are also the replicates the determinism
+  cross-check consumes), a per-pair coincidence matrix with
+  explicit denominators, determinism-suspect cells inside a
+  measurement class (output-digest or outcome disagreement,
+  attributable to backend nondeterminism or artifact corruption;
+  the audit asserts neither), and an alias-suspect abstention
+  flag when an `ambiguous` decision's passing set sits inside
+  one measurement class with no outcome-suspect cell. Classes
+  are computed from recorded IDs only — never the candidate
+  fingerprint, which hashes the format's name. The payload
+  carries per-cell SHA-256 digests under a frozen canonical
+  definition (`sha256-json-intlist-v1`) and counts only — no
+  token IDs, no text; digests do permit offline confirmation of
+  a guessed prompt, and the docs say so. New pure module
+  `aliasing.py`; `diff_aliasing` in diff-reports recomputes
+  every aggregate from the ground records (an
+  internal-consistency recompute) and reports partition,
+  boundary, count, and flag drift with fixture-set / backend /
+  digest-version comparability gates. The design was red-teamed
+  pre-build (red-team A: DO NOT BUILD AS SPECIFIED, 10 findings;
+  red-team B upheld the verdict, downgraded five severities,
+  refuted one sub-claim, and amended six of the ten build
+  gates); the corrected contract is
+  `docs/ALIASING_AUDIT_DESIGN.md`.
+
 ### Added (cycle 180 — scorer-lens regrade, 2026-10-20)
 
 - `model-protocol-lab run --scorer-lens`: post-hoc regrade of the

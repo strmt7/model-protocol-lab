@@ -404,6 +404,25 @@ def build_parser() -> argparse.ArgumentParser:
         "only; never touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--aliasing",
+        action="store_true",
+        help="Candidate aliasing audit (cycle 181, research wave-7 "
+        "rank 2): group the run's candidates into token-identity "
+        "equivalence classes over the recorded search input_ids -- "
+        "render classes (same prompt token sequences) and measurement "
+        "classes (same prompts and same response boundary) -- and "
+        "report effective vs recorded candidate counts, redundant "
+        "completed observations, per-pair coincidence, determinism-"
+        "suspect cells inside a class, and whether an ambiguous "
+        "abstention is contained in one measurement class -- "
+        "post-hoc over the main run's observations, zero extra model "
+        "calls. Monday morning: 'did I actually test 24 templates, "
+        "or 17 token sequences -- and was that tie two templates, or "
+        "one sequence wearing two name tags?' Digests and counts "
+        "only; no token IDs or text. Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1228,6 +1247,29 @@ def _run_scorerlens_probe(result: Any, *, search_fixtures: Any) -> None:
         result["scorerlens"] = {
             "available": False,
             "detail": "scorerlens_unavailable",
+        }
+
+
+def _run_aliasing_probe(result: Any) -> None:
+    """Run the candidate aliasing audit probe; never raises.
+
+    Post-hoc over the main run's recorded search observations (zero
+    extra model calls): candidates are grouped into render and
+    measurement equivalence classes over the recorded input IDs
+    (see :mod:`aliasing`) and the audit is stored as the
+    ``aliasing`` payload on ``result``. Unlike the scorer-lens the
+    profile needs no extra join -- everything it consumes is in
+    the recorded result. Any failure degrades to an "unavailable"
+    marker instead of failing the run.
+    """
+    try:
+        from .experiments import aliasing_profile
+
+        result["aliasing"] = aliasing_profile(result)
+    except Exception:  # noqa: BLE001 -- aliasing probe must not fail the run
+        result["aliasing"] = {
+            "available": False,
+            "detail": "aliasing_unavailable",
         }
 
 
@@ -2590,6 +2632,13 @@ def main(argv: list[str] | None = None) -> int:
                 # Never fails the run.
                 if args.scorer_lens:
                     _run_scorerlens_probe(result, search_fixtures=tuple(split.search))
+                # Candidate aliasing audit (cycle 181, research
+                # wave-7 rank 2): token-identity equivalence classes
+                # over the recorded search input_ids, post-hoc (zero
+                # extra model calls). Informational only -- never
+                # changes selection. Never fails the run.
+                if args.aliasing:
+                    _run_aliasing_probe(result)
                 # Prefix-cache sharability profile (cycle 168, research
                 # wave-6 idea 2): per-family exact-prefix sharability of
                 # the recorded input_ids, post-hoc over the main run's

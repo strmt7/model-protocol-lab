@@ -9,6 +9,16 @@ from hashlib import sha256
 from threading import Event
 from typing import Any, cast
 
+from .aliasing import AUDIT_ID as ALIASING_AUDIT_ID
+from .aliasing import DIGEST_VERSION as ALIASING_DIGEST_VERSION
+from .aliasing import SCOPE as ALIASING_SCOPE
+from .aliasing import analyze_candidate as aliasing_analyze_candidate
+from .aliasing import class_partitions as aliasing_class_partitions
+from .aliasing import evaluable_fixtures as aliasing_evaluable_fixtures
+from .aliasing import pair_matrix as aliasing_pair_matrix
+from .aliasing import primary_cohort as aliasing_primary_cohort
+from .aliasing import redundant_counts as aliasing_redundant_counts
+from .aliasing import suspect_cells as aliasing_suspect_cells
 from .backends import (
     StopOutcome,
     TokenHealingBackend,
@@ -6066,6 +6076,195 @@ def scorerlens_profile(
         "n_candidates": len(candidates),
         "n_candidates_available": n_available,
     }
+
+
+def aliasing_profile(result: dict[str, Any]) -> dict[str, Any]:
+    """Candidate aliasing audit of the recorded search entries (pure post-hoc).
+
+    Answers "did the run actually test distinct templates?" from
+    the recorded search observations -- zero extra model calls, and
+    unlike the scorer-lens no extra join: everything the audit
+    consumes (input/output IDs, outcomes, per-entry boundaries,
+    summaries, decision, backend fingerprint) is in the recorded
+    result. The class machinery is :mod:`aliasing`; this assembly
+    adds the run-level discipline: classes exist only inside
+    cohorts of identical completed fixture sets, effective counts
+    and the redundant count come from the primary cohort only, and
+    the alias-suspect flag is recomputed from the ground records
+    under the fixed withholding order (an unavailable candidate,
+    then a non-ambiguous decision, then an inconsistent passing
+    set, then an outcome-suspect cell in the containing class,
+    then a passing set spanning render classes, then differing
+    boundaries inside one render class).
+
+    Never raises on malformed input: returns ``{"available":
+    False}`` with a ``detail`` code for a structurally unusable
+    result; a result whose candidates are all unusable stays
+    ``available`` with per-candidate records saying why. A result
+    whose every search entry lacks recorded observations -- the
+    public ``results.json`` shape -- is ``observations_stripped``:
+    the audit is unavailable there by design, never a null result
+    manufactured from absent input.
+    """
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    if all(type(e) is dict and "observations" not in e for e in entries):
+        return {"available": False, "detail": "observations_stripped"}
+    candidates: list[dict[str, Any]] = []
+    by_name: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        fmt = entry.get("format") if type(entry) is dict else None
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(entry) is not dict or type(name) is not str or not name:
+            candidates.append({"candidate": None, "available": False, "detail": "entry_malformed"})
+            continue
+        if name in by_name:
+            # A second entry for one name: the name is unavailable
+            # as a whole (the producer-side rule; the validator
+            # rejects duplicate names in the payload outright).
+            prior = by_name[name]
+            prior.clear()
+            prior.update(
+                {"candidate": name, "available": False, "detail": "duplicate_candidate_entry"}
+            )
+            continue
+        summary = entry.get("summary")
+        eligible = type(summary) is dict and summary.get("aggregate_eligible") is True
+        planned = summary.get("planned") if type(summary) is dict else None
+        record: dict[str, Any] = {"candidate": name}
+        record.update(
+            aliasing_analyze_candidate(
+                entry.get("observations"),
+                candidate_name=name,
+                boundary_token_ids=entry.get("boundary_token_ids"),
+                eligible=eligible,
+                planned=planned,
+            )
+        )
+        candidates.append(record)
+        by_name[name] = record
+    available = [c for c in candidates if c.get("available") is True]
+    evaluable_mismatch = len({aliasing_evaluable_fixtures(c) for c in available}) > 1
+    primary = aliasing_primary_cohort(available)
+    primary_names = {str(c.get("candidate")) for c in primary}
+    render_classes, measurement_classes = aliasing_class_partitions(primary)
+    for record in available:
+        name = str(record.get("candidate"))
+        record["in_primary_cohort"] = name in primary_names
+        record["render_class_members"] = next((cls for cls in render_classes if name in cls), None)
+        record["measurement_class_members"] = next(
+            (cls for cls in measurement_classes if name in cls), None
+        )
+    excluded = sorted(
+        str(c.get("candidate")) for c in available if c.get("candidate") not in primary_names
+    )
+    n_redundant_measurement, n_redundant_render = aliasing_redundant_counts(primary)
+    suspects = aliasing_suspect_cells(primary, measurement_classes)
+    primary_fixtures = sorted(aliasing_evaluable_fixtures(primary[0])) if primary else []
+    passing = sorted(
+        str(c.get("candidate"))
+        for c in primary
+        if c.get("eligible") is True
+        and c.get("n_evaluable", 0) > 0
+        and all(r["exact_match"] and r["boundary_found"] for r in c["records"] if r["evaluable"])
+    )
+    flag, flag_detail, flag_members = _aliasing_flag(
+        decision=result.get("decision"),
+        n_candidates=len(candidates),
+        n_available=len(available),
+        passing=passing,
+        render_classes=render_classes,
+        measurement_classes=measurement_classes,
+        suspects=suspects,
+    )
+    decision = result.get("decision")
+    selected = result.get("selected_candidate")
+    fingerprint = result.get("backend_fingerprint")
+    seed = result.get("seed")
+    cap = result.get("max_new_tokens")
+    return {
+        "available": True,
+        "method": {
+            "protocol": ALIASING_AUDIT_ID,
+            "token_ids_digest": ALIASING_DIGEST_VERSION,
+            "scope": ALIASING_SCOPE,
+        },
+        "decision": decision if type(decision) is str else None,
+        "selected_candidate": selected if type(selected) is str and selected else None,
+        "backend_fingerprint": fingerprint if type(fingerprint) is str else None,
+        "seed": seed if type(seed) is int else None,
+        "max_new_tokens": cap if type(cap) is int else None,
+        "fixture_set_sha256": sha256("\n".join(primary_fixtures).encode("utf-8")).hexdigest(),
+        "evaluable_mismatch": evaluable_mismatch,
+        "candidates": candidates,
+        "n_candidates_recorded": len(candidates),
+        "n_candidates_available": len(available),
+        "n_primary_cohort": len(primary),
+        "excluded_candidates": excluded,
+        "n_candidates_excluded": len(excluded),
+        "n_effective_render": len(render_classes),
+        "n_effective_measurement": len(measurement_classes),
+        "render_classes": render_classes,
+        "measurement_classes": measurement_classes,
+        "n_redundant_completed_observations": n_redundant_measurement,
+        "n_redundant_render_observations": n_redundant_render,
+        "determinism_suspect_cells": suspects,
+        "n_determinism_suspect_cells": len(suspects),
+        "n_outcome_suspect_cells": sum(1 for c in suspects if c["kind"] in ("outcome", "both")),
+        "pairs": aliasing_pair_matrix(available),
+        "passing_candidates": passing,
+        "alias_suspect_abstention": flag,
+        "alias_suspect_detail": flag_detail,
+        "alias_suspect_class_members": flag_members,
+    }
+
+
+def _aliasing_flag(
+    *,
+    decision: Any,
+    n_candidates: int,
+    n_available: int,
+    passing: list[str],
+    render_classes: list[list[str]],
+    measurement_classes: list[list[str]],
+    suspects: list[dict[str, Any]],
+) -> tuple[bool, str, list[str]]:
+    """The alias-suspect flag under its fixed withholding order.
+
+    The order is part of the contract (the diff validator
+    recomputes the expected reason in the same order): an
+    unavailable candidate first, then a non-ambiguous decision,
+    then a passing set too small to explain an ``ambiguous``
+    decision, then an outcome-suspect cell inside the containing
+    measurement class (the aliasing explanation is exactly what
+    such a cell refutes), then a passing set spanning render
+    classes (a genuine tie between distinct prompts -- the lab
+    working as intended, not an artifact), then one render class
+    with differing boundaries. ``detail`` is ``""`` exactly when
+    the flag fires (the scorer-lens ``winner_detail`` discipline);
+    the fired case's class members travel in their own field.
+    """
+    if n_available != n_candidates:
+        return False, "candidate_unavailable", []
+    if decision != "ambiguous":
+        return False, "decision_not_ambiguous", []
+    if len(passing) < 2:
+        return False, "passing_set_inconsistent", []
+    passing_set = set(passing)
+    for cls in measurement_classes:
+        if passing_set <= set(cls):
+            if any(
+                cell["kind"] in ("outcome", "both") and set(cell["candidates"]) == set(cls)
+                for cell in suspects
+            ):
+                return False, "determinism_suspect_in_class", []
+            return True, "", list(cls)
+    if not any(passing_set <= set(cls) for cls in render_classes):
+        return False, "passing_spans_classes", []
+    return False, "boundaries_differ_within_passing_set", []
 
 
 def cache_profile_stage(

@@ -259,6 +259,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "verbosity": {"available": "neither", "changed": False},
         "refusals": {"available": "neither", "changed": False},
         "scorerlens": {"available": "neither", "changed": False},
+        "aliasing": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -328,6 +329,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "refusals_asymmetric": False,
             "scorerlens_changed": False,
             "scorerlens_asymmetric": False,
+            "aliasing_changed": False,
+            "aliasing_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -1862,6 +1865,436 @@ def _o_scorerlens(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or mismatch_changed
         or protocol_drift
         or fixture_set_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_aliasing_recompute(value: dict) -> dict | None:
+    """Oracle aliasing recompute: cohorts/classes/counts/flag from records."""
+    candidates = value.get("candidates")
+    if type(candidates) is not list or not candidates:
+        return None
+    if value.get("n_candidates_recorded") != len(candidates):
+        return None
+
+    def _hex(v: Any) -> bool:
+        return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+    available: list = []
+    total = 0
+    seen: set = set()
+    for entry in candidates:
+        if type(entry) is not dict:
+            return None
+        name = entry.get("candidate")
+        if name is not None and type(name) is not str:
+            return None
+        if type(name) is str:
+            if name in seen:
+                return None
+            seen.add(name)
+        if type(entry.get("available")) is not bool:
+            return None
+        if entry.get("available") is not True:
+            if type(entry.get("detail")) is not str:
+                return None
+            continue
+        available.append(entry)
+        if type(entry.get("eligible")) is not bool:
+            return None
+        planned = entry.get("planned")
+        if planned is not None and (type(planned) is not int or planned < 0):
+            return None
+        boundary = entry.get("boundary_token_ids")
+        if (
+            type(boundary) is not list
+            or not boundary
+            or any(type(t) is not int or t < 0 for t in boundary)
+        ):
+            return None
+        records = entry.get("records")
+        if type(records) is not list or entry.get("n_observations") != len(records):
+            return None
+        total += len(records)
+        fixtures_seen: set = set()
+        for record in records:
+            if type(record) is not dict:
+                return None
+            fixture = record.get("fixture")
+            if type(fixture) is not str or not fixture or fixture in fixtures_seen:
+                return None
+            fixtures_seen.add(fixture)
+            if type(record.get("status")) is not str:
+                return None
+            if any(
+                type(record.get(flag)) is not bool
+                for flag in ("evaluable", "exact_match", "boundary_found")
+            ):
+                return None
+            btm = record.get("boundary_text_match")
+            if btm is not None and type(btm) is not bool:
+                return None
+            if record["evaluable"] is True:
+                if record["status"] != "completed":
+                    return None
+                if not _hex(record.get("input_sha256")) or not _hex(record.get("output_sha256")):
+                    return None
+            elif (
+                record["status"] == "completed"
+                or record.get("input_sha256") is not None
+                or record.get("output_sha256") is not None
+            ):
+                return None
+        if entry.get("n_completed") != sum(1 for r in records if r["status"] == "completed"):
+            return None
+        if entry.get("n_not_completed") != sum(1 for r in records if r["status"] != "completed"):
+            return None
+        if entry.get("n_evaluable") != sum(1 for r in records if r["evaluable"]):
+            return None
+    if total > 2400 or len(available) > 24:
+        return None
+    if value.get("n_candidates_available") != len(available):
+        return None
+
+    def _fx(entry: Any) -> frozenset:
+        return frozenset(r["fixture"] for r in entry["records"] if r["evaluable"])
+
+    mismatch = len({_fx(e) for e in available}) > 1
+    groups: dict = {}
+    for entry in available:
+        groups.setdefault(_fx(entry), []).append(entry)
+    ranked = sorted(
+        groups.items(),
+        key=lambda kv: (
+            -len(kv[1]),
+            -len(kv[0]),
+            tuple(sorted(kv[0])),
+            tuple(sorted(str(m.get("candidate")) for m in kv[1])),
+        ),
+    )
+    primary = ranked[0][1] if ranked else []
+    primary_names = {str(e.get("candidate")) for e in primary}
+    fixtures_sorted = sorted(_fx(primary[0])) if primary else []
+
+    def _classes(with_boundary: bool) -> list:
+        grouped: dict = {}
+        for entry in primary:
+            cells = {r["fixture"]: r for r in entry["records"] if r["evaluable"]}
+            sig = tuple(cells[f]["input_sha256"] for f in fixtures_sorted)
+            if with_boundary:
+                sig = sig + (tuple(entry["boundary_token_ids"]),)
+            grouped.setdefault(sig, []).append(str(entry.get("candidate")))
+        return sorted((sorted(v) for v in grouped.values()), key=lambda names: names[0])
+
+    render_classes = _classes(False)
+    measurement_classes = _classes(True)
+    red_m = 0
+    red_r = 0
+    for fixture in fixtures_sorted:
+        cells = {
+            str(e.get("candidate")): next(
+                r for r in e["records"] if r["evaluable"] and r["fixture"] == fixture
+            )
+            for e in primary
+        }
+        boundaries = {str(e.get("candidate")): tuple(e["boundary_token_ids"]) for e in primary}
+        red_m += len(primary) - len({(c["input_sha256"], boundaries[n]) for n, c in cells.items()})
+        red_r += len(primary) - len({c["input_sha256"] for c in cells.values()})
+    by_name = {str(e.get("candidate")): e for e in primary}
+    suspects: list = []
+    for names in measurement_classes:
+        if len(names) < 2:
+            continue
+        for fixture in fixtures_sorted:
+            cells = [
+                next(r for r in by_name[n]["records"] if r["evaluable"] and r["fixture"] == fixture)
+                for n in names
+            ]
+            out_bad = len({c["output_sha256"] for c in cells}) > 1
+            oc_bad = (
+                len(
+                    {
+                        (
+                            c["exact_match"],
+                            c["boundary_found"],
+                            c["boundary_text_match"],
+                            c["status"],
+                        )
+                        for c in cells
+                    }
+                )
+                > 1
+            )
+            if out_bad or oc_bad:
+                kind = "both" if out_bad and oc_bad else ("output" if out_bad else "outcome")
+                suspects.append({"fixture": fixture, "candidates": list(names), "kind": kind})
+    suspects.sort(key=lambda c: (c["fixture"], c["candidates"]))
+    pairs: list = []
+    for i, left in enumerate(available):
+        lcells = {r["fixture"]: r["input_sha256"] for r in left["records"] if r["evaluable"]}
+        for right in available[i + 1 :]:
+            rcells = {r["fixture"]: r["input_sha256"] for r in right["records"] if r["evaluable"]}
+            common = sorted(set(lcells) & set(rcells))
+            if not common:
+                continue
+            shared = [f for f in common if lcells[f] == rcells[f]]
+            pairs.append(
+                {
+                    "candidates": sorted([str(left.get("candidate")), str(right.get("candidate"))]),
+                    "n_common_completed": len(common),
+                    "n_shared": len(shared),
+                    "shared_fixture_ids": shared,
+                }
+            )
+    pairs.sort(key=lambda p: p["candidates"])
+    passing = sorted(
+        str(e.get("candidate"))
+        for e in primary
+        if e.get("eligible") is True
+        and e.get("n_evaluable", 0) > 0
+        and all(r["exact_match"] and r["boundary_found"] for r in e["records"] if r["evaluable"])
+    )
+    flag = False
+    detail = ""
+    members: list = []
+    if len(available) != len(candidates):
+        detail = "candidate_unavailable"
+    elif value.get("decision") != "ambiguous":
+        detail = "decision_not_ambiguous"
+    elif len(passing) < 2:
+        detail = "passing_set_inconsistent"
+    else:
+        pset = set(passing)
+        containing = [cls for cls in measurement_classes if pset <= set(cls)]
+        if containing:
+            cls = containing[0]
+            if any(
+                cell["kind"] in ("outcome", "both") and set(cell["candidates"]) == set(cls)
+                for cell in suspects
+            ):
+                detail = "determinism_suspect_in_class"
+            else:
+                flag, members = True, list(cls)
+        elif not any(pset <= set(cls) for cls in render_classes):
+            detail = "passing_spans_classes"
+        else:
+            detail = "boundaries_differ_within_passing_set"
+    return {
+        "evaluable_mismatch": mismatch,
+        "primary_names": primary_names,
+        "render_classes": render_classes,
+        "measurement_classes": measurement_classes,
+        "n_redundant_completed_observations": red_m,
+        "n_redundant_render_observations": red_r,
+        "determinism_suspect_cells": suspects,
+        "pairs": pairs,
+        "passing_candidates": passing,
+        "alias_suspect_abstention": flag,
+        "alias_suspect_detail": detail,
+        "alias_suspect_class_members": members,
+        "fixture_set_sha256": hashlib.sha256(
+            "\n".join(fixtures_sorted).encode("utf-8")
+        ).hexdigest(),
+        "excluded_candidates": sorted(
+            str(e.get("candidate"))
+            for e in available
+            if str(e.get("candidate")) not in primary_names
+        ),
+    }
+
+
+def _o_aliasing_valid(value: Any) -> bool:
+    """Oracle aliasing validator: mirrors diffreports._valid_aliasing."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    method = value.get("method")
+    if type(method) is not dict:
+        return False
+    if any(
+        type(method.get(k)) is not str or not method.get(k)
+        for k in ("protocol", "token_ids_digest", "scope")
+    ):
+        return False
+    for key in ("decision", "selected_candidate", "backend_fingerprint"):
+        v = value.get(key)
+        if v is not None and type(v) is not str:
+            return False
+    for key in ("seed", "max_new_tokens"):
+        v = value.get(key)
+        if v is not None and type(v) is not int:
+            return False
+    fixture_sha = value.get("fixture_set_sha256")
+    if (
+        type(fixture_sha) is not str
+        or len(fixture_sha) != 64
+        or any(c not in "0123456789abcdef" for c in fixture_sha)
+    ):
+        return False
+    if type(value.get("evaluable_mismatch")) is not bool:
+        return False
+    recomputed = _o_aliasing_recompute(value)
+    if recomputed is None:
+        return False
+    for entry in value["candidates"]:
+        if entry.get("available") is not True:
+            continue
+        name = str(entry.get("candidate"))
+        if entry.get("in_primary_cohort") is not (name in recomputed["primary_names"]):
+            return False
+        if entry.get("render_class_members") != next(
+            (cls for cls in recomputed["render_classes"] if name in cls), None
+        ):
+            return False
+        if entry.get("measurement_class_members") != next(
+            (cls for cls in recomputed["measurement_classes"] if name in cls), None
+        ):
+            return False
+    expected = {
+        "evaluable_mismatch": recomputed["evaluable_mismatch"],
+        "fixture_set_sha256": recomputed["fixture_set_sha256"],
+        "excluded_candidates": recomputed["excluded_candidates"],
+        "n_candidates_excluded": len(recomputed["excluded_candidates"]),
+        "n_primary_cohort": len(recomputed["primary_names"]),
+        "n_effective_render": len(recomputed["render_classes"]),
+        "n_effective_measurement": len(recomputed["measurement_classes"]),
+        "render_classes": recomputed["render_classes"],
+        "measurement_classes": recomputed["measurement_classes"],
+        "n_redundant_completed_observations": recomputed["n_redundant_completed_observations"],
+        "n_redundant_render_observations": recomputed["n_redundant_render_observations"],
+        "determinism_suspect_cells": recomputed["determinism_suspect_cells"],
+        "n_determinism_suspect_cells": len(recomputed["determinism_suspect_cells"]),
+        "n_outcome_suspect_cells": sum(
+            1 for c in recomputed["determinism_suspect_cells"] if c["kind"] in ("outcome", "both")
+        ),
+        "pairs": recomputed["pairs"],
+        "passing_candidates": recomputed["passing_candidates"],
+        "alias_suspect_abstention": recomputed["alias_suspect_abstention"],
+        "alias_suspect_detail": recomputed["alias_suspect_detail"],
+        "alias_suspect_class_members": recomputed["alias_suspect_class_members"],
+    }
+    return all(value.get(k) == v for k, v in expected.items())
+
+
+def _o_aliasing(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle aliasing section: partition/count/flag drift, drift gates.
+
+    Independent reimplementation: view-based comparison and
+    comprehension-built drift lists, in the implementation's
+    output order.
+    """
+    old_ok = _o_aliasing_valid(old)
+    new_ok = _o_aliasing_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = (old["method"].get("protocol"), old["method"].get("token_ids_digest")) != (
+        new["method"].get("protocol"),
+        new["method"].get("token_ids_digest"),
+    )
+    fixture_set_drift = old.get("fixture_set_sha256") != new.get("fixture_set_sha256")
+    backend_drift = old.get("backend_fingerprint") != new.get("backend_fingerprint")
+    comparable = not protocol_drift and not fixture_set_drift and not backend_drift
+
+    def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for entry in payload.get("candidates") or []:
+            name = entry.get("candidate")
+            if type(name) is not str:
+                continue
+            if entry.get("available") is not True or entry.get("in_primary_cohort") is not True:
+                out[name] = {"excluded": True}
+                continue
+            out[name] = {
+                "excluded": False,
+                "members": entry.get("measurement_class_members") or [],
+                "boundary": entry.get("boundary_token_ids"),
+            }
+        return out
+
+    old_view = _view(old)
+    new_view = _view(new)
+    candidates_added = sorted(set(new_view) - set(old_view))
+    candidates_removed = sorted(set(old_view) - set(new_view))
+    old_excluded = {n for n, v in old_view.items() if v["excluded"]}
+    new_excluded = {n for n, v in new_view.items() if v["excluded"]}
+    excluded_added = sorted(new_excluded - old_excluded)
+    excluded_removed = sorted(old_excluded - new_excluded)
+    common = sorted(
+        n
+        for n in set(old_view) & set(new_view)
+        if not old_view[n]["excluded"] and not new_view[n]["excluded"]
+    )
+    pairs_joined = [
+        [left, right]
+        for i, left in enumerate(common)
+        for right in common[i + 1 :]
+        if right in new_view[left]["members"] and right not in old_view[left]["members"]
+    ]
+    pairs_split = [
+        [left, right]
+        for i, left in enumerate(common)
+        for right in common[i + 1 :]
+        if right in old_view[left]["members"] and right not in new_view[left]["members"]
+    ]
+    boundary_drift = [
+        {
+            "candidate": n,
+            "old_boundary": old_view[n]["boundary"],
+            "new_boundary": new_view[n]["boundary"],
+        }
+        for n in common
+        if old_view[n]["boundary"] != new_view[n]["boundary"]
+    ]
+    count_drift = [
+        {"metric": metric, "old": old.get(metric), "new": new.get(metric)}
+        for metric in (
+            "n_effective_render",
+            "n_effective_measurement",
+            "n_redundant_completed_observations",
+            "n_determinism_suspect_cells",
+        )
+        if old.get(metric) != new.get(metric)
+    ]
+    flag_changed = old.get("alias_suspect_abstention") != new.get("alias_suspect_abstention")
+    mismatch_changed = old.get("evaluable_mismatch") != new.get("evaluable_mismatch")
+    diff["pairs_joined"] = pairs_joined
+    diff["pairs_split"] = pairs_split
+    diff["boundary_drift"] = boundary_drift
+    diff["count_drift"] = count_drift
+    diff["flag_changed"] = flag_changed
+    diff["candidates_added"] = candidates_added
+    diff["candidates_removed"] = candidates_removed
+    diff["excluded_added"] = excluded_added
+    diff["excluded_removed"] = excluded_removed
+    diff["protocol_drift"] = protocol_drift
+    diff["fixture_set_drift"] = fixture_set_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    diff["mismatch_changed"] = mismatch_changed
+    changed = bool(
+        pairs_joined
+        or pairs_split
+        or boundary_drift
+        or count_drift
+        or flag_changed
+        or candidates_added
+        or candidates_removed
+        or excluded_added
+        or excluded_removed
+        or mismatch_changed
+        or protocol_drift
+        or fixture_set_drift
+        or backend_drift
     )
     diff["changed"] = changed
     return diff, changed, asymmetric
@@ -3981,6 +4414,7 @@ def _oracle_diff(
     o_sl, o_sl_changed, o_sl_asymmetric = _o_scorerlens(
         old.get("scorerlens"), new.get("scorerlens")
     )
+    o_al, o_al_changed, o_al_asymmetric = _o_aliasing(old.get("aliasing"), new.get("aliasing"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -4049,6 +4483,8 @@ def _oracle_diff(
         and not o_rf_asymmetric
         and not o_sl_changed
         and not o_sl_asymmetric
+        and not o_al_changed
+        and not o_al_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -4090,6 +4526,7 @@ def _oracle_diff(
         "verbosity": o_vb,
         "refusals": o_rf,
         "scorerlens": o_sl,
+        "aliasing": o_al,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -4155,6 +4592,8 @@ def _oracle_diff(
             "refusals_asymmetric": o_rf_asymmetric,
             "scorerlens_changed": o_sl_changed,
             "scorerlens_asymmetric": o_sl_asymmetric,
+            "aliasing_changed": o_al_changed,
+            "aliasing_asymmetric": o_al_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -5068,6 +5507,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "refusals_asymmetric": False,
                 "scorerlens_changed": False,
                 "scorerlens_asymmetric": False,
+                "aliasing_changed": False,
+                "aliasing_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -6349,6 +6790,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.45:
         report["scorerlens"] = _fuzz_scorerlens_section(rng)
     if rng.random() < 0.45:
+        report["aliasing"] = _fuzz_aliasing_section(rng)
+    if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
@@ -6814,6 +7257,72 @@ def _fuzz_scorerlens_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+def _fuzz_aliasing_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads are produced by the real profile over random
+    # recorded observations (guaranteeing every recompute identity
+    # holds); hostile mutations then try to break them, and oracle
+    # and implementation must agree on every rejection. A coherent
+    # foreign digest version (records unchanged, version string
+    # replaced) exercises true protocol drift rather than
+    # corruption, because digest handling is equality-only.
+    id_pools = [[1, 2], [1, 2], [3], [4, 5], [1, 2]]
+    search = []
+    for name in ("alpha", "beta"):
+        observations = []
+        for index in range(3):
+            ids = rng.choice(id_pools)
+            observations.append(
+                {
+                    "candidate": name,
+                    "fixture": f"fx-{index}",
+                    "input_ids": list(ids),
+                    "output_ids": [rng.randint(0, 9), 99],
+                    "answer": "x",
+                    "exact_match": rng.random() < 0.7,
+                    "boundary_found": rng.random() < 0.85,
+                    "boundary_text_match": rng.choice([True, False, None]),
+                    "raw_reason": "limit",
+                    "error": None,
+                    "status": rng.choice(["completed", "completed", "completed", "failed"]),
+                }
+            )
+        search.append(
+            {
+                "format": {"name": name},
+                "boundary_token_ids": [99] if rng.random() < 0.8 else [7],
+                "summary": {
+                    "aggregate_eligible": rng.random() < 0.85,
+                    "planned": 3,
+                },
+                "observations": observations,
+            }
+        )
+    result = {
+        "search": search,
+        "decision": rng.choice(["ambiguous", "ambiguous", "no_candidate", "failed"]),
+        "selected_candidate": None,
+        "backend_fingerprint": "sha256:fuzz",
+        "seed": 3,
+        "max_new_tokens": 8,
+    }
+    payload = experiments.aliasing_profile(result)
+    if rng.random() < 0.12:
+        payload["method"]["token_ids_digest"] = "sha256-json-intlist-v99"  # coherent foreign
+    if rng.random() < 0.1:
+        payload["backend_fingerprint"] = "sha256:other-backend"
+    available = [c for c in payload.get("candidates", []) if c.get("available") is True]
+    if available and rng.random() < 0.1:
+        available[0]["n_effective_render"] = 99  # hostile: count off records (wrong level)
+    if available and rng.random() < 0.1:
+        payload["n_effective_render"] = payload.get("n_effective_render", 0) + 1
+    if rng.random() < 0.08:
+        payload["alias_suspect_abstention"] = True  # hostile: manufactured flag
+        payload["alias_suspect_detail"] = ""
+    if available and rng.random() < 0.08:
+        available[0]["records"][0]["input_sha256"] = "0" * 64  # hostile: digest off ids
+    return payload
+
+
 def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     # Coherent cells are produced by the real implementation over
     # random prompt sets (guaranteeing the integer identities and
@@ -7273,6 +7782,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not answer_collision_asymmetric\n"
             '        and not scorerlens_diff["changed"]\n'
             "        and not scorerlens_asymmetric\n"
+            '        and not aliasing_diff["changed"]\n'
+            "        and not aliasing_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -7331,6 +7842,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or answer_collision_asymmetric\n"
             '        or scorerlens_diff["changed"]\n'
             "        or scorerlens_asymmetric\n"
+            '        or aliasing_diff["changed"]\n'
+            "        or aliasing_asymmetric\n"
             "    )\n",
             scenario,
         )

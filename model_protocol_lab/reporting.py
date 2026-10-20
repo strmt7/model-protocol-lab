@@ -5373,6 +5373,218 @@ def _scorerlens_section(result: dict[str, Any]) -> str:
     )
 
 
+def _aliasing_section(result: dict[str, Any]) -> str:
+    """Candidate aliasing audit: render and measurement classes.
+
+    Renders the ``aliasing`` payload (see
+    experiments.aliasing_profile) as the effective-vs-recorded
+    candidate counts, the render and measurement equivalence
+    classes of the primary cohort, the per-pair coincidence
+    matrix, and the alias-suspect abstention flag.
+    Determinism-suspect cells lead the section when present: they
+    are the audit's tripwire, and a fired flag must never be read
+    over them. Classes are relative to this run's fixture set and
+    backend tokenizer; the payload's per-cell digests are never
+    rendered here. Every interpolation is escaped at this
+    boundary.
+    """
+    audit: Any = result.get("aliasing")
+    if type(audit) is not dict or not audit.get("available"):
+        return ""
+    candidates = audit.get("candidates")
+    if type(candidates) is not list:
+        return ""
+
+    def _num(key: str) -> str:
+        value = audit.get(key)
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    def _names(names: Any) -> str:
+        if type(names) is list:
+            return ", ".join('<span class="mono">' + escape(str(n)) + "</span>" for n in names)
+        return "n/a"
+
+    suspect_items = []
+    suspects = audit.get("determinism_suspect_cells")
+    if type(suspects) is list:
+        for cell in suspects:
+            if type(cell) is not dict:
+                continue
+            fixture = cell.get("fixture")
+            kind = cell.get("kind")
+            suspect_items.append(
+                "<li>"
+                + _names(cell.get("candidates"))
+                + " · fixture "
+                + '<span class="mono">'
+                + (escape(fixture) if type(fixture) is str else "unknown")
+                + "</span> · "
+                + (escape(kind) if type(kind) is str else "unknown")
+                + " divergence</li>"
+            )
+    suspect_block = ""
+    if suspect_items:
+        suspect_block = (
+            "<p><strong>Determinism-suspect cells:</strong> recorded "
+            "cells inside one measurement class that a deterministic "
+            "backend could not have produced from one measurement "
+            "configuration -- backend nondeterminism or artifact "
+            'corruption; <span class="mono">verify '
+            "--determinism</span> replay discriminates. The audit "
+            "asserts neither cause.</p><ul>" + "".join(suspect_items) + "</ul>"
+        )
+    class_rows = []
+    measurement = audit.get("measurement_classes")
+    if type(measurement) is list:
+        for idx, members in enumerate(measurement):
+            if type(members) is not list:
+                continue
+            class_rows.append(
+                "<tr><td>measurement class "
+                + escape(str(idx + 1))
+                + "</td><td>"
+                + _names(members)
+                + "</td></tr>"
+            )
+    render = audit.get("render_classes")
+    if type(render) is list and render != measurement:
+        for idx, members in enumerate(render):
+            if type(members) is not list:
+                continue
+            class_rows.append(
+                "<tr><td>render class "
+                + escape(str(idx + 1))
+                + "</td><td>"
+                + _names(members)
+                + "</td></tr>"
+            )
+    pair_items = []
+    pairs = audit.get("pairs")
+    if type(pairs) is list:
+        for pair in pairs:
+            if type(pair) is not dict or pair.get("n_shared", 0) == 0:
+                continue
+            pair_items.append(
+                "<li>"
+                + _names(pair.get("candidates"))
+                + " · identical prompts on "
+                + escape(str(pair.get("n_shared")))
+                + " of "
+                + escape(str(pair.get("n_common_completed")))
+                + " commonly completed fixtures</li>"
+            )
+    pairs_block = ""
+    if pair_items:
+        pairs_block = (
+            "<p>Pairwise coincidence (per pair, over the fixtures "
+            "both candidates completed; pairwise data, never "
+            "clustered into classes):</p><ul>" + "".join(pair_items) + "</ul>"
+        )
+    if audit.get("alias_suspect_abstention") is True:
+        flag_block = (
+            "<p><strong>Alias-suspect abstention:</strong> the "
+            'recorded decision is <span class="mono">ambiguous</span> '
+            "and every passing candidate lies in one measurement "
+            "class: "
+            + _names(audit.get("alias_suspect_class_members"))
+            + ". The tie is between names for one measurement, not "
+            "between distinct prompts. This flag is advisory -- the "
+            "recorded decision stands, and it does not assert any "
+            "candidate would have survived held-out, which was never "
+            "run for any of them.</p>"
+        )
+    else:
+        detail = audit.get("alias_suspect_detail")
+        flag_block = (
+            "<p>Alias-suspect abstention flag: not fired"
+            + (
+                " (" + escape(detail.replace("_", " ")) + ")"
+                if type(detail) is str and detail
+                else ""
+            )
+            + ".</p>"
+        )
+    mismatch_line = ""
+    if audit.get("evaluable_mismatch") is True:
+        mismatch_line = (
+            "<p><strong>Caution:</strong> candidates were not all "
+            "measured on the same completed fixture set; classes "
+            "are computed inside cohorts of identical completed "
+            "sets, and the counts below describe the primary "
+            "cohort.</p>"
+        )
+    unavailable_names = []
+    excluded_names = []
+    for entry in candidates:
+        if type(entry) is not dict:
+            continue
+        name = entry.get("candidate")
+        label = escape(str(name)) if type(name) is str and name else "unknown"
+        if not entry.get("available"):
+            unavailable_names.append(label)
+        elif entry.get("in_primary_cohort") is not True:
+            excluded_names.append(label)
+    status_line = ""
+    if unavailable_names:
+        status_line += (
+            "<p>Candidates with no usable recorded observations: "
+            + ", ".join('<span class="mono">' + n + "</span>" for n in unavailable_names)
+            + ".</p>"
+        )
+    if excluded_names:
+        status_line += (
+            "<p>Candidates outside the primary cohort (different "
+            "completed fixture set): "
+            + ", ".join('<span class="mono">' + n + "</span>" for n in excluded_names)
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="aliasing">'
+        "<h2>Candidate aliasing audit</h2>"
+        "<p>Did the run actually test distinct templates? "
+        "Candidates are grouped over the recorded search prompts: "
+        "render classes share one prompt token sequence on every "
+        "fixture of the cohort; measurement classes also share "
+        "the response boundary, which is part of the measurement. "
+        "Counts are relative to this run's fixture set and "
+        "backend tokenizer -- a collapse here is a "
+        "tokenizer-by-fixture interaction, not a claim that the "
+        "catalog families are duplicates. Redundant observations "
+        "are counted once per fixture; they are also the "
+        "replicates the determinism cross-check consumes.</p>"
+        + suspect_block
+        + mismatch_line
+        + "<table><thead><tr><th>Count</th><th>Value</th></tr></thead><tbody>"
+        + "<tr><td>Candidates recorded</td><td>"
+        + _num("n_candidates_recorded")
+        + "</td></tr>"
+        + "<tr><td>Primary cohort</td><td>"
+        + _num("n_primary_cohort")
+        + "</td></tr>"
+        + "<tr><td>Effective render candidates</td><td>"
+        + _num("n_effective_render")
+        + "</td></tr>"
+        + "<tr><td>Effective measurement candidates</td><td>"
+        + _num("n_effective_measurement")
+        + "</td></tr>"
+        + "<tr><td>Redundant completed observations</td><td>"
+        + _num("n_redundant_completed_observations")
+        + "</td></tr>"
+        + "</tbody></table>"
+        + (
+            "<table><thead><tr><th>Class</th><th>Members</th></tr></thead><tbody>"
+            + "".join(class_rows)
+            + "</tbody></table>"
+            if class_rows
+            else ""
+        )
+        + pairs_block
+        + flag_block
+        + status_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -6692,6 +6904,7 @@ def render_html(result: dict[str, Any]) -> str:
     verbosity_html = _verbosity_section(result)
     refusals_html = _refusals_section(result)
     scorerlens_html = _scorerlens_section(result)
+    aliasing_html = _aliasing_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -6811,6 +7024,11 @@ def render_html(result: dict[str, Any]) -> str:
                 scorerlens_html,
             ),
             (
+                "aliasing",
+                "Candidate aliasing audit",
+                aliasing_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -6895,6 +7113,7 @@ def render_html(result: dict[str, Any]) -> str:
         + verbosity_html
         + refusals_html
         + scorerlens_html
+        + aliasing_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html
