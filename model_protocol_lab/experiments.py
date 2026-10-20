@@ -85,6 +85,10 @@ from .prefill import (
     validate_prefill_specs,
 )
 from .refusals import DETECTOR_ID, OPENERS_SHA256, REFUSAL_OPENERS, analyze_candidate
+from .scorerlens import LADDER_ID as SCORERLENS_LADDER_ID
+from .scorerlens import LADDER_SPEC as SCORERLENS_LADDER_SPEC
+from .scorerlens import analyze_candidate as scorerlens_analyze_candidate
+from .scorerlens import ladder_sha256 as scorerlens_ladder_sha256
 from .scoring import STATUS_OK, TargetScore, score_target_logprobs
 from .structured import candidate_adherence, classify_response, validate_schema_def
 from .synthhistory import (
@@ -5954,6 +5958,110 @@ def refusal_profile(result: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "evaluable_mismatch": len(set(completed_sets)) > 1,
+        "candidates": candidates,
+        "n_candidates": len(candidates),
+        "n_candidates_available": n_available,
+    }
+
+
+def scorerlens_profile(
+    result: dict[str, Any], expected_by_fixture: dict[str, str]
+) -> dict[str, Any]:
+    """Scorer-lens regrade of the recorded search answers (pure post-hoc).
+
+    Answers "how much of each template's failure is the byte-exact
+    scorer, not the answer?" by regrading every recorded search
+    answer under the frozen normalisation ladder in
+    :mod:`scorerlens` -- zero extra model calls. The expected texts
+    come from the run's own fixture set, supplied by the caller:
+    recorded results deliberately carry no ``expected`` field, so
+    the join is an explicit parameter (the verbosity precedent),
+    and it is fail-closed per candidate (see
+    :func:`scorerlens.analyze_candidate`).
+
+    The winner readout is the *search-phase* winner under each
+    rung, re-applying the conservative bar (every evaluable fixture
+    verdict-passes) to the rung verdict counts; held-out is never
+    regraded. It is withheld whenever any candidate is unavailable
+    or ineligible, or the evaluable fixture sets differ -- a winner
+    computed over a partial field would be the interrupted-run sin
+    one level up. Surface-failure shares are withheld per candidate
+    on the same eligibility gate as the refusal rates.
+
+    Never raises on malformed input: returns ``{"available":
+    False}`` with a ``detail`` code for a structurally unusable
+    result or expected map.
+    """
+    if type(result) is not dict:
+        return {"available": False, "detail": "result_not_a_dict"}
+    if type(expected_by_fixture) is not dict or not all(
+        type(k) is str and type(v) is str for k, v in expected_by_fixture.items()
+    ):
+        return {"available": False, "detail": "expected_map_invalid"}
+    entries = result.get("search")
+    if type(entries) is not list or not entries:
+        return {"available": False, "detail": "no_search_entries"}
+    candidates: list[dict[str, Any]] = []
+    evaluable_sets: list[frozenset[str]] = []
+    n_available = 0
+    for entry in entries:
+        fmt = entry.get("format") if type(entry) is dict else None
+        name = fmt.get("name") if type(fmt) is dict else None
+        if type(entry) is not dict or type(name) is not str or not name:
+            candidates.append({"candidate": None, "available": False, "detail": "entry_malformed"})
+            continue
+        summary = entry.get("summary")
+        eligible = type(summary) is dict and summary.get("aggregate_eligible") is True
+        record: dict[str, Any] = {"candidate": name}
+        record.update(
+            scorerlens_analyze_candidate(
+                entry.get("observations"), expected_by_fixture, eligible=eligible
+            )
+        )
+        candidates.append(record)
+        if record["available"]:
+            n_available += 1
+            evaluable_sets.append(
+                frozenset(r["fixture"] for r in record["records"] if not r["excluded"])
+            )
+    evaluable_mismatch = len(set(evaluable_sets)) > 1
+    fixture_set_sha256 = sha256("\n".join(sorted(expected_by_fixture)).encode("utf-8")).hexdigest()
+    native = result.get("selected_candidate")
+    native_winner = native if type(native) is str and native else None
+    winner_by_rung: dict[str, str | None] | None = None
+    winner_detail = ""
+    if n_available != len(candidates) or not candidates:
+        winner_detail = "candidate_unavailable"
+    elif any(c.get("eligible") is not True for c in candidates):
+        winner_detail = "candidate_not_eligible"
+    elif evaluable_mismatch:
+        winner_detail = "evaluable_mismatch"
+    else:
+        winner_by_rung = {}
+        for rung in ("0", "1", "2", "3", "4"):
+            winners = [
+                c["candidate"]
+                for c in candidates
+                if c["verdict_counts"][rung] == c["n_evaluable"] and c["n_evaluable"] > 0
+            ]
+            winner_by_rung[rung] = winners[0] if len(winners) == 1 else None
+    return {
+        "available": True,
+        "method": {
+            "protocol": SCORERLENS_LADDER_ID,
+            "ladder": SCORERLENS_LADDER_SPEC,
+            "ladder_sha256": scorerlens_ladder_sha256(),
+            "scope": (
+                "search observations only; boundary-cut recorded answers; "
+                "expected texts joined from the run's own fixture set, "
+                "never recorded; held-out is never regraded"
+            ),
+        },
+        "fixture_set_sha256": fixture_set_sha256,
+        "evaluable_mismatch": evaluable_mismatch,
+        "native_winner": native_winner,
+        "winner_by_rung": winner_by_rung,
+        "winner_detail": winner_detail,
         "candidates": candidates,
         "n_candidates": len(candidates),
         "n_candidates_available": n_available,

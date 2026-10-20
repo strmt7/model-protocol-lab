@@ -57,6 +57,7 @@ RUN_PROBE_FLAGS = [
     "--tool-call",
     "--verbosity",
     "--refusals",
+    "--scorer-lens",
     "--cache-profile",
     "--cache-profile-block-size",
     "--confidentiality",
@@ -119,9 +120,9 @@ class DocsCurrencyTests(unittest.TestCase):
     def test_validation_header_covers_latest_cycle(self):
         # The first "## " section (index 1; index 0 is the title).
         # Bump the pinned range whenever a cycle updates the top
-        # evidence section (178 -> 179 in cycle 179).
+        # evidence section (179 -> 180 in cycle 180).
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–179", top)
+        self.assertIn("cycles 10–180", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):

@@ -100,6 +100,7 @@ STAGE_FLAGS = [
     ("--tool-call", "tool_call", None),
     ("--verbosity", "verbosity", None),
     ("--refusals", "refusals", None),
+    ("--scorer-lens", "scorer_lens", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -214,6 +215,12 @@ HELPER_DISPATCH = [
         ["verbosity_stage", "verbosity_profile"],
     ),
     ("_run_refusals_probe", "refusals", "refusals_unavailable", ["refusal_profile"]),
+    (
+        "_run_scorerlens_probe",
+        "scorerlens",
+        "scorerlens_unavailable",
+        ["scorerlens_profile"],
+    ),
     (
         "_run_cache_profile_probe",
         "cache_profile",

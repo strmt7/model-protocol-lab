@@ -178,9 +178,9 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 
 - `results.json`: structured decision, summaries, candidate formats and fingerprint. Each observation carries `boundary_text_match` (see §4).
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
-stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
+stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
-A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness and field-ablation sections are absent from the sample even though real runs render them.
+A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation and scorer-lens sections are absent from the sample even though real runs render them.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -1488,6 +1488,74 @@ the mismatch flag, and detector protocol drift
 `identical`). Informational only: the profile never affects
 selection, and the stage never fails the run.
 
+### 8.37 Scorer-lens regrade (`scorerlens`)
+
+Opt-in with `model-protocol-lab run --scorer-lens`. Post-hoc over
+the main run's recorded search observations -- zero extra model
+calls: every recorded answer is regraded under a frozen ladder of
+normalisations, and the run gains a `scorerlens` section with
+per-candidate verdict counts per rung, first-flip attribution per
+fixture, and the search-phase winner re-derived under each rung.
+Monday-morning use: a template change made the run look worse --
+decide whether the template actually got worse or whether the
+byte-exact scorer is discarding answers a human would accept, and
+whether the winner survives the mildest defensible scorer.
+
+The ladder is one pipeline (each rung consumes the previous
+rung's output, so a fixture passing at rung k passes at every
+higher rung by construction): R0 exact; R1 trim, collapse
+space/tab runs, cap newline runs at two (line structure survives:
+a two-line answer is not the same answer on one line); R2 NFC,
+casefold, combining-mark removal (the refusal detector's fix for
+Turkish dotted capital I); R3 line-anchored markdown-fence strip,
+then iterative stripping of a small presentational punctuation
+set at the string edges; R4 R3, or both sides match a frozen
+ASCII numeric grammar (plain digits or strict thousands
+grouping, optional fraction/exponent) and parse to finite, equal
+decimal values. The ladder is embedded in every payload as data
+with its SHA-256 digest, so a ladder change is protocol drift in
+`diff-reports`, never a silent redefinition. The full contract --
+including the strip set as an explicit character list -- is in
+`docs/SCORER_LENS_DESIGN.md`.
+
+Three honesty boundaries are part of the instrument, not
+footnotes. The ladder has *no label-strip operation*: an answer
+of `Answer: 42` against expected `42` flips at no rung -- lead-in
+prose is not surface the ladder forgives. R4 does not read
+decimal commas (`1,5` is one-and-a-half in much of the world,
+not `15`; the ladder has no locale input), never equates
+underscores or non-ASCII digits with ASCII ones, and compares
+parsed decimals by value, never by a normalised string form.
+Casefold equates German ß with ss, so a rung-2 flip on a name
+fixture deserves a second look; the payload's flip attribution
+records whether a rung-2 flip needed more than NFC. Verdict
+counts always conjoin the recorded boundary fact, which no rung
+can move, and the boundary-blocked count travels with the table:
+a winner that is stable because every candidate is
+boundary-blocked is not scorer evidence. The winner readout is
+the *search-phase* winner only -- held-out is never regraded --
+and it is withheld, with a named reason, whenever any candidate
+is unavailable or ineligible or the evaluable fixture sets
+differ. Fixtures whose expected text is empty (or whitespace
+only) are excluded from the lens with their count reported: the
+lens has nothing to say about a fixture with no surface. The
+payload carries counts, fixture IDs and rung numbers only -- no
+answer text, no expected text, no normalised forms -- and its
+per-fixture ground records let `diff-reports` recompute every
+aggregate before trusting it.
+
+`diff-reports` compares per-rung winner drift, per-candidate
+surface-failure-share drift (with the failure denominators
+alongside), per-fixture first-flip-rung changes,
+excluded-candidate transitions, the mismatch flag, ladder
+protocol drift, and fixture-set drift -- across a different
+fixture set or ladder, drift is still listed but flagged
+`comparable: false`, because a moved winner then conflates the
+exam change with the scorer's effect (`diff_scorerlens`,
+`scorerlens_changed` / `scorerlens_asymmetric` feed `identical`).
+Informational only: the regrade never affects selection, and
+the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -1864,7 +1932,7 @@ cleaner or more contaminated?), and one key per recorded experiment
 stage -- `perturbation`, `token_healing`, `hierarchy`, `prefill`,
 `portfolio`, `synthhistory`, `batch_invariance`, `position`,
 `stop_cause`, `ws_canonical`, `structured`, `deliforge`, `fewshot`,
-`faketurn`, `toolcall`, `verbosity`, `refusals`, `cache_profile`,
+`faketurn`, `toolcall`, `verbosity`, `refusals`, `scorerlens`, `cache_profile`,
 `template_robustness`, `ablation`, `confidentiality`,
 `answer_collision` -- each carrying that stage's verdict drift and
 per-candidate drift, with the stage's own section in section 8

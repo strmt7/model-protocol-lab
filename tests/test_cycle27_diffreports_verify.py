@@ -1481,6 +1481,219 @@ def oracle_diff_reports(
             return False
         return value.get("n_candidates_available") == n_available
 
+    def _or_scorerlens_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_scorerlens exactly: the
+        # availability-level oracle must agree with the implementation
+        # on hostile payloads too, including every recompute identity.
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        method = value.get("method")
+        if type(method) is not dict:
+            return False
+        protocol = method.get("protocol")
+        if type(protocol) is not str or not protocol:
+            return False
+        ladder = method.get("ladder")
+        if type(ladder) is not dict or ladder.get("protocol") != protocol:
+            return False
+        canonical = json.dumps(ladder, sort_keys=True, separators=(",", ":"))
+        if method.get("ladder_sha256") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+            return False
+        fixture_sha = value.get("fixture_set_sha256")
+        if (
+            type(fixture_sha) is not str
+            or len(fixture_sha) != 64
+            or any(c not in "0123456789abcdef" for c in fixture_sha)
+        ):
+            return False
+        if type(value.get("evaluable_mismatch")) is not bool:
+            return False
+        native_winner = value.get("native_winner")
+        if native_winner is not None and type(native_winner) is not str:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not list or not candidates:
+            return False
+        if type(value.get("n_candidates")) is not int or value.get("n_candidates") != len(
+            candidates
+        ):
+            return False
+        n_available = 0
+        seen_names: set = set()
+        evaluable_sets: list = []
+        available_entries: list = []
+        for entry in candidates:
+            if type(entry) is not dict:
+                return False
+            name = entry.get("candidate")
+            if name is not None and type(name) is not str:
+                return False
+            if type(name) is str:
+                if name in seen_names:
+                    return False
+                seen_names.add(name)
+            if type(entry.get("available")) is not bool:
+                return False
+            if entry.get("available") is not True:
+                if type(entry.get("detail")) is not str:
+                    return False
+                continue
+            n_available += 1
+            available_entries.append(entry)
+            if type(entry.get("eligible")) is not bool:
+                return False
+            n_observations = entry.get("n_observations")
+            n_completed_field = entry.get("n_completed")
+            if (
+                type(n_observations) is not int
+                or n_observations < 0
+                or type(n_completed_field) is not int
+                or n_completed_field < 0
+                or n_completed_field > n_observations
+            ):
+                return False
+            records = entry.get("records")
+            if type(records) is not list or len(records) != n_observations:
+                return False
+            for record in records:
+                if type(record) is not dict:
+                    return False
+                if type(record.get("fixture")) is not str or not record.get("fixture"):
+                    return False
+                if any(
+                    type(record.get(flag)) is not bool
+                    for flag in ("completed", "boundary_found", "exact_match", "excluded")
+                ):
+                    return False
+                flip = record.get("first_flip_rung")
+                if flip is not None and (type(flip) is not int or flip < 1 or flip > 4):
+                    return False
+                via = record.get("flip_via")
+                if via is not None and via not in ("nfc", "casefold"):
+                    return False
+                if (via is not None) != (flip == 2):
+                    return False
+                if record.get("exact_match") is True and flip is not None:
+                    return False
+                if record.get("excluded") is True and flip is not None:
+                    return False
+                if any(
+                    type(record.get(flag)) is not bool
+                    for flag in ("expected_r3_altered", "newline_differs")
+                ):
+                    return False
+            if sum(1 for r in records if r["completed"] is True) != n_completed_field:
+                return False
+            evaluable = [r for r in records if r["excluded"] is not True]
+            evaluable_sets.append(frozenset(r["fixture"] for r in evaluable))
+
+            def _matches(r: Any, rung: int) -> bool:
+                return r["exact_match"] is True or (
+                    r["first_flip_rung"] is not None and r["first_flip_rung"] <= rung
+                )
+
+            match_counts = {str(k): sum(1 for r in evaluable if _matches(r, k)) for k in range(5)}
+            verdict_counts = {
+                str(k): sum(
+                    1
+                    for r in evaluable
+                    if r["completed"] is True and r["boundary_found"] is True and _matches(r, k)
+                )
+                for k in range(5)
+            }
+            if entry.get("match_counts") != match_counts:
+                return False
+            if entry.get("verdict_counts") != verdict_counts:
+                return False
+            n_evaluable = len(evaluable)
+            if entry.get("n_evaluable") != n_evaluable:
+                return False
+            if entry.get("n_excluded_empty_expected") != len(records) - n_evaluable:
+                return False
+            if entry.get("n_boundary_blocked") != sum(
+                1 for r in evaluable if r["completed"] is True and r["boundary_found"] is not True
+            ):
+                return False
+            n_failures = n_evaluable - verdict_counts["0"]
+            n_recovered = verdict_counts["4"] - verdict_counts["0"]
+            if entry.get("n_native_verdict_failures") != n_failures:
+                return False
+            if entry.get("n_recovered_by_r4") != n_recovered:
+                return False
+            flipped = [r for r in evaluable if r["first_flip_rung"] is not None]
+            if entry.get("n_flips_boundary_blocked") != sum(
+                1 for r in flipped if r["boundary_found"] is not True
+            ):
+                return False
+            if entry.get("n_flips_expected_altered") != sum(
+                1 for r in flipped if r["expected_r3_altered"] is True
+            ):
+                return False
+            if entry.get("n_r1_flips_newline_changed") != sum(
+                1 for r in flipped if r["first_flip_rung"] == 1 and r["newline_differs"] is True
+            ):
+                return False
+            share = entry.get("surface_failure_share")
+            note = entry.get("share_note")
+            if note not in ("", "candidate_not_eligible", "no_native_failures"):
+                return False
+            if (share is None) != (note != ""):
+                return False
+            if entry["eligible"] is not True:
+                if note != "candidate_not_eligible":
+                    return False
+            elif n_failures == 0:
+                if note != "no_native_failures":
+                    return False
+            elif share != n_recovered / n_failures:
+                return False
+            if share is not None and not (type(share) in (int, float) and 0.0 <= share <= 1.0):
+                return False
+        if type(value.get("n_candidates_available")) is not int:
+            return False
+        if value.get("n_candidates_available") != n_available:
+            return False
+        if value.get("evaluable_mismatch") != (len(set(evaluable_sets)) > 1):
+            return False
+        winner_detail = value.get("winner_detail")
+        winners = value.get("winner_by_rung")
+        if winner_detail not in (
+            "",
+            "candidate_unavailable",
+            "candidate_not_eligible",
+            "evaluable_mismatch",
+        ):
+            return False
+        if (winners is None) != (winner_detail != ""):
+            return False
+        if winners is None:
+            if n_available != len(candidates):
+                expected_detail = "candidate_unavailable"
+            elif any(e["eligible"] is not True for e in available_entries):
+                expected_detail = "candidate_not_eligible"
+            elif value.get("evaluable_mismatch") is True:
+                expected_detail = "evaluable_mismatch"
+            else:
+                return False
+            return winner_detail == expected_detail
+        if type(winners) is not dict or set(winners) != {"0", "1", "2", "3", "4"}:
+            return False
+        if n_available != len(candidates):
+            return False
+        if any(e["eligible"] is not True for e in available_entries):
+            return False
+        if value.get("evaluable_mismatch") is True:
+            return False
+        for rung in ("0", "1", "2", "3", "4"):
+            rung_winners = [
+                e["candidate"]
+                for e in available_entries
+                if e["verdict_counts"][rung] == e["n_evaluable"] and e["n_evaluable"] > 0
+            ]
+            if winners.get(rung) != (rung_winners[0] if len(rung_winners) == 1 else None):
+                return False
+        return True
+
     def _or_confidentiality_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
@@ -1944,6 +2157,18 @@ def oracle_diff_reports(
         _o_rf_available = "neither"
     _o_rf_asymmetric = _o_rf_available not in ("both", "neither")
 
+    _sl_old_ok = _or_scorerlens_valid(old.get("scorerlens"))
+    _sl_new_ok = _or_scorerlens_valid(new.get("scorerlens"))
+    if _sl_old_ok and _sl_new_ok:
+        _o_sl_available = "both"
+    elif _sl_old_ok:
+        _o_sl_available = "old"
+    elif _sl_new_ok:
+        _o_sl_available = "new"
+    else:
+        _o_sl_available = "neither"
+    _o_sl_asymmetric = _o_sl_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -2008,6 +2233,7 @@ def oracle_diff_reports(
         and not _o_tc_asymmetric
         and not _o_vb_asymmetric
         and not _o_rf_asymmetric
+        and not _o_sl_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -2067,6 +2293,8 @@ def oracle_diff_reports(
         "verbosity_asymmetric": _o_vb_asymmetric,
         "refusals_changed": False,
         "refusals_asymmetric": _o_rf_asymmetric,
+        "scorerlens_changed": False,
+        "scorerlens_asymmetric": _o_sl_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -2108,6 +2336,7 @@ def oracle_diff_reports(
         "toolcall": {"available": _o_tc_available, "changed": False},
         "verbosity": {"available": _o_vb_available, "changed": False},
         "refusals": {"available": _o_rf_available, "changed": False},
+        "scorerlens": {"available": _o_sl_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

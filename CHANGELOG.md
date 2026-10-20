@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 180 — scorer-lens regrade, 2026-10-20)
+
+- `model-protocol-lab run --scorer-lens`: post-hoc regrade of the
+  recorded search answers under a frozen normalisation ladder
+  (R0 exact; R1 whitespace; R2 NFC + casefold + combining-mark
+  removal; R3 markdown-fence strip and edge-punctuation strip;
+  R4 numeric value under a strict ASCII grammar), reporting
+  per-candidate verdict counts per rung (the boundary fact is
+  always conjoined and its blocked count reported), first-flip
+  attribution per fixture, the surface share of each candidate's
+  native failures, and the search-phase winner re-derived per
+  rung (withheld, with a named reason, over any partial or
+  ineligible field). The ladder travels in the payload as data
+  with a SHA-256 digest; the payload carries counts and fixture
+  IDs only — no answer or expected text. The design was
+  red-teamed pre-build (12 findings upheld on cross-check, two
+  binding amendments added); the corrected contract, including
+  the no-label-strip and no-decimal-comma honesty boundaries, is
+  `docs/SCORER_LENS_DESIGN.md`. New pure module `scorerlens.py`;
+  `diff_scorerlens` in diff-reports recomputes every aggregate
+  from the per-fixture ground records before trusting a payload.
+- Also fixed: the cycle-67 diff oracle's `identical` conjunction
+  was missing the refusals terms added in cycle 174 (latent —
+  the implementation had them; the fuzz pairs never isolated
+  the difference).
+
 ### Fixed (cycle 179 — `--perturb` dispatch nested inside `--transfer-model`, 2026-10-20)
 
 - `model-protocol-lab run --perturb N` silently did nothing
