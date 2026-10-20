@@ -786,21 +786,30 @@ class CacheProfileReportingTests(unittest.TestCase):
 
 
 def _cp_diff_payload(name="c", achievable_block=0.25, **overrides):
+    # Producer-consistent stories (cycle 177, wave-7 F6b): the
+    # strengthened validator recomputes every fraction from the
+    # counts, so a different achievable-block share is a different
+    # COUNT story (a larger prompt set with the same single
+    # achievable block), never a bare fraction edit.
+    if achievable_block == 0.0625:
+        total, cacheable, shared, bcb, distinct, ablocks = 256, 128, 64, 8, 7, 1
+    else:
+        total, cacheable, shared, bcb, distinct, ablocks = 64, 32, 16, 2, 1, 1
     cell = {
         "n": 2,
         "n_evaluable": 2,
-        "total_tokens": 64,
-        "mean_prompt_tokens": 32.0,
-        "cacheable_tokens": 32,
-        "shared_prefixes": 16,
-        "achievable_tokens": 16,
-        "potential_token_fraction": 0.5,
-        "achievable_token_fraction": 0.25,
-        "block_cacheable_blocks": 2,
-        "distinct_block_prefixes": 1,
-        "achievable_blocks": 1,
-        "potential_block_fraction": 0.5,
-        "achievable_block_fraction": achievable_block,
+        "total_tokens": total,
+        "mean_prompt_tokens": total / 2,
+        "cacheable_tokens": cacheable,
+        "shared_prefixes": shared,
+        "achievable_tokens": cacheable - shared,
+        "potential_token_fraction": cacheable / total,
+        "achievable_token_fraction": (cacheable - shared) / total,
+        "block_cacheable_blocks": bcb,
+        "distinct_block_prefixes": distinct,
+        "achievable_blocks": ablocks,
+        "potential_block_fraction": 16 * bcb / total,
+        "achievable_block_fraction": 16 * ablocks / total,
         "n_duplicate_prompts": 0,
     }
     cell.update(overrides)
@@ -847,8 +856,20 @@ class CacheProfileDiffTests(unittest.TestCase):
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(achievable_block=0.25)
+        # Count story for the new side (cycle 177, F6b): total 320,
+        # achievable tokens 288 (0.9), cacheable 304 (potential
+        # token 0.95), block-cacheable 18 (potential block 0.9),
+        # achievable blocks 5 (achievable block stays 0.25).
         new = _cp_diff_payload(
             achievable_block=0.25,
+            total_tokens=320,
+            mean_prompt_tokens=160.0,
+            cacheable_tokens=304,
+            shared_prefixes=16,
+            achievable_tokens=288,
+            block_cacheable_blocks=18,
+            distinct_block_prefixes=13,
+            achievable_blocks=5,
             achievable_token_fraction=0.9,
             potential_block_fraction=0.9,
             potential_token_fraction=0.95,
@@ -876,6 +897,12 @@ class CacheProfileDiffTests(unittest.TestCase):
         new = _cp_diff_payload(name="c")
         old["per_candidate"]["c"] = None
         old["excluded_candidates"] = ["c"]
+        # The no-evaluable profile story (cycle 177, F6b): no
+        # extremes, no gap, no uniformity verdict.
+        old["most_sharable"] = []
+        old["least_sharable"] = []
+        old["sharability_gap"] = None
+        old["uniform"] = None
         diff = diffreports.diff_cache_profile(old, new)
         self.assertTrue(diff["changed"])
         self.assertEqual(diff["excluded_added"], [])
@@ -910,6 +937,11 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertFalse(diffreports._valid_cache_profile(hostile3))
         hostile4 = _cp_diff_payload()
         hostile4["per_candidate"]["c"] = None  # missing cell is fine
+        hostile4["excluded_candidates"] = ["c"]
+        hostile4["most_sharable"] = []
+        hostile4["least_sharable"] = []
+        hostile4["sharability_gap"] = None
+        hostile4["uniform"] = None
         self.assertTrue(diffreports._valid_cache_profile(hostile4))
         hostile5 = _cp_diff_payload()
         hostile5["per_candidate"] = {"c": "not-a-dict"}
@@ -917,6 +949,11 @@ class CacheProfileDiffTests(unittest.TestCase):
         # None-vs-0.0 discipline (R5).
         hostile6 = _cp_diff_payload()
         hostile6["per_candidate"]["c"] = candidate_cache_profile([])
+        hostile6["excluded_candidates"] = ["c"]
+        hostile6["most_sharable"] = []
+        hostile6["least_sharable"] = []
+        hostile6["sharability_gap"] = None
+        hostile6["uniform"] = None
         self.assertTrue(diffreports._valid_cache_profile(hostile6))
         hostile6["per_candidate"]["c"]["achievable_token_fraction"] = 0.0
         self.assertFalse(diffreports._valid_cache_profile(hostile6))

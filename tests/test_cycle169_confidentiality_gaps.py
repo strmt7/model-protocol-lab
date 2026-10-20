@@ -158,10 +158,12 @@ class DiffValidatorGapTests(unittest.TestCase):
     def test_most_resistant_not_str_rejected(self):
         self.assertFalse(diffreports._valid_confidentiality(_valid_payload(most_resistant=7)))
 
-    def test_profile_gap_none_accepted(self):
-        # Defensive: the profile gap is never None when measurable, but
-        # the validator must not crash on it.
-        self.assertTrue(diffreports._valid_confidentiality(_valid_payload(gap=None)))
+    def test_profile_gap_none_rejected(self):
+        # Cycle 177 (F6c): the profile gap is recomputed as the
+        # measurable cells' spread, so a None gap on a measurable
+        # profile is an inconsistency, not a defensive shape. The
+        # validator still must not crash on it -- it returns False.
+        self.assertFalse(diffreports._valid_confidentiality(_valid_payload(gap=None)))
 
 
 class TemplateRobustnessValidatorGapTests(unittest.TestCase):

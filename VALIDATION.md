@@ -7,10 +7,10 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **6782 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **6827 tests collected**
   (cycle 176, 2026-10-20). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **6782 tests (cycle 176,
+- `python -m unittest discover -s tests -t .` — **6827 tests (cycle 177,
   2026-10-20; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -23,7 +23,7 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   log-likelihood diagnostic, the fixture-loader contract fuzzer
   (`fixtures fuzz`), and differential-verification suites with
   mutation gates for every module.
-- `ruff check` — clean; `ruff format --check` — clean (240 files).
+- `ruff check` — clean; `ruff format --check` — clean (241 files).
 - `mypy model_protocol_lab` — clean (45 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on

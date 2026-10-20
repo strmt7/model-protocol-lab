@@ -1538,9 +1538,36 @@ def oracle_diff_reports(
             if v is not None and type(v) is not str:
                 return False
         gap = value.get("gap")
-        if gap is None:
-            return True
-        return type(gap) in (int, float) and -1.0 <= gap <= 1.0
+        if gap is not None and not (type(gap) in (int, float) and -1.0 <= gap <= 1.0):
+            return False
+        # Profile-level recomputation (cycle 177, F6c mirror).
+        dict_cells = {name: e for name, e in per_candidate.items() if type(e) is dict}
+        if value.get("n_candidates") != len(per_candidate):
+            return False
+        if value.get("n_cells") != len(dict_cells):
+            return False
+        measurable = {name: e for name, e in dict_cells.items() if e.get("gap") is not None}
+        if value.get("n_measurable") != len(measurable):
+            return False
+        if not measurable:
+            return False
+        gaps = {name: float(e["gap"]) for name, e in measurable.items()}
+        most = max(gaps, key=lambda name: (gaps[name], name))
+        least = min(gaps, key=lambda name: (gaps[name], name))
+        if value.get("most_resistant") != most:
+            return False
+        if value.get("least_resistant") != least:
+            return False
+        if gap != gaps[most] - gaps[least]:
+            return False
+        if value.get("uniform_nonpositive") != all(g <= 0 for g in gaps.values()):
+            return False
+        expected_positive = sorted(
+            name for name, e in measurable.items() if e.get("positive") is True
+        )
+        if positive != expected_positive:
+            return False
+        return value.get("any_positive") == bool(expected_positive)
 
     def _or_answer_collision_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_answer_collision exactly: the
@@ -1685,6 +1712,27 @@ def oracle_diff_reports(
                     return False
             elif not (type(mean) in (int, float) and mean > 0):
                 return False
+            if entry["n_evaluable"] > 0:
+                # Recompute mirror (cycle 177, F6b).
+                total = entry["total_tokens"]
+                if total <= 0:
+                    return False
+                if mean != total / entry["n_evaluable"]:
+                    return False
+                if entry["potential_token_fraction"] != entry["cacheable_tokens"] / total:
+                    return False
+                if entry["achievable_token_fraction"] != entry["achievable_tokens"] / total:
+                    return False
+                if (
+                    entry["potential_block_fraction"]
+                    != block_size * entry["block_cacheable_blocks"] / total
+                ):
+                    return False
+                if (
+                    entry["achievable_block_fraction"]
+                    != block_size * entry["achievable_blocks"] / total
+                ):
+                    return False
             achievable_token = entry.get("achievable_token_fraction")
             potential_token = entry.get("potential_token_fraction")
             achievable_block = entry.get("achievable_block_fraction")
@@ -1710,7 +1758,56 @@ def oracle_diff_reports(
             return False
         if value.get("uniform") is not None and type(value.get("uniform")) is not bool:
             return False
-        return type(value.get("evaluable_mismatch")) is bool
+        if type(value.get("evaluable_mismatch")) is not bool:
+            return False
+        # Profile-level recomputation mirror (cycle 177, F6b).
+        evaluable = {
+            name: float(entry["achievable_block_fraction"])
+            for name, entry in per_candidate.items()
+            if entry is not None and entry["n_evaluable"] > 0
+        }
+        excluded = sorted(
+            name
+            for name, entry in per_candidate.items()
+            if entry is None or entry["n_evaluable"] == 0
+        )
+        if value.get("excluded_candidates") != excluded:
+            return False
+        counts = {
+            entry["n_evaluable"]
+            for entry in per_candidate.values()
+            if entry is not None and entry["n_evaluable"] > 0
+        }
+        if value.get("evaluable_mismatch") != (len(counts) > 1):
+            return False
+        if not evaluable:
+            return (
+                gap is None
+                and value.get("uniform") is None
+                and not value["most_sharable"]
+                and not value["least_sharable"]
+            )
+        values = list(evaluable.values())
+        if gap != max(values) - min(values):
+            return False
+        top = max(values)
+        bottom = min(values)
+        if value["most_sharable"] != sorted(n for n, v in evaluable.items() if v == top):
+            return False
+        if value["least_sharable"] != sorted(n for n, v in evaluable.items() if v == bottom):
+            return False
+        fraction_keys = (
+            "achievable_block_fraction",
+            "achievable_token_fraction",
+            "potential_block_fraction",
+            "potential_token_fraction",
+        )
+        first = per_candidate[next(iter(evaluable))]
+        expected_uniform = all(
+            all(per_candidate[name].get(key) == first.get(key) for name in evaluable)
+            for key in fraction_keys
+        )
+        return value.get("uniform") == expected_uniform
 
     def _or_trob_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_template_robustness exactly.

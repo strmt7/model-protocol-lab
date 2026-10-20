@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 177 — wave-7 red-team fixes round 3, 2026-10-20)
+
+- `diff-reports` validators for cache profile and
+  confidentiality now recompute their derived values
+  (wave-7 F6b/F6c), completing the F6 cluster: cache means and
+  fractions must equal their counts' ratios under the payload's
+  block size, and the gap/extremes/uniformity/exclusions are
+  recomputed from the cells; confidentiality rates must equal
+  leaks over the paired denominator, the McNemar p-value is
+  recomputed from the discordant counts, the positive/base-rate/
+  evaluable flags are recomputed from the producer's
+  definitions, run fractions must be consistent with the leak
+  counts, and the profile's extremes, spread, and positive set
+  are recomputed from the measurable cells.
+
 ### Fixed (cycle 176 — wave-7 red-team fixes round 2, 2026-10-20)
 
 - Confidentiality leak detector measured only marker *prefixes*
