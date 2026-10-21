@@ -6082,6 +6082,7 @@ _NUMFORM_RECORD_KEYS = {
     "form_identical",
     "expected_answer_tokens",
     "answer_value",
+    "answer_text",
     "cell",
     "detail",
 }
@@ -6118,6 +6119,71 @@ def _numform_render(value: int, form: str) -> str:
     if len(mantissa) > 1:
         return f"{mantissa[0]}.{mantissa[1:]}e{exponent}"
     return f"{mantissa}e{exponent}"
+
+
+_NUMFORM_PLAIN_RE = re.compile(r"[0-9]+")
+_NUMFORM_COMMA_RE = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})*")
+_NUMFORM_SPACE_RE = re.compile(r"[0-9]{1,3}(?:\u202f[0-9]{3})*")
+_NUMFORM_SCI_RE = re.compile(r"([0-9]+)(?:\.([0-9]+))?[eE]\+?([0-9]{1,3})")
+_NUMFORM_MAX_PARSE_DIGITS = 20
+
+
+def _numform_parse_value(text: Any) -> int | None:
+    """Independent mirror of numform.parse_value (cycle 190).
+
+    The grammars are deliberately [0-9], never \\d: int() and
+    \\d both accept non-ASCII decimal digits, the producer
+    accepts neither. Caps are digit counts checked before
+    conversion, and the scientific branch keeps the
+    producer's shift arithmetic exactly (a negative shift
+    must divide the mantissa, and results are uncapped).
+    The differential battery in tests/test_cycle190_numform_f3.py
+    pins this mirror against the producer over the grammar
+    alphabet; the pattern texts are pinned equal by test.
+    """
+    if type(text) is not str or not text:
+        return None
+    if _NUMFORM_PLAIN_RE.fullmatch(text):
+        if len(text) > _NUMFORM_MAX_PARSE_DIGITS:
+            return None
+        return int(text)
+    if _NUMFORM_COMMA_RE.fullmatch(text):
+        digits = text.replace(",", "")
+        if len(digits) > _NUMFORM_MAX_PARSE_DIGITS:
+            return None
+        return int(digits)
+    if _NUMFORM_SPACE_RE.fullmatch(text):
+        digits = text.replace(_NUMFORM_SPACE, "")
+        if len(digits) > _NUMFORM_MAX_PARSE_DIGITS:
+            return None
+        return int(digits)
+    match = _NUMFORM_SCI_RE.fullmatch(text)
+    if match is not None:
+        head, frac, exponent_text = match.group(1), match.group(2) or "", match.group(3)
+        if len(head) + len(frac) > _NUMFORM_MAX_PARSE_DIGITS:
+            return None
+        exponent = int(exponent_text)
+        mantissa = int(head + frac)
+        shift = exponent - len(frac)
+        if shift >= 0:
+            result: int = mantissa * 10**shift
+            return result
+        divisor = 10 ** (-shift)
+        if mantissa % divisor:
+            return None
+        quotient: int = mantissa // divisor
+        return quotient
+    return None
+
+
+def _numform_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the text
+    cannot be encoded (a lone-surrogate answer_text is a
+    validation failure, never an exception — cycle 190 A3)."""
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
 
 
 def _numform_carry(a: int, b: int) -> str:
@@ -6689,6 +6755,24 @@ def _numform_record_construction(
             and answer_value != expected_value
         ):
             return None
+        # Cycle 190 (F3): the stored parse is no longer
+        # trusted. The answer text must digest to the cell's
+        # recorded digest, and re-parsing it under the
+        # mirrored grammars must reproduce answer_value
+        # exactly. Compare answers are words, not numbers:
+        # they are bound by the digest alone (A2).
+        answer_text = record["answer_text"]
+        if type(answer_text) is not str:
+            return None
+        if _numform_text_digest(answer_text) != digest:
+            return None
+        if task != "compare" and _numform_parse_value(answer_text) != answer_value:
+            return None
+    elif record["answer_text"] is not None or answer_value is not None:
+        # A cell that never completed carries neither an
+        # answer nor a parse of one (A4: explicit, not a
+        # byproduct of the aggregate filters).
+        return None
     return (
         task,
         value_id,
@@ -6719,12 +6803,13 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     -- and the stored token means/deltas must satisfy the
     producer's arithmetic relation (each delta is its form's
     mean minus the plain mean, up to float summation order).
-    The answer's parsed value is stored data the decomposition
-    recomputes FROM (the parse itself is a stage act, pinned
-    by the stage's own tests, as with leading's eligibility);
-    where the answer digest pins the answer to the expected
-    string, the stored value is checked against the expected
-    value exactly.
+    The answer's parsed value is NOT trusted stored data:
+    each record's answer_text is bound to its cell digest
+    and re-parsed under this module's mirrored grammars,
+    and the decomposition recomputes from the re-derived
+    value (cycle 190); where the answer digest pins the
+    answer to the expected string, the value is checked
+    against the expected value exactly.
     """
     import hashlib as _hashlib
     import json as _json

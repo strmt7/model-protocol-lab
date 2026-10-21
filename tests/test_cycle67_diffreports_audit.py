@@ -3941,6 +3941,7 @@ _O_NF_RECORD_KEYS = {
     "form_identical",
     "expected_answer_tokens",
     "answer_value",
+    "answer_text",
     "cell",
     "detail",
 }
@@ -4084,6 +4085,25 @@ def _o_nf_record(record: Any) -> tuple[Any, ...] | None:
             and answer_value != expected_value
         ):
             return None
+        # Cycle 190 (F3): digest-bound answer text, re-parsed.
+        # This oracle is producer-coupled for the parse (it
+        # imports numform); the independent parse legs are
+        # the diffreports mirror and the cycle-27 hand mirror,
+        # pinned by the differential battery in
+        # tests/test_cycle190_numform_f3.py.
+        answer_text = record["answer_text"]
+        if type(answer_text) is not str:
+            return None
+        try:
+            text_digest = hashlib.sha256(answer_text.encode("utf-8")).hexdigest()
+        except UnicodeEncodeError:
+            return None
+        if text_digest != digest:
+            return None
+        if task != "compare" and numform.parse_value(answer_text) != answer_value:
+            return None
+    elif record["answer_text"] is not None or answer_value is not None:
+        return None
     return (
         task,
         value_id,

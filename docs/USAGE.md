@@ -1902,10 +1902,13 @@ would be invertible by enumeration and buy nothing), so
 records — construction, aggregates, contrasts, the
 protocol — and regenerates the generated set from the
 run's seed to check that the records are that set, not
-merely a self-consistent grid. The value/form
-decomposition is recomputed from the parsed values the
-stage recorded; the parse itself is a stage act (the
-design doc states the limit and the scheduled fix). It
+merely a self-consistent grid. Since cycle 190 the
+records also carry the answer text itself, bound by its
+digest, and the validator re-parses the text under
+mirrored grammars instead of trusting the stage's
+recorded parse (compare answers, being labels, are bound
+by the digest alone); payloads written before cycle 190
+are rejected — re-run the probe to diff them. It
 reports rate and
 classification drift per candidate, task, and form, with
 protocol, generator, or backend drift marking the

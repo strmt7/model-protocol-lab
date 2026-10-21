@@ -3368,6 +3368,7 @@ def oracle_diff_reports(
         import hashlib as _hashlib
         import json as _json
         import math as _math
+        import re as _re
 
         _tasks = ("copy", "compare", "add")
         _forms = ("plain", "comma", "space", "scientific")
@@ -3391,6 +3392,7 @@ def oracle_diff_reports(
             "form_identical",
             "expected_answer_tokens",
             "answer_value",
+            "answer_text",
             "cell",
             "detail",
         }
@@ -3477,6 +3479,52 @@ def oracle_diff_reports(
                         return "same_length_early"
                     return "same_length_middle"
             return "equal"
+
+        _plain_re = _re.compile(r"[0-9]+")
+        _comma_re = _re.compile(r"[0-9]{1,3}(?:,[0-9]{3})*")
+        _space_re = _re.compile(r"[0-9]{1,3}(?:\u202f[0-9]{3})*")
+        _sci_re = _re.compile(r"([0-9]+)(?:\.([0-9]+))?[eE]\+?([0-9]{1,3})")
+
+        def _parse(text: Any) -> Any:
+            # Hand mirror of numform.parse_value (cycle 190):
+            # the third leg of the differential parse battery.
+            if type(text) is not str or not text:
+                return None
+            if _plain_re.fullmatch(text):
+                if len(text) > 20:
+                    return None
+                return int(text)
+            if _comma_re.fullmatch(text):
+                digits = text.replace(",", "")
+                if len(digits) > 20:
+                    return None
+                return int(digits)
+            if _space_re.fullmatch(text):
+                digits = text.replace("\u202f", "")
+                if len(digits) > 20:
+                    return None
+                return int(digits)
+            match = _sci_re.fullmatch(text)
+            if match is not None:
+                head, frac = match.group(1), match.group(2) or ""
+                if len(head) + len(frac) > 20:
+                    return None
+                exponent = int(match.group(3))
+                mantissa = int(head + frac)
+                shift = exponent - len(frac)
+                if shift >= 0:
+                    return mantissa * 10**shift
+                divisor = 10 ** (-shift)
+                if mantissa % divisor:
+                    return None
+                return mantissa // divisor
+            return None
+
+        def _text_digest(text: Any) -> Any:
+            try:
+                return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+            except UnicodeEncodeError:
+                return None
 
         def _is_round(v: int) -> bool:
             if v < 10:
@@ -3737,6 +3785,15 @@ def oracle_diff_reports(
                     and answer_value != expected_value
                 ):
                     return None
+                answer_text = record["answer_text"]
+                if type(answer_text) is not str:
+                    return None
+                if _text_digest(answer_text) != digest:
+                    return None
+                if task != "compare" and _parse(answer_text) != answer_value:
+                    return None
+            elif record["answer_text"] is not None or answer_value is not None:
+                return None
             return (
                 task,
                 value_id,

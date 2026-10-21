@@ -8358,6 +8358,7 @@ def numform_stage(
                         ),
                         "expected_answer_tokens": expected_tokens,
                         "answer_value": None,
+                        "answer_text": None,
                         "cell": None,
                         "detail": "",
                     }
@@ -8398,6 +8399,10 @@ def numform_stage(
                             "input_tokens": len(cell_obs.input_ids),
                             "answer_digest": _answer_digest(cell_obs.answer),
                         }
+                        # Verbatim, never normalised: the diff
+                        # validator binds this text to the cell
+                        # digest and re-parses it (cycle 190, F3).
+                        record["answer_text"] = cell_obs.answer
                         if task != "compare":
                             record["answer_value"] = _nf.parse_value(cell_obs.answer)
                     else:

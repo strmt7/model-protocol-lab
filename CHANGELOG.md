@@ -55,6 +55,23 @@ All notable changes to this project are documented here. The format follows
   literal arm table. Motivated by Sanz-Guerrero et al. 2026
   (arXiv:2609.36931); contract in `docs/DATELINE_DESIGN.md`.
 
+### Fixed (cycle 190 — numform validator re-parses the answer, 2026-10-21)
+
+- The `numform` diff validator no longer trusts the
+  stage's stored parse. Records carry the answer text
+  verbatim, bound by `answer_digest == sha256(answer_text)`;
+  the validator re-parses the text under mirrored grammars
+  and requires equality with the stored value, closing an
+  executed forgery (a rewritten `answer_value` with
+  honestly recomputed aggregates validated, in three
+  variants). Compare records are digest-bound only.
+  Payloads written before this cycle are rejected by
+  `diff-reports` (no migration shim, by design). Side
+  effect, documented in `docs/NUMFORM_DESIGN.md`: answer
+  text is byte-accounted, so a checkpoint rambling to a
+  large `--max-new-tokens` can now reach the records cap
+  (`numform_records_too_large`).
+
 ### Fixed (cycle 187 — wave-8 numform fix round, 2026-10-21)
 
 - `run --numform` no longer dies for ~1.6% of seeds: the value
