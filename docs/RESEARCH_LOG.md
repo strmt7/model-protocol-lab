@@ -7957,3 +7957,90 @@ arm table is its own literal copy — weekday names recomputed
 from each date, so a payload re-rendered from one weekday
 fails. Cost stated in CLI help before the run: 67,200
 generations at the legal maximum.
+
+## Cycle 189 — multi-turn drift × template (wave-8 rank 2, 2026-10-21)
+
+Question: every shipped probe except synth-history/fake-turn
+is effectively single-exchange, yet the lab's own problem
+statement is that conversations are formatted incorrectly.
+Does the winner chosen on single-exchange fixtures still win
+when the same information arrives sharded across turns and the
+model's own earlier replies become the history — per template
+family, at which depth, and is the active ingredient the
+self-written history or the multi-turn framing itself?
+
+### The blocker, discharged
+
+Cycle 179's closures recorded the blocker as the
+**incorporation policy** (what a "turn" means for the
+conservative selection rule; which turn is scored, against
+what), not the fixture schema. The policy is adopted in
+`docs/MULTITURN_DESIGN.md` before code: P1 — a turn is a
+frozen user shard; the model's boundary-cut reply text is the
+next turn's assistant message, verbatim. P2 — only the final
+turn is scored, against the fixture's single `expected`,
+under the unchanged exact-match + boundary rule. P3 — the
+probe never touches native selection; a per-depth readout
+re-applies the conservative rule and is withheld when
+completed sets differ across candidates.
+
+### Uniqueness pass (sources verified live 2026-10-21)
+
+Primary source: Laban et al., *LLMs Get Lost In Multi-Turn
+Conversation*, arXiv:2505.06120 — 15 models, 200k+ simulated
+conversations, −39% average performance and +112%
+unreliability in the Sharded setting vs the fully specified
+Full setting, with Concat at 95.1% of Full (so the loss is
+not information loss); the mechanism named is premature
+assumptions locked in across turns ("answer bloat"). A
+follow-up (arXiv:2602.07338, *Intent Mismatch Causes LLMs to
+Get Lost in Multi-Turn Conversation*) re-attributes the
+effect to intent mismatch under underspecification. Both use
+a **simulated user** and each model's own/vendor rendering,
+scored by task metrics or judges. lm-eval's
+`--fewshot_as_multiturn` formats few-shot *examples* as
+turns — demonstrations, not a sharded task with
+self-generated history (verified in the v0.4.3 release notes
+and downstream docs, 2026-10-21). No surveyed harness
+crosses sharded delivery with hand-rendered template
+families on a local checkpoint, with the model's own
+boundary-cut replies as history, a scripted-history control
+isolating the self-history ingredient, and the conservative
+selection re-applied per depth. The combination is the
+claim. The design's honesty boundary: generated shard tasks
+are an instrument, not a benchmark — real conversations are
+underspecified in ways a frozen shard sequence is not, and
+the section says so.
+
+### Red-team disposition (design v1 → v2, 2026-10-21)
+
+Red-team A returned DO NOT BUILD AS SPECIFIED (A1–A14;
+briefs in `~/workspace/agents_out/wave8/cycle189/`).
+Red-team B confirmed the four design-fatal items (A1
+recovery counter is a category error — the depths are
+different generated tasks; A2 classification routed every
+below-floor drift case to the strongest label; A5 generated
+history entered prompts unscreened and forged special-token
+turn structure is token-real; A8 generator underspecified,
+including a degenerate question-placement reading),
+downgraded A4/A6, refuted two of A's own amendments (a
+length-matched scripted arm would candidate-depend the
+control and change the estimand; A's substring leakage
+screen rejects the shelf family by construction — rescoped
+to a ledger-only entry-equality screen), and added B-NEW-1
+(family pooling unstated). `docs/MULTITURN_DESIGN.md` v2
+adopts B's surviving must-fix list wholesale: recovery
+deleted, classification rebuilt with a `below_threshold`
+outcome gated on single-depth at-floor paired evidence, the
+contrast shipped as a discordant pair with McNemar
+diagnostic (never net-only — the cycle-185 settlement), the
+history screen pre-registered as `arm_screened`, the
+generator fully specified (question rides the final shard;
+depth in the derive material; `str(int)` entries so entry
+style cannot become a form trap), per-family counts beside
+pooled, and the candidate cap corrected to 24 (budget
+5,184 generations, 1,152 records). One correction to this
+entry's own text above: the scripted control does not
+"isolate" the self-history ingredient — the contrast is a
+bundle (authorship + content + length) over a minimal
+neutral history, and the shipped wording says so.

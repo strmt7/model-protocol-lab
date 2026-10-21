@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 189 — multi-turn drift, 2026-10-21)
+
+- `run --multiturn`: true multi-turn drift with
+  self-generated history. The probe generates its own tasks
+  from the run seed (ledger sums and shelf argmax over
+  shards; depths 2 and 3; 48 fixtures) and runs each in
+  three arms — `full` (all shards in one message),
+  `sharded` (one shard per turn, the model's own
+  boundary-cut replies incorporated verbatim as history),
+  and `scripted` (frozen `Noted.` history) — scoring only
+  the final turn. The headline is the self-history
+  discordant pair over single-shot passers, reported with
+  denominators beside the delivery 2×2 tables; the
+  classification is a total function with floors, and the
+  design carries no cross-depth recovery statistic
+  (depths are different generated task sets). A reply
+  containing the candidate's own special-token literals
+  ends its cell as `arm_screened`; unbounded or empty
+  intermediate replies become history and are flagged.
+  `diff-reports` gains the `multiturn` section with a
+  full-recompute validator holding a seed-regenerating
+  generator mirror. The design survived a red-team
+  DO-NOT-BUILD verdict and cross-check (the recovery
+  counter and the length-matched control arm were cut);
+  motivated by Laban et al. 2025 (arXiv:2505.06120);
+  contract in `docs/MULTITURN_DESIGN.md`.
+
 ### Added (cycle 188 — date-line sensitivity, 2026-10-21)
 
 - `run --dateline`: date-line sensitivity × template. A frozen
