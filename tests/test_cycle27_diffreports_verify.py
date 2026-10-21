@@ -3971,6 +3971,310 @@ def oracle_diff_reports(
                 return False
         return True
 
+    def _or_dateline_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_dateline exactly: protocol
+        # rebuilt from the producer's frozen protocol object,
+        # record structure with the class-detail consistency
+        # rules, verdict recompute from digests, control
+        # token-count equality against the anchor cell, reference
+        # fields constant across candidates, record/byte caps,
+        # aggregates, per-arm selection with the defined-set
+        # withholding rule, common population, and the multi-turn
+        # count all recomputed. The oracle recomputes through the
+        # producer module (dateline) where the implementation
+        # recomputes through its own literal tables -- a drift in
+        # either side's constants breaks the agreement.
+        import json as _json
+
+        from model_protocol_lab import dateline as _dl
+
+        _details = {
+            "",
+            "vacuous",
+            "expected_blank",
+            "screened",
+            "message_date_bearing",
+            "arm_screened",
+            "arm_context_exceeded",
+            "arm_evaluation_failed",
+            "control_unmatchable",
+            "control_screened",
+        }
+        _treated = list(_dl.TREATED_KEYS)
+        _formats = list(_dl.FORMATS)
+        _hex = frozenset("0123456789abcdef")
+
+        def _digest(item: Any) -> bool:
+            return item is None or (
+                type(item) is str and len(item) == 64 and all(c in _hex for c in item)
+            )
+
+        def _int(item: Any) -> bool:
+            return type(item) is int and not isinstance(item, bool) and item >= 0
+
+        def _cell_ok(cell: Any, expected_digest: Any) -> bool:
+            if type(cell) is not dict:
+                return False
+            if type(cell.get("verdict")) is not bool:
+                return False
+            if type(cell.get("boundary_found")) is not bool:
+                return False
+            if cell.get("boundary_text_match") not in (True, False, None):
+                return False
+            if not _int(cell.get("input_tokens")):
+                return False
+            if not _digest(cell.get("answer_digest")):
+                return False
+            recomputed = bool(
+                cell.get("answer_digest") is not None
+                and cell.get("answer_digest") == expected_digest
+                and cell.get("boundary_found")
+            )
+            return bool(cell.get("verdict")) == recomputed
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        for key in ("primary_decision", "primary_winner"):
+            item = value.get(key)
+            if item is not None and type(item) is not str:
+                return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        total_records = 0
+        records_bytes = 0
+        fixture_ids = None
+        reference: dict = {}
+        raw_records: dict = {}
+        aggregates: dict = {}
+        for name, entry in candidates.items():
+            if type(name) is not str or type(entry) is not dict:
+                return False
+            status = entry.get("status")
+            if status not in ("available", "unavailable"):
+                return False
+            records = entry.get("records")
+            if type(records) is not list:
+                return False
+            if status == "unavailable":
+                if records != []:
+                    return False
+                continue
+            if len(records) > 100:
+                return False
+            total_records += len(records)
+            if total_records > _dl.MAX_GROUND_RECORDS:
+                return False
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _dl.MAX_RECORDS_BYTES:
+                return False
+            ids: list = []
+            for record in records:
+                if type(record) is not dict:
+                    return False
+                fixture = record.get("fixture")
+                if type(fixture) is not str or not fixture or fixture in ids:
+                    return False
+                ids.append(fixture)
+                if type(record.get("group")) is not str:
+                    return False
+                if not _int(record.get("n_user_messages")) or record["n_user_messages"] < 1:
+                    return False
+                for flag in (
+                    "vacuous",
+                    "expected_blank",
+                    "echo_fixture",
+                    "screened",
+                    "message_date_bearing",
+                ):
+                    if type(record.get(flag)) is not bool:
+                        return False
+                if record.get("construction") not in ("id_exact", "text_level", "vacuous"):
+                    return False
+                seam = record.get("seam_ids")
+                if type(seam) is not list or any(not _int(token) for token in seam):
+                    return False
+                if not _digest(record.get("expected_digest")):
+                    return False
+                if record.get("expected_digest") is None:
+                    return False
+                control_evaluable = record.get("control_evaluable")
+                if type(control_evaluable) is not dict or set(control_evaluable) != set(_formats):
+                    return False
+                if any(type(flag) is not bool for flag in control_evaluable.values()):
+                    return False
+                if not _cell_ok(record.get("native"), record.get("expected_digest")):
+                    return False
+                cells = record.get("cells")
+                details = record.get("cell_details")
+                if type(cells) is not dict or set(cells) != set(_treated):
+                    return False
+                if type(details) is not dict or set(details) != set(_treated):
+                    return False
+                class_detail = None
+                if record["vacuous"]:
+                    class_detail = "vacuous"
+                elif record["expected_blank"]:
+                    class_detail = "expected_blank"
+                elif record["screened"]:
+                    class_detail = "screened"
+                elif record["message_date_bearing"]:
+                    class_detail = "message_date_bearing"
+                for arm_key in _treated:
+                    detail = details[arm_key]
+                    if detail not in _details:
+                        return False
+                    cell = cells[arm_key]
+                    if class_detail is not None:
+                        if cell is not None or detail != class_detail:
+                            return False
+                        continue
+                    if detail in (
+                        "vacuous",
+                        "expected_blank",
+                        "screened",
+                        "message_date_bearing",
+                    ):
+                        return False
+                    if (cell is None) != (detail != ""):
+                        return False
+                    if arm_key in _dl.CONTROL_KEYS:
+                        fmt = arm_key.removeprefix("nodate_")
+                        if not control_evaluable[fmt]:
+                            if cell is not None or detail not in (
+                                "control_unmatchable",
+                                "control_screened",
+                            ):
+                                return False
+                            continue
+                        if detail == "control_unmatchable":
+                            return False
+                        if cell is not None:
+                            anchor = cells[f"anchor_{fmt}"]
+                            if anchor is not None and (
+                                cell["input_tokens"] != anchor["input_tokens"]
+                            ):
+                                return False
+                    if cell is None:
+                        continue
+                    if not _cell_ok(cell, record.get("expected_digest")):
+                        return False
+                fields = {
+                    "group": record["group"],
+                    "n_user_messages": record["n_user_messages"],
+                    "expected_digest": record["expected_digest"],
+                    "vacuous": record["vacuous"],
+                    "expected_blank": record["expected_blank"],
+                    "echo_fixture": record["echo_fixture"],
+                    "screened": record["screened"],
+                    "message_date_bearing": record["message_date_bearing"],
+                }
+                if fixture in reference:
+                    if reference[fixture] != fields:
+                        return False
+                else:
+                    reference[fixture] = fields
+            if fixture_ids is None:
+                fixture_ids = ids
+            elif fixture_ids != ids:
+                return False
+            raw_records[name] = records
+            aggregates[name] = _dl.aggregate_candidate(records)
+        if fixture_ids is None:
+            return False
+        backend_fingerprint = protocol.get("backend_fingerprint")
+        if type(backend_fingerprint) is not str:
+            return False
+        expected_protocol = dict(_dl.protocol_object(fixture_ids, backend_fingerprint))
+        expected_protocol["fingerprint"] = _dl.protocol_fingerprint(
+            fixture_ids, backend_fingerprint
+        )
+        if protocol != expected_protocol:
+            return False
+        for name, expected in aggregates.items():
+            entry = candidates[name]
+            for key, item in expected.items():
+                if entry.get(key) != item:
+                    return False
+        primary_decision = value.get("primary_decision")
+        primary_winner = value.get("primary_winner")
+        if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+            mapped = ("selected", primary_winner)
+        else:
+            mapped = (primary_decision, primary_winner)
+        arms_out: dict = {}
+        for arm_key in _treated:
+            completed_sets: list = []
+            all_pass: dict = {}
+            withheld = False
+            for cand_name, entry in candidates.items():
+                if entry.get("status") != "available":
+                    withheld = True
+                    all_pass[cand_name] = None
+                    continue
+                live = _dl.live_records(raw_records[cand_name])
+                if arm_key in _dl.CONTROL_KEYS:
+                    control_format = arm_key.removeprefix("nodate_")
+                    defined = frozenset(
+                        r["fixture"] for r in live if r["control_evaluable"][control_format]
+                    )
+                else:
+                    defined = frozenset(r["fixture"] for r in live)
+                completed = frozenset(r["fixture"] for r in live if r["cells"][arm_key] is not None)
+                completed_sets.append(completed)
+                if completed != defined or not completed:
+                    withheld = True
+                    all_pass[cand_name] = None
+                    continue
+                all_pass[cand_name] = all(
+                    r["cells"][arm_key]["verdict"] for r in live if r["fixture"] in completed
+                )
+            if len(set(completed_sets)) > 1:
+                withheld = True
+            if withheld:
+                arms_out[arm_key] = {
+                    "decision": "unavailable",
+                    "detail": "selection_withheld_mismatched_sets",
+                    "winner": None,
+                    "withheld": True,
+                    "flip": None,
+                }
+                continue
+            passers = [n for n in candidates if all_pass[n]]
+            if len(passers) == 1:
+                decision, winner = "selected", passers[0]
+            elif len(passers) > 1:
+                decision, winner = "ambiguous", None
+            else:
+                decision, winner = "no_candidate", None
+            arms_out[arm_key] = {
+                "decision": decision,
+                "winner": winner,
+                "withheld": False,
+                "detail": "",
+                "flip": (decision, winner) != mapped,
+            }
+        if value.get("arms") != arms_out:
+            return False
+        available_records = {
+            cand_name: raw_records[cand_name]
+            for cand_name, entry in candidates.items()
+            if entry.get("status") == "available"
+        }
+        if value.get("common_population") != _dl.common_population(available_records):
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        if value.get("n_search_fixtures") != len(fixture_ids):
+            return False
+        n_multi = sum(1 for fields in reference.values() if fields["n_user_messages"] > 1)
+        return bool(value.get("n_multi_turn_fixtures") == n_multi)
+
     def _or_confidentiality_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
@@ -4506,6 +4810,18 @@ def oracle_diff_reports(
         _o_nf_available = "neither"
     _o_nf_asymmetric = _o_nf_available not in ("both", "neither")
 
+    _dt_old_ok = _or_dateline_valid(old.get("dateline"))
+    _dt_new_ok = _or_dateline_valid(new.get("dateline"))
+    if _dt_old_ok and _dt_new_ok:
+        _o_dt_available = "both"
+    elif _dt_old_ok:
+        _o_dt_available = "old"
+    elif _dt_new_ok:
+        _o_dt_available = "new"
+    else:
+        _o_dt_available = "neither"
+    _o_dt_asymmetric = _o_dt_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -4576,6 +4892,7 @@ def oracle_diff_reports(
         and not _o_dst_asymmetric
         and not _o_lead_asymmetric
         and not _o_nf_asymmetric
+        and not _o_dt_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -4647,6 +4964,8 @@ def oracle_diff_reports(
         "leading_asymmetric": _o_lead_asymmetric,
         "numform_changed": False,
         "numform_asymmetric": _o_nf_asymmetric,
+        "dateline_changed": False,
+        "dateline_asymmetric": _o_dt_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -4694,6 +5013,7 @@ def oracle_diff_reports(
         "distraction": {"available": _o_dst_available, "changed": False},
         "leading": {"available": _o_lead_available, "changed": False},
         "numform": {"available": _o_nf_available, "changed": False},
+        "dateline": {"available": _o_dt_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

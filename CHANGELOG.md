@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 188 — date-line sensitivity, 2026-10-21)
+
+- `run --dateline`: date-line sensitivity × template. A frozen
+  `[Context] Today's date is … [/Context]` block is prepended
+  to the final user message of each search fixture — eight
+  protocol-constant date values (anchor, ±1 day, ±1 year, a
+  leap day, a year-boundary pair) in three formats (ISO, long,
+  weekday-ISO), a per-format no-date control sized to the
+  anchor arm's rendered length, and one weekday-lie arm
+  (anchor date, next day's weekday name). The headline is
+  per-pair discordant counts partitioned pure-date /
+  pure-format with the frozen classification and floors;
+  date-loss subsets (pass the control, fail a date value) are
+  reported per value with their asymmetric counterparts and a
+  lie split. Fixtures whose expected answer is itself date
+  content are screened out before generation under the frozen
+  `dateline-components-r4-v1` rule. Nothing reads the wall
+  clock or the locale. `diff-reports` gains the `dateline`
+  section with a full-recompute validator holding its own
+  literal arm table. Motivated by Sanz-Guerrero et al. 2026
+  (arXiv:2609.36931); contract in `docs/DATELINE_DESIGN.md`.
+
 ### Fixed (cycle 187 — wave-8 numform fix round, 2026-10-21)
 
 - `run --numform` no longer dies for ~1.6% of seeds: the value

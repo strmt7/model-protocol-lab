@@ -527,6 +527,36 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--dateline",
+        action="store_true",
+        help="Date-line sensitivity probe (cycle 188, research wave-8 "
+        "rank 1): a frozen '[Context] Today's date is ... "
+        "[/Context]' block is prepended to each search fixture's "
+        "last user message -- eight frozen date values (anchor "
+        "2026-10-21, +/-1 day, +/-1 year, leap day 2028-02-29, a "
+        "year-boundary pair) in three formats (ISO, long, "
+        "weekday+ISO), a per-format no-date control sized to the "
+        "anchor arm's rendered length, and one weekday-lie arm -- "
+        "against the recorded native run, with per-pair discordant "
+        "counts partitioned by pair type, date-attributable loss "
+        "per date value, and the conservative selection re-applied "
+        "per arm. If your serving stack prepends a 'Today is ...' "
+        "line, this tells you -- per template family, on your own "
+        "checkpoint -- how often changing only that date flips a "
+        "task verdict, and whether the template you picked still "
+        "wins afterwards, so a calendar rollover cannot silently "
+        "change your eval results after you ship. Costs 28 extra "
+        "generations per candidate per fixture (67,200 at the "
+        "legal maximum: 24 date arms, 3 controls, 1 lie); the "
+        "native arm is reused at zero cost. Dates are frozen "
+        "protocol constants, never the wall clock. Meaningful "
+        "readouts need a materially larger search set than the "
+        "shipped example -- on two fixtures every classification "
+        "is 'insufficient' by design. Date-derived fixtures are "
+        "screened out and reported. Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1557,6 +1587,67 @@ def _run_leading_probe(
         result["leading"] = {
             "available": False,
             "detail": "leading_unavailable",
+        }
+
+
+def _run_dateline_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the date-line sensitivity probe; never raises.
+
+    The native arm is the recorded native search, so a failed,
+    cancelled, or truncated search gates the probe to zero
+    generations. The run's cancel event is threaded dispatch ->
+    wrapper -> stage -> evaluate, so SIGINT/SIGTERM stop the
+    stage cooperatively.
+    """
+    try:
+        from .experiments import dateline_analysis, dateline_stage
+
+        search = result.get("search")
+        names = tuple(fmt.name for fmt in formats)
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["dateline"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        stage = dateline_stage(
+            backend,
+            formats,
+            cases,
+            search,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["dateline"] = dateline_analysis(
+            stage,
+            result.get("decision"),
+            result.get("selected_candidate"),
+            names,
+        )
+    except Exception:  # noqa: BLE001 -- dateline must not fail the run
+        result["dateline"] = {
+            "available": False,
+            "detail": "dateline_unavailable",
         }
 
 
@@ -3039,6 +3130,25 @@ def main(argv: list[str] | None = None) -> int:
                         backend,
                         formats,
                         result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Date-line sensitivity probe (cycle 188, research
+                # wave-8 rank 1): frozen date arms against the
+                # recorded native run, per-cell degradation, the
+                # run's cancel event threaded into the stage.
+                # Informational only -- never changes selection.
+                # Never fails the run.
+                if args.dateline:
+                    _run_dateline_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
