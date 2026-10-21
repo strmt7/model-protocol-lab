@@ -146,7 +146,8 @@ Run the base experiment first; every probe is opt-in and answers one
 question the base run leaves open (which stop semantics, which template
 field, which serving stack). USAGE §8 gives each probe its own subsection,
 and each opens with the decision it informs. The probes split by cost:
-the portfolio, verbosity, refusal and cache-profile readouts are computed
+the portfolio, verbosity, refusal, cache-profile, stop-cause,
+scorer-lens and candidate-aliasing readouts are computed
 from the recorded answers after the run and cost no extra model calls,
 while the re-evaluation stages (perturbation, hierarchy, ablation and the
 rest) re-run the search split under their treatment.

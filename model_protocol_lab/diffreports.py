@@ -6141,6 +6141,261 @@ def _numform_is_round(value: int) -> bool:
     return result
 
 
+# ---------------------------------------------------------------------------
+# The generator, mirrored. The validator regenerates the value
+# set from the protocol's seed with its own copy of the frozen
+# derivation (never an import from numform.py -- independence is
+# the point of this module) and compares every record's
+# construction against the regenerated set. A payload whose
+# records are not the seed's set is not this probe's payload,
+# however self-consistent its aggregates are.
+# ---------------------------------------------------------------------------
+
+
+def _numform_derive(
+    seed: int, task: str, band_index: int, slot: int, counter: int, stream: int
+) -> int:
+    import hashlib as _hashlib
+
+    material = f"numform-v1|{seed}|{task}|{band_index}|{slot}|{counter}|{stream}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _numform_value_in_band(derived: int, lo: int, hi: int, *, min_length: int = 1) -> int:
+    low = max(lo, min_length)
+    length = low + derived % (hi - low + 1)
+    rest = derived >> 16
+    if length == 1:
+        return rest % 10
+    value: int = 10 ** (length - 1) + rest % (9 * 10 ** (length - 1))
+    return value
+
+
+def _numform_round_value(band_index: int, slot: int) -> int:
+    _lo, hi = _NUMFORM_BANDS[band_index]
+    if slot == 0:
+        power: int = 10 ** (hi - 1)
+        return power
+    nines: int = 10**hi - 1
+    return nines
+
+
+def _numform_band_of(value: int) -> int:
+    length = len(str(value))
+    for index, (lo, hi) in enumerate(_NUMFORM_BANDS):
+        if lo <= length <= hi:
+            return index
+    raise ValueError("value outside the frozen bands")
+
+
+def _numform_compare_partner(a: int, target: str, derived: int) -> int:
+    digits = str(a)
+    length = len(digits)
+    if target == "different_length":
+        new_length = length + 1 if derived % 2 == 0 else length - 1
+        if new_length > 12:
+            new_length = length - 1
+        if new_length < 1:
+            new_length = length + 1
+        return _numform_value_in_band(derived >> 8, new_length, new_length)
+    if target == "same_length_last_digit":
+        last = int(digits[-1])
+        replacement = (last + 1 + (derived % 9)) % 10
+        return int(digits[:-1] + str(replacement)) if length > 1 else replacement
+    position = derived % max(1, length // 2)
+    current = int(digits[position])
+    replacement = (current + 1 + (derived >> 4) % 9) % 10
+    if position == 0 and replacement == 0:
+        replacement = 1
+    return int(digits[:position] + str(replacement) + digits[position + 1 :])
+
+
+def _numform_add_partner(a: int, target: str, derived: int) -> int:
+    digits = [int(ch) for ch in reversed(str(a))]
+    partner_digits: list[int] = []
+    if target == "full_chain" and digits[0] == 0:
+        digits[0] = 1
+    stream = derived
+    if target == "none":
+        for digit in digits:
+            partner_digits.append(stream % (10 - digit) if digit < 9 else 0)
+            stream //= 10
+    elif target == "full_chain":
+        carry_in = 0
+        for digit in digits:
+            minimum = 10 - digit - carry_in
+            partner_digits.append(minimum + stream % (10 - minimum))
+            carry_in = 1
+            stream //= 10
+    else:  # some: force exactly one carry position, none below it
+        pivot_candidates = [pos for pos, digit in enumerate(digits) if digit >= 1]
+        if not pivot_candidates:
+            # a == 0: no digit can carry; propose zero and let
+            # the caller's classifier check reject the pair
+            # (mirrors the producer's cycle-187 fix exactly).
+            return 0
+        pivot = pivot_candidates[stream % len(pivot_candidates)]
+        carry_in = 0
+        for pos, digit in enumerate(digits):
+            if pos < pivot:
+                partner_digits.append(stream % (10 - digit) if digit < 9 else 0)
+            elif pos == pivot:
+                minimum = 10 - digit - carry_in
+                partner_digits.append(minimum + stream % (10 - minimum))
+                carry_in = 1
+            elif digit + carry_in <= 9:
+                partner_digits.append(stream % (10 - digit - carry_in))
+                carry_in = 0
+            else:
+                partner_digits.append(stream % 10)
+                carry_in = 1
+            stream //= 10
+    partner = int("".join(str(d) for d in reversed(partner_digits)))
+    if partner == 0:
+        partner = 1 if digits[0] <= 8 or target != "none" else 10
+    return partner
+
+
+def _numform_gen_copy(seed: int) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    index = 0
+    for band_index, (lo, hi) in enumerate(_NUMFORM_BANDS):
+        for slot in range(4):
+            is_round = slot < 2
+            if is_round:
+                value = _numform_round_value(band_index, slot)
+            else:
+                value = _numform_value_in_band(
+                    _numform_derive(seed, "copy", band_index, slot, 0, 0), lo, hi
+                )
+                counter = 0
+                while _numform_is_round(value):
+                    counter += 1
+                    value = _numform_value_in_band(
+                        _numform_derive(seed, "copy", band_index, slot, counter, 0), lo, hi
+                    )
+            entries.append(
+                {
+                    "value_id": f"nf-copy-{index:02d}",
+                    "task": "copy",
+                    "band": band_index,
+                    "stratum": "round" if is_round else "random",
+                    "operands": [value],
+                    "expected_value": value,
+                }
+            )
+            index += 1
+    return entries
+
+
+def _numform_gen_pairs(seed: int, task: str) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    index = 0
+    targets = (
+        ("different_length", "same_length_early", "same_length_last_digit")
+        if task == "compare"
+        else ("none", "some", "full_chain")
+    )
+    classifier = _numform_margin if task == "compare" else _numform_carry
+    for band_index, (lo, hi) in enumerate(_NUMFORM_BANDS):
+        for slot in range(4):
+            target = targets[slot % len(targets)]
+            is_round = slot < 2
+            pair: tuple[int, int] | None = None
+            for counter in range(1000):
+                if is_round and counter == 0:
+                    a = _numform_round_value(band_index, slot)
+                else:
+                    a = _numform_value_in_band(
+                        _numform_derive(seed, task, band_index, slot, counter, 0),
+                        lo,
+                        hi,
+                        min_length=2 if target == "same_length_early" else 1,
+                    )
+                derived = _numform_derive(seed, task, band_index, slot, counter, 1)
+                b = (
+                    _numform_compare_partner(a, target, derived)
+                    if task == "compare"
+                    else _numform_add_partner(a, target, derived)
+                )
+                if b < 0 or len(str(b)) > 12:
+                    continue
+                if task == "add" and target == "full_chain" and str(a)[-1] == "0":
+                    a = a + 1
+                if classifier(a, b) == target and a != b:
+                    pair = (a, b)
+                    break
+            if pair is None:  # pragma: no cover - construction is verified below
+                raise ValueError(f"numform generation failed for {task} slot {slot}")
+            a, b = pair
+            entry: dict[str, Any] = {
+                "value_id": f"nf-{task}-{index:02d}",
+                "task": task,
+                "band": _numform_band_of(max(a, b)),
+                "stratum": target,
+                "operands": [a, b],
+                "expected_value": max(a, b) if task == "compare" else a + b,
+            }
+            if task == "compare":
+                larger_first = slot % 2 == 0
+                first, second = (max(a, b), min(a, b)) if larger_first else (min(a, b), max(a, b))
+                entry["operands"] = [first, second]
+                entry["expected_label"] = "first" if larger_first else "second"
+            entries.append(entry)
+            index += 1
+    return entries
+
+
+def _numform_generated(
+    seed: int,
+) -> tuple[dict[tuple[str, str, str], tuple[Any, ...]], list[list[Any]]]:
+    """Regenerate the seed's set; return the expected
+    construction map (same tuple shape the record check builds)
+    and the canonical generated rows the protocol hash binds."""
+    value_set = {
+        "copy": _numform_gen_copy(seed),
+        "compare": _numform_gen_pairs(seed, "compare"),
+        "add": _numform_gen_pairs(seed, "add"),
+    }
+    construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+    rows: list[list[Any]] = []
+    for task in _NUMFORM_TASKS:
+        for entry in value_set[task]:
+            operands = [int(value) for value in entry["operands"]]
+            answers = [
+                str(entry["expected_label"])
+                if task == "compare"
+                else _numform_render(int(entry["expected_value"]), form)
+                for form in _NUMFORM_FORMS
+            ]
+            for form, expected_answer in zip(_NUMFORM_FORMS, answers, strict=True):
+                form_identical = all(
+                    _numform_render(value, form) == _numform_render(value, "plain")
+                    for value in operands
+                )
+                construction[(task, str(entry["value_id"]), form)] = (
+                    task,
+                    entry["value_id"],
+                    form,
+                    entry["band"],
+                    entry["stratum"],
+                    tuple(operands),
+                    entry["expected_value"],
+                    expected_answer,
+                    form_identical,
+                )
+            rows.append(
+                [
+                    task,
+                    entry["value_id"],
+                    operands,
+                    entry["expected_value"],
+                    answers,
+                ]
+            )
+    return construction, rows
+
+
 def _numform_probe_strings() -> list[str]:
     probes: list[str] = []
     sequential = "123456789012"
@@ -6430,22 +6685,26 @@ def _numform_record_construction(
 def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Recompute a numform payload from its ground records.
 
-    The validator carries its own renderers, classifiers, and
-    aggregators (no imports from numform.py): every record's
-    construction facts are re-derived (expected value, expected
-    answer string, band, stratum class, form identity), the
-    generated set is re-hashed from the records and compared
-    against the protocol, the protocol is rebuilt from frozen
-    scalars plus the payload's seed and backend fingerprint,
-    and every aggregate and paired contrast is recomputed. The
-    grouping classification is re-run over the stored probe
-    evidence -- a consistency check, since the validator has
-    no tokenizer. The answer's parsed value is stored data the
-    decomposition recomputes FROM (the parse itself is a stage
-    act, pinned by the stage's own tests, as with leading's
-    eligibility); where the answer digest pins the answer to
-    the expected string, the stored value is checked against
-    the expected value exactly.
+    The validator carries its own renderers, classifiers,
+    aggregators, and generator (no imports from numform.py):
+    every record's construction facts are re-derived (expected
+    value, expected answer string, band, stratum class, form
+    identity), the generated set is regenerated from the
+    protocol's seed and every record's construction is compared
+    against it, the protocol is rebuilt from frozen scalars
+    plus the payload's seed and backend fingerprint, and every
+    aggregate and paired contrast is recomputed. The grouping
+    classification is re-run over the stored probe evidence --
+    a consistency check, since the validator has no tokenizer
+    -- and the stored token means/deltas must satisfy the
+    producer's arithmetic relation (each delta is its form's
+    mean minus the plain mean, up to float summation order).
+    The answer's parsed value is stored data the decomposition
+    recomputes FROM (the parse itself is a stage act, pinned
+    by the stage's own tests, as with leading's eligibility);
+    where the answer digest pins the answer to the expected
+    string, the stored value is checked against the expected
+    value exactly.
     """
     import hashlib as _hashlib
     import json as _json
@@ -6465,6 +6724,7 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if payload.get("n_candidates") != len(candidates):
         return None
     construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+    answer_tokens: dict[tuple[str, str, str], int] = {}
     aggregates: dict[str, dict[str, Any]] = {}
     available_names: list[str] = []
     total_records = 0
@@ -6502,6 +6762,16 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 construction[key] = built
             elif prior != built:
                 return None
+            # The expected answer's token count is measured
+            # once per run (one backend), so it is part of the
+            # construction every candidate must agree on, even
+            # though it is not part of the regenerated set.
+            tokens = record["expected_answer_tokens"]
+            prior_tokens = answer_tokens.get(key)
+            if prior_tokens is None:
+                answer_tokens[key] = tokens
+            elif prior_tokens != tokens:
+                return None
         expected_keys = {
             (task, f"nf-{task}-{index:02d}", form)
             for task in _NUMFORM_TASKS
@@ -6517,33 +6787,18 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         > 12 * 1024 * 1024
     ):
         return None
-    # The generated set, re-hashed from one candidate's records.
-    first_records = all_records[available_names[0]]
-    by_entry: dict[tuple[str, str], dict[str, Any]] = {}
-    for record in first_records:
-        by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
-    rows: list[list[Any]] = []
-    for task in _NUMFORM_TASKS:
-        for index in range(16):
-            value_id = f"nf-{task}-{index:02d}"
-            forms_map = by_entry.get((task, value_id))
-            # Unreachable while the per-candidate grid check
-            # above holds (the first candidate's records are
-            # grid-complete); kept so a future weakening of
-            # that check fails closed here instead of raising
-            # KeyError on an incomplete form map.
-            if forms_map is None or set(forms_map) != set(_NUMFORM_FORMS):
-                return None
-            plain = forms_map["plain"]
-            rows.append(
-                [
-                    task,
-                    value_id,
-                    list(plain["operands"]),
-                    plain["expected_value"],
-                    [forms_map[form]["expected_answer"] for form in _NUMFORM_FORMS],
-                ]
-            )
+    # The generated set, regenerated from the protocol's seed:
+    # the records must BE the seed's set, not merely a
+    # self-consistent grid whose hash was recomputed from
+    # itself. Regeneration is fail-closed -- a seed the mirror
+    # cannot generate (the producer could not have generated
+    # it either) invalidates the payload instead of raising.
+    try:
+        expected_construction, rows = _numform_generated(seed)
+    except Exception:  # noqa: BLE001 -- hostile seeds fail closed
+        return None
+    if construction != expected_construction:
+        return None
     generator_sha = _hashlib.sha256(
         _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     ).hexdigest()
@@ -6622,6 +6877,24 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
     if deltas["plain"] is not None and deltas["plain"] != 0:
         return None
+    plain_mean = means["plain"]
+    if plain_mean is not None:
+        for form in _NUMFORM_FORMS:
+            mean = means[form]
+            delta = deltas[form]
+            if mean is None or delta is None:
+                continue
+            # The producer's delta is the mean of the paired
+            # per-operand differences over the same operand
+            # multiset as the means, so it equals mean - plain
+            # mean in exact arithmetic; float summation order
+            # can move the last bits, hence the tight relative
+            # tolerance rather than an equality check (an exact
+            # check would false-reject honest payloads).
+            expected_delta = mean - plain_mean
+            tolerance = 1e-9 * max(1.0, abs(expected_delta), abs(delta))
+            if abs(delta - expected_delta) > tolerance:
+                return None
     for name in available_names:
         records = all_records[name]
         aggregates[name] = {

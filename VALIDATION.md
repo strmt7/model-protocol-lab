@@ -1,16 +1,16 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–186 (executed 2026-10-14 → 2026-10-21, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–187 (executed 2026-10-14 → 2026-10-21, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-21). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **7413 tests collected**
-  (cycle 186, 2026-10-21). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **7423 tests collected**
+  (cycle 187, 2026-10-21). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **7413 tests (cycle 186,
+- `python -m unittest discover -s tests -t .` — **7423 tests (cycle 187,
   2026-10-21; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -30,6 +30,12 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   the numeric surface-form probe (`run --numform`),
   and differential-verification suites with
   mutation gates for every module.
+- `coverage run -m unittest discover -s tests -t .` +
+  `coverage report --fail-under=95` — **passes; precise coverage
+  96.3361% (cycle 187, 2026-10-21)**. The gate compares the
+  rounded display percentage against 95; the precise figure is
+  recorded here so the margin above the 94.5 rounding edge
+  (+1.836) is auditable rather than inferred from the display.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
   (257 files in that CI scope; the repo-root scope counts more.

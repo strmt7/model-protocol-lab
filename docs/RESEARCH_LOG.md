@@ -7782,3 +7782,83 @@ diff_numform from canonical values stored in the clear
 (synthetic data — digest-only storage would make the
 decomposition unverifiable, and a hash over a ≤12-digit
 value is invertible by enumeration anyway).
+
+## Cycle 187 — wave-8 fix round: numform generator crash + seed-regenerating validator (2026-10-21)
+
+The wave-8 red-team pair audited the shipped tree (briefs:
+red-team A, 2 HIGH / 1 MEDIUM / 2 LOW, all execution-verified;
+red-team B cross-checked every finding with its own scripts —
+nothing refuted, nothing fabricated; F2 downgraded HIGH →
+MEDIUM on executed bounds). All five findings were in the
+cycle-186 numform probe; this cycle fixes them.
+
+- F1 (HIGH, confirmed): `generate_value_set` raised
+  `ZeroDivisionError` for ~1.6% of seeds (79 of 0–4999, first
+  at seed 26): `_add_partner`'s "some" construction divides by
+  the count of non-zero digits, and a counter-≥1 redraw can
+  land on a = 0. End-to-end the probe degraded to a generic
+  `numform_unavailable`. B proved (a=0, "some") is the only
+  zero-divisor and that a generic a==0 patch would drift
+  healthy seeds' generator hashes (166 full_chain and 171
+  "none" acceptances of a=0 ship today). Fix: the "some"
+  branch proposes 0 for a=0 — a proposal the caller's
+  classifier always rejects (`carry_class(0, 0)` is "none",
+  and a != b fails) — so the retry loop redraws; no healthy
+  seed's set changes. Pinned: `generator_sha256` for eight
+  pre-fix healthy seeds, byte-identical after the fix; a
+  0–999 plus negative-seed sweep generates without crashing.
+- F2 (MEDIUM after B's downgrade): `_valid_numform` hashed
+  the payload's own records and compared the protocol against
+  that — a fabricated, self-consistent record grid validated,
+  because the validator never regenerated the set from the
+  protocol's seed. Fix: the validator now carries its own
+  mirror of the generator (diffreports stays import-free of
+  numform.py, as everywhere else in that module) and compares
+  every record's construction against the regenerated set;
+  regeneration is fail-closed (any exception → invalid).
+  Both test oracles were updated in the same push (cycle-27
+  inline mirror, cycle-67 via the producer module) — a
+  fabricated-set payload and a seed-relabeled payload are
+  regression tests. B's bounds stand and are not claimed
+  away: diff-time generator drift already caught
+  fake-vs-genuine, and outcome fabrication on the honest
+  instrument was and remains possible — the validator family
+  is an internal-consistency recompute, not a signature.
+- F3 (MEDIUM, confirmed and strengthened by B): the value/form
+  decomposition rests on the stored `answer_value` for every
+  failing cell, which the validator cannot re-derive (the
+  answer text is not stored, only its digest; the grammar
+  accepts non-canonical costume, so no rendering check can
+  re-derive a parse). This cycle lands the honesty half: the
+  numform.py / design-doc / USAGE wording now states that the
+  decomposition is recomputed from a stage-attested parse and
+  the parse is a stage act — correcting the cycle-186 summary
+  sentence in this log ("digest-only storage would make the
+  decomposition unverifiable"), which was true only of the
+  expected side. The structural half — store the answer text
+  on the record, bound by `answer_digest == sha256(text)`,
+  validator re-parses — is scheduled in
+  docs/NUMFORM_DESIGN.md (Honesty items) as its own cycle,
+  because it moves the payload's exact record key set.
+- F4 (LOW): the grouping means/deltas were type-checked only.
+  The validator now checks the producer's arithmetic relation
+  (delta = form mean − plain mean) with a tight relative
+  tolerance — the producer computes deltas as a mean of paired
+  differences, so exact float equality would false-reject
+  honest payloads — and candidates must agree on each
+  record's `expected_answer_tokens` (measured once per run).
+  Full recompute of the means stays impossible from the
+  current records (no per-operand token counts are stored and
+  the validator has no tokenizer); the docs do not claim it.
+- F5 (LOW): "4 values per band" summary sentences (numform.py
+  comment, design doc) now say 4 *drawn* per band, with the
+  recorded-band definition (the larger operand's) beside them;
+  denominators come from the payload's own `by_band` counts.
+
+Also folded in: the wave-8 verifier's doc-enumeration drift
+cluster (USAGE §12 stage-key list missing repetition /
+distraction / leading / numform; README's diff-reports bullet
+missing six comparisons; USAGE §6 sample-absent list missing
+four sections; FAQ's zero-call post-hoc list missing
+stop-cause, scorer-lens and aliasing) and a coverage line in
+VALIDATION's current evidence block.

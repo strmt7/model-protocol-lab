@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 187 — wave-8 numform fix round, 2026-10-21)
+
+- `run --numform` no longer dies for ~1.6% of seeds: the value
+  generator raised `ZeroDivisionError` when an add redraw landed
+  on 0 in the "some" carry construction (first at seed 26), and
+  the whole probe degraded to a generic `numform_unavailable`.
+  The construction now proposes a value the classifier rejects
+  and redraws; generated sets for previously healthy seeds are
+  byte-identical (hashes pinned in the tests).
+- `diff-reports`' numform validator now regenerates the value
+  set from the protocol's seed and compares every record's
+  construction against it. Before, it hashed the payload's own
+  records and compared the protocol against that hash, so a
+  fabricated self-consistent grid validated; fabricated-set and
+  seed-relabeled payloads are now rejected (regression tests
+  included). The validator also checks the tokenizer grouping
+  means/deltas against the producer's arithmetic relation and
+  requires candidates to agree on each record's expected-answer
+  token count.
+- Honesty wording: the value/form decomposition is recomputed
+  from the stage's recorded parse — the parse itself is a stage
+  act, and the docs (module docstring, design doc, USAGE) now
+  say so; storing the answer text so the validator can re-parse
+  it is scheduled in the design doc. The "4 values per band"
+  summaries now say 4 *drawn* per band (a pair's recorded band
+  is its larger operand's). Doc-enumeration drift from the
+  wave-8 verifier is repaired (USAGE §6/§12, README's
+  diff-reports bullet, FAQ post-hoc list, VALIDATION coverage
+  line).
+
 ### Added (cycle 186 — numeric surface-form probe, 2026-10-21)
 
 - `model-protocol-lab run --numform`: numeric surface-form probe

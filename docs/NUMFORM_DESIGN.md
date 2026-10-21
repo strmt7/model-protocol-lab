@@ -45,8 +45,11 @@ Non-negative integers only. Negatives and fractions are excluded
 and named (with integers only, no decimal marker exists, so a
 comma can only be a grouping separator — the locale ambiguity
 Reddy's F2 exposes cannot arise). Digit bands: 1–3, 4–6, 7–9,
-10–12 digits. Values per task: 16 (4 per band). Operands never
-exceed 12 digits; a sum never exceeds 13.
+10–12 digits. Values per task: 16 (4 drawn per band; a pair's
+recorded band is its larger operand's band, so compare's
+recorded per-band counts vary around 4 — read denominators
+from a payload's own `by_band` counts, not from this line).
+Operands never exceed 12 digits; a sum never exceeds 13.
 
 Renderers are total functions of the integer value alone, never
 of an operand string:
@@ -170,19 +173,33 @@ stage closed (`numform_record_budget_exceeded`).
 
 ## Records and decomposition
 
-Generated values are not user data, so records store canonical
-integer values in the clear (operands, expected value, the
-answer's parsed value) — digest-only storage would make the
-value decomposition unverifiable by the diff validator, and a
-hash over a ≤12-digit value is brute-force-invertible anyway, so
-it would buy no privacy either. Records also carry
-`answer_digest`, `boundary_found`, `input_tokens`, and the
-expected answer's token count. Records ride in the public
-results.json regardless of `--include-evidence`, like every
-probe's ground records — stated here so the diff contract is
-explicit; the data is synthetic.
+Generated values are not user data, so records store the
+expected side's canonical integer values in the clear
+(operands, expected value) — and the validator does not merely
+trust them: it regenerates the whole set from the protocol's
+seed and compares every record's construction against the
+regenerated set (cycle 187; before that, the validator hashed
+whatever records were present, which vouched for a binding it
+never checked). The answer side is stored differently: a cell
+carries the answer's digest and the value the stage parsed
+from it. The decomposition below is recomputed from that
+stage-attested parsed value — the parse itself is a stage
+act, pinned by the stage's own tests, not re-derivable from
+a digest (the grammar deliberately accepts non-canonical
+costume, so no rendering check could re-derive it either).
+Storing the answer text so the validator can re-parse it is
+scheduled work (see Honesty items); it is a payload-format
+change, not a wording fix. A hash over a ≤12-digit expected
+value would be brute-force-invertible anyway, so digest-only
+expected-side storage would buy no privacy either. Records
+also carry `answer_digest`, `boundary_found`, `input_tokens`,
+and the expected answer's token count. Records ride in the
+public results.json regardless of `--include-evidence`, like
+every probe's ground records — stated here so the diff
+contract is explicit; the data is synthetic.
 
-Per-cell decomposition (recomputed by the validator):
+Per-cell decomposition (recomputed by the validator from the
+stage-attested parsed value):
 
 - copy / add: `exact_pass` (verdict true); else
   `value_pass_form_fail` when the parsed answer value equals
@@ -264,15 +281,23 @@ object. Generator drift ⇒ not comparable.
 code (no imports from numform.py): every form rendering and
 expected string (N1: all forms of a value parse to the same
 value), every aggregate, the decomposition, the paired
-contrasts, and the protocol fingerprints; it re-runs the
-grouping decision over stored evidence (consistency). Grouping
+contrasts, and the protocol fingerprints; it regenerates the
+generated set from the protocol's seed with its own mirror of
+the generator and compares every record's construction
+against it, checks that candidates agree on the expected
+answer's token count, and re-runs the grouping decision over
+stored evidence (consistency) with the stored token
+means/deltas held to the producer's arithmetic relation (each
+delta is its form's mean minus the plain mean, up to float
+summation order). Grouping
 drift between runs is reported and flags the form-contrast
 comparison; it does not by itself make sections incomparable.
 Impossible payloads are rejected: pass > completed, rate ≠
 count/denominator, duplicate (task, value, form) record keys,
 a cell present iff its detail is empty, records over the caps,
 malformed digests, per-record construction fields (band,
-strata, operands, expected) inconsistent across candidates, and
+strata, operands, expected) inconsistent across candidates,
+records that are not the protocol seed's generated set, and
 any pooled cross-task total present at all.
 
 ## Honesty items
@@ -294,6 +319,16 @@ any pooled cross-task total present at all.
   grouping explains nothing by itself within a run, and
   cross-tokenizer claims require cross-run diffs of different
   checkpoints, which confound weights with tokenizer.
+- The decomposition's answer side rests on the stage's
+  parse (see Records and decomposition). Scheduled structural
+  fix, recorded here so it is not lost: store the answer text
+  on numform records and bind it with
+  `answer_digest == sha256(answer_text)`, so the validator can
+  re-parse the answer itself instead of trusting the stored
+  parsed value. It changes the payload's exact record key set
+  (stage, both diff-oracle mirrors, and the records-bytes
+  accounting move together), which is why it is its own cycle
+  and not part of the cycle-187 wording fix.
 - Named future work, not in v1: spelled-out number words,
   locale forms (decimal-comma, 3-2-2 grouping), other space
   codepoints, mixed-form fixtures, fractional operands,
