@@ -7529,3 +7529,144 @@ during chunked writes (purged; source now uses escapes only),
 and the fake backend's first scripting draft was level-blind —
 dose-sensitive scripting needs a prompt-length band, recorded
 in the test file's docstring.
+
+## Cycle 185 — leading-claim caving × template (wave-7 rank 6, pre-build)
+
+Uniqueness pass (wave-7 researcher §6, refreshed live
+2026-10-21; refresh brief in the wave-7 series). Corrections to
+§6 earned by the refresh, recorded before the build so the log
+never carries them wrong: (1) §6 attributed both the
+preemptive-rebuttal effect and the first-person effect to
+"Fanous et al. via the survey at arXiv:2509.12517". That source
+is Jain et al., *Interaction Context Often Increases Sycophancy
+in LLMs* (CHI '26), a primary study, not a survey
+(https://arxiv.org/html/2509.12517v3); its §2.2 attributes the
+preemptive effect to Fanous et al. and the first-person effect
+to Wang et al., and the primaries check out separately.
+(2) Two near-neighbours on adjacent axes postdate §6's survey
+and are named below.
+
+Primary sources, verified 2026-10-21. Sharma et al. 2023,
+*Towards Understanding Sycophancy in Language Models*
+(arXiv:2310.13548, https://arxiv.org/html/2310.13548v4): five
+vendor assistants, each under its own rendering, exhibit
+feedback / are-you-sure / mimicry sycophancy; human preference
+data rewards matching the user's views. Fanous et al. 2025,
+*SycEval* (arXiv:2502.08177,
+https://arxiv.org/html/2502.08177v2): preemptive rebuttals
+(user's stance in the original prompt) cave more than
+in-context rebuttals (61.75% vs 56.52% overall; regressive
+sycophancy on computational tasks 8.13% vs 3.54%); citation-
+based rebuttals are the most regressive; labels are LLM-judge
+based. The lab's construction is the preemptive condition by
+design (single-turn; the in-context contrast is out of scope
+and is not claimed). Wang et al. 2025, *When Truth Is
+Overridden* (arXiv:2508.02087,
+https://arxiv.org/html/2508.02087v4/): first-person prompts
+("I believe…") consistently induce higher sycophancy than
+third-person framings ("They believe…"); simple opinion
+statements suffice and expertise framing is negligible in their
+setting. The perspective effect is independently corroborated
+by Dubois et al. 2026, *Ask don't tell* (arXiv:2602.23971,
+https://arxiv.org/abs/2602.23971v3): sycophancy rises
+monotonically with expressed certainty and is amplified by
+I-perspective framing, and by ELEPHANT's own first→third-person
+rewrite mitigation, which reduced social sycophancy only
+somewhat. Cheng et al. 2025, *ELEPHANT* (arXiv:2505.13995,
+https://arxiv.org/html/2505.13995v2; now ICLR 2026, with the
+team's extended study in Science, March 2026): social
+sycophancy as face preservation, GPT-4o-judge labels on
+open-ended advice, both sides of a moral conflict affirmed in
+48% of cases. ELEPHANT §5 reports its model ranking reverses
+SycEval's — explicit (factual) and social sycophancy are
+different measurements, and this probe reports only the
+former, under the name factual caving.
+
+Near-neighbours on adjacent axes. SyPS (Huang et al. 2026,
+arXiv:2608.23837, https://arxiv.org/html/2608.23837) varies
+user-side social-cue wording over ELEPHANT's datasets and
+scores verdict instability across variants (GPT-4 judge on the
+open-ended split) — prompt-variant sensitivity of *social*
+sycophancy, not rendering, not factual. Christophe et al.
+2026, healthcare overalignment (arXiv:2601.18334,
+https://arxiv.org/html/2601.18334v1): on medical MCQA, an
+expert nudge collapses accuracy, and moving the expert role
+from the user turn into the system prompt largely abolishes
+the collapse — role *placement* inside one vendor rendering,
+not template family; its confusability correction (flips to a
+third answer are partly instability, worst in small models)
+is the reason this probe's headline counts only
+byte-exact adoption of the planted answer as caving, with
+failed-otherwise reported separately and never as caving.
+BrokenMath (arXiv:2510.04721,
+https://arxiv.org/html/2510.04721v1) measures factual caving
+on false theorems with a judge ensemble. Ye et al. 2026,
+*What Counts as AI Sycophancy?* (arXiv:2605.21778,
+https://arxiv.org/pdf/2605.21778), reviewing 70 papers, places
+this probe's cell at Position / Verifiable / Overt — the
+literature's most populated cell — and documents that experts
+disagree on what "sycophancy" covers; the docs therefore say
+factual caving, with sycophancy always qualified.
+
+Scoped claim: caving rate — passing natively and under a
+right-claim control, failing under a wrong claim, with adoption
+of the planted answer counted byte-exactly — as a function of
+hand-rendered chat-template family on a fixed local checkpoint,
+under exact-match scoring with no LLM judge and the conservative
+selection re-applied per arm, was not found in any work surveyed
+in this pass. The claim is about the combination only: factual
+caving itself (SycEval, BrokenMath), prompt-variant sensitivity
+of social sycophancy (SyPS), and role-placement sensitivity
+(healthcare overalignment study) are all published, on adjacent
+axes. Framing stays "the combination"; the words "first" and
+"unique" appear nowhere as claims. Unverifiable in this pass
+(recorded, not smoothed over): garak's probe inventory (no
+authoritative dated list retrieved), and any harness change
+shipped 2026-10-20 → 2026-10-21.
+
+Cross-check (two red teams + verifier, briefs in the wave-7
+series). Red-team A returned DO NOT BUILD AS SPECIFIED
+(F1–F15): the headline metric is a joint per-fixture property
+the proposed hierarchy-shaped payload cannot store or validate;
+§6's L3 compares marginal rates and is disproved by a
+counterexample (disjoint failure sets, equal rates, three true
+caves it acquits); the wrong-claim construction is not a total
+deterministic rule; L1's byte-inequality admits semantically
+correct "wrong" claims ("42.0" for "42", NFD for NFC, "7" for
+"17"); mirroring `hierarchy_stage` imports the pre-183 defects
+(no withholding, no mapped primary, no cancellation/context
+guard); the framing factor has no frozen text; donors must be
+search-only and the payload digest-only. Red-team B's full
+cross-check confirmed A in substance on 13 of 15 findings,
+refuted A's F8(3) (the construction *is* SycEval's preemptive
+condition — stance before any model answer — not the in-context
+condition), corrected A's F1 caving range by brute force
+([1, 5], not [0, 3] — A's conclusion strengthens), and amended
+four gates: leading freezes its *own* discordance floors rather
+than importing confidentiality's; the discordance population is
+pinned to native-passing paired fixtures so the wrong-side
+count *is* the caving count, with the classification vocabulary
+completed by a truth table; donor eligibility is implemented by
+reusing `scorerlens.rung_match(..., 4)` plus the containment
+screen, never a second normaliser; and floors gate the
+classification and ranked headlines only — rates always ship
+with denominators, `None` only at denominator 0. B also
+constructed a forged payload passing every check A enumerated
+(a same-group donor, internally consistent) and named the
+missing cross-record checks, plus two things both A and the
+first B dispatch missed: per-record `plant_source` with
+split reporting (donor plants and numeric plants are different
+treatments), and the cycle-67 anchor/mutant/oracle blast radius
+of adding a diff section, now a build gate. The first B
+dispatch (against attributed positions, before A's brief was on
+disk) contributed two findings that survive into the design:
+adoption is a behavioural equality that cannot separate belief
+from copying, and the two claim templates must be a minimal
+pair (identical certainty wording) lest the framing contrast
+confound perspective with certainty. Final disposition: BUILD
+WITH AMENDMENTS on the endorsed gate set G1′–G15, recorded in
+docs/LEADING_DESIGN.md, which also states the validator's
+structural limit — donor eligibility is a property of answer
+text, the payload stores only digests, so construction validity
+rests on the stage and its pin tests while the validator proves
+the arithmetic.

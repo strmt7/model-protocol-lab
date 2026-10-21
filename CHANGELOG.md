@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 185 — leading-claim caving, 2026-10-21)
+
+- `model-protocol-lab run --leading`: leading-claim caving probe
+  (wave-7 rank 6). One frozen claim sentence is appended to each
+  search fixture's last user message: a wrong claim planted from
+  another fixture's correct answer (donor-first construction —
+  smallest-id eligible donor from a different group, digit-surgery
+  fallback, per-record plant source) and the right claim as the
+  control arm, each in first-person and third-person framings that
+  form a minimal pair (identical certainty wording). A plant is
+  eligible only when it is not equivalent to any expected answer
+  in the target's group under the scorer-lens R4 rung plus a
+  substring-containment screen. The headline metric is the
+  per-candidate per-framing caving count over native-passing
+  paired fixtures (pass right, fail wrong), with byte-exact
+  adoption reported beside the failed-otherwise instability
+  bucket; the classification is a frozen truth table over the
+  discordant pair (the research brief's marginal-rate acquittal
+  rule was disproved by counterexample pre-build and deleted),
+  the McNemar exact p is diagnostic only, per-condition
+  selection is withheld on mismatched or undefined completed
+  sets, and the common-population readout is the only ranked
+  cross-candidate comparison. Payloads carry ground records
+  (ids, counts, digests) and `diff-reports` recomputes every
+  derived value, including cross-record donor consistency and
+  the donor-map fingerprint. The pre-build swarm corrected the
+  brief's literature attributions (SycEval is Fanous et al.; the
+  first-person effect is Wang et al.), the verifier replaced
+  the brief's named mirror stage (hierarchy records none of the
+  required per-fixture data), and red-team A's DO NOT BUILD AS
+  SPECIFIED verdict (15 findings) survived B's cross-check with
+  amendments; the shipped design is the amended gate set. The
+  probe measures factual caving on verifiable fixtures, not
+  social sycophancy; no authority arm ships in v1 because the
+  literature disagrees on its size. Design:
+  `docs/LEADING_DESIGN.md`.
+
 ### Added (cycle 184 — distractor dilution, 2026-10-20)
 
 - `model-protocol-lab run --distract`: distractor-dilution probe

@@ -7065,6 +7065,352 @@ def distraction_analysis(
     }
 
 
+def leading_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    search_entries: Any,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Leading-claim caving stage (cycle 185): claim cells per candidate.
+
+    The native arm is the recorded search (reused, never
+    regenerated). Each treated cell appends one frozen claim
+    sentence to the last user message's content before render --
+    a wrong claim (another fixture's answer, or a digit-surgery
+    plant of the fixture's own) or the right-claim control, in
+    two framings -- and is scored by the standard pipeline
+    against the fixture's own expected answer. Cells degrade
+    individually (donor undefined, claim too long, screened,
+    context-exceeded); one bad fixture never takes a candidate's
+    whole curve with it. Design: docs/LEADING_DESIGN.md.
+    """
+    from . import leading as _lead
+    from . import repetition as _rep
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    fixture_ids = [case.id for case in cases]
+    donor_map = _lead.build_donor_map(cases)
+    protocol: dict[str, Any] = dict(
+        _lead.protocol_object(fixture_ids, donor_map, str(backend.fingerprint))
+    )
+    protocol["fingerprint"] = _lead.protocol_fingerprint(
+        fixture_ids, donor_map, str(backend.fingerprint)
+    )
+    if len(formats) * len(cases) > _lead.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "leading_cell_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    template_text = "".join(
+        template.replace("{claim}", "") for template in _lead.CLAIM_TEMPLATES.values()
+    )
+    if audit_special_token_literals(template_text, formats):
+        # A special-token literal in the frozen templates would
+        # forge turn structure in every cell of every run; there
+        # is no honest per-cell version of that arm, so the stage
+        # fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "leading_claim_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    if not any(entry["planted"] is not None for entry in donor_map.values()):
+        return {
+            "available": False,
+            "detail": "leading_no_defined_claims",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    entries: dict[str, Any] = {}
+    if type(search_entries) is list:
+        for entry in search_entries:
+            if type(entry) is not dict:
+                continue
+            fmt_dict = entry.get("format")
+            entry_name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+            if type(entry_name) is str and entry_name:
+                entries[entry_name] = entry
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        entry = entries.get(name)
+        summary = entry.get("summary") if type(entry) is dict else None
+        observations = entry.get("observations") if type(entry) is dict else None
+        if (
+            type(entry) is not dict
+            or type(observations) is not list
+            or not observations
+            or (type(summary) is dict and summary.get("aggregate_eligible") is False)
+        ):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        obs_by_fixture: dict[str, Any] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict or type(obs.get("fixture")) is not str:
+                usable = False
+                break
+            obs_by_fixture[obs["fixture"]] = obs
+        if not usable or any(case.id not in obs_by_fixture for case in cases):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        records: list[dict[str, Any]] = []
+        for case in cases:
+            if _cancelled():
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+            obs = obs_by_fixture[case.id]
+            ids_x1 = tuple(obs["input_ids"])
+            native_cell = {
+                "verdict": bool(obs["exact_match"] and obs["boundary_found"]),
+                "boundary_found": bool(obs["boundary_found"]),
+                "boundary_text_match": obs["boundary_text_match"],
+                "input_tokens": len(ids_x1),
+                "answer_digest": _answer_digest(obs.get("answer")),
+            }
+            donor_entry = donor_map[case.id]
+            content = _rep.target_content(case)
+            vacuous = _rep.is_vacuous(content)
+            expected_blank = not case.expected.strip()
+            record: dict[str, Any] = {
+                "fixture": case.id,
+                "group": case.group,
+                "vacuous": vacuous,
+                "expected_blank": expected_blank,
+                "echo_fixture": _rep.is_echo_fixture(case),
+                "donor_fixture": donor_entry["donor_fixture"],
+                "plant_source": donor_entry["plant_source"],
+                "wrong_claim_defined": donor_entry["planted"] is not None,
+                "expected_digest": _lead.digest_text(case.expected),
+                "planted_digest": donor_entry["planted_digest"],
+                "native": native_cell,
+                "cells": dict.fromkeys(_lead.CONDITION_KEYS),
+                "cell_details": dict.fromkeys(_lead.CONDITION_KEYS, ""),
+            }
+            records.append(record)
+            if vacuous:
+                record["cell_details"] = dict.fromkeys(_lead.CONDITION_KEYS, "vacuous")
+                continue
+            if expected_blank:
+                record["cell_details"] = dict.fromkeys(_lead.CONDITION_KEYS, "expected_blank")
+                continue
+            for arm in _lead.ARMS:
+                if arm == "wrong":
+                    if donor_entry["planted"] is None:
+                        for framing in _lead.FRAMINGS:
+                            record["cell_details"][f"wrong_{framing}"] = "donor_undefined"
+                        continue
+                    claim_value = donor_entry["planted"]
+                else:
+                    claim_value = case.expected
+                for framing in _lead.FRAMINGS:
+                    key = f"{arm}_{framing}"
+                    sentence = _lead.claim_sentence(framing, claim_value)
+                    if len(sentence) > _lead.MAX_CLAIM_CHARS:
+                        record["cell_details"][key] = "claim_too_long"
+                        continue
+                    if audit_special_token_literals(sentence, (fmt,)) or (
+                        boundary_text[name] and boundary_text[name] in sentence
+                    ):
+                        record["cell_details"][key] = "arm_screened"
+                        continue
+                    cell_fixture = _lead.build_claim_fixture(case, sentence)
+                    ids_arm = tuple(backend.encode(fmt.render(cell_fixture.messages)))
+                    if len(ids_arm) + max_new_tokens > max_context:
+                        record["cell_details"][key] = "arm_context_exceeded"
+                        continue
+                    if _cancelled():
+                        return {
+                            "available": False,
+                            "detail": "cancelled",
+                            "protocol": protocol,
+                            "candidates": {},
+                        }
+                    report = evaluate(
+                        backend,
+                        fmt,
+                        (cell_fixture,),
+                        boundary=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if report.aggregate_eligible and report.observations:
+                        cell_obs = report.observations[0]
+                        record["cells"][key] = {
+                            "verdict": bool(cell_obs.exact_match and cell_obs.boundary_found),
+                            "boundary_found": bool(cell_obs.boundary_found),
+                            "boundary_text_match": cell_obs.boundary_text_match,
+                            "input_tokens": len(cell_obs.input_ids),
+                            "answer_digest": _answer_digest(cell_obs.answer),
+                        }
+                    else:
+                        record["cell_details"][key] = "arm_evaluation_failed"
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def leading_analysis(
+    stage: dict[str, Any],
+    primary_decision: Any,
+    primary_winner: Any,
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a leading stage into the stored payload (cycle 185).
+
+    Per-condition winners follow the conservative rule over each
+    condition's completed, non-vacuous fixtures -- withheld
+    whenever any candidate is unavailable, the completed set
+    differs across candidates, or the completed set is not the
+    condition's defined set (for the wrong-claim conditions,
+    the fixtures whose wrong claim is defined). The caving
+    classification is per candidate per framing; the common-
+    population readout is the only ranked cross-candidate
+    comparison. Design: docs/LEADING_DESIGN.md.
+    """
+    from . import leading as _lead
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "leading_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped_primary = ("selected", primary_winner)
+    else:
+        mapped_primary = (primary_decision, primary_winner)
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _lead.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    conditions_out: dict[str, Any] = {}
+    for key in _lead.CONDITION_KEYS:
+        arm = key.split("_", 1)[0]
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for name in candidate_names:
+            entry = stage_candidates[name]
+            if entry["status"] != "available":
+                withheld = True
+                all_pass[name] = None
+                continue
+            live = [
+                record
+                for record in entry["records"]
+                if not record["vacuous"] and not record["expected_blank"]
+            ]
+            if arm == "wrong":
+                defined = frozenset(
+                    record["fixture"] for record in live if record["wrong_claim_defined"]
+                )
+            else:
+                defined = frozenset(record["fixture"] for record in live)
+            completed = frozenset(
+                record["fixture"] for record in live if record["cells"][key] is not None
+            )
+            completed_sets.append(completed)
+            if completed != defined or not completed:
+                withheld = True
+                all_pass[name] = None
+                continue
+            all_pass[name] = all(
+                record["cells"][key]["verdict"] for record in live if record["fixture"] in completed
+            )
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            conditions_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidate_names if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        conditions_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped_primary,
+        }
+    common: dict[str, Any] = {}
+    available_records = {
+        name: stage_candidates[name]["records"]
+        for name in candidate_names
+        if stage_candidates[name]["status"] == "available"
+    }
+    for framing in _lead.FRAMINGS:
+        common[framing] = _lead.common_population(available_records, framing)
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "primary_decision": primary_decision,
+        "primary_winner": primary_winner,
+        "candidates": candidates_out,
+        "conditions": conditions_out,
+        "common_population": common,
+        "n_candidates": len(candidate_names),
+    }
+
+
 def cache_profile_stage(
     *,
     observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],

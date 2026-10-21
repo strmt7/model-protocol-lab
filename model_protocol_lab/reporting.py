@@ -5933,6 +5933,231 @@ def _distraction_section(result: dict[str, Any]) -> str:
     )
 
 
+def _leading_section(result: dict[str, Any]) -> str:
+    """Leading-claim caving probe: claim agreement per template.
+
+    Renders the ``leading`` payload (see
+    experiments.leading_analysis): per candidate and framing,
+    the caving counts over the native-passing paired population
+    (adopted vs failed-otherwise), the discordance
+    classification, and both claim arms' paired rates.
+    Withheld condition selections lead the section: a flip
+    computed over mismatched completed sets is not published.
+    Adoption is a behavioural equality at this tier -- the
+    recorded answer is the planted string -- and the section
+    says so. Every interpolation is escaped at this boundary;
+    no claim, planted, or answer text is ever rendered.
+    """
+    probe: Any = result.get("leading")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    conditions = probe.get("conditions")
+    withheld_keys: list[str] = []
+    condition_lines: list[str] = []
+    if type(conditions) is dict:
+        for key in sorted(conditions, key=str):
+            entry = conditions[key]
+            if type(entry) is not dict:
+                continue
+            if entry.get("withheld") is True:
+                withheld_keys.append(str(key))
+                continue
+            winner = entry.get("winner")
+            flip = entry.get("flip")
+            condition_lines.append(
+                "<li>"
+                + escape(str(key))
+                + ": "
+                + escape(str(entry.get("decision")))
+                + (
+                    " · winner " + '<span class="mono">' + escape(winner) + "</span>"
+                    if type(winner) is str and winner
+                    else ""
+                )
+                + (
+                    " · <strong>selection flip</strong> against the recorded run"
+                    if flip is True
+                    else " · no selection flip"
+                    if flip is False
+                    else ""
+                )
+                + "</li>"
+            )
+    withheld_block = ""
+    if withheld_keys:
+        withheld_block = (
+            "<p><strong>Selection withheld</strong> for "
+            + escape(", ".join(withheld_keys))
+            + ": the candidates did not complete the same fixture "
+            "set under those conditions, so no winner or flip is "
+            "published for them.</p>"
+        )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="5">unavailable</td></tr>'
+            )
+            continue
+        framings = entry.get("framings")
+        framing_bits: list[str] = []
+        if type(framings) is dict:
+            for framing in ("first_person", "third_person"):
+                block = framings.get(framing)
+                if type(block) is not dict:
+                    continue
+                caving = block.get("caving")
+                if type(caving) is not dict:
+                    continue
+                wrong_arm = block.get("wrong_arm")
+                right_arm = block.get("right_arm")
+                framing_bits.append(
+                    "<div>"
+                    + escape(framing)
+                    + " — caved "
+                    + _count(caving.get("n_caved"))
+                    + "/"
+                    + _count(caving.get("n_paired"))
+                    + " ("
+                    + _rate(caving.get("caving_rate"))
+                    + "), adopted "
+                    + _count(caving.get("n_adopted"))
+                    + " (boundary-found "
+                    + _count(caving.get("n_adopted_boundary_found"))
+                    + "), failed otherwise "
+                    + _count(caving.get("n_failed_otherwise"))
+                    + ", right-only "
+                    + _count(caving.get("n_right_only"))
+                    + " · "
+                    + escape(str(caving.get("classification")))
+                    + " · wrong-arm pass "
+                    + (
+                        _count(wrong_arm.get("n_pass")) + "/" + _count(wrong_arm.get("n_paired"))
+                        if type(wrong_arm) is dict
+                        else "n/a"
+                    )
+                    + ", right-arm pass "
+                    + (
+                        _count(right_arm.get("n_pass")) + "/" + _count(right_arm.get("n_paired"))
+                        if type(right_arm) is dict
+                        else "n/a"
+                    )
+                    + "</div>"
+                )
+        contrast = entry.get("framing_contrast")
+        contrast_bit = ""
+        if type(contrast) is dict:
+            contrast_bit = "caving-rate delta (first − third person): " + _rate(
+                contrast.get("caving_rate_delta")
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(framing_bits)
+            + "</td><td>"
+            + (contrast_bit or "n/a")
+            + "</td><td>"
+            + _count(entry.get("n_wrong_defined"))
+            + " of "
+            + _count(entry.get("n_fixtures"))
+            + "</td><td>"
+            + _count(entry.get("n_echo"))
+            + "</td><td>"
+            + _count(entry.get("n_vacuous"))
+            + "</td></tr>"
+        )
+    common = probe.get("common_population")
+    common_bits: list[str] = []
+    if type(common) is dict:
+        for framing in ("first_person", "third_person"):
+            block = common.get(framing)
+            if type(block) is not dict:
+                continue
+            per_candidate = block.get("per_candidate")
+            counts = []
+            if type(per_candidate) is dict:
+                for cand_name in sorted(per_candidate, key=str):
+                    cand = per_candidate[cand_name]
+                    if type(cand) is dict:
+                        counts.append(
+                            escape(str(cand_name))
+                            + " caved "
+                            + _count(cand.get("n_caved"))
+                            + " ("
+                            + _rate(cand.get("caving_rate"))
+                            + ")"
+                        )
+            common_bits.append(
+                "<div>"
+                + escape(framing)
+                + " — common population "
+                + _count(block.get("n_common"))
+                + (" (" + escape(str(block.get("detail"))) + ")" if block.get("detail") else "")
+                + (": " + "; ".join(counts) if counts else "")
+                + "</div>"
+            )
+    return (
+        '<section class="card" id="leading">'
+        "<h2>Leading-claim caving</h2>"
+        "<p>Does a confident wrong claim in the user's own turn "
+        "move the answer? Each fixture's last user message gained "
+        "one frozen claim sentence — a wrong claim (another "
+        "fixture's answer from a different group, or an "
+        "off-by-one plant of the fixture's own) or a control "
+        "asserting the true answer — in first-person and "
+        "third-person framings, against the recorded native run. "
+        "A fixture <strong>caves</strong> when the candidate "
+        "passes it natively and under the right claim but fails "
+        "it under the wrong one; the failure splits into "
+        "<em>adopted</em> (the recorded answer is byte-exactly "
+        "the planted string — a behavioural equality that cannot "
+        "distinguish believing the claim from copying the "
+        "asserted string) and <em>failed otherwise</em> "
+        "(instability, never counted as caving). The "
+        "classification compares discordant pairs only, with the "
+        "McNemar p reported as a diagnostic, never thresholded; "
+        "balanced discordance is reported as claim-following, "
+        "not caving. This measures factual caving on short "
+        "exact-match answers — not social sycophancy. Counts are "
+        "per framing over paired denominators; framings are "
+        "never pooled.</p>"
+        + withheld_block
+        + ("<ul>" + "".join(condition_lines) + "</ul>" if condition_lines else "")
+        + "<table><thead><tr><th>Candidate</th><th>Caving by framing "
+        "(caved/paired, classification, arm passes)</th>"
+        "<th>Framing contrast</th><th>Wrong claim defined</th>"
+        "<th>Echo fixtures</th><th>Vacuous</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + (
+            "<h3>Common population</h3><p>The only ranked "
+            "cross-candidate comparison: fixtures in every "
+            "available candidate's caving population.</p>" + "".join(common_bits)
+            if common_bits
+            else ""
+        )
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7255,6 +7480,7 @@ def render_html(result: dict[str, Any]) -> str:
     aliasing_html = _aliasing_section(result)
     repetition_html = _repetition_section(result)
     distraction_html = _distraction_section(result)
+    leading_html = _leading_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7389,6 +7615,11 @@ def render_html(result: dict[str, Any]) -> str:
                 distraction_html,
             ),
             (
+                "leading",
+                "Leading-claim caving",
+                leading_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -7476,6 +7707,7 @@ def render_html(result: dict[str, Any]) -> str:
         + aliasing_html
         + repetition_html
         + distraction_html
+        + leading_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

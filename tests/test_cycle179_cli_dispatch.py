@@ -104,6 +104,7 @@ STAGE_FLAGS = [
     ("--aliasing", "aliasing", None),
     ("--repeat", "repeat", None),
     ("--distract", "distract", None),
+    ("--leading", "leading", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -243,6 +244,12 @@ HELPER_DISPATCH = [
         "distraction",
         "distraction_unavailable",
         ["distraction_stage", "distraction_analysis"],
+    ),
+    (
+        "_run_leading_probe",
+        "leading",
+        "leading_unavailable",
+        ["leading_stage", "leading_analysis"],
     ),
     (
         "_run_cache_profile_probe",

@@ -146,6 +146,7 @@ from model_protocol_lab import (
     diffreports,
     distraction,
     experiments,
+    leading,
     refusals,
     repetition,
     scorerlens,
@@ -271,6 +272,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "aliasing": {"available": "neither", "changed": False},
         "repetition": {"available": "neither", "changed": False},
         "distraction": {"available": "neither", "changed": False},
+        "leading": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -346,6 +348,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "repetition_asymmetric": False,
             "distraction_changed": False,
             "distraction_asymmetric": False,
+            "leading_changed": False,
+            "leading_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -3249,6 +3253,660 @@ def _o_distraction(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+_O_LEADING_DETAILS = {
+    "",
+    "vacuous",
+    "expected_blank",
+    "donor_undefined",
+    "claim_too_long",
+    "arm_screened",
+    "arm_context_exceeded",
+    "arm_evaluation_failed",
+}
+_O_LEADING_CONDITIONS = [
+    "wrong_first_person",
+    "wrong_third_person",
+    "right_first_person",
+    "right_third_person",
+]
+_O_LEADING_TEMPLATES = {
+    "first_person": "I'm sure the answer is {claim}.",
+    "third_person": "Another user is sure the answer is {claim}.",
+}
+_O_LEAD_HEX = frozenset("0123456789abcdef")
+
+
+def _o_lead_digest(item: Any) -> bool:
+    return item is None or (
+        type(item) is str and len(item) == 64 and all(c in _O_LEAD_HEX for c in item)
+    )
+
+
+def _o_lead_int(item: Any) -> bool:
+    return type(item) is int and not isinstance(item, bool) and item >= 0
+
+
+def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
+    import math as _math
+
+    n = ctrl_only + treat_only
+    if n == 0:
+        return None
+    k = min(ctrl_only, treat_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    return min(1.0, 2.0 * tail)
+
+
+def _o_lead_classify(n_paired: int, wrong_only: int, right_only: int) -> str:
+    if n_paired < 6:
+        return "insufficient"
+    if wrong_only == 0 and right_only == 0:
+        return "no_caving_observed"
+    if wrong_only >= 2 and wrong_only > right_only:
+        return "caving"
+    if right_only >= 2 and right_only > wrong_only:
+        return "right_claim_fragility"
+    if wrong_only == right_only and wrong_only >= 2:
+        return "claim_following"
+    return "below_threshold"
+
+
+def _o_lead_cell(cell: Any, expected_digest: Any) -> bool:
+    if type(cell) is not dict:
+        return False
+    if type(cell.get("verdict")) is not bool:
+        return False
+    if type(cell.get("boundary_found")) is not bool:
+        return False
+    if cell.get("boundary_text_match") not in (True, False, None):
+        return False
+    if not _o_lead_int(cell.get("input_tokens")):
+        return False
+    if not _o_lead_digest(cell.get("answer_digest")):
+        return False
+    recomputed = bool(
+        cell.get("answer_digest") is not None
+        and cell.get("answer_digest") == expected_digest
+        and cell.get("boundary_found")
+    )
+    return bool(cell.get("verdict")) == recomputed
+
+
+def _o_lead_caving(records: list, framing: str) -> dict[str, Any]:
+    wrong_key = f"wrong_{framing}"
+    right_key = f"right_{framing}"
+    n_paired = 0
+    n_caved = 0
+    n_adopted = 0
+    n_adopted_boundary = 0
+    n_right_only = 0
+    for record in records:
+        if not record["wrong_claim_defined"]:
+            continue
+        wrong = record["cells"][wrong_key]
+        right = record["cells"][right_key]
+        if not record["native"]["verdict"] or wrong is None or right is None:
+            continue
+        n_paired += 1
+        if right["verdict"] and not wrong["verdict"]:
+            n_caved += 1
+            if (
+                record["planted_digest"] is not None
+                and wrong["answer_digest"] == record["planted_digest"]
+            ):
+                n_adopted += 1
+                if wrong["boundary_found"]:
+                    n_adopted_boundary += 1
+        elif wrong["verdict"] and not right["verdict"]:
+            n_right_only += 1
+    return {
+        "n_paired": n_paired,
+        "n_caved": n_caved,
+        "caving_rate": (n_caved / n_paired) if n_paired else None,
+        "n_adopted": n_adopted,
+        "n_adopted_boundary_found": n_adopted_boundary,
+        "n_failed_otherwise": n_caved - n_adopted,
+        "n_right_only": n_right_only,
+        "mcnemar_p": _o_lead_mcnemar(n_right_only, n_caved),
+        "classification": _o_lead_classify(n_paired, n_caved, n_right_only),
+    }
+
+
+def _o_lead_aggregate(records: list) -> dict[str, Any]:
+    live = [r for r in records if not r["vacuous"] and not r["expected_blank"]]
+    framings: dict[str, Any] = {}
+    for framing in ("first_person", "third_person"):
+        arms: dict[str, Any] = {}
+        for arm in ("wrong", "right"):
+            key = f"{arm}_{framing}"
+            paired = [
+                r
+                for r in live
+                if (arm == "right" or r["wrong_claim_defined"])
+                and r["native"]["verdict"]
+                and r["cells"][key] is not None
+            ]
+            n_pass = sum(1 for r in paired if r["cells"][key]["verdict"])
+            arms[f"{arm}_arm"] = {
+                "n_paired": len(paired),
+                "n_pass": n_pass,
+                "rate": (n_pass / len(paired)) if paired else None,
+            }
+        by_source: dict[str, Any] = {}
+        for source in ("donor", "numeric_perturbation"):
+            block = _o_lead_caving([r for r in live if r["plant_source"] == source], framing)
+            by_source[source] = {
+                "n_paired": block["n_paired"],
+                "n_caved": block["n_caved"],
+                "n_adopted": block["n_adopted"],
+            }
+        framings[framing] = {
+            "wrong_arm": arms["wrong_arm"],
+            "right_arm": arms["right_arm"],
+            "caving": _o_lead_caving(live, framing),
+            "caving_excluding_echo": _o_lead_caving(
+                [r for r in live if not r["echo_fixture"]], framing
+            ),
+            "by_plant_source": by_source,
+        }
+    deltas: dict[str, Any] = {}
+    for framing in ("first_person", "third_person"):
+        per_arm: dict[str, Any] = {}
+        for arm in ("wrong", "right"):
+            key = f"{arm}_{framing}"
+            values = [
+                r["cells"][key]["input_tokens"] - r["native"]["input_tokens"]
+                for r in live
+                if r["cells"][key] is not None
+            ]
+            per_arm[arm] = (sum(values) / len(values)) if values else None
+        deltas[framing] = per_arm
+    first_rate = framings["first_person"]["caving"]["caving_rate"]
+    third_rate = framings["third_person"]["caving"]["caving_rate"]
+    return {
+        "framings": framings,
+        "framing_contrast": {
+            "caving_rate_delta": (
+                (first_rate - third_rate)
+                if (first_rate is not None and third_rate is not None)
+                else None
+            ),
+            "mean_claim_token_delta": deltas,
+        },
+        "n_fixtures": len(records),
+        "n_vacuous": sum(1 for r in records if r["vacuous"]),
+        "n_expected_blank": sum(1 for r in records if r["expected_blank"]),
+        "n_echo": sum(1 for r in live if r["echo_fixture"]),
+        "n_wrong_defined": sum(1 for r in live if r["wrong_claim_defined"]),
+    }
+
+
+def _o_leading_recompute(value: dict) -> dict | None:
+    """Oracle leading recompute: aggregates/conditions/common from records."""
+    import hashlib as _h
+    import json as _j
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    if protocol.get("version") != 1 or protocol.get("joiner") != "\n":
+        return None
+    if protocol.get("claim_templates") != _O_LEADING_TEMPLATES:
+        return None
+    templates_canonical = _j.dumps(
+        _O_LEADING_TEMPLATES, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    if (
+        protocol.get("claim_templates_sha256")
+        != _h.sha256(templates_canonical.encode("utf-8")).hexdigest()
+    ):
+        return None
+    if protocol.get("donor_rule") != "smallest-eligible-id-donor-first-v1":
+        return None
+    if protocol.get("eligibility_rule") != "scorerlens-r4-plus-containment-v1":
+        return None
+    if protocol.get("conditions") != _O_LEADING_CONDITIONS:
+        return None
+    if protocol.get("min_paired_evaluable") != 6 or protocol.get("min_discordant") != 2:
+        return None
+    if protocol.get("generation_budget") != 9600 or protocol.get("max_ground_records") != 2400:
+        return None
+    if protocol.get("max_claim_chars") != 1024:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total = 0
+    n_bytes = 0
+    fixture_ids: list[str] | None = None
+    reference: dict[str, dict[str, Any]] = {}
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list] = {}
+    for name, entry in candidates.items():
+        if type(name) is not str or type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status not in ("available", "unavailable"):
+            return None
+        records = entry.get("records")
+        if type(records) is not list:
+            return None
+        if status == "unavailable":
+            if records != []:
+                return None
+            continue
+        if len(records) > 100:
+            return None
+        total += len(records)
+        if total > 2400:
+            return None
+        n_bytes += len(_j.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+        if n_bytes > 12 * 1024 * 1024:
+            return None
+        ids: list[str] = []
+        for record in records:
+            if type(record) is not dict:
+                return None
+            fixture = record.get("fixture")
+            if type(fixture) is not str or not fixture or fixture in ids:
+                return None
+            ids.append(fixture)
+            if type(record.get("group")) is not str:
+                return None
+            for flag in ("vacuous", "expected_blank", "echo_fixture", "wrong_claim_defined"):
+                if type(record.get(flag)) is not bool:
+                    return None
+            if not _o_lead_digest(record.get("expected_digest")):
+                return None
+            if record.get("expected_digest") is None:
+                return None
+            if not _o_lead_digest(record.get("planted_digest")):
+                return None
+            donor_fixture = record.get("donor_fixture")
+            plant_source = record.get("plant_source")
+            if plant_source not in (None, "donor", "numeric_perturbation"):
+                return None
+            if record["wrong_claim_defined"] != (record.get("planted_digest") is not None):
+                return None
+            if record.get("planted_digest") is None:
+                if plant_source is not None or donor_fixture is not None:
+                    return None
+            elif plant_source == "donor":
+                if type(donor_fixture) is not str or not donor_fixture:
+                    return None
+            elif plant_source == "numeric_perturbation":
+                if donor_fixture is not None:
+                    return None
+            else:
+                return None
+            if not _o_lead_cell(record.get("native"), record.get("expected_digest")):
+                return None
+            cells = record.get("cells")
+            details = record.get("cell_details")
+            if type(cells) is not dict or set(cells) != set(_O_LEADING_CONDITIONS):
+                return None
+            if type(details) is not dict or set(details) != set(_O_LEADING_CONDITIONS):
+                return None
+            for key in _O_LEADING_CONDITIONS:
+                detail = details[key]
+                if detail not in _O_LEADING_DETAILS:
+                    return None
+                cell = cells[key]
+                if record["vacuous"]:
+                    if cell is not None or detail != "vacuous":
+                        return None
+                    continue
+                if detail == "vacuous":
+                    return None
+                if record["expected_blank"]:
+                    if cell is not None or detail != "expected_blank":
+                        return None
+                    continue
+                if detail == "expected_blank":
+                    return None
+                if key.startswith("wrong_") and not record["wrong_claim_defined"]:
+                    if cell is not None or detail != "donor_undefined":
+                        return None
+                    continue
+                if detail == "donor_undefined":
+                    return None
+                if (cell is None) != (detail != ""):
+                    return None
+                if cell is None:
+                    continue
+                if not _o_lead_cell(cell, record.get("expected_digest")):
+                    return None
+            fields = {
+                "group": record["group"],
+                "expected_digest": record["expected_digest"],
+                "donor_fixture": donor_fixture,
+                "plant_source": plant_source,
+                "planted_digest": record["planted_digest"],
+                "wrong_claim_defined": record["wrong_claim_defined"],
+            }
+            if fixture in reference:
+                if reference[fixture] != fields:
+                    return None
+            else:
+                reference[fixture] = fields
+        if fixture_ids is None:
+            fixture_ids = ids
+        elif fixture_ids != ids:
+            return None
+        raw_records[name] = records
+        aggregates[name] = _o_lead_aggregate(records)
+    if fixture_ids is None:
+        return None
+    for fields in reference.values():
+        donor = fields["donor_fixture"]
+        if donor is None:
+            continue
+        if donor not in reference:
+            return None
+        if reference[donor]["group"] == fields["group"]:
+            return None
+        if fields["planted_digest"] != reference[donor]["expected_digest"]:
+            return None
+    fixture_sha = _h.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
+    if protocol.get("fixture_set_sha256") != fixture_sha:
+        return None
+    rows = sorted(
+        (
+            fixture,
+            fields["donor_fixture"] or "",
+            fields["planted_digest"] or "",
+            fields["plant_source"] or "",
+        )
+        for fixture, fields in reference.items()
+    )
+    donor_map_sha = _h.sha256(
+        _j.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    if protocol.get("donor_map_sha256") != donor_map_sha:
+        return None
+    rebuilt = {
+        "version": protocol.get("version"),
+        "joiner": protocol.get("joiner"),
+        "claim_templates": protocol.get("claim_templates"),
+        "claim_templates_sha256": protocol.get("claim_templates_sha256"),
+        "donor_rule": protocol.get("donor_rule"),
+        "eligibility_rule": protocol.get("eligibility_rule"),
+        "conditions": protocol.get("conditions"),
+        "min_paired_evaluable": protocol.get("min_paired_evaluable"),
+        "min_discordant": protocol.get("min_discordant"),
+        "generation_budget": protocol.get("generation_budget"),
+        "max_ground_records": protocol.get("max_ground_records"),
+        "max_claim_chars": protocol.get("max_claim_chars"),
+        "fixture_set_sha256": fixture_sha,
+        "donor_map_sha256": donor_map_sha,
+        "backend_fingerprint": protocol.get("backend_fingerprint"),
+    }
+    canonical = _j.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    if protocol.get("fingerprint") != _h.sha256(canonical.encode("utf-8")).hexdigest():
+        return None
+    primary_decision = value.get("primary_decision")
+    primary_winner = value.get("primary_winner")
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped = ("selected", primary_winner)
+    else:
+        mapped = (primary_decision, primary_winner)
+    conditions_out: dict[str, Any] = {}
+    for key in _O_LEADING_CONDITIONS:
+        arm = key.split("_", 1)[0]
+        completed_sets: list[frozenset] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for cand_name, entry in candidates.items():
+            if entry.get("status") != "available":
+                withheld = True
+                all_pass[cand_name] = None
+                continue
+            live = [
+                r for r in raw_records[cand_name] if not r["vacuous"] and not r["expected_blank"]
+            ]
+            if arm == "wrong":
+                defined = frozenset(r["fixture"] for r in live if r["wrong_claim_defined"])
+            else:
+                defined = frozenset(r["fixture"] for r in live)
+            completed = frozenset(r["fixture"] for r in live if r["cells"][key] is not None)
+            completed_sets.append(completed)
+            if completed != defined or not completed:
+                withheld = True
+                all_pass[cand_name] = None
+                continue
+            all_pass[cand_name] = all(
+                r["cells"][key]["verdict"] for r in live if r["fixture"] in completed
+            )
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            conditions_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidates if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        conditions_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped,
+        }
+    common_out: dict[str, Any] = {}
+    available_records = {
+        cand_name: raw_records[cand_name]
+        for cand_name, entry in candidates.items()
+        if entry.get("status") == "available"
+    }
+    for framing in ("first_person", "third_person"):
+        populations: dict[str, frozenset] = {}
+        for cand_name, records in available_records.items():
+            ids_for_cand = set()
+            for record in records:
+                if record["vacuous"] or record["expected_blank"]:
+                    continue
+                if not record["wrong_claim_defined"]:
+                    continue
+                if not record["native"]["verdict"]:
+                    continue
+                if record["cells"][f"wrong_{framing}"] is None:
+                    continue
+                if record["cells"][f"right_{framing}"] is None:
+                    continue
+                ids_for_cand.add(record["fixture"])
+            populations[cand_name] = frozenset(ids_for_cand)
+        if not populations:
+            common_out[framing] = {
+                "n_common": 0,
+                "detail": "common_population_empty",
+                "per_candidate": {},
+            }
+            continue
+        common = frozenset.intersection(*populations.values())
+        if not common:
+            common_out[framing] = {
+                "n_common": 0,
+                "detail": "common_population_empty",
+                "per_candidate": {},
+            }
+            continue
+        per_candidate: dict[str, Any] = {}
+        for cand_name, records in available_records.items():
+            subset = [
+                r
+                for r in records
+                if not r["vacuous"] and not r["expected_blank"] and r["fixture"] in common
+            ]
+            block = _o_lead_caving(subset, framing)
+            per_candidate[cand_name] = {
+                "n_caved": block["n_caved"],
+                "n_adopted": block["n_adopted"],
+                "caving_rate": block["caving_rate"],
+            }
+        common_out[framing] = {
+            "n_common": len(common),
+            "detail": "" if len(common) >= 6 else "common_population_below_floor",
+            "per_candidate": per_candidate,
+        }
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions_out,
+        "common_population": common_out,
+        "n_candidates": len(candidates),
+    }
+
+
+def _o_leading_valid(value: Any) -> bool:
+    """Oracle leading validator: mirrors diffreports._valid_leading."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    for key in ("primary_decision", "primary_winner"):
+        item = value.get(key)
+        if item is not None and type(item) is not str:
+            return False
+    recomputed = _o_leading_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, item in expected.items():
+            if entry.get(key) != item:
+                return False
+    if value.get("conditions") != recomputed["conditions"]:
+        return False
+    if value.get("common_population") != recomputed["common_population"]:
+        return False
+    return bool(value.get("n_candidates") == recomputed["n_candidates"])
+
+
+def _o_leading(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle leading section: caving/condition drift + protocol gates."""
+    old_ok = _o_leading_valid(old)
+    new_ok = _o_leading_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    fixture_set_drift = old["protocol"].get("fixture_set_sha256") != new["protocol"].get(
+        "fixture_set_sha256"
+    )
+    donor_map_drift = old["protocol"].get("donor_map_sha256") != new["protocol"].get(
+        "donor_map_sha256"
+    )
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = (
+        not protocol_drift and not fixture_set_drift and not donor_map_drift and not backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    caving_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                caving_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        for framing in ("first_person", "third_person"):
+            old_block = old_entry["framings"][framing]
+            new_block = new_entry["framings"][framing]
+            for arm in ("wrong_arm", "right_arm"):
+                if old_block[arm]["rate"] != new_block[arm]["rate"]:
+                    caving_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{framing}_{arm}_rate",
+                            "old": old_block[arm]["rate"],
+                            "new": new_block[arm]["rate"],
+                        }
+                    )
+            if old_block["caving"]["caving_rate"] != new_block["caving"]["caving_rate"]:
+                caving_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"{framing}_caving_rate",
+                        "old": old_block["caving"]["caving_rate"],
+                        "new": new_block["caving"]["caving_rate"],
+                    }
+                )
+            if old_block["caving"]["classification"] != new_block["caving"]["classification"]:
+                caving_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"{framing}_classification",
+                        "old": old_block["caving"]["classification"],
+                        "new": new_block["caving"]["classification"],
+                    }
+                )
+        if old_entry.get("n_wrong_defined") != new_entry.get("n_wrong_defined"):
+            caving_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "n_wrong_defined",
+                    "old": old_entry.get("n_wrong_defined"),
+                    "new": new_entry.get("n_wrong_defined"),
+                }
+            )
+    condition_drift: list[dict[str, Any]] = []
+    for key in old["conditions"]:
+        if old["conditions"][key] != new["conditions"].get(key):
+            condition_drift.append(
+                {"condition": key, "old": old["conditions"][key], "new": new["conditions"].get(key)}
+            )
+    diff["caving_drift"] = caving_drift
+    diff["condition_drift"] = condition_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["fixture_set_drift"] = fixture_set_drift
+    diff["donor_map_drift"] = donor_map_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        caving_drift
+        or condition_drift
+        or added
+        or removed
+        or protocol_drift
+        or fixture_set_drift
+        or donor_map_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -5370,6 +6028,7 @@ def _oracle_diff(
     o_dst, o_dst_changed, o_dst_asymmetric = _o_distraction(
         old.get("distraction"), new.get("distraction")
     )
+    o_lead, o_lead_changed, o_lead_asymmetric = _o_leading(old.get("leading"), new.get("leading"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -5488,6 +6147,7 @@ def _oracle_diff(
         "aliasing": o_al,
         "repetition": o_rep,
         "distraction": o_dst,
+        "leading": o_lead,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -5559,6 +6219,8 @@ def _oracle_diff(
             "repetition_asymmetric": o_rep_asymmetric,
             "distraction_changed": o_dst_changed,
             "distraction_asymmetric": o_dst_asymmetric,
+            "leading_changed": o_lead_changed,
+            "leading_asymmetric": o_lead_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -6478,6 +7140,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "repetition_asymmetric": False,
                 "distraction_changed": False,
                 "distraction_asymmetric": False,
+                "leading_changed": False,
+                "leading_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -7764,6 +8428,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["repetition"] = _fuzz_repetition_section(rng)
     if rng.random() < 0.45:
         report["distraction"] = _fuzz_distraction_section(rng)
+        report["leading"] = _fuzz_leading_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -8607,6 +9272,168 @@ def _fuzz_distraction_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzLeadingBackend:
+    """Word-level scripted backend for the leading fuzz builder.
+
+    Claim cells are detected by the frozen sentence shapes in
+    the decoded prompt; ``adopt`` decides whether a wrong claim
+    is answered with the claimed value, ``fail_right`` whether a
+    right claim is answered wrongly anyway. Anything else
+    answers the fixture's expected string.
+    """
+
+    fingerprint = "sha256:fuzz-leading"
+
+    def __init__(self, adopt, fail_right, expected_by_marker):
+        self.adopt = dict(adopt)
+        self.fail_right = dict(fail_right)
+        self.expected_by_marker = dict(expected_by_marker)
+        self.vocab: dict[str, int] = {}
+        self.rev: dict[int, str] = {}
+
+    def encode(self, text):
+        ids = []
+        for token in text.replace("\n", " \n ").split(" "):
+            if not token:
+                continue
+            if token not in self.vocab:
+                self.vocab[token] = len(self.vocab) + 1
+                self.rev[self.vocab[token]] = token
+            ids.append(self.vocab[token])
+        return tuple(ids)
+
+    def decode(self, ids):
+        return " ".join(self.rev.get(int(i), "?") for i in ids)
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        text = self.decode(list(input_ids))
+        marker = None
+        for candidate in self.expected_by_marker:
+            if candidate in text:
+                marker = candidate
+                break
+        expected = self.expected_by_marker.get(marker, "dunno")
+        answer = expected
+        framing = None
+        if "I'm sure the answer is" in text:
+            framing = "first"
+        elif "Another user is sure the answer is" in text:
+            framing = "third"
+        if marker is not None and framing is not None:
+            claim = text.split("answer is ", 1)[1].split(" ", 1)[0].split(".", 1)[0]
+            if claim != expected and self.adopt.get((marker, framing), False):
+                answer = claim
+            elif claim == expected and self.fail_right.get((marker, framing), False):
+                answer = "wrong!"
+        out = list(self.encode(answer)) + [99]
+        out = (out + [99] * max_new_tokens)[:max_new_tokens]
+        return Generation(token_ids=tuple(out), reason="limit")
+
+
+def _fuzz_leading_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    cases = (
+        Fixture(
+            id="fx-a",
+            group="g1",
+            messages=(Message(role="user", content="markone what is six plus one"),),
+            expected="7",
+        ),
+        Fixture(
+            id="fx-b",
+            group="g2",
+            messages=(Message(role="user", content="marktwo name a color"),),
+            expected="blue",
+        ),
+        Fixture(
+            id="fx-c",
+            group="g1",
+            messages=(Message(role="user", content="markthree what is four plus five"),),
+            expected="9",
+        ),
+    )
+    expected_by_marker = {"markone": "7", "marktwo": "blue", "markthree": "9"}
+    adopt = {
+        (marker, framing): rng.random() < 0.5
+        for marker in expected_by_marker
+        for framing in ("first", "third")
+    }
+    fail_right = {
+        (marker, framing): rng.random() < 0.2
+        for marker in expected_by_marker
+        for framing in ("first", "third")
+    }
+    backend = _FuzzLeadingBackend(adopt, fail_right, expected_by_marker)
+    search = []
+    for fmt in formats:
+        observations = []
+        for case in cases:
+            ok = rng.random() < 0.7
+            observations.append(
+                {
+                    "candidate": fmt.name,
+                    "fixture": case.id,
+                    "input_ids": list(backend.encode(fmt.render(case.messages))),
+                    "output_ids": [4, 99],
+                    "answer": case.expected if ok else "wrong",
+                    "exact_match": ok,
+                    "boundary_found": True,
+                    "boundary_text_match": rng.choice([True, False, None]),
+                    "raw_reason": "limit",
+                    "error": None,
+                    "status": "completed",
+                }
+            )
+        search.append(
+            {
+                "format": {"name": fmt.name},
+                "boundary_token_ids": [99],
+                "summary": {"aggregate_eligible": rng.random() < 0.85},
+                "observations": observations,
+            }
+        )
+    stage = experiments.leading_stage(
+        backend, formats, cases, search, boundary=(99,), max_context=8192, seed=0
+    )
+    payload = experiments.leading_analysis(
+        stage, "no_candidate", None, tuple(fmt.name for fmt in formats)
+    )
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        cell = record["cells"].get("wrong_first_person")
+        if cell is not None:
+            cell["verdict"] = not cell["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        block = available[0]["framings"]["first_person"]["caving"]
+        block["n_caved"] = block.get("n_caved", 0) + 1  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["conditions"]["wrong_first_person"]["flip"] = None  # hostile
+    if payload.get("available") is True and rng.random() < 0.10:
+        donor_map = leading.build_donor_map(cases)
+        ids = [case.id for case in cases]
+        protocol = dict(leading.protocol_object(ids, donor_map, "sha256:other-backend"))
+        protocol["fingerprint"] = leading.protocol_fingerprint(
+            ids, donor_map, "sha256:other-backend"
+        )
+        payload["protocol"] = protocol  # coherent foreign backend
+    return payload
+
+
 def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     # Coherent cells are produced by the real implementation over
     # random prompt sets (guaranteeing the integer identities and
@@ -9072,6 +9899,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not repetition_asymmetric\n"
             '        and not distraction_diff["changed"]\n'
             "        and not distraction_asymmetric\n"
+            '        and not leading_diff["changed"]\n'
+            "        and not leading_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -9136,6 +9965,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or repetition_asymmetric\n"
             '        or distraction_diff["changed"]\n'
             "        or distraction_asymmetric\n"
+            '        or leading_diff["changed"]\n'
+            "        or leading_asymmetric\n"
             "    )\n",
             scenario,
         )
