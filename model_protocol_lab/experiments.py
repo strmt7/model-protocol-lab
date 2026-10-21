@@ -7874,6 +7874,374 @@ def dateline_analysis(
     }
 
 
+class _MultiturnCancelled(Exception):
+    """Internal control flow: unwind the stage on cancellation."""
+
+
+def _multiturn_turn(
+    backend: Any,
+    fmt: Any,
+    case_id: str,
+    messages: tuple[Any, ...],
+    expected: str,
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None, str | None]:
+    """One multiturn generation: (detail, cell, answer_text).
+
+    Exactly one of ``detail`` / ``cell`` is set. The cancel
+    event is checked immediately after ``evaluate`` returns,
+    before the evaluation-failure mapping (design rule 5: a
+    cancel observed during a turn is never mislabelled an
+    evaluation failure). The answer text is returned
+    separately and never stored in the cell -- records carry
+    digests only.
+    """
+    from . import multiturn as _mt
+    from .core import Fixture
+
+    fixture = Fixture(id=case_id, messages=messages, expected=expected, group=_mt.GROUP)
+    ids = tuple(backend.encode(fmt.render(fixture.messages)))
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None, None
+    if cancel is not None and cancel.is_set():
+        raise _MultiturnCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _MultiturnCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        cell = {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+        return None, cell, obs.answer
+    return "arm_evaluation_failed", None, None
+
+
+def multiturn_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Multi-turn drift stage (cycle 189): generated shard
+    fixtures in three arms per candidate.
+
+    The fixtures are generated from the run seed inside the
+    stage; there is no native arm and no dependence on the
+    user's fixtures or the primary run. The sharded arm is a
+    sequential loop -- each turn's boundary-cut reply is
+    screened for special-token literals and then incorporated
+    verbatim as the next turn's history (P1); only the final
+    turn is scored (P2). Cells degrade individually in the
+    fixed detail vocabulary; cancellation unwinds the whole
+    stage to its fail-closed payload. Design:
+    docs/MULTITURN_DESIGN.md.
+    """
+    from . import multiturn as _mt
+    from .core import Message
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    protocol: dict[str, Any] = dict(_mt.protocol_object(seed, str(backend.fingerprint)))
+    protocol["fingerprint"] = _mt.protocol_fingerprint(seed, str(backend.fingerprint))
+    generated = _mt.generate_fixtures(seed)
+    if len(formats) * len(generated) > _mt.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "multiturn_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    screen_text = "".join(
+        template.replace("{v}", "").replace("{label}", "") for template in _mt.SHARD_TEMPLATES
+    )
+    if audit_special_token_literals(screen_text, formats):
+        # A special-token literal in the frozen protocol text
+        # would forge turn structure in every cell of every run;
+        # the stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "multiturn_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in screen_text:
+            return {
+                "available": False,
+                "detail": "multiturn_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for generated_fixture in generated:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                fixture_id = str(generated_fixture["fixture_id"])
+                shards = [str(shard) for shard in generated_fixture["shards"]]
+                expected = str(generated_fixture["expected"])
+                depth = int(generated_fixture["depth"])
+                record: dict[str, Any] = {
+                    "fixture": fixture_id,
+                    "family": str(generated_fixture["family"]),
+                    "depth": depth,
+                    "group": _mt.GROUP,
+                    "shards": shards,
+                    "values": [int(value) for value in generated_fixture["values"]],
+                    "expected": expected,
+                    "cells": dict.fromkeys(_mt.ARMS),
+                    "cell_details": dict.fromkeys(_mt.ARMS, ""),
+                }
+                # full: every shard in one user turn.
+                detail, cell, _answer = _multiturn_turn(
+                    backend,
+                    fmt,
+                    f"{fixture_id}-full",
+                    (Message("user", _mt.JOINER.join(shards)),),
+                    expected,
+                    boundary_ids=boundaries[name],
+                    max_new_tokens=max_new_tokens,
+                    max_context=max_context,
+                    seed=seed,
+                    cancel=cancel,
+                )
+                if detail is not None:
+                    record["cell_details"]["full"] = detail
+                else:
+                    record["cells"]["full"] = cell
+                # scripted: frozen intermediate replies, one
+                # final generation.
+                scripted_messages: list[Any] = []
+                for slot in range(depth - 1):
+                    scripted_messages.append(Message("user", shards[slot]))
+                    scripted_messages.append(Message("assistant", _mt.SCRIPTED_REPLY))
+                scripted_messages.append(Message("user", shards[depth - 1]))
+                detail, cell, _answer = _multiturn_turn(
+                    backend,
+                    fmt,
+                    f"{fixture_id}-scripted",
+                    tuple(scripted_messages),
+                    expected,
+                    boundary_ids=boundaries[name],
+                    max_new_tokens=max_new_tokens,
+                    max_context=max_context,
+                    seed=seed,
+                    cancel=cancel,
+                )
+                if detail is not None:
+                    record["cell_details"]["scripted"] = detail
+                else:
+                    record["cells"]["scripted"] = cell
+                # sharded: the sequential loop. Each turn's cut
+                # reply is screened, then becomes history.
+                messages: list[Any] = [Message("user", shards[0])]
+                turns: list[dict[str, Any]] = []
+                sharded_cell: dict[str, Any] | None = None
+                sharded_detail: str | None = None
+                for turn in range(1, depth + 1):
+                    detail, cell, answer = _multiturn_turn(
+                        backend,
+                        fmt,
+                        f"{fixture_id}-sharded-t{turn}",
+                        tuple(messages),
+                        expected,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None or cell is None or answer is None:
+                        sharded_detail = detail or "arm_evaluation_failed"
+                        break
+                    turns.append(
+                        {
+                            "input_tokens": cell["input_tokens"],
+                            "answer_digest": cell["answer_digest"],
+                            "boundary_found": cell["boundary_found"],
+                        }
+                    )
+                    if turn == depth:
+                        sharded_cell = dict(cell)
+                        sharded_cell["intermediate_unbounded"] = any(
+                            not entry["boundary_found"] for entry in turns[:-1]
+                        )
+                        sharded_cell["intermediate_empty"] = any(
+                            entry["answer_digest"] == _mt.EMPTY_DIGEST for entry in turns[:-1]
+                        )
+                        sharded_cell["turns"] = turns
+                        break
+                    if audit_special_token_literals(answer, (fmt,)):
+                        # A forged turn boundary inside history
+                        # is token-real; the cell ends here and
+                        # leaves the paired set (design rule 3).
+                        sharded_detail = "arm_screened"
+                        break
+                    messages.append(Message("assistant", answer))
+                    messages.append(Message("user", shards[turn]))
+                if sharded_detail is not None:
+                    record["cell_details"]["sharded"] = sharded_detail
+                else:
+                    record["cells"]["sharded"] = sharded_cell
+                records.append(record)
+        except _MultiturnCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def multiturn_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a multiturn stage into the stored payload
+    (cycle 189).
+
+    Per-candidate readouts come from multiturn.aggregate_candidate;
+    the per-depth selection readouts for the full and sharded
+    arms re-apply the conservative rule over the common
+    completed population and are withheld whenever any
+    candidate is unavailable, a completed set is not the
+    depth's defined set, or completed sets differ across
+    candidates (P3). The scripted arm is a control and gets no
+    selection readout. Design: docs/MULTITURN_DESIGN.md.
+    """
+    from . import multiturn as _mt
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "multiturn_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _mt.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    generated = _mt.generate_fixtures(int(stage["protocol"]["seed"]))
+    selections: dict[str, Any] = {}
+    for depth in _mt.DEPTHS:
+        selections[str(depth)] = {}
+        defined = frozenset(
+            fixture["fixture_id"] for fixture in generated if fixture["depth"] == depth
+        )
+        for arm in ("full", "sharded"):
+            completed_sets: list[frozenset[str]] = []
+            all_pass: dict[str, bool | None] = {}
+            withheld = False
+            for name in candidate_names:
+                entry = stage_candidates[name]
+                if entry["status"] != "available":
+                    withheld = True
+                    all_pass[name] = None
+                    continue
+                completed = frozenset(
+                    record["fixture"]
+                    for record in entry["records"]
+                    if record["depth"] == depth and record["cells"][arm] is not None
+                )
+                completed_sets.append(completed)
+                if completed != defined or not completed:
+                    withheld = True
+                    all_pass[name] = None
+                    continue
+                all_pass[name] = all(
+                    bool(record["cells"][arm]["verdict"])
+                    for record in entry["records"]
+                    if record["depth"] == depth and record["fixture"] in completed
+                )
+            if len(set(completed_sets)) > 1:
+                withheld = True
+            if withheld:
+                selections[str(depth)][arm] = {
+                    "decision": "unavailable",
+                    "detail": "selection_withheld_mismatched_sets",
+                    "winner": None,
+                    "withheld": True,
+                }
+                continue
+            passers = [n for n in candidate_names if all_pass[n]]
+            if len(passers) == 1:
+                decision, winner = "selected", passers[0]
+            elif len(passers) > 1:
+                decision, winner = "ambiguous", None
+            else:
+                decision, winner = "no_candidate", None
+            selections[str(depth)][arm] = {
+                "decision": decision,
+                "winner": winner,
+                "withheld": False,
+                "detail": "",
+            }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "selections": selections,
+        "n_candidates": len(candidate_names),
+        "n_fixtures": len(generated),
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

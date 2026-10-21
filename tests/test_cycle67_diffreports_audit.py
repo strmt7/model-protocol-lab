@@ -148,6 +148,7 @@ from model_protocol_lab import (
     distraction,
     experiments,
     leading,
+    multiturn,
     numform,
     refusals,
     repetition,
@@ -277,6 +278,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "leading": {"available": "neither", "changed": False},
         "numform": {"available": "neither", "changed": False},
         "dateline": {"available": "neither", "changed": False},
+        "multiturn": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -358,6 +360,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "numform_asymmetric": False,
             "dateline_changed": False,
             "dateline_asymmetric": False,
+            "multiturn_changed": False,
+            "multiturn_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -4818,6 +4822,383 @@ def _o_dateline(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+_O_MT_DETAILS = frozenset({"arm_context_exceeded", "arm_evaluation_failed", "arm_screened"})
+_O_MT_ARMS = ("full", "sharded", "scripted")
+_O_MT_CELL_KEYS = frozenset(
+    {"verdict", "boundary_found", "boundary_text_match", "input_tokens", "answer_digest"}
+)
+_O_MT_HEX = frozenset("0123456789abcdef")
+
+
+def _o_multiturn_digest_ok(item: Any) -> bool:
+    return type(item) is str and len(item) == 64 and all(c in _O_MT_HEX for c in item)
+
+
+def _o_multiturn_cell_ok(
+    cell: Any, arm: str, depth: int, expected_digest: str, empty_digest: str
+) -> bool:
+    if type(cell) is not dict:
+        return False
+    keys = frozenset(cell)
+    if arm == "sharded":
+        if keys != _O_MT_CELL_KEYS | {
+            "intermediate_unbounded",
+            "intermediate_empty",
+            "turns",
+        }:
+            return False
+    elif keys != _O_MT_CELL_KEYS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] not in (True, False, None):
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _o_multiturn_digest_ok(cell["answer_digest"]):
+        return False
+    if cell["verdict"] != bool(cell["answer_digest"] == expected_digest and cell["boundary_found"]):
+        return False
+    if arm == "sharded":
+        if type(cell["intermediate_unbounded"]) is not bool:
+            return False
+        if type(cell["intermediate_empty"]) is not bool:
+            return False
+        turns = cell["turns"]
+        if type(turns) is not list or len(turns) != depth:
+            return False
+        for entry in turns:
+            if type(entry) is not dict or set(entry) != {
+                "input_tokens",
+                "answer_digest",
+                "boundary_found",
+            }:
+                return False
+            if type(entry["input_tokens"]) is not int or entry["input_tokens"] < 0:
+                return False
+            if not _o_multiturn_digest_ok(entry["answer_digest"]):
+                return False
+            if type(entry["boundary_found"]) is not bool:
+                return False
+        last = turns[-1]
+        if (
+            last["input_tokens"] != cell["input_tokens"]
+            or last["answer_digest"] != cell["answer_digest"]
+            or last["boundary_found"] != cell["boundary_found"]
+        ):
+            return False
+        if cell["intermediate_unbounded"] != any(not e["boundary_found"] for e in turns[:-1]):
+            return False
+        if cell["intermediate_empty"] != any(
+            e["answer_digest"] == empty_digest for e in turns[:-1]
+        ):
+            return False
+    return True
+
+
+def _o_multiturn_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle multiturn recompute: mirrors diffreports._multiturn_recompute.
+
+    The oracle rebuilds the protocol and the fixture set through
+    the producer module (multiturn) where the implementation
+    rebuilds them from literal tables -- a drift in either side's
+    constants breaks the agreement the fuzz harness asserts.
+    """
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(multiturn.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = multiturn.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = multiturn.generate_fixtures(seed)
+    by_id = {f["fixture_id"]: f for f in generated}
+    empty_digest = hashlib.sha256(b"").hexdigest()
+    total = 0
+    records_bytes = 0
+    raw: dict[str, list[dict[str, Any]]] = {}
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict or set(entry) != {
+            "status",
+            "detail",
+            "depths",
+            "classification",
+            "records",
+        }:
+            return None
+        if entry["status"] != "available" or entry["detail"] != "":
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > multiturn.MAX_RECORDS_BYTES:
+            return None
+        seen: set[str] = set()
+        for record in records:
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "family",
+                "depth",
+                "group",
+                "shards",
+                "values",
+                "expected",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            fixture = by_id.get(record["fixture"])
+            if fixture is None or record["fixture"] in seen:
+                return None
+            seen.add(record["fixture"])
+            if (
+                record["family"] != fixture["family"]
+                or record["depth"] != fixture["depth"]
+                or record["group"] != "multiturn"
+                or record["shards"] != fixture["shards"]
+                or record["values"] != fixture["values"]
+                or record["expected"] != fixture["expected"]
+            ):
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_O_MT_ARMS):
+                return None
+            if type(details) is not dict or set(details) != set(_O_MT_ARMS):
+                return None
+            expected_digest = hashlib.sha256(str(fixture["expected"]).encode("utf-8")).hexdigest()
+            for arm in _O_MT_ARMS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _O_MT_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_multiturn_cell_ok(
+                        cell, arm, int(fixture["depth"]), expected_digest, empty_digest
+                    ):
+                        return None
+        raw[name] = records
+        aggregates[name] = multiturn.aggregate_candidate(records)
+    if total > multiturn.MAX_GROUND_RECORDS:
+        return None
+    selections: dict[str, Any] = {}
+    for depth in multiturn.DEPTHS:
+        selections[str(depth)] = {}
+        defined = {f["fixture_id"] for f in generated if f["depth"] == depth}
+        for arm in ("full", "sharded"):
+            completed_sets: list[frozenset[str]] = []
+            all_pass: dict[str, bool | None] = {}
+            withheld = False
+            for name in candidates:
+                completed = {
+                    r["fixture"]
+                    for r in raw[name]
+                    if r["depth"] == depth and type(r["cells"][arm]) is dict
+                }
+                completed_sets.append(frozenset(completed))
+                if completed != defined or not completed:
+                    withheld = True
+                    all_pass[name] = None
+                    continue
+                all_pass[name] = all(
+                    bool(r["cells"][arm]["verdict"])
+                    for r in raw[name]
+                    if r["depth"] == depth and r["fixture"] in completed
+                )
+            if len(set(completed_sets)) > 1:
+                withheld = True
+            if withheld:
+                selections[str(depth)][arm] = {
+                    "decision": "unavailable",
+                    "detail": "selection_withheld_mismatched_sets",
+                    "winner": None,
+                    "withheld": True,
+                }
+                continue
+            passers = [n for n in candidates if all_pass[n]]
+            if len(passers) == 1:
+                decision, winner = "selected", passers[0]
+            elif len(passers) > 1:
+                decision, winner = "ambiguous", None
+            else:
+                decision, winner = "no_candidate", None
+            selections[str(depth)][arm] = {
+                "decision": decision,
+                "winner": winner,
+                "withheld": False,
+                "detail": "",
+            }
+    return {
+        "aggregates": aggregates,
+        "selections": selections,
+        "n_candidates": len(candidates),
+        "n_fixtures": len(generated),
+    }
+
+
+def _o_multiturn_valid(value: Any) -> bool:
+    """Oracle multiturn validator: mirrors diffreports._valid_multiturn."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "selections",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_multiturn_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("depths") != expected["depths"]:
+            return False
+        if entry.get("classification") != expected["classification"]:
+            return False
+    if value.get("selections") != recomputed["selections"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_fixtures") == recomputed["n_fixtures"])
+
+
+def _o_multiturn(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle multiturn section: mirrors diffreports.diff_multiturn."""
+    old_ok = _o_multiturn_valid(old)
+    new_ok = _o_multiturn_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    classification_drift: list[dict[str, Any]] = []
+    depth_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                classification_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        if old_entry.get("classification") != new_entry.get("classification"):
+            classification_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "classification",
+                    "old": old_entry.get("classification"),
+                    "new": new_entry.get("classification"),
+                }
+            )
+        for depth_key in ("2", "3"):
+            old_block = old_entry["depths"][depth_key]
+            new_block = new_entry["depths"][depth_key]
+            if old_block["pass_rates"]["sharded"] != new_block["pass_rates"]["sharded"]:
+                depth_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"depth_{depth_key}_sharded_rate",
+                        "old": old_block["pass_rates"]["sharded"],
+                        "new": new_block["pass_rates"]["sharded"],
+                    }
+                )
+            old_pair = (
+                old_block["self_history"]["sh_only"],
+                old_block["self_history"]["sc_only"],
+            )
+            new_pair = (
+                new_block["self_history"]["sh_only"],
+                new_block["self_history"]["sc_only"],
+            )
+            if old_pair != new_pair:
+                depth_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"depth_{depth_key}_self_history_pair",
+                        "old": list(old_pair),
+                        "new": list(new_pair),
+                    }
+                )
+    selection_drift: list[dict[str, Any]] = []
+    for depth_key in ("2", "3"):
+        for arm in ("full", "sharded"):
+            if old["selections"][depth_key][arm] != new["selections"][depth_key][arm]:
+                selection_drift.append(
+                    {
+                        "depth": depth_key,
+                        "arm": arm,
+                        "old": old["selections"][depth_key][arm],
+                        "new": new["selections"][depth_key][arm],
+                    }
+                )
+    diff["classification_drift"] = classification_drift
+    diff["depth_drift"] = depth_drift
+    diff["selection_drift"] = selection_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        classification_drift
+        or depth_drift
+        or selection_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -6942,6 +7323,7 @@ def _oracle_diff(
     o_lead, o_lead_changed, o_lead_asymmetric = _o_leading(old.get("leading"), new.get("leading"))
     o_nf, o_nf_changed, o_nf_asymmetric = _o_numform(old.get("numform"), new.get("numform"))
     o_dt, o_dt_changed, o_dt_asymmetric = _o_dateline(old.get("dateline"), new.get("dateline"))
+    o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -7022,6 +7404,8 @@ def _oracle_diff(
         and not o_nf_asymmetric
         and not o_dt_changed
         and not o_dt_asymmetric
+        and not o_mt_changed
+        and not o_mt_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -7069,6 +7453,7 @@ def _oracle_diff(
         "leading": o_lead,
         "numform": o_nf,
         "dateline": o_dt,
+        "multiturn": o_mt,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -7146,6 +7531,8 @@ def _oracle_diff(
             "numform_asymmetric": o_nf_asymmetric,
             "dateline_changed": o_dt_changed,
             "dateline_asymmetric": o_dt_asymmetric,
+            "multiturn_changed": o_mt_changed,
+            "multiturn_asymmetric": o_mt_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -8071,6 +8458,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "numform_asymmetric": False,
                 "dateline_changed": False,
                 "dateline_asymmetric": False,
+                "multiturn_changed": False,
+                "multiturn_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -9361,6 +9750,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
     if rng.random() < 0.45:
         report["numform"] = _fuzz_numform_section(rng)
         report["dateline"] = _fuzz_dateline_section(rng)
+        report["multiturn"] = _fuzz_multiturn_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -10611,6 +11001,105 @@ def _fuzz_dateline_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzMultiturnBackend:
+    """Word-level scripted backend for the multiturn fuzz builder.
+
+    Answers are parsed out of the decoded prompt: ledger totals
+    are summed from the stated entries, the shelf question takes
+    the argmax label, and intermediate turns get the running
+    partial answer (a plausible self-generated history). Fail
+    modes answer wrongly for deep ledgers or shelf questions.
+    """
+
+    fingerprint = "sha256:fuzz-multiturn"
+
+    def __init__(self, fail_deep: bool, fail_shelf: bool):
+        self.fail_deep = fail_deep
+        self.fail_shelf = fail_shelf
+        self.vocab: dict[str, int] = {}
+        self.rev: dict[int, str] = {}
+
+    def encode(self, text):
+        ids = []
+        for token in text.replace("\n", " \n ").split(" "):
+            if not token:
+                continue
+            if token not in self.vocab:
+                self.vocab[token] = len(self.vocab) + 1
+                self.rev[self.vocab[token]] = token
+            ids.append(self.vocab[token])
+        return tuple(ids)
+
+    def decode(self, ids):
+        return " ".join(self.rev.get(int(i), "?") for i in ids)
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        import re as _re
+
+        text = self.decode(list(input_ids))
+        entries = [int(v) for v in _re.findall(r"Ledger entry: (-?\d+)\.", text)]
+        shelves = _re.findall(r"Shelf ([ABC]) holds (\d+) units\.", text)
+        if "What is the ledger total?" in text:
+            answer = str(sum(entries) + (1 if self.fail_deep and len(entries) >= 3 else 0))
+        elif "Which shelf holds the most units?" in text:
+            best = max(shelves, key=lambda pair: int(pair[1]))[0]
+            answer = "A" if self.fail_shelf and best != "A" else best
+        elif entries:
+            answer = str(sum(entries))
+        elif shelves:
+            answer = max(shelves, key=lambda pair: int(pair[1]))[0]
+        else:
+            answer = "dunno"
+        boundary = self.encode("endmark")[0]
+        out = list(self.encode(answer)) + [boundary]
+        out = (out + [boundary] * max_new_tokens)[:max_new_tokens]
+        return Generation(token_ids=tuple(out), reason="limit")
+
+
+def _fuzz_multiturn_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    backend = _FuzzMultiturnBackend(fail_deep=rng.random() < 0.4, fail_shelf=rng.random() < 0.4)
+    seed = rng.choice([0, 1, 2])
+    stage = experiments.multiturn_stage(
+        backend,
+        formats,
+        boundary=tuple(backend.encode("endmark")),
+        max_context=8192,
+        seed=seed,
+    )
+    payload = experiments.multiturn_analysis(stage, tuple(fmt.name for fmt in formats))
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        cell = record["cells"].get("full")
+        if cell is not None:
+            cell["verdict"] = not cell["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        available[0]["classification"] = "self_history_drift"  # hostile
+    if available and rng.random() < 0.10:
+        block = available[0]["depths"]["2"]
+        block["n_paired"] = block.get("n_paired", 0) + 1  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(multiturn.protocol_object(seed, "sha256:other-backend"))
+        protocol["fingerprint"] = multiturn.protocol_fingerprint(seed, "sha256:other-backend")
+        payload["protocol"] = protocol  # coherent foreign backend
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -11134,6 +11623,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not numform_asymmetric\n"
             '        and not dateline_diff["changed"]\n'
             "        and not dateline_asymmetric\n"
+            '        and not multiturn_diff["changed"]\n'
+            "        and not multiturn_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -11212,6 +11703,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or numform_asymmetric\n"
             '        or dateline_diff["changed"]\n'
             "        or dateline_asymmetric\n"
+            '        or multiturn_diff["changed"]\n'
+            "        or multiturn_asymmetric\n"
             "    )\n",
             scenario,
         )

@@ -6523,6 +6523,126 @@ def _dateline_section(result: dict[str, Any]) -> str:
     )
 
 
+def _multiturn_section(result: dict[str, Any]) -> str:
+    """Multi-turn drift probe: does the winner survive its own history.
+
+    Renders the ``multiturn`` payload (see
+    experiments.multiturn_analysis): per candidate, the
+    classification and, per depth, the paired pass rates for
+    the three arms, the delivery discordant counts (drift and
+    gains), and the self-history discordant pair with its net
+    and McNemar diagnostic. The contrast is named as the
+    bundle it is -- authorship, content, and history length
+    move together -- and the generated tasks are named as an
+    instrument, not a benchmark. Counts and rates only; no
+    answer text is rendered. Every interpolation is escaped
+    at this boundary.
+    """
+    probe: Any = result.get("multiturn")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        classification = entry.get("classification")
+        bits.append(
+            "<div>Classification: <strong>" + escape(str(classification)) + "</strong>.</div>"
+        )
+        depths = entry.get("depths")
+        if type(depths) is dict:
+            for depth in sorted(depths, key=str):
+                block = depths[depth]
+                if type(block) is not dict:
+                    continue
+                rates = block.get("pass_rates")
+                delivery = block.get("delivery")
+                self_history = block.get("self_history")
+                if type(rates) is not dict or type(delivery) is not dict:
+                    continue
+                line = (
+                    "Depth "
+                    + escape(str(depth))
+                    + ": paired "
+                    + _count(block.get("n_paired"))
+                    + " of "
+                    + _count(block.get("n_defined"))
+                    + "; pass full "
+                    + _rate(rates.get("full"))
+                    + ", sharded "
+                    + _rate(rates.get("sharded"))
+                    + ", scripted "
+                    + _rate(rates.get("scripted"))
+                    + "; drift "
+                    + _count(delivery.get("drift"))
+                    + ", gains "
+                    + _count(delivery.get("gains"))
+                )
+                if type(self_history) is dict:
+                    line += (
+                        "; self-history pair (sharded-only "
+                        + _count(self_history.get("sh_only"))
+                        + ", scripted-only "
+                        + _count(self_history.get("sc_only"))
+                        + ", net "
+                        + _count(self_history.get("net_excess"))
+                        + ", McNemar p "
+                        + _rate(self_history.get("mcnemar_p"))
+                        + ")"
+                    )
+                bits.append("<div>" + line + ".</div>")
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="multiturn">'
+        "<h2>Multi-turn drift</h2>"
+        "<p>Generated shard tasks (ledger sums and shelf "
+        "argmax, depths 2 and 3, 48 fixtures from the run seed) "
+        "delivered three ways: every shard in one user turn, "
+        "one shard per turn with the model's own boundary-cut "
+        "replies as the history, and one shard per turn with a "
+        "frozen <em>Noted.</em> history. Only the final turn is "
+        "scored. The sharded-vs-scripted contrast is a bundle "
+        "-- authorship, content, and history length move "
+        "together, because content and length are the mechanism "
+        "of self-history -- so it is reported as a discordant "
+        "pair, never a net-only difference. Intermediate "
+        "replies are screened for special-token literals before "
+        "they become history. The generated tasks are a probe "
+        "instrument, not a benchmark: they measure whether "
+        "verdicts survive sharded delivery, not performance on "
+        "real conversations.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7848,6 +7968,7 @@ def render_html(result: dict[str, Any]) -> str:
     leading_html = _leading_section(result)
     numform_html = _numform_section(result)
     dateline_html = _dateline_section(result)
+    multiturn_html = _multiturn_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7997,6 +8118,11 @@ def render_html(result: dict[str, Any]) -> str:
                 dateline_html,
             ),
             (
+                "multiturn",
+                "Multi-turn drift",
+                multiturn_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8087,6 +8213,7 @@ def render_html(result: dict[str, Any]) -> str:
         + leading_html
         + numform_html
         + dateline_html
+        + multiturn_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

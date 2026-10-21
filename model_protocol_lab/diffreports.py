@@ -605,6 +605,7 @@ def diff_reports(
     leading_diff = diff_leading(old.get("leading"), new.get("leading"))
     numform_diff = diff_numform(old.get("numform"), new.get("numform"))
     dateline_diff = diff_dateline(old.get("dateline"), new.get("dateline"))
+    multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -661,6 +662,10 @@ def diff_reports(
         "neither",
     )
     dateline_asymmetric = dateline_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    multiturn_asymmetric = multiturn_diff["available"] not in (
         "both",
         "neither",
     )
@@ -749,6 +754,8 @@ def diff_reports(
         and not numform_asymmetric
         and not dateline_diff["changed"]
         and not dateline_asymmetric
+        and not multiturn_diff["changed"]
+        and not multiturn_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -827,6 +834,8 @@ def diff_reports(
         "numform_asymmetric": numform_asymmetric,
         "dateline_changed": dateline_diff["changed"],
         "dateline_asymmetric": dateline_asymmetric,
+        "multiturn_changed": multiturn_diff["changed"],
+        "multiturn_asymmetric": multiturn_asymmetric,
         "identical": identical,
     }
     return {
@@ -865,6 +874,7 @@ def diff_reports(
         "leading": leading_diff,
         "numform": numform_diff,
         "dateline": dateline_diff,
+        "multiturn": multiturn_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -7890,6 +7900,773 @@ def diff_dateline(old: Any, new: Any) -> dict[str, Any]:
         or dateline_protocol_drift
         or dateline_fixture_set_drift
         or dateline_backend_drift
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# multiturn mirror (cycle 189): independent recompute -- never imports
+# multiturn.py. The generator, the aggregate, and the classification
+# are re-implemented from the frozen design literals, so a payload is
+# accepted only when two independent implementations agree. The one
+# stage-attested link is the correspondence between the recorded
+# intermediate digests and the history actually rendered (disclosed
+# in docs/MULTITURN_DESIGN.md); every identity among recorded fields
+# is checked here.
+# ---------------------------------------------------------------------------
+
+_MULTITURN_FAMILIES = ("ledger", "shelf")
+_MULTITURN_DEPTHS = (2, 3)
+_MULTITURN_ARMS = ("full", "sharded", "scripted")
+_MULTITURN_DETAILS = (
+    "arm_context_exceeded",
+    "arm_evaluation_failed",
+    "arm_screened",
+)
+_MULTITURN_LABELS = ("A", "B", "C")
+_MULTITURN_LEDGER_QUESTION = "What is the ledger total?"
+_MULTITURN_SHELF_QUESTION = "Which shelf holds the most units? Answer with the shelf label."
+_MULTITURN_JOINER = "\n\n"
+_MULTITURN_SCRIPTED = "Noted."
+_MULTITURN_TEMPLATES = (
+    "Ledger entry: {v}.",
+    "Ledger entry: {v}. " + _MULTITURN_LEDGER_QUESTION,
+    "Shelf {label} holds {v} units.",
+    "Shelf {label} holds {v} units. " + _MULTITURN_SHELF_QUESTION,
+)
+_MULTITURN_CELL_KEYS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+
+
+def _multiturn_derive(
+    seed: int, family: str, depth: int, index: int, slot: int, counter: int
+) -> int:
+    import hashlib as _hashlib
+
+    material = f"multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of the frozen fixture generator (design literals)."""
+    fixtures: list[dict[str, Any]] = []
+    for family in _MULTITURN_FAMILIES:
+        for depth in _MULTITURN_DEPTHS:
+            for index in range(12):
+                values: list[int] = []
+                if family == "ledger":
+                    counter = 0
+                    while True:
+                        candidate_values: list[int] = []
+                        for slot in range(depth):
+                            derived = _multiturn_derive(seed, "ledger", depth, index, slot, counter)
+                            magnitude = 1 + derived % 999
+                            candidate_values.append(
+                                magnitude if (derived >> 32) % 2 == 0 else -magnitude
+                            )
+                        if str(sum(candidate_values)) not in {
+                            str(value) for value in candidate_values
+                        }:
+                            values = candidate_values
+                            break
+                        counter += 1
+                else:
+                    for slot in range(depth):
+                        counter = 0
+                        while True:
+                            value = (
+                                1
+                                + _multiturn_derive(seed, "shelf", depth, index, slot, counter) % 99
+                            )
+                            if value not in values:
+                                values.append(value)
+                                break
+                            counter += 1
+                shards: list[str] = []
+                for slot, value in enumerate(values):
+                    final = slot == depth - 1
+                    if family == "ledger":
+                        text = f"Ledger entry: {value}."
+                        if final:
+                            text += f" {_MULTITURN_LEDGER_QUESTION}"
+                    else:
+                        text = f"Shelf {_MULTITURN_LABELS[slot]} holds {value} units."
+                        if final:
+                            text += f" {_MULTITURN_SHELF_QUESTION}"
+                    shards.append(text)
+                if family == "ledger":
+                    expected = str(sum(values))
+                else:
+                    expected = _MULTITURN_LABELS[
+                        max(range(len(values)), key=lambda slot: values[slot])
+                    ]
+                fixtures.append(
+                    {
+                        "fixture_id": f"mt-{family}-{depth}-{index:02d}",
+                        "family": family,
+                        "depth": depth,
+                        "shards": shards,
+                        "values": values,
+                        "expected": expected,
+                    }
+                )
+    return fixtures
+
+
+def _multiturn_digest(text: str) -> str:
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _multiturn_template_digest() -> str:
+    import hashlib as _hashlib
+    import json as _json
+
+    canonical = _json.dumps(
+        [list(_MULTITURN_TEMPLATES), _MULTITURN_JOINER, _MULTITURN_SCRIPTED],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _multiturn_ground_sha(seed: int) -> str:
+    import hashlib as _hashlib
+    import json as _json
+
+    rows = [
+        [
+            fixture["fixture_id"],
+            fixture["family"],
+            fixture["depth"],
+            fixture["shards"],
+            fixture["values"],
+            fixture["expected"],
+        ]
+        for fixture in _multiturn_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "families": list(_MULTITURN_FAMILIES),
+        "depths": list(_MULTITURN_DEPTHS),
+        "fixtures_per_family_depth": 12,
+        "arms": list(_MULTITURN_ARMS),
+        "template_digest": _multiturn_template_digest(),
+        "ground_sha256": _multiturn_ground_sha(seed),
+        "min_paired_evaluable": 6,
+        "min_discordant": 2,
+        "generation_budget": 5184,
+        "max_ground_records": 1152,
+        "max_records_bytes": 12 * 1024 * 1024,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+
+
+def _multiturn_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    import math as _math
+
+    n = a_only + b_only
+    if n == 0:
+        return None
+    k = min(a_only, b_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _multiturn_cell(record: dict[str, Any], arm: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if type(cells) is not dict:
+        return None
+    cell = cells.get(arm)
+    return cell if type(cell) is dict else None
+
+
+def _multiturn_verdict(record: dict[str, Any], arm: str) -> bool:
+    cell = _multiturn_cell(record, arm)
+    return bool(cell["verdict"]) if cell is not None else False
+
+
+def _multiturn_pair(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[str, int]:
+    counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    for record in records:
+        cell_a = _multiturn_cell(record, arm_a)
+        cell_b = _multiturn_cell(record, arm_b)
+        if cell_a is None or cell_b is None:
+            continue
+        counts["n_paired"] += 1
+        verdict_a = bool(cell_a["verdict"])
+        verdict_b = bool(cell_b["verdict"])
+        if verdict_a and verdict_b:
+            counts["both_pass"] += 1
+        elif verdict_a:
+            counts["a_only"] += 1
+        elif verdict_b:
+            counts["b_only"] += 1
+        else:
+            counts["both_fail"] += 1
+    return counts
+
+
+def _multiturn_classify(depths: dict[str, Any]) -> str:
+    """Mirror of the candidate classification (total function)."""
+    evaluable = [block for block in depths.values() if block["n_paired"] >= 6]
+    if not evaluable:
+        return "insufficient_evidence"
+    for block in evaluable:
+        self_history = block["self_history"]
+        if self_history["sh_only"] >= 2 and self_history["sh_only"] > self_history["sc_only"]:
+            return "self_history_drift"
+    for block in evaluable:
+        if (
+            max(
+                block["delivery"]["drift"],
+                block["delivery"]["gains"],
+                block["scripted_contrast"]["drift"],
+                block["scripted_contrast"]["gains"],
+            )
+            >= 2
+        ):
+            return "framing_only"
+    for block in evaluable:
+        if (
+            block["delivery"]["drift"]
+            + block["delivery"]["gains"]
+            + block["scripted_contrast"]["drift"]
+            + block["scripted_contrast"]["gains"]
+            + block["self_history"]["sh_only"]
+            + block["self_history"]["sc_only"]
+            > 0
+        ):
+            return "below_threshold"
+    return "no_drift"
+
+
+def _multiturn_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Independent recompute of ``multiturn.aggregate_candidate``."""
+    depths_out: dict[str, Any] = {}
+    for depth in _MULTITURN_DEPTHS:
+        at_depth = [record for record in records if record["depth"] == depth]
+        paired_records = [
+            record
+            for record in at_depth
+            if all(_multiturn_cell(record, arm) is not None for arm in _MULTITURN_ARMS)
+        ]
+        n_paired = len(paired_records)
+        completion: dict[str, Any] = {}
+        for arm in _MULTITURN_ARMS:
+            details: dict[str, int] = {}
+            completed = 0
+            for record in at_depth:
+                if _multiturn_cell(record, arm) is not None:
+                    completed += 1
+                else:
+                    detail = record["cell_details"][arm]
+                    details[detail] = details.get(detail, 0) + 1
+            completion[arm] = {
+                "completed": completed,
+                "defined": len(at_depth),
+                "details": details,
+            }
+        passed: dict[str, int] = {}
+        rates: dict[str, Any] = {}
+        for arm in _MULTITURN_ARMS:
+            n_pass = sum(1 for record in paired_records if _multiturn_verdict(record, arm))
+            passed[arm] = n_pass
+            rates[arm] = (n_pass / n_paired) if n_paired else None
+        delivery = _multiturn_pair(paired_records, "full", "sharded")
+        scripted_pair = _multiturn_pair(paired_records, "full", "scripted")
+        self_history = {
+            "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "sh_only": 0,
+            "sc_only": 0,
+            "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "both_fail": 0,
+        }
+        for record in paired_records:
+            if not _multiturn_verdict(record, "full"):
+                continue
+            self_history["n_full_pass"] += 1
+            sharded = _multiturn_verdict(record, "sharded")
+            scripted = _multiturn_verdict(record, "scripted")
+            if sharded and scripted:
+                self_history["both_pass"] += 1
+            elif scripted:
+                self_history["sh_only"] += 1
+            elif sharded:
+                self_history["sc_only"] += 1
+            else:
+                self_history["both_fail"] += 1
+        per_family: dict[str, Any] = {}
+        for family in _MULTITURN_FAMILIES:
+            family_records = [record for record in paired_records if record["family"] == family]
+            fam_delivery = _multiturn_pair(family_records, "full", "sharded")
+            fam_scripted = _multiturn_pair(family_records, "full", "scripted")
+            fam_self = {"sh_only": 0, "sc_only": 0}
+            for record in family_records:
+                if not _multiturn_verdict(record, "full"):
+                    continue
+                sharded = _multiturn_verdict(record, "sharded")
+                scripted = _multiturn_verdict(record, "scripted")
+                if scripted and not sharded:
+                    fam_self["sh_only"] += 1
+                elif sharded and not scripted:
+                    fam_self["sc_only"] += 1
+            per_family[family] = {
+                "n_paired": len(family_records),
+                "drift": fam_delivery["a_only"],
+                "gains": fam_delivery["b_only"],
+                "drift_scripted": fam_scripted["a_only"],
+                "sh_only": fam_self["sh_only"],
+                "sc_only": fam_self["sc_only"],
+            }
+        depths_out[str(depth)] = {
+            "n_defined": len(at_depth),
+            "n_paired": n_paired,
+            "completion": completion,
+            "passed": passed,
+            "pass_rates": rates,
+            "delivery": {
+                "drift": delivery["a_only"],
+                "gains": delivery["b_only"],
+                "both_pass": delivery["both_pass"],
+                "both_fail": delivery["both_fail"],
+                "mcnemar_p": _multiturn_mcnemar_p(delivery["a_only"], delivery["b_only"]),
+            },
+            "scripted_contrast": {
+                "drift": scripted_pair["a_only"],
+                "gains": scripted_pair["b_only"],
+                "both_pass": scripted_pair["both_pass"],
+                "both_fail": scripted_pair["both_fail"],
+                "mcnemar_p": _multiturn_mcnemar_p(scripted_pair["a_only"], scripted_pair["b_only"]),
+            },
+            "self_history": {
+                **self_history,
+                "net_excess": self_history["sh_only"] - self_history["sc_only"],
+                "mcnemar_p": _multiturn_mcnemar_p(self_history["sh_only"], self_history["sc_only"]),
+            },
+            "per_family": per_family,
+        }
+    return {
+        "depths": depths_out,
+        "classification": _multiturn_classify(depths_out),
+    }
+
+
+def _multiturn_digest_ok(value: Any) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _multiturn_cell_ok(cell: Any, arm: str, depth: int, expected: str) -> bool:
+    """One cell's shape and identities, including the verdict
+    binding ``verdict == (answer_digest == sha256(expected))
+    and boundary_found`` and, for the sharded arm, the turns
+    identities."""
+    if type(cell) is not dict:
+        return False
+    keys = set(cell)
+    if arm == "sharded":
+        if keys != _MULTITURN_CELL_KEYS | {
+            "intermediate_unbounded",
+            "intermediate_empty",
+            "turns",
+        }:
+            return False
+    elif keys != _MULTITURN_CELL_KEYS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _multiturn_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == _multiturn_digest(expected)) and cell["boundary_found"]
+    if cell["verdict"] != verdict:
+        return False
+    if arm == "sharded":
+        if type(cell["intermediate_unbounded"]) is not bool:
+            return False
+        if type(cell["intermediate_empty"]) is not bool:
+            return False
+        turns = cell["turns"]
+        if type(turns) is not list or len(turns) != depth:
+            return False
+        for entry in turns:
+            if type(entry) is not dict or set(entry) != {
+                "input_tokens",
+                "answer_digest",
+                "boundary_found",
+            }:
+                return False
+            if type(entry["input_tokens"]) is not int or entry["input_tokens"] < 0:
+                return False
+            if not _multiturn_digest_ok(entry["answer_digest"]):
+                return False
+            if type(entry["boundary_found"]) is not bool:
+                return False
+        last = turns[-1]
+        if (
+            last["input_tokens"] != cell["input_tokens"]
+            or last["answer_digest"] != cell["answer_digest"]
+            or last["boundary_found"] != cell["boundary_found"]
+        ):
+            return False
+        empty_digest = _multiturn_digest("")
+        if cell["intermediate_unbounded"] != any(
+            not entry["boundary_found"] for entry in turns[:-1]
+        ):
+            return False
+        if cell["intermediate_empty"] != any(
+            entry["answer_digest"] == empty_digest for entry in turns[:-1]
+        ):
+            return False
+    return True
+
+
+def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a multiturn payload from its ground records.
+
+    The protocol is rebuilt from this module's own literals and
+    the mirror generator (never imported from multiturn.py) and
+    compared whole; every record is checked against the
+    mirror-regenerated fixture; every cell's verdict is
+    re-derived from its digest identity; aggregates and
+    selection readouts are recomputed and compared.
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or type(backend_fingerprint) is not str:
+        return None
+    expected_protocol = _multiturn_protocol(seed, backend_fingerprint)
+    fingerprint = _hashlib.sha256(
+        _json.dumps(
+            expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+    expected_protocol["fingerprint"] = fingerprint
+    if protocol != expected_protocol:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _multiturn_generate(seed)
+    by_id = {fixture["fixture_id"]: fixture for fixture in generated}
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict or set(entry) != {
+            "status",
+            "detail",
+            "depths",
+            "classification",
+            "records",
+        }:
+            return None
+        if entry["status"] != "available" or entry["detail"] != "":
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > 12 * 1024 * 1024:
+            return None
+        seen: set[str] = set()
+        for record in records:
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "family",
+                "depth",
+                "group",
+                "shards",
+                "values",
+                "expected",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            fixture = by_id.get(record["fixture"])
+            if fixture is None or record["fixture"] in seen:
+                return None
+            seen.add(record["fixture"])
+            if (
+                record["family"] != fixture["family"]
+                or record["depth"] != fixture["depth"]
+                or record["group"] != "multiturn"
+                or record["shards"] != fixture["shards"]
+                or record["values"] != fixture["values"]
+                or record["expected"] != fixture["expected"]
+            ):
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_MULTITURN_ARMS):
+                return None
+            if type(details) is not dict or set(details) != set(_MULTITURN_ARMS):
+                return None
+            for arm in _MULTITURN_ARMS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _MULTITURN_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _multiturn_cell_ok(
+                        cell, arm, int(fixture["depth"]), str(fixture["expected"])
+                    ):
+                        return None
+        raw_records[name] = records
+        aggregates[name] = _multiturn_aggregate(records)
+    if total_records > 1152:
+        return None
+    # Selection readouts, recomputed with the analysis rule.
+    selections: dict[str, Any] = {}
+    for depth in _MULTITURN_DEPTHS:
+        selections[str(depth)] = {}
+        defined = {fixture["fixture_id"] for fixture in generated if fixture["depth"] == depth}
+        for arm in ("full", "sharded"):
+            completed_sets: list[frozenset[str]] = []
+            all_pass: dict[str, bool | None] = {}
+            withheld = False
+            for name in candidates:
+                completed = {
+                    record["fixture"]
+                    for record in raw_records[name]
+                    if record["depth"] == depth and _multiturn_cell(record, arm) is not None
+                }
+                completed_sets.append(frozenset(completed))
+                if completed != defined or not completed:
+                    withheld = True
+                    all_pass[name] = None
+                    continue
+                all_pass[name] = all(
+                    _multiturn_verdict(record, arm)
+                    for record in raw_records[name]
+                    if record["depth"] == depth and record["fixture"] in completed
+                )
+            if len(set(completed_sets)) > 1:
+                withheld = True
+            if withheld:
+                selections[str(depth)][arm] = {
+                    "decision": "unavailable",
+                    "detail": "selection_withheld_mismatched_sets",
+                    "winner": None,
+                    "withheld": True,
+                }
+                continue
+            passers = [n for n in candidates if all_pass[n]]
+            if len(passers) == 1:
+                decision, winner = "selected", passers[0]
+            elif len(passers) > 1:
+                decision, winner = "ambiguous", None
+            else:
+                decision, winner = "no_candidate", None
+            selections[str(depth)][arm] = {
+                "decision": decision,
+                "winner": winner,
+                "withheld": False,
+                "detail": "",
+            }
+    return {
+        "aggregates": aggregates,
+        "selections": selections,
+        "n_candidates": len(candidates),
+        "n_fixtures": len(generated),
+    }
+
+
+def _valid_multiturn(payload: Any) -> bool:
+    """Structural check for a ``multiturn`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "selections",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _multiturn_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("depths") != expected["depths"]:
+            return False
+        if entry.get("classification") != expected["classification"]:
+            return False
+    if payload.get("selections") != recomputed["selections"]:
+        return False
+    if payload.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(payload.get("n_fixtures") == recomputed["n_fixtures"])
+
+
+def diff_multiturn(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``multiturn`` probe payloads; deterministic.
+
+    Answers "did the multi-turn drift story change between
+    runs?": per-candidate classification drift, per-depth
+    sharded pass-rate and self-history pair drift, selection
+    readout drift, candidates added/removed, and protocol /
+    generator / backend drift (any of which marks the
+    comparison not comparable, with the drift still listed --
+    the generated set is the treatment, so a changed generator
+    is protocol drift). A side without a valid payload is
+    reported plainly.
+    """
+    old_ok = _valid_multiturn(old)
+    new_ok = _valid_multiturn(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    multiturn_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    multiturn_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    multiturn_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    multiturn_comparable = (
+        not multiturn_protocol_drift
+        and not multiturn_generator_drift
+        and not multiturn_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    multiturn_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    multiturn_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    multiturn_classification_drift: list[dict[str, Any]] = []
+    multiturn_depth_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                multiturn_classification_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        if old_entry.get("classification") != new_entry.get("classification"):
+            multiturn_classification_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "classification",
+                    "old": old_entry.get("classification"),
+                    "new": new_entry.get("classification"),
+                }
+            )
+        for depth in ("2", "3"):
+            old_block = old_entry["depths"][depth]
+            new_block = new_entry["depths"][depth]
+            if old_block["pass_rates"]["sharded"] != new_block["pass_rates"]["sharded"]:
+                multiturn_depth_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"depth_{depth}_sharded_rate",
+                        "old": old_block["pass_rates"]["sharded"],
+                        "new": new_block["pass_rates"]["sharded"],
+                    }
+                )
+            old_pair = (
+                old_block["self_history"]["sh_only"],
+                old_block["self_history"]["sc_only"],
+            )
+            new_pair = (
+                new_block["self_history"]["sh_only"],
+                new_block["self_history"]["sc_only"],
+            )
+            if old_pair != new_pair:
+                multiturn_depth_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"depth_{depth}_self_history_pair",
+                        "old": list(old_pair),
+                        "new": list(new_pair),
+                    }
+                )
+    multiturn_selection_drift: list[dict[str, Any]] = []
+    for depth in ("2", "3"):
+        for arm in ("full", "sharded"):
+            if old["selections"][depth][arm] != new["selections"][depth][arm]:
+                multiturn_selection_drift.append(
+                    {
+                        "depth": depth,
+                        "arm": arm,
+                        "old": old["selections"][depth][arm],
+                        "new": new["selections"][depth][arm],
+                    }
+                )
+    result["classification_drift"] = multiturn_classification_drift
+    result["depth_drift"] = multiturn_depth_drift
+    result["selection_drift"] = multiturn_selection_drift
+    result["candidates_added"] = multiturn_candidates_added
+    result["candidates_removed"] = multiturn_candidates_removed
+    result["protocol_drift"] = multiturn_protocol_drift
+    result["generator_drift"] = multiturn_generator_drift
+    result["backend_drift"] = multiturn_backend_drift
+    result["comparable"] = multiturn_comparable
+    result["changed"] = bool(
+        multiturn_classification_drift
+        or multiturn_depth_drift
+        or multiturn_selection_drift
+        or multiturn_candidates_added
+        or multiturn_candidates_removed
+        or multiturn_protocol_drift
+        or multiturn_generator_drift
+        or multiturn_backend_drift
     )
     return result
 

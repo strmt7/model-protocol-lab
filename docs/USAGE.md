@@ -2002,6 +2002,87 @@ states the count before the run. The full contract is in
 never affects selection, and the stage never fails the
 run.
 
+### 8.44 Multi-turn drift (`multiturn`)
+
+Opt-in with `model-protocol-lab run --multiturn`. A
+generation stage over fixtures the probe generates itself
+from the run seed — two task families whose answers are
+computed, not judged: ledger sums (signed entries stated
+one per shard; the total is asked on the final shard) and
+shelf argmax (per-shelf unit counts; the fullest shelf's
+label is asked), at depths 2 and 3, twelve fixtures per
+family and depth. Each fixture runs in three arms: `full`
+(every shard in one user message, one generation),
+`sharded` (one shard per turn, the model's own
+boundary-cut replies incorporated verbatim as the
+history), and `scripted` (the same turn structure with a
+frozen `Noted.` reply at every intermediate turn). Only
+the final turn is scored. Monday-morning use: if your
+product serves multi-turn conversations, this tells you —
+per template family, on your own checkpoint — whether a
+task the model passes in one shot starts failing once its
+own earlier replies are the history, separated from the
+generic effect of merely having history at all, so a
+chat-shaped deployment risk is measured before your users
+find it.
+
+The comparison that carries the claim is the
+self-history discordant pair, over fixtures the `full`
+arm passed: `sh_only` counts fixtures the sharded arm
+fails while the scripted arm passes, `sc_only` the
+reverse, and the pair is always reported together with
+its denominators — the scripted arm holds turn count,
+message framing, and approximate history length constant,
+so the pair attributes the bundle of self-generated
+content (its wording, length, and tokenization under the
+candidate's own template), never self-authorship alone.
+Beside it sit the two delivery 2×2 tables (full against
+sharded, full against scripted) with a McNemar exact
+p-value as a diagnostic only, per-family counts beside
+the pooled ones, and per-arm pass rates and completion
+counts with an attrition breakdown — a cell that degrades
+(context exceeded, evaluation failed, or screened out)
+leaves the paired set and is counted, never silently
+dropped. The classification is a total function over the
+paired counts with floors (six paired fixtures, two
+discordants): `self_history_drift` requires the sharded
+side to dominate the scripted side, scripted-side or
+balanced discordance at the same bar reads
+`framing_only`, anything smaller reads `below_threshold`
+or, with no evaluable depth, `insufficient_evidence`.
+
+Two edge rules are pre-registered. A generated reply
+that contains one of the candidate format's own
+special-token literals is token-real — it would forge a
+turn boundary in any real transcript — so the cell ends
+there as `arm_screened` and leaves the paired set rather
+than letting forged structure into later prompts. An
+intermediate reply with no boundary, or an empty one,
+still becomes history (that is what the model produced)
+and is flagged on the cell. There is deliberately no
+cross-depth recovery statistic: depth changes the task
+set itself, so a "recovery rate" across depths would
+divide answers to one set of generated tasks by answers
+to another. Selection readouts are recomputed for the
+`full` and `sharded` arms and withheld whenever any
+candidate's completed set is not the defined set.
+Records carry answer digests only, and `diff-reports`
+regenerates the fixture set from the protocol seed with
+its own generator mirror and recomputes every aggregate
+before comparing (`diff_multiturn`, `multiturn_changed` /
+`multiturn_asymmetric` feed `identical`), so a stored
+readout nobody can re-derive fails validation outright.
+Multiturn cells sit outside `verify --determinism`
+scope: a sharded history is whatever the model happened
+to generate, so token-exact re-execution is not the
+contract. Cost: candidates × (24×4 + 24×5) generations
+(5,184 at the legal maximum); the CLI help states the
+count before the run. The full contract, including the
+incorporation policy and the red-team adjudication, is
+in `docs/MULTITURN_DESIGN.md`. Informational only: the
+probe never affects selection, and the stage never fails
+the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -2379,7 +2460,7 @@ stage -- `perturbation`, `token_healing`, `hierarchy`, `prefill`,
 `portfolio`, `synthhistory`, `batch_invariance`, `position`,
 `stop_cause`, `ws_canonical`, `structured`, `deliforge`, `fewshot`,
 `faketurn`, `toolcall`, `verbosity`, `refusals`, `scorerlens`, `aliasing`, `repetition`,
-`distraction`, `leading`, `numform`, `dateline`, `cache_profile`,
+`distraction`, `leading`, `numform`, `dateline`, `multiturn`, `cache_profile`,
 `template_robustness`, `ablation`, `confidentiality`,
 `answer_collision` -- each carrying that stage's verdict drift and
 per-candidate drift, with the stage's own section in section 8

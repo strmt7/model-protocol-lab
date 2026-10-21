@@ -4438,6 +4438,274 @@ def oracle_diff_reports(
         worst = max(rates, key=lambda name: (float(rates[name]), name))
         return value.get("worst_candidate") == worst
 
+    def _or_multiturn_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_multiturn: exact top-level
+        # shape, the protocol rebuilt through the producer
+        # module (multiturn) where the implementation rebuilds
+        # it from literal tables, every record checked against
+        # the producer-regenerated fixture set, every cell's
+        # verdict re-derived from its digest identity, the
+        # sharded turns identities checked, aggregates and
+        # selection readouts recomputed. A drift in either
+        # side's constants breaks the agreement.
+        import hashlib as _hashlib
+        import json as _json
+
+        from model_protocol_lab import multiturn as _mt
+
+        _details = {
+            "arm_context_exceeded",
+            "arm_evaluation_failed",
+            "arm_screened",
+        }
+        _arms = ("full", "sharded", "scripted")
+        _cell_keys = {
+            "verdict",
+            "boundary_found",
+            "boundary_text_match",
+            "input_tokens",
+            "answer_digest",
+        }
+        _hex = frozenset("0123456789abcdef")
+
+        def _digest_ok(item: Any) -> bool:
+            return type(item) is str and len(item) == 64 and all(c in _hex for c in item)
+
+        def _cell_ok(
+            cell: Any, arm: str, depth: int, expected_digest: str, empty_digest: str
+        ) -> bool:
+            if type(cell) is not dict:
+                return False
+            keys = set(cell)
+            if arm == "sharded":
+                if keys != _cell_keys | {
+                    "intermediate_unbounded",
+                    "intermediate_empty",
+                    "turns",
+                }:
+                    return False
+            elif keys != _cell_keys:
+                return False
+            if type(cell["verdict"]) is not bool:
+                return False
+            if type(cell["boundary_found"]) is not bool:
+                return False
+            if cell["boundary_text_match"] not in (True, False, None):
+                return False
+            if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+                return False
+            if not _digest_ok(cell["answer_digest"]):
+                return False
+            if cell["verdict"] != bool(
+                cell["answer_digest"] == expected_digest and cell["boundary_found"]
+            ):
+                return False
+            if arm == "sharded":
+                if type(cell["intermediate_unbounded"]) is not bool:
+                    return False
+                if type(cell["intermediate_empty"]) is not bool:
+                    return False
+                turns = cell["turns"]
+                if type(turns) is not list or len(turns) != depth:
+                    return False
+                for entry in turns:
+                    if type(entry) is not dict or set(entry) != {
+                        "input_tokens",
+                        "answer_digest",
+                        "boundary_found",
+                    }:
+                        return False
+                    if type(entry["input_tokens"]) is not int or entry["input_tokens"] < 0:
+                        return False
+                    if not _digest_ok(entry["answer_digest"]):
+                        return False
+                    if type(entry["boundary_found"]) is not bool:
+                        return False
+                last = turns[-1]
+                if (
+                    last["input_tokens"] != cell["input_tokens"]
+                    or last["answer_digest"] != cell["answer_digest"]
+                    or last["boundary_found"] != cell["boundary_found"]
+                ):
+                    return False
+                if cell["intermediate_unbounded"] != any(
+                    not e["boundary_found"] for e in turns[:-1]
+                ):
+                    return False
+                if cell["intermediate_empty"] != any(
+                    e["answer_digest"] == empty_digest for e in turns[:-1]
+                ):
+                    return False
+            return True
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "selections",
+            "n_candidates",
+            "n_fixtures",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_mt.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _mt.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _mt.generate_fixtures(seed)
+        by_id = {f["fixture_id"]: f for f in generated}
+        empty_digest = _hashlib.sha256(b"").hexdigest()
+        total = 0
+        records_bytes = 0
+        raw: dict = {}
+        for name, entry in candidates.items():
+            if type(entry) is not dict or set(entry) != {
+                "status",
+                "detail",
+                "depths",
+                "classification",
+                "records",
+            }:
+                return False
+            if entry["status"] != "available" or entry["detail"] != "":
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _mt.MAX_RECORDS_BYTES:
+                return False
+            seen: set = set()
+            for record in records:
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "family",
+                    "depth",
+                    "group",
+                    "shards",
+                    "values",
+                    "expected",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                fixture = by_id.get(record["fixture"])
+                if fixture is None or record["fixture"] in seen:
+                    return False
+                seen.add(record["fixture"])
+                if (
+                    record["family"] != fixture["family"]
+                    or record["depth"] != fixture["depth"]
+                    or record["group"] != "multiturn"
+                    or record["shards"] != fixture["shards"]
+                    or record["values"] != fixture["values"]
+                    or record["expected"] != fixture["expected"]
+                ):
+                    return False
+                cells = record["cells"]
+                details = record["cell_details"]
+                if type(cells) is not dict or set(cells) != set(_arms):
+                    return False
+                if type(details) is not dict or set(details) != set(_arms):
+                    return False
+                expected_digest = _hashlib.sha256(
+                    str(fixture["expected"]).encode("utf-8")
+                ).hexdigest()
+                for arm in _arms:
+                    cell = cells[arm]
+                    detail = details[arm]
+                    if cell is None:
+                        if detail not in _details:
+                            return False
+                    else:
+                        if detail != "":
+                            return False
+                        if not _cell_ok(
+                            cell,
+                            arm,
+                            int(fixture["depth"]),
+                            expected_digest,
+                            empty_digest,
+                        ):
+                            return False
+            raw[name] = records
+            aggregates = _mt.aggregate_candidate(records)
+            if entry["depths"] != aggregates["depths"]:
+                return False
+            if entry["classification"] != aggregates["classification"]:
+                return False
+        if total > 1152:
+            return False
+        selections: dict = {}
+        for depth in _mt.DEPTHS:
+            selections[str(depth)] = {}
+            defined = {f["fixture_id"] for f in generated if f["depth"] == depth}
+            for arm in ("full", "sharded"):
+                completed_sets: list = []
+                all_pass: dict = {}
+                withheld = False
+                for name in candidates:
+                    completed = {
+                        r["fixture"]
+                        for r in raw[name]
+                        if r["depth"] == depth and type(r["cells"][arm]) is dict
+                    }
+                    completed_sets.append(frozenset(completed))
+                    if completed != defined or not completed:
+                        withheld = True
+                        all_pass[name] = None
+                        continue
+                    all_pass[name] = all(
+                        bool(r["cells"][arm]["verdict"])
+                        for r in raw[name]
+                        if r["depth"] == depth and r["fixture"] in completed
+                    )
+                if len(set(completed_sets)) > 1:
+                    withheld = True
+                if withheld:
+                    selections[str(depth)][arm] = {
+                        "decision": "unavailable",
+                        "detail": "selection_withheld_mismatched_sets",
+                        "winner": None,
+                        "withheld": True,
+                    }
+                    continue
+                passers = [n for n in candidates if all_pass[n]]
+                if len(passers) == 1:
+                    decision, winner = "selected", passers[0]
+                elif len(passers) > 1:
+                    decision, winner = "ambiguous", None
+                else:
+                    decision, winner = "no_candidate", None
+                selections[str(depth)][arm] = {
+                    "decision": decision,
+                    "winner": winner,
+                    "withheld": False,
+                    "detail": "",
+                }
+        if value.get("selections") != selections:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_fixtures") == len(generated))
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -4822,6 +5090,18 @@ def oracle_diff_reports(
         _o_dt_available = "neither"
     _o_dt_asymmetric = _o_dt_available not in ("both", "neither")
 
+    _mt_old_ok = _or_multiturn_valid(old.get("multiturn"))
+    _mt_new_ok = _or_multiturn_valid(new.get("multiturn"))
+    if _mt_old_ok and _mt_new_ok:
+        _o_mt_available = "both"
+    elif _mt_old_ok:
+        _o_mt_available = "old"
+    elif _mt_new_ok:
+        _o_mt_available = "new"
+    else:
+        _o_mt_available = "neither"
+    _o_mt_asymmetric = _o_mt_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -4893,6 +5173,7 @@ def oracle_diff_reports(
         and not _o_lead_asymmetric
         and not _o_nf_asymmetric
         and not _o_dt_asymmetric
+        and not _o_mt_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -4966,6 +5247,8 @@ def oracle_diff_reports(
         "numform_asymmetric": _o_nf_asymmetric,
         "dateline_changed": False,
         "dateline_asymmetric": _o_dt_asymmetric,
+        "multiturn_changed": False,
+        "multiturn_asymmetric": _o_mt_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -5014,6 +5297,7 @@ def oracle_diff_reports(
         "leading": {"available": _o_lead_available, "changed": False},
         "numform": {"available": _o_nf_available, "changed": False},
         "dateline": {"available": _o_dt_available, "changed": False},
+        "multiturn": {"available": _o_mt_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

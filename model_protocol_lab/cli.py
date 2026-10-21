@@ -557,6 +557,29 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--multiturn",
+        action="store_true",
+        help="Multi-turn drift probe (cycle 189, research wave-8 "
+        "rank 2): generated shard tasks (ledger sums, shelf "
+        "argmax; depths 2 and 3; 48 fixtures from the run seed) "
+        "are delivered three ways per candidate -- all shards in "
+        "one user turn, one shard per turn with the model's own "
+        "boundary-cut replies as history, and one shard per turn "
+        "with a frozen 'Noted.' history -- and only the final "
+        "turn is scored. Monday morning: 'does the template I "
+        "picked still win when the model's own earlier replies "
+        "become the history?' Costs candidates x (24x4 + 24x5) "
+        "generations (5,184 at the legal maximum); prompt cost "
+        "grows every turn because each sharded turn re-renders "
+        "the whole history. Intermediate replies are screened "
+        "for special-token literals before they become history. "
+        "The sharded-vs-scripted contrast is reported as a "
+        "discordant pair (a bundle of authorship, content, and "
+        "length), never a net-only difference. Informational "
+        "only; never touches selection. The stage never fails "
+        "the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1587,6 +1610,50 @@ def _run_leading_probe(
         result["leading"] = {
             "available": False,
             "detail": "leading_unavailable",
+        }
+
+
+def _run_multiturn_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the multi-turn drift probe; never raises.
+
+    The probe is self-contained: its fixtures are generated
+    from the run seed, so -- unlike the native-arm probes -- it
+    consults neither the recorded search nor the primary
+    decision, and a failed user run cannot silently suppress
+    it. The run's cancel event is threaded dispatch -> wrapper
+    -> stage -> evaluate, so SIGINT/SIGTERM stop the stage
+    cooperatively.
+    """
+    try:
+        from .experiments import multiturn_analysis, multiturn_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = multiturn_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["multiturn"] = multiturn_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- multiturn must not fail the run
+        result["multiturn"] = {
+            "available": False,
+            "detail": "multiturn_unavailable",
         }
 
 
@@ -3149,6 +3216,25 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Multi-turn drift probe (cycle 189, research
+                # wave-8 rank 2): generated shard fixtures in
+                # full/sharded/scripted arms, self-generated
+                # history screened before incorporation, the
+                # run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.multiturn:
+                    _run_multiturn_probe(
+                        backend,
+                        formats,
+                        result,
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
