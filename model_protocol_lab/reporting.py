@@ -6158,6 +6158,180 @@ def _leading_section(result: dict[str, Any]) -> str:
     )
 
 
+def _numform_section(result: dict[str, Any]) -> str:
+    """Numeric surface-form probe: written form per template.
+
+    Renders the ``numform`` payload (see
+    experiments.numform_analysis): per candidate, task, and
+    form, exact pass counts with the value/form decomposition,
+    and the paired form contrasts over the values completed in
+    both forms. The scope is stated in the quantity's
+    definition, not a footnote: generated integer tasks,
+    isolated operands, one frozen zero-shot wording, this
+    checkpoint. The tokenizer grouping is a run-level label
+    (one backend per run), never a within-run correlation, and
+    an ``unknown`` classification suppresses every grouping
+    sentence beyond the label itself. Every interpolation is
+    escaped at this boundary.
+    """
+    probe: Any = result.get("numform")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    grouping = probe.get("grouping")
+    grouping_line = ""
+    if type(grouping) is dict:
+        classification = grouping.get("classification")
+        if classification == "unknown":
+            grouping_line = (
+                "<p>Tokenizer digit grouping: <strong>unknown</strong> "
+                "-- the probe battery's counts match no frozen class, "
+                "so no grouping reading is offered; the per-form "
+                "counts below do not depend on the label.</p>"
+            )
+        elif type(classification) is str and classification:
+            grouping_line = (
+                "<p>Tokenizer digit grouping (measured on the "
+                "attached tokenizer, one label for the whole run): "
+                f"<strong>{escape(classification)}</strong>. The "
+                "label describes this run only; a grouping claim "
+                "across tokenizers needs a cross-run diff of "
+                "different checkpoints, which confounds weights "
+                "with tokenizer.</p>"
+            )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        aggregates = entry.get("aggregates")
+        contrasts = entry.get("contrasts")
+        task_bits: list[str] = []
+        if type(aggregates) is dict:
+            for task in ("copy", "compare", "add"):
+                forms = aggregates.get(task)
+                if type(forms) is not dict:
+                    continue
+                form_bits: list[str] = []
+                for form in ("plain", "comma", "space", "scientific"):
+                    agg = forms.get(form)
+                    if type(agg) is not dict:
+                        continue
+                    decomposition = agg.get("decomposition")
+                    decomp_bit = ""
+                    if type(decomposition) is dict and decomposition:
+                        if task == "compare":
+                            decomp_bit = (
+                                " (wrong label "
+                                + _count(decomposition.get("wrong_label"))
+                                + ", non-label "
+                                + _count(decomposition.get("non_label"))
+                                + ")"
+                            )
+                        else:
+                            decomp_bit = (
+                                " (right value, wrong form "
+                                + _count(decomposition.get("value_pass_form_fail"))
+                                + ", wrong value "
+                                + _count(decomposition.get("value_fail"))
+                                + ")"
+                            )
+                    form_bits.append(
+                        escape(form)
+                        + " "
+                        + _count(agg.get("n_exact"))
+                        + "/"
+                        + _count(agg.get("n_completed"))
+                        + " ("
+                        + _rate(agg.get("exact_rate"))
+                        + ")"
+                        + decomp_bit
+                    )
+                contrast_bits: list[str] = []
+                if type(contrasts) is dict:
+                    task_contrasts = contrasts.get(task)
+                    if type(task_contrasts) is dict:
+                        for pair in sorted(task_contrasts, key=str):
+                            block = task_contrasts[pair]
+                            if type(block) is not dict:
+                                continue
+                            contrast_bits.append(
+                                escape(pair.replace("__", " vs "))
+                                + ": "
+                                + escape(str(block.get("classification")))
+                                + " (paired "
+                                + _count(block.get("n_paired"))
+                                + ", discordant "
+                                + _count(block.get("n_pass_a_only"))
+                                + "/"
+                                + _count(block.get("n_pass_b_only"))
+                                + ")"
+                            )
+                task_bits.append(
+                    "<div><strong>"
+                    + escape(task)
+                    + "</strong> — "
+                    + "; ".join(form_bits)
+                    + ("<br>contrasts: " + "; ".join(contrast_bits) if contrast_bits else "")
+                    + "</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(task_bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="numform">'
+        "<h2>Numeric surface form</h2>"
+        "<p>The same generated integers, written four ways -- "
+        "plain, comma-grouped (3-3-3), space-grouped (U+202F), "
+        "scientific -- across copy, compare, and add tasks, "
+        "with the expected answer in the operands' form (for "
+        "compare the answer is the word <em>first</em> or "
+        "<em>second</em>, the one arm where the scorer cannot "
+        "be a form confound). A pass is the right value, in "
+        "the requested form, with the response boundary found; "
+        "the decomposition separates <em>right value, wrong "
+        "form</em> from <em>wrong value</em>, and only the "
+        "wrong-value class licenses an arithmetic reading. "
+        "Rates are per task and never pooled; the headline is "
+        "the paired contrast over the values completed in both "
+        "forms, and a contrast of <em>no_difference_observed</em> "
+        "across the board is a publishable result: "
+        "normalisation does not matter here. Generated integer "
+        "tasks with isolated operands, one frozen zero-shot "
+        "wording, this checkpoint -- a probe, not a numeracy "
+        "benchmark, and no selection is derived from the "
+        "synthetic set.</p>"
+        + grouping_line
+        + "<table><thead><tr><th>Candidate</th><th>Exact passes "
+        "by task and form, with paired contrasts</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7481,6 +7655,7 @@ def render_html(result: dict[str, Any]) -> str:
     repetition_html = _repetition_section(result)
     distraction_html = _distraction_section(result)
     leading_html = _leading_section(result)
+    numform_html = _numform_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7620,6 +7795,11 @@ def render_html(result: dict[str, Any]) -> str:
                 leading_html,
             ),
             (
+                "numform",
+                "Numeric surface form",
+                numform_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -7708,6 +7888,7 @@ def render_html(result: dict[str, Any]) -> str:
         + repetition_html
         + distraction_html
         + leading_html
+        + numform_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

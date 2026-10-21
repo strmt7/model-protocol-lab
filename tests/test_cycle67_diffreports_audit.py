@@ -147,6 +147,7 @@ from model_protocol_lab import (
     distraction,
     experiments,
     leading,
+    numform,
     refusals,
     repetition,
     scorerlens,
@@ -273,6 +274,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "repetition": {"available": "neither", "changed": False},
         "distraction": {"available": "neither", "changed": False},
         "leading": {"available": "neither", "changed": False},
+        "numform": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -350,6 +352,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "distraction_asymmetric": False,
             "leading_changed": False,
             "leading_asymmetric": False,
+            "numform_changed": False,
+            "numform_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -3907,6 +3911,468 @@ def _o_leading(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+_O_NF_TASKS = ("copy", "compare", "add")
+_O_NF_FORMS = ("plain", "comma", "space", "scientific")
+_O_NF_BANDS = ((1, 3), (4, 6), (7, 9), (10, 12))
+_O_NF_DETAILS = (
+    "",
+    "arm_context_exceeded",
+    "answer_budget_exceeded",
+    "form_not_in_render",
+    "arm_evaluation_failed",
+)
+_O_NF_RECORD_KEYS = {
+    "task",
+    "value_id",
+    "form",
+    "band",
+    "stratum",
+    "operands",
+    "expected_value",
+    "expected_answer",
+    "form_identical",
+    "expected_answer_tokens",
+    "answer_value",
+    "cell",
+    "detail",
+}
+_O_NF_CELL_KEYS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_O_NF_PAIRS = (
+    ("plain", "comma"),
+    ("plain", "space"),
+    ("plain", "scientific"),
+    ("comma", "space"),
+    ("comma", "scientific"),
+    ("space", "scientific"),
+)
+_O_NF_HEX = frozenset("0123456789abcdef")
+
+
+def _o_nf_int_ok(value: Any) -> bool:
+    return type(value) is int and not isinstance(value, bool) and value >= 0
+
+
+def _o_nf_is_round(value: int) -> bool:
+    digits = str(value)
+    if value < 10:
+        return False
+    return digits == "1" + "0" * (len(digits) - 1) or digits == "9" * len(digits)
+
+
+def _o_nf_record(record: Any) -> tuple[Any, ...] | None:
+    """Oracle numform record construction, via the producer
+    module's renderers and classifiers (the implementation's
+    validator carries its own copies; agreement is the check)."""
+    if type(record) is not dict or set(record) != _O_NF_RECORD_KEYS:
+        return None
+    task = record["task"]
+    form = record["form"]
+    if task not in _O_NF_TASKS or form not in _O_NF_FORMS:
+        return None
+    value_id = record["value_id"]
+    if (
+        type(value_id) is not str
+        or not value_id.startswith(f"nf-{task}-")
+        or len(value_id) != len(task) + 6
+        or not value_id[-2:].isdigit()
+        or int(value_id[-2:]) >= 16
+    ):
+        return None
+    operands = record["operands"]
+    if type(operands) is not list or len(operands) != (1 if task == "copy" else 2):
+        return None
+    if any(type(v) is not int or isinstance(v, bool) or v < 0 or v >= 10**12 for v in operands):
+        return None
+    expected_value = record["expected_value"]
+    if type(expected_value) is not int or isinstance(expected_value, bool):
+        return None
+    if task == "copy" and expected_value != operands[0]:
+        return None
+    if task == "add" and expected_value != operands[0] + operands[1]:
+        return None
+    if task == "compare" and expected_value != max(operands):
+        return None
+    expected_answer = record["expected_answer"]
+    if type(expected_answer) is not str:
+        return None
+    if task == "compare":
+        if operands[0] == operands[1]:
+            return None
+        if expected_answer != ("first" if operands[0] > operands[1] else "second"):
+            return None
+    elif expected_answer != numform.render_form(expected_value, form):
+        return None
+    band = record["band"]
+    max_length = len(str(max(operands)))
+    if (
+        type(band) is not int
+        or isinstance(band, bool)
+        or not 0 <= band < len(_O_NF_BANDS)
+        or not _O_NF_BANDS[band][0] <= max_length <= _O_NF_BANDS[band][1]
+    ):
+        return None
+    stratum = record["stratum"]
+    if task == "copy":
+        if stratum != ("round" if _o_nf_is_round(operands[0]) else "random"):
+            return None
+    elif task == "compare":
+        if stratum != numform.margin_class(operands[0], operands[1]):
+            return None
+        if stratum in ("same_length_middle", "equal"):
+            return None
+    elif stratum != numform.carry_class(operands[0], operands[1]):
+        return None
+    form_identical = record["form_identical"]
+    if type(form_identical) is not bool:
+        return None
+    if form_identical != all(
+        numform.render_form(v, form) == numform.render_form(v, "plain") for v in operands
+    ):
+        return None
+    if not _o_nf_int_ok(record["expected_answer_tokens"]):
+        return None
+    answer_value = record["answer_value"]
+    if answer_value is not None and (
+        type(answer_value) is not int or isinstance(answer_value, bool) or answer_value < 0
+    ):
+        return None
+    if task == "compare" and answer_value is not None:
+        return None
+    detail = record["detail"]
+    if detail not in _O_NF_DETAILS:
+        return None
+    cell = record["cell"]
+    if (cell is None) != (detail != ""):
+        return None
+    if cell is not None:
+        if type(cell) is not dict or set(cell) != _O_NF_CELL_KEYS:
+            return None
+        if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+            return None
+        if cell["boundary_text_match"] not in (True, False, None):
+            return None
+        if not _o_nf_int_ok(cell["input_tokens"]):
+            return None
+        digest = cell["answer_digest"]
+        if (
+            type(digest) is not str
+            or len(digest) != 64
+            or any(char not in _O_NF_HEX for char in digest)
+        ):
+            return None
+        expected_digest = hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
+        if cell["verdict"] != bool(digest == expected_digest and cell["boundary_found"]):
+            return None
+        if (
+            task != "compare"
+            and digest == expected_digest
+            and answer_value is not None
+            and answer_value != expected_value
+        ):
+            return None
+    return (
+        task,
+        value_id,
+        form,
+        band,
+        stratum,
+        tuple(operands),
+        expected_value,
+        expected_answer,
+        form_identical,
+    )
+
+
+def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle numform recompute: mirrors diffreports._numform_recompute."""
+    if type(value) is not dict:
+        return None
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(backend_fingerprint) is not str or not backend_fingerprint:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if value.get("n_candidates") != len(candidates):
+        return None
+    construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+    available_names: list[str] = []
+    total_records = 0
+    all_records: dict[str, list[dict[str, Any]]] = {}
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available":
+            return None
+        if set(entry) != {"status", "detail", "records", "aggregates", "contrasts"}:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) > 192:
+            return None
+        available_names.append(name)
+        all_records[name] = records
+        total_records += len(records)
+        seen: set[tuple[str, str, str]] = set()
+        for record in records:
+            built = _o_nf_record(record)
+            if built is None:
+                return None
+            key = (str(record["task"]), str(record["value_id"]), str(record["form"]))
+            if key in seen:
+                return None
+            seen.add(key)
+            prior = construction.get(key)
+            if prior is None:
+                construction[key] = built
+            elif prior != built:
+                return None
+        expected_keys = {
+            (task, f"nf-{task}-{index:02d}", form)
+            for task in _O_NF_TASKS
+            for index in range(16)
+            for form in _O_NF_FORMS
+        }
+        if seen != expected_keys:
+            return None
+    if not available_names or total_records > 4608:
+        return None
+    if (
+        len(json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+        > 12 * 1024 * 1024
+    ):
+        return None
+    first_records = all_records[available_names[0]]
+    by_entry: dict[tuple[str, str], dict[str, Any]] = {}
+    for record in first_records:
+        by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
+    rows: list[list[Any]] = []
+    for task in _O_NF_TASKS:
+        for index in range(16):
+            value_id = f"nf-{task}-{index:02d}"
+            forms_map = by_entry.get((task, value_id))
+            if forms_map is None or set(forms_map) != set(_O_NF_FORMS):
+                return None
+            plain = forms_map["plain"]
+            rows.append(
+                [
+                    task,
+                    value_id,
+                    list(plain["operands"]),
+                    plain["expected_value"],
+                    [forms_map[form]["expected_answer"] for form in _O_NF_FORMS],
+                ]
+            )
+    generator_sha = hashlib.sha256(
+        json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    expected_protocol = dict(numform.protocol_object(seed, backend_fingerprint))
+    expected_protocol["generator_sha256"] = generator_sha
+    if protocol != {**expected_protocol, "fingerprint": protocol.get("fingerprint")}:
+        return None
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+    if protocol.get("fingerprint") != fingerprint:
+        return None
+    grouping = value.get("grouping")
+    if type(grouping) is not dict or set(grouping) != {
+        "classification",
+        "evidence",
+        "form_token_means",
+        "token_deltas_vs_plain",
+    }:
+        return None
+    evidence = grouping["evidence"]
+    if type(evidence) is not dict:
+        return None
+    if evidence and set(evidence) != set(numform.probe_strings()):
+        return None
+    if any(
+        type(count) is not int or isinstance(count, bool) or count < 0
+        for count in evidence.values()
+    ):
+        return None
+    if grouping["classification"] != numform.classify_grouping(evidence):
+        return None
+    means = grouping["form_token_means"]
+    deltas = grouping["token_deltas_vs_plain"]
+    if type(means) is not dict or set(means) != set(_O_NF_FORMS):
+        return None
+    if type(deltas) is not dict or set(deltas) != set(_O_NF_FORMS):
+        return None
+    for form in _O_NF_FORMS:
+        mean = means[form]
+        delta = deltas[form]
+        if (mean is None) != (delta is None):
+            return None
+        if mean is not None and (
+            type(mean) not in (int, float) or isinstance(mean, bool) or mean < 0
+        ):
+            return None
+        if delta is not None and (type(delta) not in (int, float) or isinstance(delta, bool)):
+            return None
+    if deltas["plain"] is not None and deltas["plain"] != 0:
+        return None
+    aggregates: dict[str, Any] = {}
+    for name in available_names:
+        records = all_records[name]
+        aggregates[name] = {
+            "aggregates": {
+                task: {form: numform.aggregate_records(records, task, form) for form in _O_NF_FORMS}
+                for task in _O_NF_TASKS
+            },
+            "contrasts": {
+                task: {
+                    f"{form_a}__{form_b}": numform.paired_contrast(records, task, form_a, form_b)
+                    for form_a, form_b in _O_NF_PAIRS
+                }
+                for task in _O_NF_TASKS
+            },
+        }
+    return {"aggregates": aggregates, "n_candidates": len(candidates)}
+
+
+def _o_numform_valid(value: Any) -> bool:
+    """Oracle numform validator: mirrors diffreports._valid_numform."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "grouping",
+        "candidates",
+        "n_candidates",
+    }:
+        return False
+    recomputed = _o_numform_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("aggregates") != expected["aggregates"]:
+            return False
+        if entry.get("contrasts") != expected["contrasts"]:
+            return False
+    return bool(value.get("n_candidates") == recomputed["n_candidates"])
+
+
+def _o_numform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle numform section: rate/contrast drift + protocol gates."""
+    old_ok = _o_numform_valid(old)
+    new_ok = _o_numform_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("generator_sha256") != new["protocol"].get(
+        "generator_sha256"
+    )
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    grouping_changed = old.get("grouping", {}).get("classification") != new.get("grouping", {}).get(
+        "classification"
+    ) or old.get("grouping", {}).get("evidence") != new.get("grouping", {}).get("evidence")
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    rate_drift: list[dict[str, Any]] = []
+    contrast_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                rate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        for task in _O_NF_TASKS:
+            for form in _O_NF_FORMS:
+                old_rate = old_entry["aggregates"][task][form]["exact_rate"]
+                new_rate = new_entry["aggregates"][task][form]["exact_rate"]
+                if old_rate != new_rate:
+                    rate_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{task}_{form}_exact_rate",
+                            "old": old_rate,
+                            "new": new_rate,
+                        }
+                    )
+            for pair_key in old_entry["contrasts"][task]:
+                old_label = old_entry["contrasts"][task][pair_key]["classification"]
+                new_label = new_entry["contrasts"][task][pair_key]["classification"]
+                if old_label != new_label:
+                    contrast_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{task}_{pair_key}_classification",
+                            "old": old_label,
+                            "new": new_label,
+                        }
+                    )
+    diff["rate_drift"] = rate_drift
+    diff["contrast_drift"] = contrast_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["grouping_changed"] = grouping_changed
+    diff["comparable"] = comparable
+    changed = bool(
+        rate_drift
+        or contrast_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+        or grouping_changed
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -6029,6 +6495,7 @@ def _oracle_diff(
         old.get("distraction"), new.get("distraction")
     )
     o_lead, o_lead_changed, o_lead_asymmetric = _o_leading(old.get("leading"), new.get("leading"))
+    o_nf, o_nf_changed, o_nf_asymmetric = _o_numform(old.get("numform"), new.get("numform"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -6103,6 +6570,10 @@ def _oracle_diff(
         and not o_rep_asymmetric
         and not o_dst_changed
         and not o_dst_asymmetric
+        and not o_lead_changed
+        and not o_lead_asymmetric
+        and not o_nf_changed
+        and not o_nf_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -6148,6 +6619,7 @@ def _oracle_diff(
         "repetition": o_rep,
         "distraction": o_dst,
         "leading": o_lead,
+        "numform": o_nf,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -6221,6 +6693,8 @@ def _oracle_diff(
             "distraction_asymmetric": o_dst_asymmetric,
             "leading_changed": o_lead_changed,
             "leading_asymmetric": o_lead_asymmetric,
+            "numform_changed": o_nf_changed,
+            "numform_asymmetric": o_nf_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -7142,6 +7616,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "distraction_asymmetric": False,
                 "leading_changed": False,
                 "leading_asymmetric": False,
+                "numform_changed": False,
+                "numform_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -8430,6 +8906,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["distraction"] = _fuzz_distraction_section(rng)
         report["leading"] = _fuzz_leading_section(rng)
     if rng.random() < 0.45:
+        report["numform"] = _fuzz_numform_section(rng)
+    if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
@@ -9434,6 +9912,141 @@ def _fuzz_leading_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzNumformBackend:
+    """Word-token scripted backend for the numform fuzz builder.
+
+    Answers the generated tasks by rule in one of four modes
+    (faithful / plain-normalising / off-by-one / label-flipping)
+    so coherent payloads exercise the full decomposition range.
+    """
+
+    fingerprint = "sha256:fuzz-numform"
+
+    def __init__(self, mode: str):
+        self.vocab: dict[str, int] = {}
+        self.rev: dict[int, str] = {}
+        self.mode = mode
+
+    def encode(self, text):
+        ids = []
+        for token in text.replace("\n", " \n ").split(" "):
+            if not token:
+                continue
+            if token not in self.vocab:
+                self.vocab[token] = len(self.vocab) + 1
+                self.rev[self.vocab[token]] = token
+            ids.append(self.vocab[token])
+        return tuple(ids)
+
+    def decode(self, ids):
+        return " ".join(self.rev.get(int(i), "?") for i in ids)
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        text = self.decode(list(input_ids))
+        if "Copy this number" in text:
+            task = "copy"
+        elif "Which of these" in text:
+            task = "compare"
+        else:
+            task = "add"
+        tokens = []
+        for raw_token in text.split(" "):
+            token = raw_token.split("<")[0]
+            if any(ch.isdigit() for ch in token) and numform.parse_value(token) is not None:
+                tokens.append(token)
+        values = [numform.parse_value(token) for token in tokens]
+
+        def form_of(token: str) -> str:
+            if "," in token:
+                return "comma"
+            if "\u202f" in token:
+                return "space"
+            if "e" in token and any(ch.isdigit() for ch in token):
+                return "scientific"
+            return "plain"
+
+        if task == "copy":
+            value = values[-1]
+            form = form_of(tokens[-1])
+            if self.mode == "plain":
+                answer = str(value)
+            elif self.mode == "wrong_value":
+                answer = numform.render_form(value + 1, form)
+            else:
+                answer = numform.render_form(value, form)
+        elif task == "compare":
+            first, second = values[-2], values[-1]
+            answer = "first" if first > second else "second"
+            if self.mode == "flip_label":
+                answer = "second" if answer == "first" else "first"
+        else:
+            first, second = values[-2], values[-1]
+            form = form_of(tokens[-2])
+            total = first + second
+            if self.mode == "plain":
+                answer = str(total)
+            elif self.mode == "wrong_value":
+                answer = numform.render_form(total + 1, form)
+            else:
+                answer = numform.render_form(total, form)
+        boundary = self.encode("<|im_end|>")[0]
+        out = list(self.encode(answer)) + [boundary]
+        out = (out + [boundary] * max_new_tokens)[:max_new_tokens]
+        return Generation(token_ids=tuple(out), reason="limit")
+
+
+def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    mode = rng.choice(["faithful", "plain", "wrong_value", "flip_label"])
+    seed = rng.choice([0, 1, 2])
+    backend = _FuzzNumformBackend(mode)
+    stage = experiments.numform_stage(
+        backend,
+        formats,
+        boundary=tuple(backend.encode("<|im_end|>")),
+        max_new_tokens=64,
+        max_context=8192,
+        seed=seed,
+    )
+    payload = experiments.numform_analysis(stage, tuple(fmt.name for fmt in formats))
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        if record["cell"] is not None:
+            record["cell"]["verdict"] = not record["cell"]["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        aggregate = available[0]["aggregates"]["copy"]["plain"]
+        aggregate["n_exact"] = aggregate.get("n_exact", 0) + 1  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["grouping"]["classification"] = "single_digit"  # hostile
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(numform.protocol_object(seed, "sha256:other-backend"))
+        protocol["fingerprint"] = numform.protocol_fingerprint(seed, "sha256:other-backend")
+        payload["protocol"] = protocol  # coherent foreign backend
+    if available and rng.random() < 0.08:
+        name = next(iter(payload["candidates"]))
+        payload["candidates"][name] = {
+            "status": "unavailable",
+            "detail": "arm_evaluation_failed",
+            "records": [],
+        }  # coherent status change
+    return payload
+
+
 def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     # Coherent cells are produced by the real implementation over
     # random prompt sets (guaranteeing the integer identities and
@@ -9901,6 +10514,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not distraction_asymmetric\n"
             '        and not leading_diff["changed"]\n'
             "        and not leading_asymmetric\n"
+            '        and not numform_diff["changed"]\n'
+            "        and not numform_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -9967,6 +10582,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or distraction_asymmetric\n"
             '        or leading_diff["changed"]\n'
             "        or leading_asymmetric\n"
+            '        or numform_diff["changed"]\n'
+            "        or numform_asymmetric\n"
             "    )\n",
             scenario,
         )

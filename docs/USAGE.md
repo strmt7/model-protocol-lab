@@ -1840,6 +1840,80 @@ affects selection, and the stage never fails the run (a
 failed or cancelled native search gates it to zero
 generations instead).
 
+### 8.42 Numeric surface form (`numform`)
+
+Opt-in with `model-protocol-lab run --numform`. A synthetic
+generation stage: the lab generates its own integer tasks —
+copy a number, say which of two numbers is larger, add two
+numbers — and renders every value in four surface forms:
+plain digits (`1234567`), comma-grouped (`1,234,567`),
+grouped with a narrow no-break space (`1 234 567`, U+202F),
+and scientific (`1.234567e6`). The chat template, wording,
+and decoding never change; only the numeral's shape does.
+Monday-morning use: before a template ships for a product
+that shows prices, quantities, or readings, learn whether
+the form your UI prints is the form the model handles worst
+under that template — and whether grouping digits the way
+your locale does costs exact answers.
+
+The prompt wording is frozen and carries no digit and no
+worked example, and the pass bar is the same in every arm:
+the exact value, written in the form the operands arrived
+in, with the response boundary found. Each value is rendered
+into all four forms under one shared fixture id, so the
+headline numbers are *paired* contrasts per task and form
+pair over the values completed in both forms — the frozen
+classification (`plain_advantage`, `mixed_discordance`,
+`no_difference_observed`, `below_threshold`, `insufficient`)
+over the discordant counts, with a McNemar exact p-value as a
+diagnostic only. Every completed cell is also decomposed:
+for copy and add, an exact pass, a right-value/wrong-form
+failure, or a wrong-value failure — so a model that computes
+correctly but will not keep your grouping is visibly a
+different problem from a model that miscalculates, and only
+the wrong-value class licenses an arithmetic reading. For
+copy, right-value/wrong-form is a task failure, not a
+consolation: copying is form fidelity. Compare answers are
+the labels `first`/`second` and decompose into wrong-label
+vs non-label answers; the task measures whether the
+verbalised comparison survives the forms, not comparison
+itself (its operands always share one form — mixed-form
+pairs are a different instrument's cell and out of scope).
+Values are stratified by digit band (1–3, 4–6, 7–9, 10–12
+digits) and by construction class — round vs random for
+copy, margin class for compare, carry class for add — and
+those classes are recomputed from the values, never trusted
+from the record. The tokenizer's own digit grouping is
+measured at run time with a frozen probe battery over the
+backend's encoder (`single_digit`, `chunked_up_to_3`,
+`irregular_or_mixed`, `unknown`) and reported as a run
+label beside per-form operand token counts; grouping is a
+property of the checkpoint-plus-tokenizer, so the same form
+effect measured on two checkpoints with different grouping
+is confounded, and the report says so. A pre-registered
+null — every contrast `no_difference_observed` or below
+threshold — is a publishable answer: normalisation does not
+matter here, for these tasks, at this checkpoint.
+
+Records store the canonical integers in the clear (the
+values are lab-generated; a hash over a 12-digit value
+would be invertible by enumeration and buy nothing), so
+`diff-reports` recomputes everything from the ground
+records — construction, aggregates, contrasts, the
+generated set's hash, the protocol — and reports rate and
+classification drift per candidate, task, and form, with
+protocol, generator, or backend drift marking the
+comparison not comparable and grouping drift flagged
+without changing comparability (`diff_numform`,
+`numform_changed` / `numform_asymmetric` feed `identical`).
+There is no per-form selection in this probe: the report
+informs the template decision, it does not make one. Cost:
+candidates × 3 tasks × 16 values × 4 forms generations
+(4,608 at the legal maximum); the CLI help states the count
+before the run. The full contract is in
+`docs/NUMFORM_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
