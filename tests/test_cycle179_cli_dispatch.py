@@ -105,6 +105,7 @@ STAGE_FLAGS = [
     ("--repeat", "repeat", None),
     ("--distract", "distract", None),
     ("--leading", "leading", None),
+    ("--numform", "numform", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -250,6 +251,12 @@ HELPER_DISPATCH = [
         "leading",
         "leading_unavailable",
         ["leading_stage", "leading_analysis"],
+    ),
+    (
+        "_run_numform_probe",
+        "numform",
+        "numform_unavailable",
+        ["numform_stage", "numform_analysis"],
     ),
     (
         "_run_cache_profile_probe",

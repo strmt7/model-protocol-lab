@@ -7411,6 +7411,247 @@ def leading_analysis(
     }
 
 
+def numform_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Numeric surface-form stage (cycle 186): generated integer
+    fixtures in four written forms per candidate.
+
+    The fixtures are generated from the run seed inside the
+    stage (the hierarchy synthetic-construction pattern); the
+    mechanics are the leading/distraction ones -- per-fixture
+    ``evaluate()``, cancel and context threaded, per-cell
+    fixed-vocabulary details. There is no native arm and no
+    dependence on the user's fixtures or the primary run: the
+    same values are drawn once per task and rendered into every
+    form under one shared fixture id, so request seeds pair the
+    arms. Design: docs/NUMFORM_DESIGN.md.
+    """
+    from . import numform as _nf
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    protocol: dict[str, Any] = dict(_nf.protocol_object(seed, str(backend.fingerprint)))
+    protocol["fingerprint"] = _nf.protocol_fingerprint(seed, str(backend.fingerprint))
+    if (
+        len(formats) * _nf.VALUES_PER_TASK * len(_nf.TASKS) * len(_nf.FORMS)
+        > _nf.MAX_GROUND_RECORDS
+    ):
+        return {
+            "available": False,
+            "detail": "numform_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    template_text = "".join(
+        template.replace("{operand}", "").replace("{a}", "").replace("{b}", "")
+        for template in _nf.PROMPT_TEMPLATES.values()
+    )
+    if audit_special_token_literals(template_text, formats):
+        # A special-token literal in the frozen templates would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "numform_template_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in template_text:
+            return {
+                "available": False,
+                "detail": "numform_template_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+    value_set = _nf.generate_value_set(seed)
+    fixtures = _nf.build_fixtures(seed)
+    grouping = _nf.measure_grouping(backend.encode, value_set)
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    if _cancelled():
+        return {
+            "available": False,
+            "detail": "cancelled",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        for task in _nf.TASKS:
+            for form in _nf.FORMS:
+                for entry, case in zip(value_set[task], fixtures[(task, form)], strict=True):
+                    if _cancelled():
+                        return {
+                            "available": False,
+                            "detail": "cancelled",
+                            "protocol": protocol,
+                            "candidates": {},
+                        }
+                    expected = _nf.expected_answer(entry, form)
+                    expected_tokens = len(backend.encode(expected))
+                    record: dict[str, Any] = {
+                        "task": task,
+                        "value_id": entry["value_id"],
+                        "form": form,
+                        "band": entry["band"],
+                        "stratum": entry["stratum"],
+                        "operands": [int(value) for value in entry["operands"]],
+                        "expected_value": int(entry["expected_value"]),
+                        "expected_answer": expected,
+                        "form_identical": all(
+                            _nf.render_form(int(value), form)
+                            == _nf.render_form(int(value), "plain")
+                            for value in entry["operands"]
+                        ),
+                        "expected_answer_tokens": expected_tokens,
+                        "answer_value": None,
+                        "cell": None,
+                        "detail": "",
+                    }
+                    records.append(record)
+                    rendered = fmt.render(case.messages)
+                    operand_strings = [
+                        _nf.render_form(int(value), form) for value in entry["operands"]
+                    ]
+                    if any(text not in rendered for text in operand_strings):
+                        # The template rewrote or dropped an
+                        # operand (a normaliser inside the format
+                        # would do exactly this): the cell never
+                        # measured the form it names.
+                        record["detail"] = "form_not_in_render"
+                        continue
+                    ids = tuple(backend.encode(rendered))
+                    if len(ids) + max_new_tokens > max_context:
+                        record["detail"] = "arm_context_exceeded"
+                        continue
+                    if expected_tokens + len(boundaries[name]) > max_new_tokens:
+                        record["detail"] = "answer_budget_exceeded"
+                        continue
+                    report = evaluate(
+                        backend,
+                        fmt,
+                        (case,),
+                        boundary=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if report.aggregate_eligible and report.observations:
+                        cell_obs = report.observations[0]
+                        record["cell"] = {
+                            "verdict": bool(cell_obs.exact_match and cell_obs.boundary_found),
+                            "boundary_found": bool(cell_obs.boundary_found),
+                            "boundary_text_match": cell_obs.boundary_text_match,
+                            "input_tokens": len(cell_obs.input_ids),
+                            "answer_digest": _answer_digest(cell_obs.answer),
+                        }
+                        if task != "compare":
+                            record["answer_value"] = _nf.parse_value(cell_obs.answer)
+                    else:
+                        record["detail"] = "arm_evaluation_failed"
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    stage: dict[str, Any] = {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "grouping": grouping,
+        "candidates": candidates,
+    }
+    if (
+        _nf.records_bytes({name: entry["records"] for name, entry in candidates.items()})
+        > _nf.MAX_RECORDS_BYTES
+    ):
+        return {
+            "available": False,
+            "detail": "numform_records_too_large",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    return stage
+
+
+def numform_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a numform stage into the stored payload (cycle 186).
+
+    Per candidate x task x form aggregates with the value/form
+    decomposition, and per-task paired contrasts for the six
+    form pairs. No selection, no winner, no flip against the
+    primary run: the synthetic set is a different contest from
+    the user's fixtures, and a winner over 16 generated values
+    per task would invite exactly the headline the design
+    forbids (red-team B, GB5). Design: docs/NUMFORM_DESIGN.md.
+    """
+    from . import numform as _nf
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "numform_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        records = entry["records"]
+        candidates_out[name] = {
+            "status": "available",
+            "detail": "",
+            "records": records,
+            "aggregates": {
+                task: {form: _nf.aggregate_records(records, task, form) for form in _nf.FORMS}
+                for task in _nf.TASKS
+            },
+            "contrasts": {
+                task: {
+                    f"{form_a}__{form_b}": _nf.paired_contrast(records, task, form_a, form_b)
+                    for form_a, form_b in _nf.form_pairs()
+                }
+                for task in _nf.TASKS
+            },
+        }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "grouping": stage["grouping"],
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+    }
+
+
 def cache_profile_stage(
     *,
     observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],

@@ -62,6 +62,7 @@ RUN_PROBE_FLAGS = [
     "--repeat",
     "--distract",
     "--leading",
+    "--numform",
     "--cache-profile",
     "--cache-profile-block-size",
     "--confidentiality",
@@ -126,7 +127,7 @@ class DocsCurrencyTests(unittest.TestCase):
         # Bump the pinned range whenever a cycle updates the top
         # evidence section (179 -> 180 in cycle 180).
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–185", top)
+        self.assertIn("cycles 10–186", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):

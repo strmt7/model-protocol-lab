@@ -603,6 +603,7 @@ def diff_reports(
     repetition_diff = diff_repetition(old.get("repetition"), new.get("repetition"))
     distraction_diff = diff_distraction(old.get("distraction"), new.get("distraction"))
     leading_diff = diff_leading(old.get("leading"), new.get("leading"))
+    numform_diff = diff_numform(old.get("numform"), new.get("numform"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -651,6 +652,10 @@ def diff_reports(
         "neither",
     )
     leading_asymmetric = leading_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    numform_asymmetric = numform_diff["available"] not in (
         "both",
         "neither",
     )
@@ -735,6 +740,8 @@ def diff_reports(
         and not distraction_asymmetric
         and not leading_diff["changed"]
         and not leading_asymmetric
+        and not numform_diff["changed"]
+        and not numform_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -809,6 +816,8 @@ def diff_reports(
         "distraction_asymmetric": distraction_asymmetric,
         "leading_changed": leading_diff["changed"],
         "leading_asymmetric": leading_asymmetric,
+        "numform_changed": numform_diff["changed"],
+        "numform_asymmetric": numform_asymmetric,
         "identical": identical,
     }
     return {
@@ -845,6 +854,7 @@ def diff_reports(
         "repetition": repetition_diff,
         "distraction": distraction_diff,
         "leading": leading_diff,
+        "numform": numform_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -6015,6 +6025,766 @@ def diff_leading(old: Any, new: Any) -> dict[str, Any]:
         or leading_fixture_set_drift
         or leading_donor_map_drift
         or leading_backend_drift
+    )
+    return result
+
+
+_NUMFORM_TASKS = ("copy", "compare", "add")
+_NUMFORM_FORMS = ("plain", "comma", "space", "scientific")
+_NUMFORM_BANDS = ((1, 3), (4, 6), (7, 9), (10, 12))
+_NUMFORM_SPACE = "\u202f"
+_NUMFORM_TEMPLATES = {
+    "copy": "Copy this number exactly, character for character:\n{operand}",
+    "compare": (
+        "Which of these two numbers is larger? Reply with only the word first or second.\n{a}\n{b}"
+    ),
+    "add": (
+        "Add these two numbers and reply with only the sum, "
+        "written in the same format as the numbers:\n{a}\n{b}"
+    ),
+}
+_NUMFORM_DETAILS = (
+    "",
+    "arm_context_exceeded",
+    "answer_budget_exceeded",
+    "form_not_in_render",
+    "arm_evaluation_failed",
+)
+_NUMFORM_RECORD_KEYS = {
+    "task",
+    "value_id",
+    "form",
+    "band",
+    "stratum",
+    "operands",
+    "expected_value",
+    "expected_answer",
+    "form_identical",
+    "expected_answer_tokens",
+    "answer_value",
+    "cell",
+    "detail",
+}
+_NUMFORM_CELL_KEYS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+
+
+def _numform_grouped(digits: str, separator: str) -> str:
+    parts: list[str] = []
+    while digits:
+        parts.append(digits[-3:])
+        digits = digits[:-3]
+    return separator.join(reversed(parts))
+
+
+def _numform_render(value: int, form: str) -> str:
+    """Independent reimplementation of the numform renderers."""
+    digits = str(value)
+    if form == "plain":
+        return digits
+    if form == "comma":
+        return _numform_grouped(digits, ",")
+    if form == "space":
+        return _numform_grouped(digits, _NUMFORM_SPACE)
+    if value == 0:
+        return "0e0"
+    exponent = len(digits) - 1
+    mantissa = digits.rstrip("0")
+    if len(mantissa) > 1:
+        return f"{mantissa[0]}.{mantissa[1:]}e{exponent}"
+    return f"{mantissa}e{exponent}"
+
+
+def _numform_carry(a: int, b: int) -> str:
+    digits_a = str(a)
+    digits_b = str(b)
+    width = max(len(digits_a), len(digits_b))
+    carry_in = 0
+    carries: list[bool] = []
+    for pos in range(width):
+        digit_a = int(digits_a[-1 - pos]) if pos < len(digits_a) else 0
+        digit_b = int(digits_b[-1 - pos]) if pos < len(digits_b) else 0
+        carry_in = 1 if digit_a + digit_b + carry_in >= 10 else 0
+        carries.append(bool(carry_in))
+    if not any(carries):
+        return "none"
+    if all(carries):
+        return "full_chain"
+    return "some"
+
+
+def _numform_margin(a: int, b: int) -> str:
+    digits_a = str(a)
+    digits_b = str(b)
+    if len(digits_a) != len(digits_b):
+        return "different_length"
+    for index in range(len(digits_a)):
+        if digits_a[index] != digits_b[index]:
+            if index == len(digits_a) - 1:
+                return "same_length_last_digit"
+            if index * 2 < len(digits_a):
+                return "same_length_early"
+            return "same_length_middle"
+    return "equal"
+
+
+def _numform_is_round(value: int) -> bool:
+    if value < 10:
+        return False
+    digits = str(value)
+    result: bool = value == 10 ** (len(digits) - 1) or value == 10 ** len(digits) - 1
+    return result
+
+
+def _numform_probe_strings() -> list[str]:
+    probes: list[str] = []
+    sequential = "123456789012"
+    ones = "1" * 12
+    zero_heavy = "1" + "0" * 11
+    for length in range(1, 13):
+        probes.append(sequential[:length])
+        probes.append(ones[:length])
+        probes.append(zero_heavy[:length])
+    for form in _NUMFORM_FORMS:
+        probes.append(_numform_render(123456789, form))
+    return probes
+
+
+def _numform_classify_grouping(evidence: Any) -> str:
+    """Consistency re-run of the frozen grouping decision rule
+    over stored probe evidence (the validator has no tokenizer;
+    this checks the asserted class against the evidence, it
+    does not re-measure the tokenizer)."""
+    if type(evidence) is not dict or not evidence:
+        return "unknown"
+    digit_probes = [
+        probe for probe in _numform_probe_strings() if probe.isascii() and probe.isdigit()
+    ]
+    if any(probe not in evidence for probe in digit_probes):
+        return "unknown"
+    counts: list[tuple[int, Any]] = []
+    for probe in digit_probes:
+        count = evidence[probe]
+        if type(count) is not int or isinstance(count, bool) or count < 1:
+            return "unknown"
+        counts.append((len(probe), count))
+    if all(count == length for length, count in counts):
+        return "single_digit"
+    if all(count == (length + 2) // 3 for length, count in counts):
+        return "chunked_up_to_3"
+    if all((length + 2) // 3 <= count <= length for length, count in counts):
+        return "irregular_or_mixed"
+    return "unknown"
+
+
+def _numform_decomposition(record: dict[str, Any]) -> str:
+    import hashlib as _hashlib
+
+    cell = record["cell"]
+    if cell["verdict"]:
+        return "exact_pass"
+    if record["task"] == "compare":
+        other = "second" if record["expected_answer"] == "first" else "first"
+        other_digest = _hashlib.sha256(other.encode("utf-8")).hexdigest()
+        return "wrong_label" if cell["answer_digest"] == other_digest else "non_label"
+    if record["answer_value"] is not None and record["answer_value"] == record["expected_value"]:
+        return "value_pass_form_fail"
+    return "value_fail"
+
+
+def _numform_aggregate(records: list[dict[str, Any]], task: str, form: str) -> dict[str, Any]:
+    selected = [r for r in records if r["task"] == task and r["form"] == form]
+    completed = [r for r in selected if r["cell"] is not None]
+    n_exact = sum(1 for r in completed if r["cell"]["verdict"])
+    decomposition: dict[str, int] = {}
+    for record in completed:
+        cls = _numform_decomposition(record)
+        decomposition[cls] = decomposition.get(cls, 0) + 1
+    if task != "compare":
+        decomposition["value_pass_form_fail_boundary_found"] = sum(
+            1
+            for r in completed
+            if _numform_decomposition(r) == "value_pass_form_fail" and r["cell"]["boundary_found"]
+        )
+    by_band: dict[str, dict[str, Any]] = {}
+    for band_index in range(len(_NUMFORM_BANDS)):
+        band_records = [r for r in selected if r["band"] == band_index]
+        band_completed = [r for r in band_records if r["cell"] is not None]
+        by_band[str(band_index)] = {
+            "n_values": len(band_records),
+            "n_completed": len(band_completed),
+            "n_exact": sum(1 for r in band_completed if r["cell"]["verdict"]),
+            "n_form_identical": sum(1 for r in band_records if r["form_identical"]),
+        }
+    input_tokens = [int(r["cell"]["input_tokens"]) for r in completed]
+    answer_tokens = [int(r["expected_answer_tokens"]) for r in completed]
+    return {
+        "n_values": len(selected),
+        "n_completed": len(completed),
+        "n_exact": n_exact,
+        "exact_rate": (n_exact / len(completed)) if completed else None,
+        "decomposition": decomposition,
+        "by_band": by_band,
+        "mean_input_tokens": (sum(input_tokens) / len(input_tokens)) if input_tokens else None,
+        "mean_expected_answer_tokens": (
+            (sum(answer_tokens) / len(answer_tokens)) if answer_tokens else None
+        ),
+    }
+
+
+def _numform_classify_contrast(n_paired: int, n_a_only: int, n_b_only: int) -> str:
+    if n_paired < 6:
+        return "insufficient"
+    if n_a_only == 0 and n_b_only == 0:
+        return "no_difference_observed"
+    if n_a_only >= 2 and n_a_only > n_b_only:
+        return "a_advantage"
+    if n_b_only >= 2 and n_b_only > n_a_only:
+        return "b_advantage"
+    if n_a_only == n_b_only and n_a_only >= 2:
+        return "mixed_discordance"
+    return "below_threshold"
+
+
+def _numform_contrast(
+    records: list[dict[str, Any]], task: str, form_a: str, form_b: str
+) -> dict[str, Any]:
+    by_value: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if record["task"] != task or record["form"] not in (form_a, form_b):
+            continue
+        by_value.setdefault(str(record["value_id"]), {})[str(record["form"])] = record
+    n_paired = n_a_only = n_b_only = n_both_pass = n_both_fail = 0
+    for pair in by_value.values():
+        rec_a = pair.get(form_a)
+        rec_b = pair.get(form_b)
+        if rec_a is None or rec_b is None:
+            continue
+        if rec_a["cell"] is None or rec_b["cell"] is None:
+            continue
+        n_paired += 1
+        pass_a = bool(rec_a["cell"]["verdict"])
+        pass_b = bool(rec_b["cell"]["verdict"])
+        if pass_a and pass_b:
+            n_both_pass += 1
+        elif pass_a:
+            n_a_only += 1
+        elif pass_b:
+            n_b_only += 1
+        else:
+            n_both_fail += 1
+    label = _numform_classify_contrast(n_paired, n_a_only, n_b_only)
+    if label == "a_advantage":
+        label = f"{form_a}_advantage"
+    elif label == "b_advantage":
+        label = f"{form_b}_advantage"
+    return {
+        "n_paired": n_paired,
+        "n_pass_a_only": n_a_only,
+        "n_pass_b_only": n_b_only,
+        "n_both_pass": n_both_pass,
+        "n_both_fail": n_both_fail,
+        "mcnemar_p": _leading_mcnemar_p(n_b_only, n_a_only),
+        "classification": label,
+    }
+
+
+def _numform_record_construction(
+    record: Any,
+) -> tuple[Any, ...] | None:
+    """Validate one ground record; return its construction
+    tuple (the fields that must be constant across candidates)
+    or None when the record is not an honest numform record."""
+    import hashlib as _hashlib
+
+    if type(record) is not dict or set(record) != _NUMFORM_RECORD_KEYS:
+        return None
+    task = record["task"]
+    form = record["form"]
+    if task not in _NUMFORM_TASKS or form not in _NUMFORM_FORMS:
+        return None
+    value_id = record["value_id"]
+    if (
+        type(value_id) is not str
+        or not value_id.startswith(f"nf-{task}-")
+        or len(value_id) != len(task) + 6
+        or not value_id[-2:].isdigit()
+        or int(value_id[-2:]) >= 16
+    ):
+        return None
+    operands = record["operands"]
+    if type(operands) is not list or len(operands) != (1 if task == "copy" else 2):
+        return None
+    if any(
+        type(value) is not int or isinstance(value, bool) or value < 0 or value >= 10**12
+        for value in operands
+    ):
+        return None
+    expected_value = record["expected_value"]
+    if type(expected_value) is not int or isinstance(expected_value, bool):
+        return None
+    if task == "copy" and expected_value != operands[0]:
+        return None
+    if task == "add" and expected_value != operands[0] + operands[1]:
+        return None
+    if task == "compare" and expected_value != max(operands):
+        return None
+    expected_answer = record["expected_answer"]
+    if type(expected_answer) is not str:
+        return None
+    if task == "compare":
+        if operands[0] == operands[1]:
+            return None
+        label = "first" if operands[0] > operands[1] else "second"
+        if expected_answer != label:
+            return None
+    elif expected_answer != _numform_render(expected_value, form):
+        return None
+    band = record["band"]
+    max_length = len(str(max(operands)))
+    band_ok = (
+        type(band) is int
+        and not isinstance(band, bool)
+        and 0 <= band < len(_NUMFORM_BANDS)
+        and _NUMFORM_BANDS[band][0] <= max_length <= _NUMFORM_BANDS[band][1]
+    )
+    if not band_ok:
+        return None
+    stratum = record["stratum"]
+    if task == "copy":
+        if stratum != ("round" if _numform_is_round(operands[0]) else "random"):
+            return None
+    elif task == "compare":
+        if stratum != _numform_margin(operands[0], operands[1]):
+            return None
+        if stratum in ("same_length_middle", "equal"):
+            return None
+    elif stratum != _numform_carry(operands[0], operands[1]):
+        return None
+    form_identical = record["form_identical"]
+    if type(form_identical) is not bool:
+        return None
+    if form_identical != all(
+        _numform_render(value, form) == _numform_render(value, "plain") for value in operands
+    ):
+        return None
+    if not _leading_int_ok(record["expected_answer_tokens"]):
+        return None
+    answer_value = record["answer_value"]
+    if answer_value is not None and (
+        type(answer_value) is not int or isinstance(answer_value, bool) or answer_value < 0
+    ):
+        return None
+    if task == "compare" and answer_value is not None:
+        return None
+    detail = record["detail"]
+    if detail not in _NUMFORM_DETAILS:
+        return None
+    cell = record["cell"]
+    if (cell is None) != (detail != ""):
+        return None
+    if cell is not None:
+        if type(cell) is not dict or set(cell) != _NUMFORM_CELL_KEYS:
+            return None
+        if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+            return None
+        if cell["boundary_text_match"] not in (True, False, None):
+            return None
+        if not _leading_int_ok(cell["input_tokens"]):
+            return None
+        digest = cell["answer_digest"]
+        if (
+            type(digest) is not str
+            or len(digest) != 64
+            or any(char not in _LEADING_HEX for char in digest)
+        ):
+            return None
+        expected_digest = _hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
+        if cell["verdict"] != bool(digest == expected_digest and cell["boundary_found"]):
+            return None
+        if (
+            task != "compare"
+            and digest == expected_digest
+            and answer_value is not None
+            and answer_value != expected_value
+        ):
+            return None
+    return (
+        task,
+        value_id,
+        form,
+        band,
+        stratum,
+        tuple(operands),
+        expected_value,
+        expected_answer,
+        form_identical,
+    )
+
+
+def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a numform payload from its ground records.
+
+    The validator carries its own renderers, classifiers, and
+    aggregators (no imports from numform.py): every record's
+    construction facts are re-derived (expected value, expected
+    answer string, band, stratum class, form identity), the
+    generated set is re-hashed from the records and compared
+    against the protocol, the protocol is rebuilt from frozen
+    scalars plus the payload's seed and backend fingerprint,
+    and every aggregate and paired contrast is recomputed. The
+    grouping classification is re-run over the stored probe
+    evidence -- a consistency check, since the validator has
+    no tokenizer. The answer's parsed value is stored data the
+    decomposition recomputes FROM (the parse itself is a stage
+    act, pinned by the stage's own tests, as with leading's
+    eligibility); where the answer digest pins the answer to
+    the expected string, the stored value is checked against
+    the expected value exactly.
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(backend_fingerprint) is not str or not backend_fingerprint:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if payload.get("n_candidates") != len(candidates):
+        return None
+    construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+    aggregates: dict[str, dict[str, Any]] = {}
+    available_names: list[str] = []
+    total_records = 0
+    all_records: dict[str, list[dict[str, Any]]] = {}
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available":
+            return None
+        if set(entry) != {"status", "detail", "records", "aggregates", "contrasts"}:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) > 192:
+            return None
+        available_names.append(name)
+        all_records[name] = records
+        total_records += len(records)
+        seen: set[tuple[str, str, str]] = set()
+        for record in records:
+            built = _numform_record_construction(record)
+            if built is None:
+                return None
+            key = (str(record["task"]), str(record["value_id"]), str(record["form"]))
+            if key in seen:
+                return None
+            seen.add(key)
+            prior = construction.get(key)
+            if prior is None:
+                construction[key] = built
+            elif prior != built:
+                return None
+        expected_keys = {
+            (task, f"nf-{task}-{index:02d}", form)
+            for task in _NUMFORM_TASKS
+            for index in range(16)
+            for form in _NUMFORM_FORMS
+        }
+        if seen != expected_keys:
+            return None
+    if not available_names or total_records > 4608:
+        return None
+    if (
+        len(_json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+        > 12 * 1024 * 1024
+    ):
+        return None
+    # The generated set, re-hashed from one candidate's records.
+    first_records = all_records[available_names[0]]
+    by_entry: dict[tuple[str, str], dict[str, Any]] = {}
+    for record in first_records:
+        by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
+    rows: list[list[Any]] = []
+    for task in _NUMFORM_TASKS:
+        for index in range(16):
+            value_id = f"nf-{task}-{index:02d}"
+            forms_map = by_entry.get((task, value_id))
+            # Unreachable while the per-candidate grid check
+            # above holds (the first candidate's records are
+            # grid-complete); kept so a future weakening of
+            # that check fails closed here instead of raising
+            # KeyError on an incomplete form map.
+            if forms_map is None or set(forms_map) != set(_NUMFORM_FORMS):
+                return None
+            plain = forms_map["plain"]
+            rows.append(
+                [
+                    task,
+                    value_id,
+                    list(plain["operands"]),
+                    plain["expected_value"],
+                    [forms_map[form]["expected_answer"] for form in _NUMFORM_FORMS],
+                ]
+            )
+    generator_sha = _hashlib.sha256(
+        _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    templates_canonical = _json.dumps(
+        _NUMFORM_TEMPLATES, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    expected_protocol: dict[str, Any] = {
+        "version": 1,
+        "tasks": list(_NUMFORM_TASKS),
+        "forms": list(_NUMFORM_FORMS),
+        "bands": [list(band) for band in _NUMFORM_BANDS],
+        "values_per_task": 16,
+        "min_paired_evaluable": 6,
+        "min_discordant": 2,
+        "generation_budget": 4608,
+        "max_ground_records": 4608,
+        "max_records_bytes": 12 * 1024 * 1024,
+        "space_codepoint": "U+202F",
+        "scientific_grammar": "mantissa-[1,10)-lowercase-e-v1",
+        "renderer_spec": "value-only-renderers-v1",
+        "generator_rule": "sha256-derived-paired-v1",
+        "prompt_templates": dict(_NUMFORM_TEMPLATES),
+        "prompt_templates_sha256": _hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest(),
+        "seed": seed,
+        "generator_sha256": generator_sha,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    if protocol != {**expected_protocol, "fingerprint": protocol.get("fingerprint")}:
+        return None
+    fingerprint = _hashlib.sha256(
+        _json.dumps(
+            expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+    if protocol.get("fingerprint") != fingerprint:
+        return None
+    grouping = payload.get("grouping")
+    if type(grouping) is not dict or set(grouping) != {
+        "classification",
+        "evidence",
+        "form_token_means",
+        "token_deltas_vs_plain",
+    }:
+        return None
+    evidence = grouping["evidence"]
+    if type(evidence) is not dict:
+        return None
+    # Empty evidence is the honest stage output when the
+    # backend's encoder raised during measurement (the class is
+    # then "unknown", which the decision-rule re-run confirms).
+    if evidence and set(evidence) != set(_numform_probe_strings()):
+        return None
+    if any(
+        type(count) is not int or isinstance(count, bool) or count < 0
+        for count in evidence.values()
+    ):
+        return None
+    if grouping["classification"] != _numform_classify_grouping(evidence):
+        return None
+    means = grouping["form_token_means"]
+    deltas = grouping["token_deltas_vs_plain"]
+    if type(means) is not dict or set(means) != set(_NUMFORM_FORMS):
+        return None
+    if type(deltas) is not dict or set(deltas) != set(_NUMFORM_FORMS):
+        return None
+    for form in _NUMFORM_FORMS:
+        mean = means[form]
+        delta = deltas[form]
+        if (mean is None) != (delta is None):
+            return None
+        if mean is not None and (
+            type(mean) not in (int, float) or isinstance(mean, bool) or mean < 0
+        ):
+            return None
+        if delta is not None and (type(delta) not in (int, float) or isinstance(delta, bool)):
+            return None
+    if deltas["plain"] is not None and deltas["plain"] != 0:
+        return None
+    for name in available_names:
+        records = all_records[name]
+        aggregates[name] = {
+            "aggregates": {
+                task: {form: _numform_aggregate(records, task, form) for form in _NUMFORM_FORMS}
+                for task in _NUMFORM_TASKS
+            },
+            "contrasts": {
+                task: {
+                    f"{form_a}__{form_b}": _numform_contrast(records, task, form_a, form_b)
+                    for form_a, form_b in (
+                        ("plain", "comma"),
+                        ("plain", "space"),
+                        ("plain", "scientific"),
+                        ("comma", "space"),
+                        ("comma", "scientific"),
+                        ("space", "scientific"),
+                    )
+                }
+                for task in _NUMFORM_TASKS
+            },
+        }
+    return {"aggregates": aggregates, "n_candidates": len(candidates)}
+
+
+def _valid_numform(payload: Any) -> bool:
+    """Structural check for a ``numform`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "grouping",
+        "candidates",
+        "n_candidates",
+    }:
+        # The exact top-level shape is the structural form of
+        # the no-pooling rule: a cross-task total has no key to
+        # live under, so a payload carrying one is not this
+        # probe's payload.
+        return False
+    recomputed = _numform_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("aggregates") != expected["aggregates"]:
+            return False
+        if entry.get("contrasts") != expected["contrasts"]:
+            return False
+    return bool(payload.get("n_candidates") == recomputed["n_candidates"])
+
+
+def diff_numform(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``numform`` probe payloads; deterministic.
+
+    Answers "did the surface-form story change between runs?":
+    per-candidate per-task per-form exact-rate drift, paired
+    contrast classification drift, candidates added/removed,
+    and protocol / generator / backend drift (any of which
+    marks the comparison not comparable, with the drift still
+    listed -- the generated set is the treatment, so a changed
+    generator is protocol drift). Tokenizer grouping drift is
+    reported and flags the form-contrast comparison
+    (``grouping_changed``) without by itself marking the
+    sections incomparable: the grouping is a label on the run,
+    and the rates do not depend on it.
+    """
+    old_ok = _valid_numform(old)
+    new_ok = _valid_numform(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    numform_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    numform_generator_drift = old["protocol"].get("generator_sha256") != new["protocol"].get(
+        "generator_sha256"
+    )
+    numform_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    numform_comparable = (
+        not numform_protocol_drift and not numform_generator_drift and not numform_backend_drift
+    )
+    numform_grouping_changed = old.get("grouping", {}).get("classification") != new.get(
+        "grouping", {}
+    ).get("classification") or old.get("grouping", {}).get("evidence") != new.get(
+        "grouping", {}
+    ).get("evidence")
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    numform_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    numform_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    numform_rate_drift: list[dict[str, Any]] = []
+    numform_contrast_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                numform_rate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        for task in _NUMFORM_TASKS:
+            for form in _NUMFORM_FORMS:
+                old_rate = old_entry["aggregates"][task][form]["exact_rate"]
+                new_rate = new_entry["aggregates"][task][form]["exact_rate"]
+                if old_rate != new_rate:
+                    numform_rate_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{task}_{form}_exact_rate",
+                            "old": old_rate,
+                            "new": new_rate,
+                        }
+                    )
+            for pair_key in old_entry["contrasts"][task]:
+                old_label = old_entry["contrasts"][task][pair_key]["classification"]
+                new_label = new_entry["contrasts"][task][pair_key]["classification"]
+                if old_label != new_label:
+                    numform_contrast_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{task}_{pair_key}_classification",
+                            "old": old_label,
+                            "new": new_label,
+                        }
+                    )
+    result["rate_drift"] = numform_rate_drift
+    result["contrast_drift"] = numform_contrast_drift
+    result["candidates_added"] = numform_candidates_added
+    result["candidates_removed"] = numform_candidates_removed
+    result["protocol_drift"] = numform_protocol_drift
+    result["generator_drift"] = numform_generator_drift
+    result["backend_drift"] = numform_backend_drift
+    result["grouping_changed"] = numform_grouping_changed
+    result["comparable"] = numform_comparable
+    result["changed"] = bool(
+        numform_rate_drift
+        or numform_contrast_drift
+        or numform_candidates_added
+        or numform_candidates_removed
+        or numform_protocol_drift
+        or numform_generator_drift
+        or numform_backend_drift
+        or numform_grouping_changed
     )
     return result
 

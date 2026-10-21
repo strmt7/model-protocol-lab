@@ -7670,3 +7670,115 @@ structural limit — donor eligibility is a property of answer
 text, the payload stores only digests, so construction validity
 rests on the stage and its pin tests while the validator proves
 the arithmetic.
+
+## Cycle 186 — numeric surface-form × template (wave-7 rank 7, pre-build)
+
+Uniqueness pass (wave-7 researcher §7, refreshed live
+2026-10-21; refresh brief in the wave-7 series). Corrections to
+§7 earned by the refresh, recorded before the build so the log
+never carries them wrong: (1) §7's near-miss list omitted the
+two closest works — Reddy et al. 2026 and the NUPA benchmark
+below — both published before the wave-7 survey; the claim
+survives only scoped to the chat-template axis. (2) §7 labelled
+the single-digit tokenizer family "Llama/Gemma-style": that is
+Llama 2 and Gemma only — Llama 3 onward groups digits by three
+(TokSuite table; Reddy Table 5: Llama 3.3 tokenizes their
+equations identically to GPT-4o), so the probe's grouping
+variable is measured from the attached tokenizer per operand,
+never inferred from a family name. (3) §7 supported the
+comma/chunking mechanism with two blog posts; the primary
+source is Singh & Strouse 2024, cited below. (4) Per-form
+selection, present in §7's build shape and in the refreshed
+claim's first draft, is deliberately excluded from v1
+(red-team B, gate GB5): over 16 generated values per task an
+all-pass selection readout carries almost no information per
+unit of validator surface, and the scoped claim below does
+not carry the selection clause — the empty cell is occupied
+by the template axis and the paired contrasts alone.
+
+Primary sources, verified 2026-10-21. Reddy et al. 2026,
+*1,729 vs. १७२९: The Effect of Scripts and Formats on LLM
+Numeracy* (arXiv:2601.15251,
+https://arxiv.org/html/2601.15251v2): 336 base arithmetic
+expressions held constant while six formatting conventions
+vary the decimal marker and grouping separator independently
+(F1 period/comma 3-3-3 through F6 Indian 3-2-2 grouping), on
+nine API/open models under their own renderings; the baseline
+accepts answers in any format, and a separate condition
+requires the answer in the same format as the operands — the
+lab's form-matched construction — which degrades accuracy
+(GLMER −0.793, p < 1e−8), as do all of F2–F6 relative to F1;
+few-shot examples recover 20–60%. Yang et al. 2025, *Number
+Cookbook* (NUPA; arXiv:2411.03766,
+https://arxiv.org/html/2411.03766v3; ICLR 2025): four
+representations (integer, float, fraction, scientific
+notation) crossed with 17 tasks including addition, Max/Min
+comparison and digit tasks, 41 combinations; its integer form
+uses no grouping separator at all, so grouped forms are
+outside it. Singh & Strouse 2024, *Tokenization counts*
+(arXiv:2402.14903, https://arxiv.org/abs/2402.14903):
+right-to-left tokenization enforced at inference time by
+comma-separating numbers largely improves GPT-3.5/GPT-4
+arithmetic, with stereotyped left-to-right error patterns;
+LLaMA/PaLM single-digit vs GPT 1–3-digit tokens is their
+framing. Schwartz et al. 2024, *NumeroLogic*
+(arXiv:2404.00459, https://arxiv.org/abs/2404.00459;
+EMNLP 2024): a digit-count prefix (`42` → `2:42`) makes place
+value available before the digits are read — surface form as
+a causal lever, as an intervention rather than a measurement.
+Yuchi, Du & Eisner 2026, *LLMs Know More About Numbers than
+They Can Say* (arXiv:2602.07812,
+https://arxiv.org/html/2602.07812v2/): verbalised comparisons
+that mix notations (5.7 × 10² vs 580) score 50–70% while a
+linear probe recovers the ranking from hidden states at >90%
+— the lab's compare arm is therefore a verbalisation
+measurement, stated as such, and its operands are same-form
+by design (the mixed-form cell is Yuchi et al.'s, not
+claimed). Tokenizer facts, primary: Gemma 2 report
+(arXiv:2408.00118, https://arxiv.org/html/2408.00118v1) —
+SentencePiece "with split digits, preserved whitespace, and
+byte-level encodings"; TokSuite (arXiv:2512.20757,
+https://arxiv.org/pdf/2512.20757) classifies numbers
+processing per tokenizer — Split (Gemma-2), Group by 3
+(GPT-4o, Llama-3.2), Learned — which is why this probe
+measures grouping on the attached tokenizer instead of
+labelling families. The tokenizer-tax pair §7 cited is
+cross-lingual fertility work, as §7 said: Lundin et al.
+2025, *The Token Tax* (arXiv:2509.05486,
+https://arxiv.org/abs/2509.05486; AfriMMLU, 16 African
+languages) and Srivastava 2026, *The Tokenizer Tax*
+(arXiv:2607.24276, https://arxiv.org/abs/2607.24276;
+FLORES-200, Indian languages) — form → token count →
+performance for languages, not numeral formats.
+
+Scoped claim: numeric surface form (plain, comma-grouped
+3-3-3, space-grouped with the separator codepoint frozen and
+named, scientific) as a function of hand-rendered chat-template
+family on a fixed local checkpoint, over generated fixtures
+with form-matched expected answers, per-candidate paired form
+contrasts, and the tokenizer's digit grouping measured at run
+time as a grouping variable only, was not found in any work
+surveyed in this pass. The claim is about the combination
+only: format variation over fixed arithmetic (Reddy et al.),
+representation × task benchmarks including scientific
+notation (NUPA), and comma-enforced rechunking (Singh &
+Strouse) are all published, on adjacent axes. Framing stays
+"the combination"; the words "first" and "unique" appear
+nowhere as claims. Unverifiable in this pass (recorded, not
+smoothed over): an exhaustive lm-eval / HELM / Inspect
+task-inventory scrape (the negative is search-based: the
+inventories surfaced GSM8K, Minerva MATH and MGSM and no
+operand-surface-form task), the aggregate accuracies
+sometimes quoted for Singh & Strouse (seen in a secondary
+summary only), and any harness change shipped
+2026-10-20 → 2026-10-21.
+
+Design summary: docs/NUMFORM_DESIGN.md. Integers only
+(non-negative), four forms as total functions of the value,
+SHA-256-derived paired generation across digit bands with
+carry/margin strata, frozen digit-free prompt templates,
+a three-class value/form decomposition recomputed by
+diff_numform from canonical values stored in the clear
+(synthetic data — digest-only storage would make the
+decomposition unverifiable, and a hash over a ≤12-digit
+value is invertible by enumeration anyway).

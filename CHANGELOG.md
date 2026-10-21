@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 186 — numeric surface-form probe, 2026-10-21)
+
+- `model-protocol-lab run --numform`: numeric surface-form probe
+  (wave-7 rank 7, the last wave-7 item). The lab generates its own
+  integer tasks (copy / compare / add; values stratified by digit
+  band and by round, margin, and carry construction classes) and
+  renders every value in four surface forms — plain, comma-grouped,
+  narrow-no-break-space-grouped (U+202F), scientific — under one
+  shared fixture id, with frozen digit-free zero-shot wording and
+  the pass bar held constant (exact value, in the form the operands
+  arrived in, boundary found). Paired per-task form contrasts with
+  a frozen classification over discordant counts are the headline;
+  every cell decomposes into exact / right-value-wrong-form /
+  wrong-value (copy and add) or wrong-label / non-label (compare),
+  so a grouping-keeping failure is never read as a miscalculation.
+  The tokenizer's digit grouping is measured at run time and
+  reported as a run label. Records store the generated integers in
+  the clear, and `diff-reports` recomputes the section in full
+  (`diff_numform`), with protocol/generator/backend drift marking
+  comparisons not comparable. No per-form selection. The research
+  round narrowed the claim to the hand-rendered chat-template axis
+  (Reddy et al. 2026 and NUPA already vary numeric formats outside
+  it), the red-team pair's amendments are in the shipped contract
+  (total value-only renderers, clear canonical values,
+  grammar-gated answer parsing with caps before conversion, no
+  numeric worked example in the prompts), and the design is frozen
+  in `docs/NUMFORM_DESIGN.md`. The cycle also fixes a latent gap
+  the verifier found in the diff test oracles: both oracles'
+  `identical` conjunctions omitted the leading-claim section;
+  the clauses are now present in both.
+
 ### Added (cycle 185 — leading-claim caving, 2026-10-21)
 
 - `model-protocol-lab run --leading`: leading-claim caving probe
