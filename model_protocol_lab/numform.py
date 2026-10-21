@@ -46,10 +46,19 @@ cycle 186):
   "computes fine, won't emit the form" from "cannot compute",
   and those worlds demand opposite operator actions.
 * Generated values are not user data, so records store the
-  canonical integers in the clear. Digest-only storage would
-  make the decomposition unverifiable by the diff validator,
-  and a hash over a value of at most 12 digits is invertible by
-  enumeration anyway, so it would buy no privacy either.
+  expected side's canonical integers in the clear, and the
+  diff validator regenerates the whole set from the seed and
+  recomputes every expected-side fact from it. The answer
+  side is different: a cell stores the answer's digest and
+  the value the stage parsed from it, so the decomposition
+  is recomputed from a stage-attested parse -- the parse
+  itself is a stage act, pinned by the stage's own tests,
+  not something the validator can re-derive from a digest.
+  (Storing the answer text so the validator could re-parse
+  it is scheduled work, recorded in the design doc; a hash
+  over a value of at most 12 digits would be invertible by
+  enumeration anyway, so digest-only expected-side storage
+  would buy no privacy either.)
 * The tokenizer grouping label is measured from the attached
   tokenizer by a frozen count-based probe battery, never
   inferred from a family name (Llama 3 onward groups digits by
@@ -82,7 +91,11 @@ TASKS: tuple[str, ...] = ("copy", "compare", "add")
 FORMS: tuple[str, ...] = ("plain", "comma", "space", "scientific")
 
 #: Digit-length bands (inclusive bounds) and the frozen set
-#: size: 4 values per band per task, 16 per task.
+#: size: 4 values drawn per band per task, 16 per task. A
+#: pair's recorded band is its larger operand's band, so
+#: compare's recorded per-band counts vary around 4 -- read
+#: denominators from a payload's own by_band counts, never
+#: from this constant.
 BANDS: tuple[tuple[int, int], ...] = ((1, 3), (4, 6), (7, 9), (10, 12))
 VALUES_PER_BAND = 4
 VALUES_PER_TASK = VALUES_PER_BAND * len(BANDS)
@@ -420,6 +433,16 @@ def _add_partner(a: int, target: str, derived: int) -> int:
             stream //= 10
     else:  # some: force exactly one carry position, none below it
         pivot_candidates = [pos for pos, digit in enumerate(digits) if digit >= 1]
+        if not pivot_candidates:
+            # a == 0: no digit can carry, so no partner is in
+            # class "some". Propose zero and let the caller
+            # reject the pair -- carry_class(0, 0) is "none"
+            # and a != b fails too -- and redraw with the next
+            # counter. Rejecting here (instead of skipping the
+            # draw in _gen_pairs) keeps every healthy seed's
+            # generated set byte-identical: only the crashing
+            # path changes.
+            return 0
         pivot = pivot_candidates[stream % len(pivot_candidates)]
         carry_in = 0
         for pos, digit in enumerate(digits):

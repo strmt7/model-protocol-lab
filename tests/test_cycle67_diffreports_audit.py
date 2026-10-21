@@ -4108,6 +4108,7 @@ def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
     if value.get("n_candidates") != len(candidates):
         return None
     construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+    answer_tokens: dict[tuple[str, str, str], int] = {}
     available_names: list[str] = []
     total_records = 0
     all_records: dict[str, list[dict[str, Any]]] = {}
@@ -4144,6 +4145,12 @@ def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
                 construction[key] = built
             elif prior != built:
                 return None
+            tokens = record["expected_answer_tokens"]
+            prior_tokens = answer_tokens.get(key)
+            if prior_tokens is None:
+                answer_tokens[key] = tokens
+            elif prior_tokens != tokens:
+                return None
         expected_keys = {
             (task, f"nf-{task}-{index:02d}", form)
             for task in _O_NF_TASKS
@@ -4159,30 +4166,37 @@ def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
         > 12 * 1024 * 1024
     ):
         return None
-    first_records = all_records[available_names[0]]
-    by_entry: dict[tuple[str, str], dict[str, Any]] = {}
-    for record in first_records:
-        by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
-    rows: list[list[Any]] = []
+    # Regenerate the set from the seed and compare every
+    # record's construction against it (mirrors the validator's
+    # cycle-187 regeneration; the producer module is the ground
+    # truth for generation in this oracle).
+    try:
+        value_set = numform.generate_value_set(seed)
+        generator_sha = numform.generator_sha256(seed)
+    except Exception:  # noqa: BLE001 -- regeneration failure means invalid
+        return None
+    expected_construction: dict[tuple[str, str, str], tuple[Any, ...]] = {}
     for task in _O_NF_TASKS:
-        for index in range(16):
-            value_id = f"nf-{task}-{index:02d}"
-            forms_map = by_entry.get((task, value_id))
-            if forms_map is None or set(forms_map) != set(_O_NF_FORMS):
-                return None
-            plain = forms_map["plain"]
-            rows.append(
-                [
+        for gen_entry in value_set[task]:
+            for form in _O_NF_FORMS:
+                expected_answer = numform.expected_answer(gen_entry, form)
+                form_identical = all(
+                    numform.render_form(v, form) == numform.render_form(v, "plain")
+                    for v in gen_entry["operands"]
+                )
+                expected_construction[(task, str(gen_entry["value_id"]), form)] = (
                     task,
-                    value_id,
-                    list(plain["operands"]),
-                    plain["expected_value"],
-                    [forms_map[form]["expected_answer"] for form in _O_NF_FORMS],
-                ]
-            )
-    generator_sha = hashlib.sha256(
-        json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    ).hexdigest()
+                    gen_entry["value_id"],
+                    form,
+                    gen_entry["band"],
+                    gen_entry["stratum"],
+                    tuple(gen_entry["operands"]),
+                    gen_entry["expected_value"],
+                    expected_answer,
+                    form_identical,
+                )
+    if construction != expected_construction:
+        return None
     expected_protocol = dict(numform.protocol_object(seed, backend_fingerprint))
     expected_protocol["generator_sha256"] = generator_sha
     if protocol != {**expected_protocol, "fingerprint": protocol.get("fingerprint")}:
@@ -4233,6 +4247,17 @@ def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
             return None
     if deltas["plain"] is not None and deltas["plain"] != 0:
         return None
+    plain_mean = means["plain"]
+    if plain_mean is not None:
+        for form in _O_NF_FORMS:
+            mean = means[form]
+            delta = deltas[form]
+            if mean is None or delta is None:
+                continue
+            expected_delta = mean - plain_mean
+            tolerance = 1e-9 * max(1.0, abs(expected_delta), abs(delta))
+            if abs(delta - expected_delta) > tolerance:
+                return None
     aggregates: dict[str, Any] = {}
     for name in available_names:
         records = all_records[name]
@@ -10540,6 +10565,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or perturbation_asymmetric\n"
             '        or healing_diff["changed"]\n'
             "        or healing_asymmetric\n"
+            '        or hierarchy_diff["changed"]\n'
+            "        or hierarchy_asymmetric\n"
+            '        or prefill_diff["changed"]\n'
+            "        or prefill_asymmetric\n"
             '        or portfolio_diff["changed"]\n'
             "        or portfolio_asymmetric\n"
             '        or synthhistory_diff["changed"]\n'
@@ -10568,6 +10597,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or refusals_asymmetric\n"
             '        or cache_profile_diff["changed"]\n'
             "        or cache_profile_asymmetric\n"
+            '        or template_robustness_diff["changed"]\n'
+            "        or template_robustness_asymmetric\n"
+            '        or ablation_diff["changed"]\n'
+            "        or ablation_asymmetric\n"
             '        or confidentiality_diff["changed"]\n'
             "        or confidentiality_asymmetric\n"
             '        or answer_collision_diff["changed"]\n'

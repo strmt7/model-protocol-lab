@@ -3357,12 +3357,14 @@ def oracle_diff_reports(
         # top-level shape (the no-pooling rule), per-record
         # construction re-derived (expected value/answer, band,
         # stratum, form identity, verdict-from-digest), grid
-        # completeness, cross-candidate construction equality,
-        # record/byte caps, the generated set re-hashed from
-        # the records against the protocol, the protocol rebuilt
-        # from frozen scalars, the grouping classification
-        # re-run over the stored evidence, and every aggregate
-        # and paired contrast recomputed.
+        # completeness, cross-candidate construction equality
+        # (including the expected answer's token count), record/
+        # byte caps, the generated set regenerated from the
+        # protocol's seed with every record's construction
+        # compared against it, the protocol rebuilt from frozen
+        # scalars, the grouping classification re-run over the
+        # stored evidence, the grouping delta relation checked,
+        # and every aggregate and paired contrast recomputed.
         import hashlib as _hashlib
         import json as _json
         import math as _math
@@ -3773,6 +3775,7 @@ def oracle_diff_reports(
         if value.get("n_candidates") != len(candidates):
             return False
         construction: dict = {}
+        answer_tokens: dict = {}
         available_names: list = []
         total_records = 0
         all_records: dict = {}
@@ -3809,6 +3812,12 @@ def oracle_diff_reports(
                     construction[key] = built
                 elif prior != built:
                     return False
+                tokens = record["expected_answer_tokens"]
+                prior_tokens = answer_tokens.get(key)
+                if prior_tokens is None:
+                    answer_tokens[key] = tokens
+                elif prior_tokens != tokens:
+                    return False
             expected_keys = {
                 (task, f"nf-{task}-{index:02d}", form)
                 for task in _tasks
@@ -3824,30 +3833,40 @@ def oracle_diff_reports(
             > 12 * 1024 * 1024
         ):
             return False
-        first_records = all_records[available_names[0]]
-        by_entry: dict = {}
-        for record in first_records:
-            by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
-        rows: list = []
+        # Regenerate the set from the seed (producer module as
+        # ground truth, as elsewhere in this oracle family) and
+        # compare every record's construction against it.
+        from model_protocol_lab import numform as _numform
+
+        try:
+            value_set = _numform.generate_value_set(seed)
+            generator_sha = _numform.generator_sha256(seed)
+        except Exception:  # noqa: BLE001 -- regeneration failure means invalid
+            return False
+        expected_construction: dict = {}
         for task in _tasks:
-            for index in range(16):
-                value_id = f"nf-{task}-{index:02d}"
-                forms_map = by_entry.get((task, value_id))
-                if forms_map is None or set(forms_map) != set(_forms):
-                    return False
-                plain = forms_map["plain"]
-                rows.append(
-                    [
+            for gen_entry in value_set[task]:
+                for form in _forms:
+                    if task == "compare":
+                        expected_answer = str(gen_entry["expected_label"])
+                    else:
+                        expected_answer = _render(int(gen_entry["expected_value"]), form)
+                    form_identical = all(
+                        _render(v, form) == _render(v, "plain") for v in gen_entry["operands"]
+                    )
+                    expected_construction[(task, str(gen_entry["value_id"]), form)] = (
                         task,
-                        value_id,
-                        list(plain["operands"]),
-                        plain["expected_value"],
-                        [forms_map[form]["expected_answer"] for form in _forms],
-                    ]
-                )
-        generator_sha = _hashlib.sha256(
-            _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-        ).hexdigest()
+                        gen_entry["value_id"],
+                        form,
+                        gen_entry["band"],
+                        gen_entry["stratum"],
+                        tuple(gen_entry["operands"]),
+                        gen_entry["expected_value"],
+                        expected_answer,
+                        form_identical,
+                    )
+        if construction != expected_construction:
+            return False
         templates_canonical = _json.dumps(
             _templates, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
@@ -3922,6 +3941,17 @@ def oracle_diff_reports(
                 return False
         if deltas["plain"] is not None and deltas["plain"] != 0:
             return False
+        plain_mean = means["plain"]
+        if plain_mean is not None:
+            for form in _forms:
+                mean = means[form]
+                delta = deltas[form]
+                if mean is None or delta is None:
+                    continue
+                expected_delta = mean - plain_mean
+                tolerance = 1e-9 * max(1.0, abs(expected_delta), abs(delta))
+                if abs(delta - expected_delta) > tolerance:
+                    return False
         for name in available_names:
             records = all_records[name]
             entry = candidates[name]

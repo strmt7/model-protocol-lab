@@ -380,6 +380,52 @@ class TestGeneration(unittest.TestCase):
             outputs.add(proc.stdout)
         self.assertEqual(len(outputs), 1)
 
+    def test_previously_crashing_seeds_generate(self):
+        # Cycle 187 (wave-8 F1): seeds whose band-0 "some" slot
+        # redrew a = 0 raised ZeroDivisionError in _add_partner
+        # (empty pivot set). The construction now proposes 0,
+        # the classifier rejects it, and the loop redraws.
+        for seed in (26, 109, 116, 127, 167, 229, 249, 273, 517, 528):
+            value_set = nf.generate_value_set(seed)
+            for record in value_set["add"]:
+                a, b = record["operands"]
+                self.assertEqual(record["stratum"], _carry_oracle(a, b), (seed, record))
+            for record in value_set["compare"]:
+                a, b = record["operands"]
+                self.assertEqual(record["stratum"], _margin_oracle(a, b), (seed, record))
+
+    def test_seed_sweep_generation_is_total(self):
+        # Generation must succeed for every seed, not just the
+        # ones the stage tests happen to use: the CLI accepts
+        # any int as --seed, including negatives.
+        for seed in list(range(1000)) + list(range(-100, 0)):
+            value_set = nf.generate_value_set(seed)
+            self.assertEqual(
+                sum(len(entries) for entries in value_set.values()), 3 * nf.VALUES_PER_TASK
+            )
+            for record in value_set["add"]:
+                a, b = record["operands"]
+                self.assertEqual(record["stratum"], _carry_oracle(a, b), (seed, record))
+                self.assertEqual(record["expected_value"], a + b)
+
+    def test_healthy_seed_hashes_pinned(self):
+        # The F1 fix must be set-preserving: seeds that already
+        # generated valid sets keep byte-identical instruments,
+        # or every existing report becomes incomparable for no
+        # benefit. Hashes captured from the pre-fix generator.
+        pinned = {
+            0: "8337b8fa804de3ba23419a4fcde9d04cb55003a24a162a1aec2c271d874269d3",
+            3: "87d4f04dcb0d145401e48cee612ff9bd0545d23facc69dc278e0e750b9bb8c9e",
+            7: "81353b240e7af9b47f073211ac94742fb35c2f83c0b33e8ad01e2382674f65b5",
+            42: "c08ea0f2828ce2d5cd60e0de83b5a8433ed1bb7600d397ea6b4394792371d79a",
+            100: "ddd68b1866352067d1cc164c399c491d4b4b0c79b85258450da15ca098481fdf",
+            999: "bdd11fbdd6f81f643d70369f37ad0f5131e9c7f6b2a0f1bf3d45b32f35cbe626",
+            1234: "b379ba0d40d3741cfc702ea1d2c58ecc679f820e32dd58d69a6f8e12f65cd8d8",
+            -5: "7e4ff951cf3985e972cd6376744b7aac678694ba950ed7374ce5503a868ccf59",
+        }
+        for seed, digest in pinned.items():
+            self.assertEqual(nf.generator_sha256(seed), digest, seed)
+
 
 class TestGroupingClassifier(unittest.TestCase):
     def _evidence(self, counts):
@@ -975,6 +1021,208 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(_valid_numform(self.base))
         self.assertTrue(_valid_numform(_base_payload(mode="plain")))
         self.assertTrue(_valid_numform(_base_payload(seed=3)))
+
+    def test_seed26_payload_validates(self):
+        # Cycle 187 (wave-8 F1): seed 26 crashed the generator
+        # before the fix, so no honest payload could exist for
+        # it; now the full stage + validator path accepts it.
+        self.assertTrue(_valid_numform(_base_payload(seed=26)))
+
+    def _rehash_from_records(self, payload):
+        """Recompute the protocol hashes the pre-cycle-187 way:
+        the generated set's hash derived from the payload's own
+        records, then the protocol fingerprint over that. A
+        payload carrying these hashes is exactly what the old
+        validator vouched for."""
+        first = payload["candidates"][sorted(payload["candidates"])[0]]["records"]
+        by_entry = {}
+        for record in first:
+            by_entry.setdefault((record["task"], record["value_id"]), {})[record["form"]] = record
+        rows = []
+        for task in nf.TASKS:
+            for index in range(16):
+                value_id = f"nf-{task}-{index:02d}"
+                forms_map = by_entry[(task, value_id)]
+                plain = forms_map["plain"]
+                rows.append(
+                    [
+                        task,
+                        value_id,
+                        list(plain["operands"]),
+                        plain["expected_value"],
+                        [forms_map[form]["expected_answer"] for form in nf.FORMS],
+                    ]
+                )
+        payload["protocol"]["generator_sha256"] = hashlib.sha256(
+            json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        ).hexdigest()
+        core = {k: v for k, v in payload["protocol"].items() if k != "fingerprint"}
+        payload["protocol"]["fingerprint"] = hashlib.sha256(
+            json.dumps(core, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    def _recompute_candidate(self, entry):
+        pairs = (
+            ("plain", "comma"),
+            ("plain", "space"),
+            ("plain", "scientific"),
+            ("comma", "space"),
+            ("comma", "scientific"),
+            ("space", "scientific"),
+        )
+        entry["aggregates"] = {
+            task: {form: nf.aggregate_records(entry["records"], task, form) for form in nf.FORMS}
+            for task in nf.TASKS
+        }
+        entry["contrasts"] = {
+            task: {f"{a}__{b}": nf.paired_contrast(entry["records"], task, a, b) for a, b in pairs}
+            for task in nf.TASKS
+        }
+
+    def test_fabricated_set_rejected(self):
+        # Cycle 187 (wave-8 F2): the validator regenerates the
+        # set from the seed. Swapping one value for a different
+        # locally-valid one in every candidate -- with aggregates
+        # recomputed and both protocol hashes recomputed the old
+        # records-derived way -- validated before the fix and
+        # must not validate now.
+        def swap(payload):
+            for entry in payload["candidates"].values():
+                for record in entry["records"]:
+                    if record["task"] == "copy" and record["value_id"] == "nf-copy-00":
+                        record["operands"] = [123]
+                        record["expected_value"] = 123
+                        record["stratum"] = "random"
+                        record["expected_answer"] = nf.render_form(123, record["form"])
+                        record["form_identical"] = nf.render_form(
+                            123, record["form"]
+                        ) == nf.render_form(123, "plain")
+                        record["cell"] = None
+                        record["detail"] = "arm_context_exceeded"
+                        record["answer_value"] = None
+                self._recompute_candidate(entry)
+            self._rehash_from_records(payload)
+
+        self.assertFalse(_valid_numform(self._tampered(swap)))
+
+    def test_seed_relabel_rejected(self):
+        # The seed is part of the instrument binding: genuine
+        # seed-0 records relabelled as seed 999 (with the
+        # relabelled seed's true generator hash and a recomputed
+        # fingerprint) are not seed 999's payload.
+        def relabel(payload):
+            payload["protocol"]["seed"] = 999
+            payload["protocol"]["generator_sha256"] = nf.generator_sha256(999)
+            core = {k: v for k, v in payload["protocol"].items() if k != "fingerprint"}
+            payload["protocol"]["fingerprint"] = hashlib.sha256(
+                json.dumps(core, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+
+        self.assertFalse(_valid_numform(self._tampered(relabel)))
+
+    def test_grouping_delta_relation(self):
+        # Cycle 187 (wave-8 F4): each stored delta must equal
+        # its form's mean minus the plain mean (the producer's
+        # paired-difference mean over the same operand multiset),
+        # not merely be a plausible number.
+        def inconsistent(payload):
+            payload["grouping"]["form_token_means"] = {
+                "plain": 10.0,
+                "comma": 20.0,
+                "space": 30.0,
+                "scientific": 40.0,
+            }
+            payload["grouping"]["token_deltas_vs_plain"] = {
+                "plain": 0.0,
+                "comma": 999.0,
+                "space": -555.0,
+                "scientific": 0.5,
+            }
+
+        self.assertFalse(_valid_numform(self._tampered(inconsistent)))
+
+        def consistent(payload):
+            payload["grouping"]["form_token_means"] = {
+                "plain": 10.0,
+                "comma": 20.0,
+                "space": 30.0,
+                "scientific": 40.0,
+            }
+            payload["grouping"]["token_deltas_vs_plain"] = {
+                "plain": 0.0,
+                "comma": 10.0,
+                "space": 20.0,
+                "scientific": 30.0,
+            }
+
+        self.assertTrue(_valid_numform(self._tampered(consistent)))
+
+    def test_mirror_matches_producer_sweep(self):
+        # The validator's generator mirror must reproduce the
+        # producer's set exactly, seed for seed -- including
+        # seed 4, whose copy draw hits the round-redraw loop.
+        for seed in range(100):
+            _construction, rows = dr._numform_generated(seed)
+            digest = hashlib.sha256(
+                json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+            ).hexdigest()
+            self.assertEqual(digest, nf.generator_sha256(seed), seed)
+
+    def test_mirror_defensive_paths(self):
+        # The mirror's fail-closed guards, proven directly the
+        # way the producer's identical guards are proven above:
+        # the out-of-band raise, the partner==0 nudge (both
+        # branches), and the out-of-range partner retry.
+        with self.assertRaises(ValueError):
+            dr._numform_band_of(10**12)
+        self.assertEqual(dr._numform_add_partner(9, "none", 10), 10)
+        self.assertEqual(dr._numform_add_partner(8, "none", 10), 1)
+
+        # The retry redraws with the next counter, so the flaky
+        # set differs from the unpatched one; the property is
+        # that mirror and producer agree under the same patch.
+        def make_flaky(original):
+            calls = {"n": 0}
+
+            def flaky(a, target, derived):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return -1
+                return original(a, target, derived)
+
+            return flaky
+
+        with mock.patch.object(
+            dr, "_numform_compare_partner", make_flaky(dr._numform_compare_partner)
+        ):
+            _construction, rows = dr._numform_generated(0)
+        digest = hashlib.sha256(
+            json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        ).hexdigest()
+        with mock.patch.object(nf, "_compare_partner", make_flaky(nf._compare_partner)):
+            produced = nf.canonical_generated_rows(0)
+        produced_digest = hashlib.sha256(
+            json.dumps(produced, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(digest, produced_digest)
+
+    def test_cross_candidate_answer_tokens(self):
+        # Cycle 187 (wave-8 F4): expected_answer_tokens is
+        # measured once per run, so candidates must agree on it
+        # per record; a one-candidate edit (with that candidate's
+        # aggregates honestly recomputed) is a construction
+        # disagreement, not a per-candidate fact.
+        def mismatch(payload):
+            names = sorted(payload["candidates"])
+            entry = payload["candidates"][names[1]]
+            entry["records"][0]["expected_answer_tokens"] += 5
+            self._recompute_candidate(entry)
+
+        self.assertFalse(_valid_numform(self._tampered(mismatch)))
 
     def test_aggregate_tampers(self):
         def agg(payload):
