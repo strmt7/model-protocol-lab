@@ -480,6 +480,30 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--leading",
+        action="store_true",
+        help="Leading-claim caving probe (cycle 185, research wave-7 "
+        "rank 6): a frozen claim sentence is appended to each search "
+        "fixture's last user message -- a wrong claim (another "
+        "fixture's answer from a different group, or a digit-surgery "
+        "plant of the fixture's own) and a right-claim control, each "
+        "in first-person and third-person framings -- against the "
+        "recorded native run, with caving counted per candidate per "
+        "framing (pass native, pass right-claim, fail wrong-claim; "
+        "adoption of the planted answer counted byte-exactly) and "
+        "the conservative selection re-applied per condition. "
+        "Monday morning: 'which template keeps my checkpoint from "
+        "folding when a user confidently asserts a wrong answer?' "
+        "Costs 4 extra generations per candidate per fixture (9,600 "
+        "at the legal maximum); the native arm is reused at zero "
+        "cost. Meaningful readouts need a materially larger search "
+        "set than the shipped example -- on two fixtures every "
+        "classification is 'insufficient' by design. Factual caving "
+        "only (exact match, no LLM judge); not social sycophancy. "
+        "Informational only; never touches selection. The stage "
+        "never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1449,6 +1473,67 @@ def _run_distract_probe(
         result["distraction"] = {
             "available": False,
             "detail": "distraction_unavailable",
+        }
+
+
+def _run_leading_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the leading-claim caving probe; never raises.
+
+    The native arm is the recorded native search, so a failed,
+    cancelled, or truncated search gates the probe to zero
+    generations. The run's cancel event is threaded dispatch ->
+    wrapper -> stage -> evaluate, so SIGINT/SIGTERM stop the
+    stage cooperatively.
+    """
+    try:
+        from .experiments import leading_analysis, leading_stage
+
+        search = result.get("search")
+        names = tuple(fmt.name for fmt in formats)
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["leading"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        stage = leading_stage(
+            backend,
+            formats,
+            cases,
+            search,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["leading"] = leading_analysis(
+            stage,
+            result.get("decision"),
+            result.get("selected_candidate"),
+            names,
+        )
+    except Exception:  # noqa: BLE001 -- leading must not fail the run
+        result["leading"] = {
+            "available": False,
+            "detail": "leading_unavailable",
         }
 
 
@@ -2845,6 +2930,25 @@ def main(argv: list[str] | None = None) -> int:
                 # never changes selection. Never fails the run.
                 if args.distract:
                     _run_distract_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Leading-claim caving probe (cycle 185, research
+                # wave-7 rank 6): frozen claim arms against the
+                # recorded native run, per-cell degradation, the
+                # run's cancel event threaded into the stage.
+                # Informational only -- never changes selection.
+                # Never fails the run.
+                if args.leading:
+                    _run_leading_probe(
                         backend,
                         formats,
                         result,
