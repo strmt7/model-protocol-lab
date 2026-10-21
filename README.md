@@ -19,7 +19,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (7630 tests, 96.4% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (7648 tests, 96.4% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -127,7 +127,7 @@ raw prompts or generations.
 - Cross-tokenizer boundary portability check (`doctor --reference-model`).
 - Behavioural template probe (`doctor --template-probe`): frozen sentinel-bracketed probe conversations rendered in word-swap pairs through the checkpoint's own tokenizer, reporting per pair whether the rendering changed anywhere outside the swapped message's span — the signature of content-conditional template logic (an instruction that appears only for some user messages) that the static template firewall cannot see. Findings only, never a verdict; a section with no findings bounds only templates that cannot detect the published probe conversations.
 - Prompt-boundary sensitivity sweep (`run --sensitivity-sweep`): measures whether truncating the prompt mid-token flips the selection (the per-depth byte cap is `--max-drop-bytes`).
-- Raw evidence, opt-in only (`run --include-evidence`): adds the recorded answer/token traces to `results.json` for debugging. Off by default — the public results file carries verdicts, counts and IDs, not raw generations, unless you ask for them.
+- Raw evidence, opt-in only (`run --include-evidence`): adds the recorded answer/token traces to `results.json` for debugging. Off by default — the public results file carries verdicts, counts and IDs, not raw generations, unless you ask for them. One stated exception: the numform probe's ground records carry their synthetic answer text (never your fixtures' text), because the diff validator re-derives every stored parse from it — see `docs/NUMFORM_DESIGN.md`.
 - Whitespace canonicalization (`run --ws-scan`): every search candidate's rendered prompts re-encoded under 8 whitespace mutations of the render string (trailing/leading space, newline, tab, stripping, collapsing) — id sequences compared exactly, fixtures on divergent variants re-run to measure verdict flips. Per-family whitespace fragility with the honest split: divergent ids + flipped verdict is fragility, flipped verdict on identical ids is a backend-determinism finding.
 - Synthetic-history selection stability (`run --synth-history`): every search candidate re-evaluated with fabricated prior turns prepended to each fixture — does the winner survive a conversation history it never had, and do delimiter styles differ in how much planted history moves the answer?
 - Batch-invariance audit (`run --batch-invariance`): checks whether verdicts would survive batched serving; the local backend exposes no batch path, so the audit records `batch_unsupported` rather than inventing a result — an honest gap marker, revisited if a batch-capable backend lands.
@@ -251,6 +251,6 @@ CHANGELOG.md              What changed and when
 
 ## Privacy
 
-Reports stay on the local filesystem. JSON excludes raw observations by default; `--include-evidence` explicitly includes potentially sensitive prompts as token IDs, generated text and traces. Summary metadata, candidate names, format markers and fingerprints remain in ordinary JSON. Inspect all reports before sharing. No report files, model weights, credentials or personal configuration belong in source control.
+Reports stay on the local filesystem. JSON excludes raw observations of your fixtures by default (the numform probe's synthetic answer records are the one designed exception, above); `--include-evidence` explicitly includes potentially sensitive prompts as token IDs, generated text and traces. Summary metadata, candidate names, format markers and fingerprints remain in ordinary JSON. Inspect all reports before sharing. No report files, model weights, credentials or personal configuration belong in source control.
 
 See [docs/SECURITY.md](docs/SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under MIT — see [LICENSE](LICENSE). If you use this software, please cite it via [CITATION.cff](CITATION.cff).

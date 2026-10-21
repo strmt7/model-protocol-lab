@@ -319,9 +319,10 @@ answer digests only.** The verdict is recomputed by the validator as
 `answer_digest == expected_digest ∧ boundary_found` — there is no
 stored derived answer field to forge. Any derived answer field
 (parsed date, normalised value, …) is forbidden in dateline records
-unless digest-bound; the numform structural fix stays scheduled for
-numform and is *not* imported here, because dateline never stores
-the unbound field in the first place.
+unless digest-bound; numform's own unbound field was closed the
+same way in cycle 190 (digest-bound answer text, re-parsed by
+its validator) — dateline never needed the fix, because it
+never stored the unbound field in the first place.
 
 Byte-cap arithmetic (the driver is cells per record, since the
 2,400 ground-record cap already folds in the candidate

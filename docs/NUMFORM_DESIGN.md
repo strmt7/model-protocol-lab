@@ -180,26 +180,54 @@ trust them: it regenerates the whole set from the protocol's
 seed and compares every record's construction against the
 regenerated set (cycle 187; before that, the validator hashed
 whatever records were present, which vouched for a binding it
-never checked). The answer side is stored differently: a cell
-carries the answer's digest and the value the stage parsed
-from it. The decomposition below is recomputed from that
-stage-attested parsed value — the parse itself is a stage
-act, pinned by the stage's own tests, not re-derivable from
-a digest (the grammar deliberately accepts non-canonical
-costume, so no rendering check could re-derive it either).
-Storing the answer text so the validator can re-parse it is
-scheduled work (see Honesty items); it is a payload-format
-change, not a wording fix. A hash over a ≤12-digit expected
-value would be brute-force-invertible anyway, so digest-only
-expected-side storage would buy no privacy either. Records
-also carry `answer_digest`, `boundary_found`, `input_tokens`,
-and the expected answer's token count. Records ride in the
-public results.json regardless of `--include-evidence`, like
-every probe's ground records — stated here so the diff
-contract is explicit; the data is synthetic.
+never checked). The answer side, since cycle 190: a record
+carries the answer text verbatim (`answer_text`, the raw
+answer segment, never normalised) beside the value the stage
+parsed from it, and the cell carries the text's digest. The
+validator checks `sha256(answer_text) == answer_digest`
+(fail-closed on text that cannot be UTF-8 encoded) and
+re-parses the text under its own mirrored grammars,
+requiring the result to equal the stored value — the stage's
+parse is no longer trusted anywhere. Compare answers are
+words, not numbers: they are bound by the digest alone, and
+a numeric compare answer ("123") is a legal non-label
+record. A cell that never completed carries neither text nor
+value; the validator rejects either one appearing there.
+Pre-cycle-190 payloads are rejected (the record key set is
+exact); there is no migration shim, because a shim would
+re-open the forgery for exactly the payloads it accepted.
+Records ride in the public results.json (and in sealed
+bundles) regardless of `--include-evidence`, like every
+probe's ground records — an explicit decision, restated in
+the README: the prompts are synthetic and the stored text is
+the answer segment only, and stripping it would break
+`diff-reports` on the default artifact. The report never
+renders answer text.
 
-Per-cell decomposition (recomputed by the validator from the
-stage-attested parsed value):
+Two consequences of storing text, both accepted and pinned
+by test. First, byte accounting: the field costs ~26 bytes
+per record on faithful workloads (428 → 454 B/record;
+1.88 → 2.00 MiB at the legal maximum of 4,608 records), and
+the 12 MiB records cap leaves ~2,277 escaped bytes of
+headroom per record over that baseline — so a checkpoint
+that rambles to a large `--max-new-tokens` can now push a
+run into `numform_records_too_large` where the same run
+stayed available before (at the default 64 tokens the
+worst case still fits, at 8.75 MiB). The stage fails
+closed after spending the generation budget; the cap is
+unchanged. Second, an alternative was considered and
+rejected: store the text only when it parses (the longest
+parseable answer is 26 characters, so that field would
+cost ≤ ~42 B/record) and a sentinel otherwise. The
+projection is sound — every validator use of the value
+factors through the parse — but it makes the validator
+carry a second representation with its own honesty
+conditions (in the sentinel branch: digest ≠ expected
+digest, verdict false, value None) in place of one direct
+equality, to save bytes the cap already accommodates.
+
+Per-cell decomposition (recomputed by the validator from
+the re-parsed answer value):
 
 - copy / add: `exact_pass` (verdict true); else
   `value_pass_form_fail` when the parsed answer value equals
@@ -319,16 +347,16 @@ any pooled cross-task total present at all.
   grouping explains nothing by itself within a run, and
   cross-tokenizer claims require cross-run diffs of different
   checkpoints, which confound weights with tokenizer.
-- The decomposition's answer side rests on the stage's
-  parse (see Records and decomposition). Scheduled structural
-  fix, recorded here so it is not lost: store the answer text
-  on numform records and bind it with
-  `answer_digest == sha256(answer_text)`, so the validator can
-  re-parse the answer itself instead of trusting the stored
-  parsed value. It changes the payload's exact record key set
-  (stage, both diff-oracle mirrors, and the records-bytes
-  accounting move together), which is why it is its own cycle
-  and not part of the cycle-187 wording fix.
+- The decomposition's answer side rested on the stage's
+  parse until cycle 190 (see Records and decomposition);
+  the validator now re-parses the digest-bound answer text
+  itself. The parse grammars exist three times (producer,
+  diff validator, cycle-27 test oracle) and are pinned
+  equal — pattern texts by test, behaviour by a
+  differential battery over the grammar alphabet including
+  the five classic divergence classes (non-ASCII digits,
+  trailing newlines, digit-count caps, negative-shift
+  divisibility, uncapped scientific results).
 - Named future work, not in v1: spelled-out number words,
   locale forms (decimal-comma, 3-2-2 grouping), other space
   codepoints, mixed-form fixtures, fractional operands,

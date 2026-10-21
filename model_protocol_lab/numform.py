@@ -49,16 +49,16 @@ cycle 186):
   expected side's canonical integers in the clear, and the
   diff validator regenerates the whole set from the seed and
   recomputes every expected-side fact from it. The answer
-  side is different: a cell stores the answer's digest and
-  the value the stage parsed from it, so the decomposition
-  is recomputed from a stage-attested parse -- the parse
-  itself is a stage act, pinned by the stage's own tests,
-  not something the validator can re-derive from a digest.
-  (Storing the answer text so the validator could re-parse
-  it is scheduled work, recorded in the design doc; a hash
-  over a value of at most 12 digits would be invertible by
-  enumeration anyway, so digest-only expected-side storage
-  would buy no privacy either.)
+  side: a record stores the answer text verbatim beside
+  the value the stage parsed from it, and the cell stores
+  the text's digest; the validator binds the digest to the
+  text and re-parses the text under its own mirrored
+  grammars (cycle 190 -- before that, the decomposition
+  rested on a stage-attested parse the validator could
+  not re-derive, and a forged stored value validated).
+  (A hash over a value of at most 12 digits would be
+  invertible by enumeration anyway, so digest-only
+  expected-side storage would buy no privacy either.)
 * The tokenizer grouping label is measured from the attached
   tokenizer by a frozen count-based probe battery, never
   inferred from a family name (Llama 3 onward groups digits by

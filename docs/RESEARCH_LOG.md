@@ -8044,3 +8044,55 @@ entry's own text above: the scripted control does not
 "isolate" the self-history ingredient — the contrast is a
 bundle (authorship + content + length) over a minimal
 neutral history, and the shipped wording says so.
+
+## Cycle 190 — numform F3 structural fix (2026-10-21)
+
+The standing scheduled item from cycle 187 lands. Numform
+records now carry `answer_text` — the raw answer segment,
+verbatim — beside the stage's parsed value, and the diff
+validator binds the two: `sha256(answer_text)` must equal
+the cell's recorded digest, and re-parsing the text under
+the validator's own mirrored grammars must reproduce
+`answer_value` exactly. A cell that never completed must
+carry neither field. Compare records are bound by the
+digest alone (their answers are labels; a numeric compare
+answer is a legal non-label record, pinned).
+
+Red-team A (BUILD WITH AMENDMENTS, A1-A9) proved the hole
+by execution first: a forged `answer_value` (+999) with
+honestly recomputed aggregates validated on the cycle-189
+tree, decomposition flipping to value_fail on the forger's
+say-so. Red-team B re-ran every execution and upheld the
+brief with three amendments of its own: the forged-None
+and single-candidate variants also validate today (same
+hole, same fix); the lone-surrogate digest crash is a
+pre-existing class in this codebase (`_valid_refusals`,
+four fixture-hash joins), downgraded to LOW — the new
+mirror still fails closed on it; and the public-artifact
+decision is sharper than A framed it, because the
+README's default-results contract ("not raw generations,
+unless you ask") needed an explicit carve-out in the same
+push, which the README now carries. B also corrected A's
+byte bound for the rejected store-only-if-it-parses
+projection (314 escaped bytes, not ~42, for a 26-char
+astral string under the un-tightened scheme); the
+projection and its rejection rationale are recorded in
+docs/NUMFORM_DESIGN.md with B's tightening noted.
+
+The parse grammars now exist three times — producer,
+diffreports mirror, cycle-27 oracle hand mirror — pinned
+equal by pattern text and by a differential battery over
+the grammar alphabet (all renders of 0-2000 in four forms,
+plus the five executed divergence classes: non-ASCII
+digits, trailing newlines, digit-count caps,
+negative-shift divisibility, uncapped scientific
+results). Grammar overlap was attacked directly by B in
+cycle 190's prep (88,061 strings x 3 check orderings, 0
+mismatches): the grammars intersect only where they
+agree. Byte accounting is recorded in the design doc:
+~26 B/record on faithful workloads, and a rambling
+checkpoint at a large --max-new-tokens can now reach
+`numform_records_too_large` — an accepted, test-pinned
+consequence, cap unchanged. Pre-cycle-190 numform
+payloads are rejected by diff-reports; no migration
+shim, by design.
