@@ -12,9 +12,10 @@ This file pins the dispatch layer for every stage flag, following
 the cycle-174 pattern (flag parses -> probe attaches its profile ->
 probe never raises):
 
-- TestFlagParsing: all 24 stage flags set their argparse dest when
-  present and leave it falsy when absent.
-- TestHelperDispatch: the 19 `_run_*_probe` helpers in cli.py. With
+- TestFlagParsing: every stage flag in STAGE_FLAGS sets its
+  argparse dest when present and leaves it falsy when absent.
+- TestHelperDispatch: the `_run_*_probe` helpers in cli.py (26
+  after cycle 188 added dateline). With
   the helper's experiments functions stubbed to a sentinel, the
   helper attaches a non-marker payload under its result key; with
   the first experiments function stubbed to raise, the helper
@@ -106,6 +107,7 @@ STAGE_FLAGS = [
     ("--distract", "distract", None),
     ("--leading", "leading", None),
     ("--numform", "numform", None),
+    ("--dateline", "dateline", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -257,6 +259,12 @@ HELPER_DISPATCH = [
         "numform",
         "numform_unavailable",
         ["numform_stage", "numform_analysis"],
+    ),
+    (
+        "_run_dateline_probe",
+        "dateline",
+        "dateline_unavailable",
+        ["dateline_stage", "dateline_analysis"],
     ),
     (
         "_run_cache_profile_probe",

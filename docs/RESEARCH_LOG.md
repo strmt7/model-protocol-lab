@@ -7862,3 +7862,98 @@ missing six comparisons; USAGE §6 sample-absent list missing
 four sections; FAQ's zero-call post-hoc list missing
 stop-cause, scorer-lens and aliasing) and a coverage line in
 VALIDATION's current evidence block.
+
+## Cycle 188 — date-line sensitivity × template (wave-8 rank 1, 2026-10-21)
+
+Question: serving stacks prepend a "Today is …" line the user
+never wrote. How much does changing only that injected date
+move a local checkpoint's task verdicts, per template family —
+and does the template ranking survive a calendar rollover?
+
+### Uniqueness pass (researcher brief, sources verified live 2026-10-21)
+
+Primary source: Sanz-Guerrero, Bui, Mager, von der Wense,
+*Dating the Model: Hidden Dates in System Prompts Affect LLM
+Evaluation*, arXiv:2609.36931 (abstract page fetched and read;
+the wave-8 brief's summary corrected in three places: the
+paper covers 6 **datasets**, not benchmarks; the headline
+deltas are up to 6% on MCQA, 14% on math, 7% on code **plus
+2.84 BLEU on machine translation**, which the brief omitted;
+few-shot does not reduce the effect and chain-of-thought
+**amplifies** it, the paper's verb). Rankings shift; the
+effect exceeds batch-size and numerical-precision variance.
+The paper's own injected line is weekday + ISO ("Today is
+Wednesday, 2025-12-03"), which fixes this probe's third
+format. Surveyed harnesses — lm-eval, Inspect, HELM,
+promptfoo, OpenAI Evals, DSPy — ship no date-line sensitivity
+instrument; none crosses a frozen date treatment with
+hand-rendered template families on one local checkpoint
+under exact-match greedy scoring with a length-matched
+no-date control and a weekday-lie arm. The claim is the
+combination, as always. Boundary vs `doctor
+--template-probe` (cycle 182): that probe varies template
+structure; it cannot see a day-granularity injection inside
+an otherwise unchanged rendering. The two are complementary,
+not mirror images.
+
+### Swarm record
+
+Red-team A returned DO NOT BUILD AS SPECIFIED (F1–F15, five
+HIGH): the weekday-lie arm is unexpressible in the brief's
+two formats, neither of which contains a weekday name (F1);
+the budget was priced on ~8 arms where the design enumerates
+18+ (F2); a union headline over 24 arms saturates (F3); one
+control sentence cannot length-match arms of differing
+lengths, and no sizing mechanism existed (F4); the
+eligibility screen as specified excluded almost nothing —
+executed: expecteds `21`/`2026`/`October` rung-match nothing
+in the arm strings, and the containment pole is equally
+unsound (F5); the loss subset had no acquittal baseline
+(F6). Red-team B upheld the verdict and every HIGH, fabricated
+nothing, and corrected A in four places adopted over A's text:
+the third format is weekday-ISO (the paper's shape), not
+weekday-long (a hybrid in no cited source); the lie shifts
+the weekday +1 (the smaller length step); the screen gains a
+closed-format parse leg with frozen tables and abbreviation
+aliases over date-bearing components only; F7 downgraded
+MEDIUM → LOW. B also restated the falsification clause in
+per-pair vocabulary (M1), required answer digests only in the
+records — the numform F3 debt avoided by construction (M4),
+and pinned the sample-report behaviour: the section returns
+empty on a missing key, so regeneration stays byte-identical
+(M6). The shipped contract is `docs/DATELINE_DESIGN.md`
+(G1–G16 as amended by B).
+
+### Build notes (reality over the design text, twice)
+
+- The design's screen battery claimed expected `2` is not
+  screened. Executing the frozen screen disproved it: `2`
+  rung-matches the leap arm's zero-padded ISO month component
+  `02` under the disclosed R4 value collapse. The design doc
+  was corrected in place; the battery in the tests pins the
+  executed behaviour (`2` screened; `26`, `March 3`, `is`
+  not).
+- A scripted multi-site rename inside the date parser
+  poisoned two sibling branches (a stale variable the tests
+  caught immediately). The function was audited line by line
+  afterwards; the standing rule is now in the coordinator's
+  lesson file: textual replacement is not scope-aware — after
+  any scripted multi-site edit in a function that reuses
+  variable names, audit every branch.
+
+### What shipped
+
+`run --dateline`: 28 treated arms (8 frozen date values × 3
+formats, 3 sized no-date controls, 1 weekday-lie) over the
+search fixtures of every candidate; per-pair discordant
+headlines partitioned pure-date / pure-format (cross-both
+not computed); date-loss subsets with counterparts and the
+lie split; the component screen
+(`dateline-components-r4-v1`) applied before generation;
+per-arm selection withheld, common-population selection
+reported; records carry digests only. `diff-reports` gains
+the `dateline` section with a full-recompute validator whose
+arm table is its own literal copy — weekday names recomputed
+from each date, so a payload re-rendered from one weekday
+fails. Cost stated in CLI help before the run: 67,200
+generations at the legal maximum.

@@ -220,7 +220,7 @@ Ctrl+C requests cooperative cancellation after model loading. Interrupted evalua
 - `report.html`: offline static comparison -- decision banner (with selection margin, see §8.7), section table of contents, run configuration, candidate table with per-candidate boundary IDs, per-fixture outcome grid, decisive fixtures, token overhead, template conformance, backend divergence, stop matrix, token-budget frontier with per-candidate pass curves, a deterministic inline-SVG frontier chart with a decision ribbon coloring every budget span by post-hoc outcome, a selection-margin trajectory chart with the safe-budget-floor dashed line, a per-candidate sparkline table, per-flip-span attribution lines, a prompt-boundary canonicality section, a chat-marker isolation matrix (see §8.11), a template-firewall verdict block (see §8.12), a selection-robustness matrix under stop semantics (see §8.13), a cross-checkpoint transfer matrix (see §8.14), a fixture-perturbation robustness section (see §8.15), a token-healing sensitivity section (see §8.16), an instruction-hierarchy adherence section (see §8.17), an assistant-prefill sensitivity section (see §8.18), a protocol-portfolio section (see §8.19), a synthetic-history selection
 stability section (see §8.20), a batch-invariance audit section (see §8.21), a position-sensitivity section (see §8.22), a stop-cause termination audit section (see §8.23), a whitespace-canonicalization section (see §8.24), a structured-output adherence section (see §8.25), a delimiter-authority section (see §8.26), a few-shot x template section (see §8.27), a fake-turn history-tampering section (see §8.28), a prompt-only tool-call adherence section (see §8.29), a response-verbosity profile (see §8.30), a template surface-noise robustness section (see §8.31), a template field-ablation section (see §8.32), a prefix-cache sharability profile (see §8.33), a labeled-block confidentiality section (see §8.34), an answer-collision audit section (see §8.35), a suspected-refusal profile (see §8.36), a scorer-lens regrade (see §8.37), a candidate aliasing audit section (see §8.38), a prompt-repetition section (see §8.39), a distractor-dilution section (see §8.40), sensitivity sweep, log-likelihood diagnostic (see §8.9) and held-out cards (including the held-out verification-floor callout). A section renders only when the run recorded its stage; a run without that stage omits the section rather than rendering an empty one. Tables sort on header click via one small inline script (hash-allowlisted in the report's Content-Security-Policy); no fonts or remote assets. The report reads identically with scripting disabled.
 
-A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation, scorer-lens, candidate-aliasing, prompt-repetition, distractor-dilution, leading-claim and numeric-surface-form sections are absent from the sample even though real runs render them.
+A byte-deterministic example is committed at `examples/sample-report/report.html` (produced from `examples/fixtures.json` by `examples/make_sample_report.py`, which regenerates the directory rather than appending to it) -- open it to see most of the sections above with no model required. The sample's scripted run does not record every stage, so the template-conformance, backend-divergence, stop-matrix, sensitivity-sweep, log-likelihood, token-healing, template-robustness, field-ablation, scorer-lens, candidate-aliasing, prompt-repetition, distractor-dilution, leading-claim, numeric-surface-form and date-line sections are absent from the sample even though real runs render them.
 
 Open the HTML file in a browser. It loads no fonts or other remote assets. The only script is a small inline table sorter; the content is unchanged with scripting disabled. Raw evidence is never embedded in this HTML view. Add `--include-evidence` only when you deliberately want raw observations in JSON and understand that token IDs can reveal private prompts.
 
@@ -1920,6 +1920,88 @@ before the run. The full contract is in
 `docs/NUMFORM_DESIGN.md`. Informational only: the probe
 never affects selection, and the stage never fails the run.
 
+### 8.43 Date-line sensitivity (`dateline`)
+
+Opt-in with `model-protocol-lab run --dateline`. A
+generation stage: a `[Context] ... [/Context]` block is
+prepended to the final user message of each search fixture,
+carrying one frozen date line — eight date values (an
+anchor day, the days around it, the same day a year either
+way, a leap day, and a year boundary pair) each rendered in
+three formats (ISO `2026-10-21`, long `21 October 2026`,
+and weekday-ISO `Wednesday, 2026-10-21`, the shape real
+system prompts inject) — plus, per format, a no-date
+control whose neutral text is sized to the anchor arm's
+rendered length for that candidate and fixture, and one
+weekday-lie arm (the anchor date wearing the next day's
+weekday name). Monday-morning use: if your serving stack
+prepends a "Today is …" line, this tells you — per
+template family, on your own checkpoint — how often
+changing only that date flips a task verdict, and whether
+the template you picked still wins afterwards, so a
+calendar rollover cannot silently change your eval results
+after you ship.
+
+The headline is per-pair discordant counts, partitioned by
+pair type: pure-date pairs (one value against another in
+the same format) are the date-sensitivity family,
+pure-format pairs (one value across formats) are the
+format control, and pairs differing in both are not
+computed — a union "any-pair flip rate" over 24 date arms
+saturates under generic per-arm fragility and is not a
+shipped statistic. Each pair carries the frozen
+classification (`insufficient`, `no_discordance_observed`,
+`discordant_asymmetric`, `discordant_balanced`,
+`below_threshold`) over its discordant counts with floors,
+and a McNemar exact p-value as a diagnostic only. Beside
+the pairs, the date-loss subset counts fixtures that pass
+a format's no-date control and fail a date value, per
+value with formats collapsed and its asymmetric
+counterpart (fail the control, pass the value) reported
+beside it; the lie arm splits the anchor loss into losses
+consistent with "any date text perturbs" and losses
+specific to the true date's content. Fixtures whose
+expected answer could itself be date content — a component
+of the answer rung-matches a date-bearing component of an
+arm, or the answer parses as a date — are screened out of
+every treated population before generation, because on
+such a fixture a changed verdict is the correct answer
+changing, not task behaviour moving; date-bearing fixture
+messages and blank expecteds form their own reported
+classes (the frozen screen rule is named
+`dateline-components-r4-v1` in the protocol). A
+pre-registered null — every pure-date pair at
+zero discordants and every loss count zero — prints
+exactly that: the section states the instrument found no
+date effect, which is a publishable answer, not a missing
+one.
+
+Every date is a protocol constant and every weekday name
+is computed from its own calendar date; nothing in the
+probe reads the wall clock or the locale, so a run made in
+March and a run made in October measure the same
+instrument. Per-candidate per-arm selection is recomputed
+but withheld — a winner picked inside one date arm is an
+arm-conditional selection, not a template verdict — while
+the common-population selection (fixtures completed under
+every arm) is reported as the like-for-like readout.
+Records carry answer digests only, so `diff-reports`
+recomputes every verdict as digest-equality plus the
+boundary flag and rebuilds every aggregate, the screen,
+and the protocol fingerprint from its own literal arm
+table — a payload whose dates were re-rendered from one
+weekday fails validation outright (`diff_dateline`,
+`dateline_changed` / `dateline_asymmetric` feed
+`identical`). The ±year contrast moves the weekday with
+the year and is named a year+weekday shift wherever it is
+reported; the leap arm sits 496 days from the anchor and
+the report says so. Cost: candidates × fixtures × 28 arms
+generations (67,200 at the legal maximum); the CLI help
+states the count before the run. The full contract is in
+`docs/DATELINE_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -2297,7 +2379,7 @@ stage -- `perturbation`, `token_healing`, `hierarchy`, `prefill`,
 `portfolio`, `synthhistory`, `batch_invariance`, `position`,
 `stop_cause`, `ws_canonical`, `structured`, `deliforge`, `fewshot`,
 `faketurn`, `toolcall`, `verbosity`, `refusals`, `scorerlens`, `aliasing`, `repetition`,
-`distraction`, `leading`, `numform`, `cache_profile`,
+`distraction`, `leading`, `numform`, `dateline`, `cache_profile`,
 `template_robustness`, `ablation`, `confidentiality`,
 `answer_collision` -- each carrying that stage's verdict drift and
 per-candidate drift, with the stage's own section in section 8

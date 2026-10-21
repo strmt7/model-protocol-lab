@@ -6332,6 +6332,197 @@ def _numform_section(result: dict[str, Any]) -> str:
     )
 
 
+def _dateline_section(result: dict[str, Any]) -> str:
+    """Date-line sensitivity probe: the injected date per template.
+
+    Renders the ``dateline`` payload (see
+    experiments.dateline_analysis): per candidate, the
+    date-attributable loss per frozen date value against the
+    length-matched no-date control, the anchor's weekday-lie
+    split, and the pure-date discordant pairs (same format, two
+    date values) that carry the headline. The construct is named
+    in the prose: a date line immediately before the final user
+    message, which is the head of the conversation only for
+    single-turn fixtures. Every interpolation is escaped at this
+    boundary.
+    """
+    probe: Any = result.get("dateline")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    n_search = probe.get("n_search_fixtures")
+    n_multi = probe.get("n_multi_turn_fixtures")
+    multi_line = ""
+    if type(n_search) is int and type(n_multi) is int and n_search:
+        multi_line = (
+            "<p>Multi-turn share of the search set: "
+            + _count(n_multi)
+            + "/"
+            + _count(n_search)
+            + " fixtures have more than one user turn; for those, "
+            "the block sits immediately before the final user "
+            "message, not at the head of the conversation.</p>"
+        )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        if entry.get("date_content_falsified"):
+            bits.append(
+                "<div><strong>Date content falsified on this "
+                "fixture set</strong>: every pure-date pair's "
+                "discordant count is zero and every date value's "
+                "loss count is zero.</div>"
+            )
+        loss = entry.get("date_loss")
+        if type(loss) is dict:
+            loss_bits: list[str] = []
+            for value in sorted(loss, key=str):
+                block = loss[value]
+                if type(block) is not dict:
+                    continue
+                loss_bits.append(
+                    escape(value)
+                    + " "
+                    + _count(block.get("n_loss"))
+                    + "/"
+                    + _count(block.get("n_evaluable"))
+                    + " ("
+                    + _rate(block.get("loss_rate"))
+                    + ", counterpart "
+                    + _count(block.get("n_counterpart"))
+                    + ")"
+                )
+                lie_split = block.get("lie_split")
+                if type(lie_split) is dict:
+                    loss_bits.append(
+                        "anchor lie split: any-date-text "
+                        + _count(lie_split.get("n_loss_any_text"))
+                        + ", content-specific "
+                        + _count(lie_split.get("n_loss_content_specific"))
+                        + " of "
+                        + _count(lie_split.get("n_evaluable"))
+                    )
+            if loss_bits:
+                bits.append(
+                    "<div><strong>Date-attributable loss</strong> "
+                    "(pass the no-date control, fail the date value)"
+                    " — " + "; ".join(loss_bits) + "</div>"
+                )
+        pairs = entry.get("pairs_by_format")
+        if type(pairs) is dict:
+            pair_bits: list[str] = []
+            for fmt in sorted(pairs, key=str):
+                table = pairs[fmt]
+                if type(table) is not dict:
+                    continue
+                for pair in sorted(table, key=str):
+                    block = table[pair]
+                    if type(block) is not dict:
+                        continue
+                    discordant = 0
+                    if type(block.get("n_a_only")) is int and type(block.get("n_b_only")) is int:
+                        discordant = block["n_a_only"] + block["n_b_only"]
+                    if discordant:
+                        pair_bits.append(
+                            escape(fmt)
+                            + " "
+                            + escape(pair.replace("|", " vs "))
+                            + ": "
+                            + escape(str(block.get("classification")))
+                            + " (paired "
+                            + _count(block.get("n_paired"))
+                            + ", discordant "
+                            + _count(block.get("n_a_only"))
+                            + "/"
+                            + _count(block.get("n_b_only"))
+                            + ")"
+                        )
+            if pair_bits:
+                bits.append(
+                    "<div><strong>Pure-date discordant pairs</strong>"
+                    " — " + "; ".join(pair_bits) + "</div>"
+                )
+        control = entry.get("control_evaluable")
+        if type(control) is dict:
+            control_bits = []
+            for fmt in sorted(control, key=str):
+                block = control[fmt]
+                if type(block) is dict:
+                    control_bits.append(
+                        escape(fmt)
+                        + " "
+                        + _count(block.get("n_evaluable"))
+                        + "/"
+                        + _count(block.get("n_live"))
+                    )
+            if control_bits:
+                bits.append(
+                    "<div>Control length-match evaluable: "
+                    + "; ".join(control_bits)
+                    + ". Screened fixtures: "
+                    + _count(entry.get("n_screened"))
+                    + "; message-date-bearing: "
+                    + _count(entry.get("n_message_date_bearing"))
+                    + ".</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="dateline">'
+        "<h2>Date-line sensitivity</h2>"
+        "<p>A frozen <em>[Context] Today's date is ... "
+        "[/Context]</em> block prepended to each search fixture's "
+        "last user message -- a date line immediately before the "
+        "final user message -- across eight frozen date values "
+        "(anchor 2026-10-21, &plusmn;1 day, &plusmn;1 year, leap "
+        "day 2028-02-29, a year-boundary pair) in three formats "
+        "(ISO, long, weekday+ISO), against a no-date control whose "
+        "neutral text is sized to the anchor arm's rendered length "
+        "and one weekday-lie arm (the anchor with its weekday name "
+        "shifted a day). Dates are protocol constants, never the "
+        "wall clock, so the run is reproducible on any day. The "
+        "headline is the per-pair discordant table within a format "
+        "-- not an any-pair flip rate, which would saturate under "
+        "generic fragility -- and the date-attributable loss "
+        "subset, printed beside its asymmetric counterpart. "
+        "Fixtures whose expected answer is itself date-derived "
+        "are screened out and counted, since the date line would "
+        "hand the model the string to copy.</p>"
+        + multi_line
+        + "<table><thead><tr><th>Candidate</th><th>Date loss, lie "
+        "split, and discordant pairs</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7656,6 +7847,7 @@ def render_html(result: dict[str, Any]) -> str:
     distraction_html = _distraction_section(result)
     leading_html = _leading_section(result)
     numform_html = _numform_section(result)
+    dateline_html = _dateline_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -7800,6 +7992,11 @@ def render_html(result: dict[str, Any]) -> str:
                 numform_html,
             ),
             (
+                "dateline",
+                "Date-line sensitivity",
+                dateline_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -7889,6 +8086,7 @@ def render_html(result: dict[str, Any]) -> str:
         + distraction_html
         + leading_html
         + numform_html
+        + dateline_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

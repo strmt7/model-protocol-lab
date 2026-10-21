@@ -7411,6 +7411,469 @@ def leading_analysis(
     }
 
 
+def dateline_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    search_entries: Any,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Date-line sensitivity stage (cycle 188): frozen date arms per candidate.
+
+    The native arm is the recorded search (reused, never
+    regenerated). Each treated cell prepends one frozen block --
+    a date line, a sized no-date control, or the weekday-lie
+    line -- to the last user message's content before render and
+    is scored by the standard pipeline against the fixture's own
+    expected answer. Date-derived fixtures are screened out as
+    their own record class before any generation; cells degrade
+    individually (screened, unmatchable control, context-
+    exceeded); one bad fixture never takes a candidate's whole
+    readout with it. Design: docs/DATELINE_DESIGN.md.
+    """
+    from . import dateline as _dl
+    from . import repetition as _rep
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    fixture_ids = [case.id for case in cases]
+    protocol: dict[str, Any] = dict(_dl.protocol_object(fixture_ids, str(backend.fingerprint)))
+    protocol["fingerprint"] = _dl.protocol_fingerprint(fixture_ids, str(backend.fingerprint))
+    if len(formats) * len(cases) > _dl.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "dateline_cell_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    screen_text = (
+        _dl.BLOCK_TEMPLATE.replace("{DATE}.", ".")
+        + _dl.CONTROL_TEMPLATE.replace("{NEUTRAL}", _dl.NEUTRAL_UNIT)
+        + "".join(_dl.date_arm_table().values())
+    )
+    if audit_special_token_literals(screen_text, formats):
+        # A special-token literal in the frozen protocol text
+        # would forge turn structure in every cell of every run;
+        # there is no honest per-cell version of that arm, so the
+        # stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "dateline_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    entries: dict[str, Any] = {}
+    if type(search_entries) is list:
+        for entry in search_entries:
+            if type(entry) is not dict:
+                continue
+            fmt_dict = entry.get("format")
+            entry_name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+            if type(entry_name) is str and entry_name:
+                entries[entry_name] = entry
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    expected_by_fixture = {case.id: case.expected for case in cases}
+    neutral_screened_fixtures, neutral_screened_candidates = _dl.screen_neutral(
+        expected_by_fixture, boundary_text
+    )
+    screens = {case.id: _dl.fixture_screen(case) for case in cases}
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        entry = entries.get(name)
+        summary = entry.get("summary") if type(entry) is dict else None
+        observations = entry.get("observations") if type(entry) is dict else None
+        if (
+            type(entry) is not dict
+            or type(observations) is not list
+            or not observations
+            or (type(summary) is dict and summary.get("aggregate_eligible") is False)
+        ):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        obs_by_fixture: dict[str, Any] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict or type(obs.get("fixture")) is not str:
+                usable = False
+                break
+            obs_by_fixture[obs["fixture"]] = obs
+        if not usable or any(case.id not in obs_by_fixture for case in cases):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        unit_estimate = max(1, len(backend.encode(_dl.NEUTRAL_UNIT)))
+        records: list[dict[str, Any]] = []
+        for case in cases:
+            if _cancelled():
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+            obs = obs_by_fixture[case.id]
+            ids_x1 = tuple(obs["input_ids"])
+            native_cell = {
+                "verdict": bool(obs["exact_match"] and obs["boundary_found"]),
+                "boundary_found": bool(obs["boundary_found"]),
+                "boundary_text_match": obs["boundary_text_match"],
+                "input_tokens": len(ids_x1),
+                "answer_digest": _answer_digest(obs.get("answer")),
+            }
+            content = _rep.target_content(case)
+            vacuous = _rep.is_vacuous(content)
+            expected_blank = not case.expected.strip()
+            screened, message_bearing = screens[case.id]
+            record: dict[str, Any] = {
+                "fixture": case.id,
+                "group": case.group,
+                "n_user_messages": sum(1 for message in case.messages if message.role == "user"),
+                "vacuous": vacuous,
+                "expected_blank": expected_blank,
+                "echo_fixture": _rep.is_echo_fixture(case),
+                "screened": screened,
+                "message_date_bearing": message_bearing,
+                "construction": "vacuous" if vacuous else "text_level",
+                "seam_ids": [],
+                "expected_digest": _dl.digest_text(case.expected),
+                "native": native_cell,
+                "cells": dict.fromkeys(_dl.TREATED_KEYS),
+                "cell_details": dict.fromkeys(_dl.TREATED_KEYS, ""),
+                "control_evaluable": dict.fromkeys(_dl.FORMATS, False),
+            }
+            records.append(record)
+            if vacuous:
+                record["cell_details"] = dict.fromkeys(_dl.TREATED_KEYS, "vacuous")
+                continue
+            if expected_blank:
+                record["cell_details"] = dict.fromkeys(_dl.TREATED_KEYS, "expected_blank")
+                continue
+            if screened:
+                record["cell_details"] = dict.fromkeys(_dl.TREATED_KEYS, "screened")
+                continue
+            if message_bearing:
+                record["cell_details"] = dict.fromkeys(_dl.TREATED_KEYS, "message_date_bearing")
+                continue
+            # Construction classification at the prepend seam,
+            # computed once per (candidate, fixture) on the anchor
+            # ISO arm (the seam's shape is arm-independent).
+            marker = "\u0001dateline-marker\u0001"
+            if marker not in content:
+                marker_fixture = _fixture_with_content(case, marker)
+                rendered_marker = fmt.render(marker_fixture.messages)
+                if rendered_marker.count(marker) == 1:
+                    head, tail = rendered_marker.split(marker)
+                    prefix_ids = backend.encode(head)
+                    suffix_ids = backend.encode(tail)
+                    block_fixture = _fixture_with_content(
+                        case, _dl.block_text(_dl.arm_date_string("anchor_iso"))
+                    )
+                    block_region = _rep.content_region(
+                        backend.encode(fmt.render(block_fixture.messages)),
+                        prefix_ids,
+                        suffix_ids,
+                    )
+                    joiner_fixture = _fixture_with_content(case, _dl.JOINER)
+                    joiner_region = _rep.content_region(
+                        backend.encode(fmt.render(joiner_fixture.messages)),
+                        prefix_ids,
+                        suffix_ids,
+                    )
+                    region_native = _rep.content_region(ids_x1, prefix_ids, suffix_ids)
+                    anchor_fixture = _dl.build_arm_fixture(case, "anchor_iso")
+                    region_treated = _rep.content_region(
+                        backend.encode(fmt.render(anchor_fixture.messages)),
+                        prefix_ids,
+                        suffix_ids,
+                    )
+                    construction, seam = _dl.classify_construction(
+                        region_native, region_treated, block_region, joiner_region
+                    )
+                    record["construction"] = construction
+                    record["seam_ids"] = list(seam)
+
+            try:
+                for arm_key in _dl.DATE_ARM_KEYS + (_dl.LIE_KEY,):
+                    date_string = _dl.arm_date_string(arm_key)
+                    if audit_special_token_literals(date_string, (fmt,)) or (
+                        boundary_text[name] and boundary_text[name] in date_string
+                    ):
+                        record["cell_details"][arm_key] = "arm_screened"
+                        continue
+                    _dateline_run_cell(
+                        backend,
+                        fmt,
+                        record,
+                        arm_key,
+                        _dl.build_arm_fixture(case, arm_key),
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                for fmt_name in _dl.FORMATS:
+                    control_key = f"nodate_{fmt_name}"
+                    anchor_key = f"anchor_{fmt_name}"
+                    if name in neutral_screened_candidates or (
+                        case.id in neutral_screened_fixtures
+                    ):
+                        record["cell_details"][control_key] = "control_screened"
+                        continue
+                    anchor_fixture = _dl.build_arm_fixture(case, anchor_key)
+                    anchor_ids = tuple(backend.encode(fmt.render(anchor_fixture.messages)))
+                    empty_fixture = _dl.build_arm_fixture(case, control_key, "")
+                    empty_ids = tuple(backend.encode(fmt.render(empty_fixture.messages)))
+                    delta = len(anchor_ids) - len(empty_ids)
+                    sized_text: str | None = None
+                    if delta == 0:
+                        # The empty control already matches the
+                        # anchor's rendered length exactly.
+                        sized_text = ""
+                    elif delta > 0:
+                        for reps, cut in _dl.neutral_search_order(unit_estimate, delta):
+                            text = _dl.neutral_text(reps, cut)
+                            candidate_fixture = _dl.build_arm_fixture(case, control_key, text)
+                            candidate_ids = tuple(
+                                backend.encode(fmt.render(candidate_fixture.messages))
+                            )
+                            if len(candidate_ids) == len(anchor_ids):
+                                sized_text = text
+                                break
+                    if sized_text is None:
+                        record["cell_details"][control_key] = "control_unmatchable"
+                        continue
+                    record["control_evaluable"][fmt_name] = True
+                    _dateline_run_cell(
+                        backend,
+                        fmt,
+                        record,
+                        control_key,
+                        _dl.build_arm_fixture(case, control_key, sized_text),
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+            except _DatelineCancelled:
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+class _DatelineCancelled(Exception):
+    """Internal control flow: unwind the stage on cancellation."""
+
+
+def _dateline_run_cell(
+    backend: Any,
+    fmt: Any,
+    record: dict[str, Any],
+    arm_key: str,
+    arm_fixture: Any,
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> None:
+    """Generate and record one dateline treated cell.
+
+    Degrades per cell (context-exceeded, evaluation-failed) in
+    the fixed detail vocabulary; raises _DatelineCancelled when
+    the run's cancel event is set, so the stage unwinds to its
+    cancelled payload rather than half-recording a fixture.
+    """
+    ids_arm = tuple(backend.encode(fmt.render(arm_fixture.messages)))
+    if len(ids_arm) + max_new_tokens > max_context:
+        record["cell_details"][arm_key] = "arm_context_exceeded"
+        return
+    if cancel is not None and cancel.is_set():
+        raise _DatelineCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (arm_fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if report.aggregate_eligible and report.observations:
+        cell_obs = report.observations[0]
+        record["cells"][arm_key] = {
+            "verdict": bool(cell_obs.exact_match and cell_obs.boundary_found),
+            "boundary_found": bool(cell_obs.boundary_found),
+            "boundary_text_match": cell_obs.boundary_text_match,
+            "input_tokens": len(cell_obs.input_ids),
+            "answer_digest": _answer_digest(cell_obs.answer),
+        }
+    else:
+        record["cell_details"][arm_key] = "arm_evaluation_failed"
+
+
+def dateline_analysis(
+    stage: dict[str, Any],
+    primary_decision: Any,
+    primary_winner: Any,
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a dateline stage into the stored payload (cycle 188).
+
+    Per-arm winners follow the conservative rule over each arm's
+    completed fixtures -- withheld whenever any candidate is
+    unavailable, the completed set differs across candidates, or
+    the completed set is not the arm's defined set (for a control
+    arm, the fixtures whose control text was sizeable for that
+    candidate). Native enters no paired population; it is the
+    per-record baseline and the selection-flip comparator only.
+    The common-population readout is the only ranked
+    cross-candidate comparison. Design: docs/DATELINE_DESIGN.md.
+    """
+    from . import dateline as _dl
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "dateline_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped_primary = ("selected", primary_winner)
+    else:
+        mapped_primary = (primary_decision, primary_winner)
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _dl.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    arms_out: dict[str, Any] = {}
+    for key in _dl.TREATED_KEYS:
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for name in candidate_names:
+            entry = stage_candidates[name]
+            if entry["status"] != "available":
+                withheld = True
+                all_pass[name] = None
+                continue
+            live = _dl.live_records(entry["records"])
+            if key in _dl.CONTROL_KEYS:
+                control_format = key.removeprefix("nodate_")
+                defined = frozenset(
+                    record["fixture"]
+                    for record in live
+                    if record["control_evaluable"][control_format]
+                )
+            else:
+                defined = frozenset(record["fixture"] for record in live)
+            completed = frozenset(
+                record["fixture"] for record in live if record["cells"][key] is not None
+            )
+            completed_sets.append(completed)
+            if completed != defined or not completed:
+                withheld = True
+                all_pass[name] = None
+                continue
+            all_pass[name] = all(
+                record["cells"][key]["verdict"] for record in live if record["fixture"] in completed
+            )
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            arms_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidate_names if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        arms_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped_primary,
+        }
+    available_records = {
+        name: stage_candidates[name]["records"]
+        for name in candidate_names
+        if stage_candidates[name]["status"] == "available"
+    }
+    common = _dl.common_population(available_records)
+    # The multi-turn share is recomputed from the ground records
+    # (n_user_messages is a per-fixture reference field), so the
+    # diff validator can recompute it too -- it is not trusted
+    # from the stage.
+    reference_records: list[dict[str, Any]] = next(iter(available_records.values()), [])
+    n_multi_turn = sum(1 for record in reference_records if record["n_user_messages"] > 1)
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "primary_decision": primary_decision,
+        "primary_winner": primary_winner,
+        "candidates": candidates_out,
+        "arms": arms_out,
+        "common_population": common,
+        "n_candidates": len(candidate_names),
+        "n_search_fixtures": len(reference_records),
+        "n_multi_turn_fixtures": n_multi_turn,
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

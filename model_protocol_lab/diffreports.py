@@ -604,6 +604,7 @@ def diff_reports(
     distraction_diff = diff_distraction(old.get("distraction"), new.get("distraction"))
     leading_diff = diff_leading(old.get("leading"), new.get("leading"))
     numform_diff = diff_numform(old.get("numform"), new.get("numform"))
+    dateline_diff = diff_dateline(old.get("dateline"), new.get("dateline"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -656,6 +657,10 @@ def diff_reports(
         "neither",
     )
     numform_asymmetric = numform_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    dateline_asymmetric = dateline_diff["available"] not in (
         "both",
         "neither",
     )
@@ -742,6 +747,8 @@ def diff_reports(
         and not leading_asymmetric
         and not numform_diff["changed"]
         and not numform_asymmetric
+        and not dateline_diff["changed"]
+        and not dateline_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -818,6 +825,8 @@ def diff_reports(
         "leading_asymmetric": leading_asymmetric,
         "numform_changed": numform_diff["changed"],
         "numform_asymmetric": numform_asymmetric,
+        "dateline_changed": dateline_diff["changed"],
+        "dateline_asymmetric": dateline_asymmetric,
         "identical": identical,
     }
     return {
@@ -855,6 +864,7 @@ def diff_reports(
         "distraction": distraction_diff,
         "leading": leading_diff,
         "numform": numform_diff,
+        "dateline": dateline_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -7058,6 +7068,828 @@ def diff_numform(old: Any, new: Any) -> dict[str, Any]:
         or numform_generator_drift
         or numform_backend_drift
         or numform_grouping_changed
+    )
+    return result
+
+
+# ---------------------------------------------------------------------
+# Dateline (cycle 188): the validator carries its own literal copy
+# of the frozen protocol -- every arm string, the block template,
+# the neutral unit -- and never imports dateline.py. Independence
+# is the point: a drifted producer constant must fail validation,
+# not be re-derived from the drifted source.
+# ---------------------------------------------------------------------
+
+_DATELINE_VALUES: tuple[tuple[str, tuple[int, int, int]], ...] = (
+    ("anchor", (2026, 10, 21)),
+    ("minus_day", (2026, 10, 20)),
+    ("plus_day", (2026, 10, 22)),
+    ("minus_year", (2025, 10, 21)),
+    ("plus_year", (2027, 10, 21)),
+    ("leap", (2028, 2, 29)),
+    ("boundary_eve", (2026, 12, 31)),
+    ("boundary_day", (2027, 1, 1)),
+)
+_DATELINE_VALUE_KEYS: tuple[str, ...] = tuple(key for key, _ in _DATELINE_VALUES)
+_DATELINE_FORMATS: tuple[str, ...] = ("iso", "long", "weekday_iso")
+_DATELINE_MONTHS: tuple[str, ...] = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+_DATELINE_WEEKDAYS: tuple[str, ...] = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+_DATELINE_DATE_ARMS: tuple[str, ...] = tuple(
+    f"{value}_{fmt}" for value in _DATELINE_VALUE_KEYS for fmt in _DATELINE_FORMATS
+)
+_DATELINE_CONTROL_KEYS: tuple[str, ...] = tuple(f"nodate_{fmt}" for fmt in _DATELINE_FORMATS)
+_DATELINE_TREATED: tuple[str, ...] = _DATELINE_DATE_ARMS + _DATELINE_CONTROL_KEYS + ("lie",)
+_DATELINE_BLOCK_TEMPLATE = "[Context] Today's date is {DATE}. [/Context]"
+_DATELINE_CONTROL_TEMPLATE = "[Context] {NEUTRAL}[/Context]"
+_DATELINE_JOINER = "\n\n"
+_DATELINE_NEUTRAL_UNIT = "The reference panel is mounted on the north wall of the room. "
+_DATELINE_CELL_DETAILS = frozenset(
+    (
+        "",
+        "vacuous",
+        "expected_blank",
+        "screened",
+        "message_date_bearing",
+        "arm_screened",
+        "arm_context_exceeded",
+        "arm_evaluation_failed",
+        "control_unmatchable",
+        "control_screened",
+    )
+)
+
+
+def _dateline_format(value_key: str, fmt: str) -> str:
+    """The validator's own rendering of one frozen date value."""
+    import datetime as _datetime
+
+    year, month, day = dict(_DATELINE_VALUES)[value_key]
+    if fmt == "iso":
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    if fmt == "long":
+        return f"{day} {_DATELINE_MONTHS[month - 1]} {year}"
+    weekday = _DATELINE_WEEKDAYS[_datetime.date(year, month, day).weekday()]
+    return f"{weekday}, {year:04d}-{month:02d}-{day:02d}"
+
+
+def _dateline_lie_string() -> str:
+    """The lie literal, rebuilt from the validator's own tables.
+
+    The anchor's calendar weekday is recomputed (locale-free
+    integer arithmetic through the validator's own weekday
+    table) and shifted +1 -- the check below then requires the
+    payload's lie string to equal this literal AND to differ
+    from the honest weekday-ISO rendering, so a validator-side
+    derivation can never silently correct the lie into an
+    honest arm.
+    """
+    import datetime as _datetime
+
+    year, month, day = dict(_DATELINE_VALUES)["anchor"]
+    weekday = _DATELINE_WEEKDAYS[(_datetime.date(year, month, day).weekday() + 1) % 7]
+    return f"{weekday}, {year:04d}-{month:02d}-{day:02d}"
+
+
+def _dateline_arm_table() -> dict[str, str]:
+    table = {
+        f"{value}_{fmt}": _dateline_format(value, fmt)
+        for value in _DATELINE_VALUE_KEYS
+        for fmt in _DATELINE_FORMATS
+    }
+    table["lie"] = _dateline_lie_string()
+    return table
+
+
+def _dateline_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    import math as _math
+
+    n = a_only + b_only
+    if n == 0:
+        return None
+    k = min(a_only, b_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _dateline_classify(n_paired: int, a_only: int, b_only: int) -> str:
+    """The frozen pair-classification truth table."""
+    if n_paired < 6:
+        return "insufficient"
+    if a_only == 0 and b_only == 0:
+        return "no_discordance_observed"
+    if a_only == b_only and a_only >= 2:
+        return "discordant_balanced"
+    if max(a_only, b_only) >= 2:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _dateline_live(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in records
+        if not r["vacuous"]
+        and not r["expected_blank"]
+        and not r["screened"]
+        and not r["message_date_bearing"]
+    ]
+
+
+def _dateline_pair_block(records: list[dict[str, Any]], key_a: str, key_b: str) -> dict[str, Any]:
+    n_paired = 0
+    n_a_only = 0
+    n_b_only = 0
+    n_both = 0
+    n_pass_a = 0
+    n_pass_b = 0
+    for record in records:
+        cell_a = record["cells"][key_a]
+        cell_b = record["cells"][key_b]
+        if cell_a is None or cell_b is None:
+            continue
+        n_paired += 1
+        if cell_a["verdict"]:
+            n_pass_a += 1
+        if cell_b["verdict"]:
+            n_pass_b += 1
+        if cell_a["verdict"] and cell_b["verdict"]:
+            n_both += 1
+        elif cell_a["verdict"]:
+            n_a_only += 1
+        elif cell_b["verdict"]:
+            n_b_only += 1
+    return {
+        "n_paired": n_paired,
+        "n_a_only": n_a_only,
+        "n_b_only": n_b_only,
+        "n_both": n_both,
+        "n_neither": n_paired - n_a_only - n_b_only - n_both,
+        "rate_a": (n_pass_a / n_paired) if n_paired else None,
+        "rate_b": (n_pass_b / n_paired) if n_paired else None,
+        "mcnemar_p": _dateline_mcnemar_p(n_a_only, n_b_only),
+        "classification": _dateline_classify(n_paired, n_a_only, n_b_only),
+    }
+
+
+def _dateline_loss_block(live: list[dict[str, Any]], value: str) -> dict[str, Any]:
+    """Independent recompute of ``dateline._loss_block``."""
+    evaluable: set[str] = set()
+    lost: set[str] = set()
+    counterpart: set[str] = set()
+    per_format: dict[str, Any] = {}
+    for fmt in _DATELINE_FORMATS:
+        control_key = f"nodate_{fmt}"
+        value_key = f"{value}_{fmt}"
+        n_evaluable = 0
+        n_loss = 0
+        for record in live:
+            control = record["cells"][control_key]
+            cell = record["cells"][value_key]
+            if control is None or cell is None:
+                continue
+            n_evaluable += 1
+            evaluable.add(record["fixture"])
+            if control["verdict"] and not cell["verdict"]:
+                n_loss += 1
+                lost.add(record["fixture"])
+            elif cell["verdict"] and not control["verdict"]:
+                counterpart.add(record["fixture"])
+        per_format[fmt] = {"n_evaluable": n_evaluable, "n_loss": n_loss}
+    block: dict[str, Any] = {
+        "n_evaluable": len(evaluable),
+        "n_loss": len(lost),
+        "loss_rate": (len(lost) / len(evaluable)) if evaluable else None,
+        "n_counterpart": len(counterpart),
+        "per_format": per_format,
+    }
+    if value == "anchor":
+        n_three = 0
+        n_any_text = 0
+        n_content_specific = 0
+        for record in live:
+            control = record["cells"]["nodate_weekday_iso"]
+            cell = record["cells"]["anchor_weekday_iso"]
+            lie = record["cells"]["lie"]
+            if control is None or cell is None or lie is None:
+                continue
+            n_three += 1
+            if control["verdict"] and not cell["verdict"]:
+                if not lie["verdict"]:
+                    n_any_text += 1
+                else:
+                    n_content_specific += 1
+        block["lie_split"] = {
+            "n_evaluable": n_three,
+            "n_loss_any_text": n_any_text,
+            "n_loss_content_specific": n_content_specific,
+        }
+    else:
+        block["lie_split"] = None
+    return block
+
+
+def _dateline_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Independent recompute of ``dateline.aggregate_candidate``."""
+    from itertools import combinations as _combinations
+
+    live = _dateline_live(records)
+    arms: dict[str, Any] = {}
+    for key in _DATELINE_TREATED:
+        n_completed = 0
+        n_pass = 0
+        for record in live:
+            cell = record["cells"][key]
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+        }
+    pairs_by_format: dict[str, Any] = {}
+    total_pure_date_discordant = 0
+    for fmt in _DATELINE_FORMATS:
+        table: dict[str, Any] = {}
+        for value_a, value_b in _combinations(_DATELINE_VALUE_KEYS, 2):
+            block = _dateline_pair_block(live, f"{value_a}_{fmt}", f"{value_b}_{fmt}")
+            total_pure_date_discordant += block["n_a_only"] + block["n_b_only"]
+            table[f"{value_a}|{value_b}"] = block
+        pairs_by_format[fmt] = table
+    format_pairs: dict[str, Any] = {}
+    for value in _DATELINE_VALUE_KEYS:
+        table = {}
+        for fmt_a, fmt_b in _combinations(_DATELINE_FORMATS, 2):
+            table[f"{fmt_a}|{fmt_b}"] = _dateline_pair_block(
+                live, f"{value}_{fmt_a}", f"{value}_{fmt_b}"
+            )
+        format_pairs[value] = table
+    date_loss = {value: _dateline_loss_block(live, value) for value in _DATELINE_VALUE_KEYS}
+    control_evaluable: dict[str, Any] = {}
+    for fmt in _DATELINE_FORMATS:
+        flags = [record["control_evaluable"][fmt] for record in live]
+        n_evaluable = sum(1 for flag in flags if flag)
+        control_evaluable[fmt] = {
+            "n_evaluable": n_evaluable,
+            "n_live": len(flags),
+            "share": (n_evaluable / len(flags)) if flags else None,
+        }
+    return {
+        "arms": arms,
+        "pairs_by_format": pairs_by_format,
+        "format_pairs": format_pairs,
+        "date_loss": date_loss,
+        "control_evaluable": control_evaluable,
+        "date_content_falsified": bool(
+            total_pure_date_discordant == 0
+            and all(block["n_loss"] == 0 for block in date_loss.values())
+        ),
+        "n_fixtures": len(records),
+        "n_vacuous": sum(1 for r in records if r["vacuous"]),
+        "n_expected_blank": sum(1 for r in records if r["expected_blank"]),
+        "n_echo": sum(1 for r in live if r["echo_fixture"]),
+        "n_screened": sum(1 for r in records if r["screened"]),
+        "n_message_date_bearing": sum(1 for r in records if r["message_date_bearing"]),
+    }
+
+
+def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a dateline payload from its ground records.
+
+    The protocol is rebuilt from this module's own literal arm
+    table and frozen scalars (never imported from dateline.py)
+    plus the payload's fixture-set digest and backend
+    fingerprint, and the fingerprint is compared. Weekday names
+    in the arm table are recomputed here from the calendar, so
+    an arm rendered with the anchor's weekday throughout -- the
+    templating bug that would convert five arms into extra lie
+    arms -- fails validation, and the lie arm must equal the
+    frozen lie literal while differing from its honest rendering.
+    Control matching is verified from per-cell input_tokens
+    wherever the anchor cell completed (a completed control cell
+    must carry exactly the anchor cell's token count); where the
+    anchor cell did not complete, the sizing is stage-attested
+    and the docstring says so. The eligibility screen is a
+    property of expected *text* and is not recomputable from
+    digests; the validator checks the screened and
+    message-date-bearing flags' cross-candidate constancy as
+    reference fields, and the design doc states that limit.
+    """
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    if set(protocol) != {
+        "version",
+        "block_template",
+        "control_template",
+        "joiner",
+        "neutral_unit",
+        "sizing_rule",
+        "screen_rule",
+        "arm_dates",
+        "treated_arms",
+        "min_paired_evaluable",
+        "min_discordant",
+        "generation_budget",
+        "max_ground_records",
+        "max_records_bytes",
+        "fixture_set_sha256",
+        "backend_fingerprint",
+        "fingerprint",
+    }:
+        return None
+    if protocol.get("version") != 1:
+        return None
+    if protocol.get("block_template") != _DATELINE_BLOCK_TEMPLATE:
+        return None
+    if protocol.get("control_template") != _DATELINE_CONTROL_TEMPLATE:
+        return None
+    if protocol.get("joiner") != _DATELINE_JOINER:
+        return None
+    if protocol.get("neutral_unit") != _DATELINE_NEUTRAL_UNIT:
+        return None
+    if protocol.get("sizing_rule") != "whole-units-plus-one-truncated-suffix-v1":
+        return None
+    if protocol.get("screen_rule") != "dateline-components-r4-v1":
+        return None
+    arm_table = _dateline_arm_table()
+    if protocol.get("arm_dates") != arm_table:
+        return None
+    if arm_table["lie"] == _dateline_format("anchor", "weekday_iso"):
+        return None  # the lie must differ from the honest rendering
+    if protocol.get("treated_arms") != list(_DATELINE_TREATED):
+        return None
+    if protocol.get("min_paired_evaluable") != 6 or protocol.get("min_discordant") != 2:
+        return None
+    if protocol.get("generation_budget") != 67200 or protocol.get("max_ground_records") != 2400:
+        return None
+    if protocol.get("max_records_bytes") != 24 * 1024 * 1024:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total_records = 0
+    records_bytes = 0
+    fixture_ids: list[str] | None = None
+    reference: dict[str, dict[str, Any]] = {}
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(name) is not str or type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status not in ("available", "unavailable"):
+            return None
+        records = entry.get("records")
+        if type(records) is not list:
+            return None
+        if status == "unavailable":
+            if records != []:
+                return None
+            continue
+        if len(records) > 100:
+            return None
+        total_records += len(records)
+        if total_records > 2400:
+            return None
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > 24 * 1024 * 1024:
+            return None
+        ids: list[str] = []
+        for record in records:
+            if type(record) is not dict:
+                return None
+            fixture = record.get("fixture")
+            if type(fixture) is not str or not fixture or fixture in ids:
+                return None
+            ids.append(fixture)
+            if type(record.get("group")) is not str:
+                return None
+            if not _leading_int_ok(record.get("n_user_messages")) or record["n_user_messages"] < 1:
+                return None
+            for flag in (
+                "vacuous",
+                "expected_blank",
+                "echo_fixture",
+                "screened",
+                "message_date_bearing",
+            ):
+                if type(record.get(flag)) is not bool:
+                    return None
+            if record.get("construction") not in ("id_exact", "text_level", "vacuous"):
+                return None
+            seam = record.get("seam_ids")
+            if type(seam) is not list or any(not _leading_int_ok(token) for token in seam):
+                return None
+            if not _leading_digest_ok(record.get("expected_digest")):
+                return None
+            if record.get("expected_digest") is None:
+                return None
+            control_evaluable = record.get("control_evaluable")
+            if type(control_evaluable) is not dict or set(control_evaluable) != set(
+                _DATELINE_FORMATS
+            ):
+                return None
+            if any(type(flag) is not bool for flag in control_evaluable.values()):
+                return None
+            native = record.get("native")
+            if not _leading_cell_consistent(native, record.get("expected_digest")):
+                return None
+            cells = record.get("cells")
+            details = record.get("cell_details")
+            if type(cells) is not dict or set(cells) != set(_DATELINE_TREATED):
+                return None
+            if type(details) is not dict or set(details) != set(_DATELINE_TREATED):
+                return None
+            class_detail: str | None = None
+            if record["vacuous"]:
+                class_detail = "vacuous"
+            elif record["expected_blank"]:
+                class_detail = "expected_blank"
+            elif record["screened"]:
+                class_detail = "screened"
+            elif record["message_date_bearing"]:
+                class_detail = "message_date_bearing"
+            for key in _DATELINE_TREATED:
+                detail = details[key]
+                if detail not in _DATELINE_CELL_DETAILS:
+                    return None
+                cell = cells[key]
+                if class_detail is not None:
+                    if cell is not None or detail != class_detail:
+                        return None
+                    continue
+                if detail in (
+                    "vacuous",
+                    "expected_blank",
+                    "screened",
+                    "message_date_bearing",
+                ):
+                    return None
+                if (cell is None) != (detail != ""):
+                    return None
+                if key in _DATELINE_CONTROL_KEYS:
+                    fmt = key.removeprefix("nodate_")
+                    if not control_evaluable[fmt]:
+                        if cell is not None or detail not in (
+                            "control_unmatchable",
+                            "control_screened",
+                        ):
+                            return None
+                        continue
+                    if detail == "control_unmatchable":
+                        return None
+                    if cell is not None:
+                        anchor = cells[f"anchor_{fmt}"]
+                        if anchor is not None and (cell["input_tokens"] != anchor["input_tokens"]):
+                            return None
+                if cell is None:
+                    continue
+                if not _leading_cell_consistent(cell, record.get("expected_digest")):
+                    return None
+            fields = {
+                "group": record["group"],
+                "n_user_messages": record["n_user_messages"],
+                "expected_digest": record["expected_digest"],
+                "vacuous": record["vacuous"],
+                "expected_blank": record["expected_blank"],
+                "echo_fixture": record["echo_fixture"],
+                "screened": record["screened"],
+                "message_date_bearing": record["message_date_bearing"],
+            }
+            if fixture in reference:
+                if reference[fixture] != fields:
+                    return None
+            else:
+                reference[fixture] = fields
+        if fixture_ids is None:
+            fixture_ids = ids
+        elif fixture_ids != ids:
+            return None
+        raw_records[name] = records
+        aggregates[name] = _dateline_aggregate(records)
+    if fixture_ids is None:
+        return None
+    expected_fixture_sha = _hashlib.sha256(
+        "\n".join(sorted(fixture_ids)).encode("utf-8")
+    ).hexdigest()
+    if protocol.get("fixture_set_sha256") != expected_fixture_sha:
+        return None
+    protocol_rebuilt = {
+        "version": 1,
+        "block_template": _DATELINE_BLOCK_TEMPLATE,
+        "control_template": _DATELINE_CONTROL_TEMPLATE,
+        "joiner": _DATELINE_JOINER,
+        "neutral_unit": _DATELINE_NEUTRAL_UNIT,
+        "sizing_rule": "whole-units-plus-one-truncated-suffix-v1",
+        "screen_rule": "dateline-components-r4-v1",
+        "arm_dates": arm_table,
+        "treated_arms": list(_DATELINE_TREATED),
+        "min_paired_evaluable": 6,
+        "min_discordant": 2,
+        "generation_budget": 67200,
+        "max_ground_records": 2400,
+        "max_records_bytes": 24 * 1024 * 1024,
+        "fixture_set_sha256": expected_fixture_sha,
+        "backend_fingerprint": protocol.get("backend_fingerprint"),
+    }
+    canonical = _json.dumps(
+        protocol_rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    if protocol.get("fingerprint") != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        return None
+    primary_decision = payload.get("primary_decision")
+    primary_winner = payload.get("primary_winner")
+    mapped: tuple[Any, Any]
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped = ("selected", primary_winner)
+    else:
+        mapped = (primary_decision, primary_winner)
+    arms_out: dict[str, Any] = {}
+    for key in _DATELINE_TREATED:
+        completed_sets: list[frozenset[str]] = []
+        all_pass: dict[str, bool | None] = {}
+        withheld = False
+        for cand_name, entry in candidates.items():
+            if entry.get("status") != "available":
+                withheld = True
+                all_pass[cand_name] = None
+                continue
+            live = _dateline_live(raw_records[cand_name])
+            if key in _DATELINE_CONTROL_KEYS:
+                control_format = key.removeprefix("nodate_")
+                defined = frozenset(
+                    r["fixture"] for r in live if r["control_evaluable"][control_format]
+                )
+            else:
+                defined = frozenset(r["fixture"] for r in live)
+            completed = frozenset(r["fixture"] for r in live if r["cells"][key] is not None)
+            completed_sets.append(completed)
+            if completed != defined or not completed:
+                withheld = True
+                all_pass[cand_name] = None
+                continue
+            all_pass[cand_name] = all(
+                r["cells"][key]["verdict"] for r in live if r["fixture"] in completed
+            )
+        if len(set(completed_sets)) > 1:
+            withheld = True
+        if withheld:
+            arms_out[key] = {
+                "decision": "unavailable",
+                "detail": "selection_withheld_mismatched_sets",
+                "winner": None,
+                "withheld": True,
+                "flip": None,
+            }
+            continue
+        passers = [n for n in candidates if all_pass[n]]
+        if len(passers) == 1:
+            decision, winner = "selected", passers[0]
+        elif len(passers) > 1:
+            decision, winner = "ambiguous", None
+        else:
+            decision, winner = "no_candidate", None
+        arms_out[key] = {
+            "decision": decision,
+            "winner": winner,
+            "withheld": False,
+            "detail": "",
+            "flip": (decision, winner) != mapped,
+        }
+    available_records = {
+        cand_name: raw_records[cand_name]
+        for cand_name, entry in candidates.items()
+        if entry.get("status") == "available"
+    }
+    populations: dict[str, frozenset[str]] = {}
+    for cand_name, records in available_records.items():
+        ids_for_cand = {
+            r["fixture"]
+            for r in _dateline_live(records)
+            if all(r["cells"][key] is not None for key in _DATELINE_TREATED)
+        }
+        populations[cand_name] = frozenset(ids_for_cand)
+    common = frozenset.intersection(*populations.values()) if populations else frozenset()
+    if not common:
+        common_out: dict[str, Any] = {
+            "n_common": 0,
+            "detail": "common_population_empty",
+            "per_candidate": {},
+        }
+    else:
+        from itertools import combinations as _combinations
+
+        per_candidate: dict[str, Any] = {}
+        for cand_name, records in available_records.items():
+            subset = [r for r in _dateline_live(records) if r["fixture"] in common]
+            discordant = 0
+            for fmt in _DATELINE_FORMATS:
+                for value_a, value_b in _combinations(_DATELINE_VALUE_KEYS, 2):
+                    block = _dateline_pair_block(subset, f"{value_a}_{fmt}", f"{value_b}_{fmt}")
+                    discordant += block["n_a_only"] + block["n_b_only"]
+            loss = sum(
+                _dateline_loss_block(subset, value)["n_loss"] for value in _DATELINE_VALUE_KEYS
+            )
+            per_candidate[cand_name] = {
+                "n_pure_date_discordant": discordant,
+                "n_loss_total": loss,
+            }
+        common_out = {
+            "n_common": len(common),
+            "detail": "" if len(common) >= 6 else "common_population_below_floor",
+            "per_candidate": per_candidate,
+        }
+    n_multi_turn = sum(1 for fields in reference.values() if fields["n_user_messages"] > 1)
+    return {
+        "aggregates": aggregates,
+        "arms": arms_out,
+        "common_population": common_out,
+        "n_candidates": len(candidates),
+        "n_search_fixtures": len(fixture_ids),
+        "n_multi_turn_fixtures": n_multi_turn,
+    }
+
+
+def _valid_dateline(payload: Any) -> bool:
+    """Structural check for a ``dateline`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    for key in ("primary_decision", "primary_winner"):
+        value = payload.get(key)
+        if value is not None and type(value) is not str:
+            return False
+    recomputed = _dateline_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if entry.get(key) != value:
+                return False
+    if payload.get("arms") != recomputed["arms"]:
+        return False
+    if payload.get("common_population") != recomputed["common_population"]:
+        return False
+    if payload.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    if payload.get("n_search_fixtures") != recomputed["n_search_fixtures"]:
+        return False
+    return bool(payload.get("n_multi_turn_fixtures") == recomputed["n_multi_turn_fixtures"])
+
+
+def diff_dateline(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``dateline`` probe payloads; deterministic.
+
+    Answers "did the date-line story change between runs?":
+    per-candidate date-loss and falsification drift, pure-date
+    pair classification drift, per-arm selection drift,
+    candidates added/removed, and protocol / fixture-set /
+    backend drift (any of which marks the comparison not
+    comparable, with the drift still listed -- the frozen arm
+    table is part of the protocol, so a changed table is
+    protocol drift). A side without a valid payload is reported
+    plainly.
+    """
+    old_ok = _valid_dateline(old)
+    new_ok = _valid_dateline(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    dateline_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    dateline_fixture_set_drift = old["protocol"].get("fixture_set_sha256") != new["protocol"].get(
+        "fixture_set_sha256"
+    )
+    dateline_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    dateline_comparable = (
+        not dateline_protocol_drift
+        and not dateline_fixture_set_drift
+        and not dateline_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    dateline_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    dateline_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    dateline_loss_drift: list[dict[str, Any]] = []
+    dateline_pair_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                dateline_loss_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        if old_entry.get("date_content_falsified") != new_entry.get("date_content_falsified"):
+            dateline_loss_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "date_content_falsified",
+                    "old": old_entry.get("date_content_falsified"),
+                    "new": new_entry.get("date_content_falsified"),
+                }
+            )
+        for value in _DATELINE_VALUE_KEYS:
+            old_block = old_entry["date_loss"][value]
+            new_block = new_entry["date_loss"][value]
+            if old_block["loss_rate"] != new_block["loss_rate"]:
+                dateline_loss_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"{value}_loss_rate",
+                        "old": old_block["loss_rate"],
+                        "new": new_block["loss_rate"],
+                    }
+                )
+        for fmt in _DATELINE_FORMATS:
+            for pair, old_block in old_entry["pairs_by_format"][fmt].items():
+                new_block = new_entry["pairs_by_format"][fmt][pair]
+                if old_block["classification"] != new_block["classification"]:
+                    dateline_pair_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"{fmt}_{pair}_classification",
+                            "old": old_block["classification"],
+                            "new": new_block["classification"],
+                        }
+                    )
+    dateline_arm_drift: list[dict[str, Any]] = []
+    for key in old["arms"]:
+        if old["arms"][key] != new["arms"].get(key):
+            dateline_arm_drift.append(
+                {
+                    "arm": key,
+                    "old": old["arms"][key],
+                    "new": new["arms"].get(key),
+                }
+            )
+    result["loss_drift"] = dateline_loss_drift
+    result["pair_drift"] = dateline_pair_drift
+    result["arm_drift"] = dateline_arm_drift
+    result["candidates_added"] = dateline_candidates_added
+    result["candidates_removed"] = dateline_candidates_removed
+    result["protocol_drift"] = dateline_protocol_drift
+    result["fixture_set_drift"] = dateline_fixture_set_drift
+    result["backend_drift"] = dateline_backend_drift
+    result["comparable"] = dateline_comparable
+    result["changed"] = bool(
+        dateline_loss_drift
+        or dateline_pair_drift
+        or dateline_arm_drift
+        or dateline_candidates_added
+        or dateline_candidates_removed
+        or dateline_protocol_drift
+        or dateline_fixture_set_drift
+        or dateline_backend_drift
     )
     return result
 
