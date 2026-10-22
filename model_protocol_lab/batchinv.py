@@ -15,10 +15,14 @@ token ids.
 
 Pre-registered claims (falsifiable):
 
-1. No backend in the current tree exposes a batch path, so on the real
-   local backend the stage records ``batch_unsupported``. The audit
-   deliberately does NOT synthesize a batch out of sequential calls --
-   that would be theater, not measurement.
+1. Through cycle 191 no backend in the tree exposed a batch path, so
+   on the real local backend the stage recorded
+   ``batch_unsupported``. Cycle 192 superseded that state by building
+   the real path on ``LocalHFBackend`` (see
+   ``docs/BATCH_PATH_DESIGN.md``); backends without the method still
+   record ``batch_unsupported``. The audit deliberately does NOT
+   synthesize a batch out of sequential calls -- that would be
+   theater, not measurement.
 2. Given a batch-capable backend, the comparison below detects any
    token-level divergence (proved by the brute-force oracle and the
    hostile-backend tests in ``test_cycle153_batchinv.py``).
@@ -44,7 +48,10 @@ returning continuation-only token ids, one tuple per prompt, in order.
 Backends without this attribute record ``batch_unsupported``; a batch
 path that violates the contract (wrong arity, non-id values, raising)
 records ``batch_contract_failed`` / ``batch_failed`` -- fail-closed,
-never a crash and never silent data.
+never a crash and never silent data. A batch path that raises
+``ValueError("batch_size_exceeded")`` -- the LocalHFBackend byte-budget
+refusal -- records the ``batch_size_exceeded`` detail instead: a
+labelled refusal is a different operator signal than a mid-run crash.
 
 Everything here is pure: prompt validation and the solo-vs-batched
 comparison need no model.
@@ -64,6 +71,11 @@ BATCH_CONTRACT_FAILED = "batch_contract_failed"
 
 #: Detail code recorded when the batch path raises.
 BATCH_FAILED = "batch_failed"
+
+#: Detail code recorded when the batch path refuses the batch as too
+#: large to run (its own byte-budget estimate), as opposed to failing
+#: mid-execution: a labelled refusal, not a crash.
+BATCH_SIZE_EXCEEDED = "batch_size_exceeded"
 
 #: Verdict vocabulary for an available audit payload.
 VERDICTS = ("batch_invariant", "batch_variant", "unavailable")

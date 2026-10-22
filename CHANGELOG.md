@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 192 — the real batch path, 2026-10-22)
+
+- `LocalHFBackend.generate_batch`: the batch path cycle 153's
+  batch-invariance audit probed for. All prompts are decoded
+  together -- left-padded, position ids recomputed from the
+  attention mask at every step, one forward per generation step
+  over the whole padded batch -- under the same fp32
+  full-prefix recompute discipline as solo `generate`, so
+  `run --batch-invariance` now measures solo-vs-batched
+  equivalence on the real backend instead of recording
+  `batch_unsupported`. Equivalence is measured token-exactly,
+  never assumed; a divergence is a `batch_variant` finding.
+  The audit stage now feeds the batch path only the
+  solo-evaluable prompts (one over-context fixture previously
+  would have collapsed the whole audit to `batch_failed`), and
+  a batch whose estimated forward peak exceeds an 8 GiB byte
+  budget records the new labelled `batch_size_exceeded`
+  refusal instead of risking an OOM kill. Cancelled batches
+  raise; partial rows are never returned. The prompt-rewriting
+  wrapper backends deliberately do not forward the batch path
+  and still record `batch_unsupported`. Design and red-team
+  adjudication: `docs/BATCH_PATH_DESIGN.md`.
+
 ### Added (cycle 191 — needle depth, 2026-10-21)
 
 - `run --needle`: needle-depth × template. The probe

@@ -893,14 +893,28 @@ fixture's exact prompt token sequence through the backend's batch path
 token-for-token, reporting the divergence rate and first-divergence
 positions per prompt.
 
-Honesty note, pre-registered in `batchinv.py`: no backend in the
-current tree exposes a batch path, so on the real local backend the
-stage records `batch_unsupported` -- the audit deliberately does *not*
-synthesize a batch out of sequential calls. The comparison machinery
-is fully specified and tested (brute-force oracle, hostile backends),
-so the day a batch-capable backend exists, solo-vs-batch is checked,
-not assumed. Any nonzero divergence rate falsifies the determinism
-assumption for that backend -- and is a result in itself.
+Honesty note, updated at cycle 192: through cycle 191 no backend in
+the tree exposed a batch path, so on the real local backend the stage
+recorded `batch_unsupported`. Cycle 192 built the real path on the
+local backend (`LocalHFBackend.generate_batch`: left-padded prompts,
+position ids recomputed from the attention mask at every step, one
+forward per generation step over the whole padded batch, the same
+fp32 full-prefix recompute discipline as solo decoding -- see
+`docs/BATCH_PATH_DESIGN.md`). The audit still deliberately does *not*
+synthesize a batch out of sequential calls, and backends without a
+batch path (including the prompt-rewriting wrapper backends) still
+record `batch_unsupported`. Only prompts whose solo generation
+succeeded are fed to the batch path -- a solo-failed prompt's row
+could never be compared, and one over-context prompt must not
+collapse an otherwise measurable audit. Equivalence is measured, not
+assumed: any nonzero divergence rate falsifies the determinism
+assumption for that backend -- and is a result in itself. A batch
+whose estimated forward peak exceeds the backend's byte budget is
+refused before any forward runs and records `batch_size_exceeded`;
+the operator levers are `--max-new-tokens` and the fixture count.
+Monday-morning use: before trusting a winner measured solo, run the
+audit once -- if the verdict would flip under batched serving, the
+divergence rate here is the number that says so.
 `results.json` carries `batch_invariance` with the audit verdict
 (`batch_invariant` / `batch_variant` / `unavailable`), the divergence
 rate, and the per-prompt comparison. The report's "Batch-invariance

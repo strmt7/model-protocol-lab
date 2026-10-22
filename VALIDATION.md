@@ -1,17 +1,17 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–188 (executed 2026-10-14 → 2026-10-21, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–192 (executed 2026-10-14 → 2026-10-22, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
-(2026-10-14 → 2026-10-21). All commands run from the repository root in
+(2026-10-14 → 2026-10-22). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **7687 tests collected**
-  (cycle 191, 2026-10-21). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **7720 tests collected**
+  (cycle 192, 2026-10-22). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **7687 tests (cycle 191,
-  2026-10-21; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
+- `python -m unittest discover -s tests -t .` — **7720 tests (cycle 192,
+  2026-10-22; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
   now execute the full suite. Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,
@@ -30,17 +30,19 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   the numeric surface-form probe (`run --numform`),
   the date-line sensitivity probe (`run --dateline`),
   the multi-turn drift probe (`run --multiturn`),
+  the real batched generation path behind the batch-invariance
+  audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  96.1850% (cycle 191, 2026-10-21)**. The gate compares the
+  96.1984% (cycle 192, 2026-10-22)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+1.685) is auditable rather than inferred from the display.
+  (+1.698) is auditable rather than inferred from the display.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (264 files in that CI scope; the repo-root scope counts more.
+  (265 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (55 source files).
