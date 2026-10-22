@@ -8242,6 +8242,580 @@ def multiturn_analysis(
     }
 
 
+class _NeedleCancelled(Exception):
+    """Internal control flow: unwind the stage on cancellation."""
+
+
+def _needle_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One needle generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the accepted
+    construction's rendered ids, used for the context check;
+    the cell's ``input_tokens`` come from the evaluation's own
+    observation, so a backend whose encode disagreed with
+    itself would surface as a validator rejection downstream,
+    never as a silently wrong record. The cancel event is
+    checked before and after ``evaluate`` (the multiturn rule:
+    a cancel observed during a generation is never mislabelled
+    an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _NeedleCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _NeedleCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+    return "arm_evaluation_failed", None
+
+
+def _needle_run_cell(
+    backend: Any,
+    fmt: Any,
+    boundary_ids: tuple[int, ...],
+    boundary_text: str,
+    record: dict[str, Any],
+    case_id: str,
+    value: str,
+    key: str,
+    content: str,
+    arm_ids: tuple[int, ...],
+    spans: list[str],
+    offsets: list[int],
+    *,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> None:
+    """Screen, generate, and record one needle cell.
+
+    The filler spans are screened before generation (screening
+    rule needle-screen-v1); a screened or failed cell lands in
+    ``cell_details`` and the cell itself stays None.
+    """
+    from . import needle as _nd
+    from .core import Fixture, Message
+
+    if any(_nd.filler_screened(span, value, boundary_text) for span in spans if span):
+        record["cell_details"][key] = "arm_screened"
+        return
+    fixture = Fixture(
+        id=f"{case_id}-{key}",
+        messages=(Message("user", content),),
+        expected=value,
+        group=_nd.GROUP,
+    )
+    detail, cell = _needle_cell(
+        backend,
+        fmt,
+        fixture,
+        arm_ids,
+        boundary_ids=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        max_context=max_context,
+        seed=seed,
+        cancel=cancel,
+    )
+    if detail is not None:
+        record["cell_details"][key] = detail
+    elif cell is not None:
+        cell["needle_offsets"] = offsets
+        record["cells"][key] = cell
+
+
+def needle_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Needle-depth stage (cycle 191): generated code-recall
+    cases at exact rendered-token depths per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no native arm and no dependence on the user's
+    fixtures or the primary run. Each treated cell is sized by
+    the frozen phased search in needle.py's sizing rule: spans
+    of the cycled neutral corpus are probed until the rendered
+    delta over the case's dose-0 render equals the dose and the
+    prefix-anchored offset measurement ``D`` equals the target,
+    both verified on the accepted construction's final ids.
+    The delta identities fix every cell's final length before
+    sizing (dose-0 length + dose, + needle_len for duplicate),
+    so a cell that cannot fit the context is reported
+    ``arm_context_exceeded`` without spending sizing encodes
+    on it. Cells degrade individually in the fixed detail
+    vocabulary; cancellation unwinds the whole stage to its
+    fail-closed payload. Design: docs/NEEDLE_DESIGN.md.
+    """
+    from . import needle as _nd
+    from .core import Fixture, Message
+    from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    protocol: dict[str, Any] = dict(_nd.protocol_object(seed, str(backend.fingerprint)))
+    protocol["fingerprint"] = _nd.protocol_fingerprint(seed, str(backend.fingerprint))
+    cases = _nd.generate_cases(seed)
+    if len(formats) * len(cases) > _nd.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "needle_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    corpus_text = "".join(NEUTRAL_CORPUS)
+    generated_text = (
+        _nd.FACT_TEMPLATE.replace("{topic}", "").replace("{value}", "")
+        + "".join(_nd.TOPICS)
+        + "".join(_nd.WORDS)
+    )
+    if audit_special_token_literals(generated_text + corpus_text, formats):
+        # A special-token literal in the frozen texts would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "needle_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in generated_text:
+            return {
+                "available": False,
+                "detail": "needle_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+    stream = _nd.filler_stream()
+    corpus_tokens = max(1, len(backend.encode(corpus_text)))
+    chars_per_token = len(corpus_text) / corpus_tokens
+    order_cache: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    def _order(start: int, target: int) -> list[tuple[int, int, int]]:
+        cache_key = (start, target)
+        order = order_cache.get(cache_key)
+        if order is None:
+            order = span_candidates(stream[start:], target=target, chars_per_token=chars_per_token)
+            order_cache[cache_key] = order
+        return order
+
+    def _render_ids(fmt: Any, content: str) -> tuple[int, ...]:
+        fixture = Fixture(
+            id="needle-probe",
+            messages=(Message("user", content),),
+            expected="",
+            group=_nd.GROUP,
+        )
+        return tuple(backend.encode(fmt.render(fixture.messages)))
+
+    def _size_prefix(
+        fmt: Any,
+        case: dict[str, Any],
+        target: int,
+        z_ids: tuple[int, ...],
+        q_ids: tuple[int, ...],
+        anchor: int,
+        encodes: int,
+    ) -> tuple[str, tuple[int, ...], int, int] | None:
+        """Phase 1: (prefix_text, comparator_ids, consumed,
+        encodes) for the first prefix whose D equals ``target``
+        -- None when the budget runs out first. Depth 0 is the
+        empty prefix with the question-only render as its
+        comparator, no search."""
+        fact = str(case["fact"])
+        question = str(case["question"])
+        if target == 0:
+            return "", q_ids, 0, encodes
+        for whole, suffix, _chars in _order(0, target):
+            if encodes + 2 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            prefix = span_text(stream, whole, suffix)
+            probe = _render_ids(fmt, prefix + fact + question)
+            comparator = _render_ids(fmt, prefix + question)
+            encodes += 2
+            if _nd.lcp_len(probe, comparator) - anchor == target:
+                return prefix, comparator, whole + (1 if suffix else 0), encodes
+        return None
+
+    def _size_treated(
+        fmt: Any, case: dict[str, Any], dose: int, depth: int, base: dict[str, Any]
+    ) -> tuple[str, tuple[int, ...], list[str]] | None:
+        """Size one treated cell: (content, arm_ids, spans).
+
+        Returns None when no construction inside the encode
+        budget satisfies both equalities on the final render.
+        """
+        fact = str(case["fact"])
+        question = str(case["question"])
+        z_ids: tuple[int, ...] = base["z_ids"]
+        q_ids: tuple[int, ...] = base["q_ids"]
+        target = _nd.target_offset(dose, depth)
+        sized = _size_prefix(fmt, case, target, z_ids, q_ids, base["anchor"], 0)
+        if sized is None:
+            return None
+        prefix, comparator, consumed, encodes = sized
+        if depth == 100:
+            if encodes + 1 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            content = prefix + fact + question
+            arm_ids = _render_ids(fmt, content)
+            if (
+                len(arm_ids) - len(z_ids) == dose
+                and _nd.lcp_len(arm_ids, comparator) - base["anchor"] == target
+            ):
+                return content, arm_ids, [prefix, ""]
+            return None
+        for whole, suffix, _chars in _order(consumed, dose - target):
+            if encodes + 1 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            tail = span_text(stream[consumed:], whole, suffix)
+            content = prefix + fact + tail + question
+            arm_ids = _render_ids(fmt, content)
+            encodes += 1
+            if (
+                len(arm_ids) - len(z_ids) == dose
+                and _nd.lcp_len(arm_ids, comparator) - base["anchor"] == target
+            ):
+                return content, arm_ids, [prefix, tail]
+        return None
+
+    def _size_duplicate(
+        fmt: Any, case: dict[str, Any], dose: int, base: dict[str, Any]
+    ) -> tuple[str, tuple[int, ...], list[str]] | None:
+        """Size one duplicate cell (needles at 25% and 75%):
+        prefix phase, middle phase against the second offset,
+        suffix phase against the duplicate delta with both
+        offsets re-verified on the final ids."""
+        fact = str(case["fact"])
+        question = str(case["question"])
+        z_ids: tuple[int, ...] = base["z_ids"]
+        q_ids: tuple[int, ...] = base["q_ids"]
+        anchor: int = base["anchor"]
+        needle_len: int = base["needle_len"]
+        target1 = _nd.target_offset(dose, 25)
+        target2 = _nd.target_offset(dose, 75)
+        sized = _size_prefix(fmt, case, target1, z_ids, q_ids, anchor, 0)
+        if sized is None:
+            return None
+        prefix, comparator1, consumed, encodes = sized
+        mid: str | None = None
+        comparator2: tuple[int, ...] | None = None
+        mid_target = target2 - target1 - needle_len
+        for whole, suffix, _chars in _order(consumed, mid_target):
+            if encodes + 2 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            candidate_mid = span_text(stream[consumed:], whole, suffix)
+            probe = _render_ids(fmt, prefix + fact + candidate_mid + fact + question)
+            comparator = _render_ids(fmt, prefix + fact + candidate_mid + question)
+            encodes += 2
+            if _nd.lcp_len(probe, comparator) - anchor == target2:
+                mid = candidate_mid
+                comparator2 = comparator
+                consumed += whole + (1 if suffix else 0)
+                break
+        if mid is None or comparator2 is None:
+            return None
+        for whole, suffix, _chars in _order(consumed, dose - target2):
+            if encodes + 1 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            tail = span_text(stream[consumed:], whole, suffix)
+            content = prefix + fact + mid + fact + tail + question
+            arm_ids = _render_ids(fmt, content)
+            encodes += 1
+            if (
+                len(arm_ids) - len(z_ids) == dose + needle_len
+                and _nd.lcp_len(arm_ids, comparator1) - anchor == target1
+                and _nd.lcp_len(arm_ids, comparator2) - anchor == target2
+            ):
+                return content, arm_ids, [prefix, mid, tail]
+        return None
+
+    def _size_absent(
+        fmt: Any, case: dict[str, Any], dose: int, base: dict[str, Any]
+    ) -> tuple[str, tuple[int, ...], list[str]] | None:
+        """Size one absent cell: a single span whose rendered
+        delta over the question-only render equals the dose."""
+        question = str(case["question"])
+        q_ids: tuple[int, ...] = base["q_ids"]
+        encodes = 0
+        for whole, suffix, _chars in _order(0, dose):
+            if encodes + 1 > _nd.SIZING_ENCODE_BUDGET:
+                return None
+            span = span_text(stream, whole, suffix)
+            if not span:
+                continue
+            content = span + question
+            arm_ids = _render_ids(fmt, content)
+            encodes += 1
+            if len(arm_ids) - len(q_ids) == dose:
+                return content, arm_ids, [span]
+        return None
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                value = str(case["expected"])
+                fact = str(case["fact"])
+                question = str(case["question"])
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "topic": str(case["topic"]),
+                    "expected_digest": _nd.digest_text(value),
+                    "question_tokens": 0,
+                    "cells": dict.fromkeys(_nd.CELL_KEYS),
+                    "cell_details": dict.fromkeys(_nd.CELL_KEYS, ""),
+                }
+                records.append(record)
+                z_ids = _render_ids(fmt, fact + question)
+                q_ids = _render_ids(fmt, question)
+                record["question_tokens"] = len(q_ids)
+                needle_len = len(z_ids) - len(q_ids)
+                if needle_len <= 0:
+                    # A needle that adds no tokens under this
+                    # candidate's tokenizer cannot be placed or
+                    # measured; every cell of the case degrades
+                    # together rather than pretending otherwise.
+                    for key in _nd.CELL_KEYS:
+                        record["cell_details"][key] = "arm_unmatchable"
+                    continue
+                base = {
+                    "z_ids": z_ids,
+                    "q_ids": q_ids,
+                    "anchor": _nd.lcp_len(z_ids, q_ids),
+                    "needle_len": needle_len,
+                }
+
+                # dose_0: the control arm, no sizing.
+                _needle_run_cell(
+                    backend,
+                    fmt,
+                    boundaries[name],
+                    boundary_text[name],
+                    record,
+                    case_id,
+                    value,
+                    "dose_0",
+                    fact + question,
+                    z_ids,
+                    [],
+                    [0],
+                    max_new_tokens=max_new_tokens,
+                    max_context=max_context,
+                    seed=seed,
+                    cancel=cancel,
+                )
+                for dose in _nd.DOSES:
+                    for depth in _nd.DEPTHS:
+                        if _cancelled():
+                            raise _NeedleCancelled
+                        key = _nd.cell_key_treated(dose, depth)
+                        if len(z_ids) + dose + max_new_tokens > max_context:
+                            record["cell_details"][key] = "arm_context_exceeded"
+                            continue
+                        sized_treated = _size_treated(fmt, case, dose, depth, base)
+                        if sized_treated is None:
+                            record["cell_details"][key] = "arm_unmatchable"
+                            continue
+                        content, arm_ids, spans = sized_treated
+                        _needle_run_cell(
+                            backend,
+                            fmt,
+                            boundaries[name],
+                            boundary_text[name],
+                            record,
+                            case_id,
+                            value,
+                            key,
+                            content,
+                            arm_ids,
+                            spans,
+                            [_nd.target_offset(dose, depth)],
+                            max_new_tokens=max_new_tokens,
+                            max_context=max_context,
+                            seed=seed,
+                            cancel=cancel,
+                        )
+                    if _cancelled():
+                        raise _NeedleCancelled
+                    absent_key = _nd.cell_key_absent(dose)
+                    if len(q_ids) + dose + max_new_tokens > max_context:
+                        record["cell_details"][absent_key] = "arm_context_exceeded"
+                    else:
+                        sized_absent = _size_absent(fmt, case, dose, base)
+                        if sized_absent is None:
+                            record["cell_details"][absent_key] = "arm_unmatchable"
+                        else:
+                            content, arm_ids, spans = sized_absent
+                            _needle_run_cell(
+                                backend,
+                                fmt,
+                                boundaries[name],
+                                boundary_text[name],
+                                record,
+                                case_id,
+                                value,
+                                absent_key,
+                                content,
+                                arm_ids,
+                                spans,
+                                [],
+                                max_new_tokens=max_new_tokens,
+                                max_context=max_context,
+                                seed=seed,
+                                cancel=cancel,
+                            )
+                    if _cancelled():
+                        raise _NeedleCancelled
+                    duplicate_key = _nd.cell_key_duplicate(dose)
+                    if len(z_ids) + dose + needle_len + max_new_tokens > max_context:
+                        record["cell_details"][duplicate_key] = "arm_context_exceeded"
+                    else:
+                        sized_duplicate = _size_duplicate(fmt, case, dose, base)
+                        if sized_duplicate is None:
+                            record["cell_details"][duplicate_key] = "arm_unmatchable"
+                        else:
+                            content, arm_ids, spans = sized_duplicate
+                            _needle_run_cell(
+                                backend,
+                                fmt,
+                                boundaries[name],
+                                boundary_text[name],
+                                record,
+                                case_id,
+                                value,
+                                duplicate_key,
+                                content,
+                                arm_ids,
+                                spans,
+                                [
+                                    _nd.target_offset(dose, 25),
+                                    _nd.target_offset(dose, 75),
+                                ],
+                                max_new_tokens=max_new_tokens,
+                                max_context=max_context,
+                                seed=seed,
+                                cancel=cancel,
+                            )
+        except _NeedleCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def needle_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a needle stage into the stored payload
+    (cycle 191).
+
+    Per-candidate readouts come from needle.aggregate_candidate;
+    the headline-population curves, deficit, and first-failure
+    come from needle.headline_readouts over all candidates'
+    records (the shared population is what makes them
+    comparable); the per-cell selections re-apply the
+    conservative rule with paired-restricted flip baselines
+    from needle.cell_selection. Design: docs/NEEDLE_DESIGN.md.
+    """
+    from . import needle as _nd
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "needle_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    records_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _nd.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+        records_by_candidate[name] = entry["records"]
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "readouts": _nd.headline_readouts(records_by_candidate),
+        "conditions": {key: _nd.cell_selection(records_by_candidate, key) for key in _nd.CELL_KEYS},
+        "n_candidates": len(candidate_names),
+        "n_cases": len(_nd.generate_cases(int(stage["protocol"]["seed"]))),
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

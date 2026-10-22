@@ -6643,6 +6643,144 @@ def _multiturn_section(result: dict[str, Any]) -> str:
     )
 
 
+def _needle_section(result: dict[str, Any]) -> str:
+    """Needle-depth probe: at which depth the fact gets lost.
+
+    Renders the ``needle`` payload (see
+    experiments.needle_analysis): per candidate, the dose-0
+    control rate, the recall curve at five depths for both
+    filler doses over the shared headline population, the
+    mid-depth deficit, the needle-absent false-recall floor,
+    and the duplicate-needle readout with its independence
+    baseline. The scope limits are printed with the numbers,
+    not under them: the filler is topically dissimilar prose,
+    so the curves are a lower bound on position effects under
+    realistic retrieval bulk, and each cell is one greedy
+    generation. Counts and rates only; no needle values or
+    answer text is rendered. Every interpolation is escaped
+    at this boundary.
+    """
+    probe: Any = result.get("needle")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    readouts = probe.get("readouts")
+    if type(candidates) is not dict or type(readouts) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        control = entry.get("dose0_control")
+        if type(control) is dict:
+            bits.append(
+                "<div>Dose-0 control: "
+                + _count(control.get("n_pass"))
+                + " of "
+                + _count(control.get("n_recorded"))
+                + " passed (rate "
+                + _rate(control.get("rate"))
+                + ").</div>"
+            )
+        floors = entry.get("false_recall")
+        duplicates = entry.get("duplicate")
+        for dose in ("1024", "4096"):
+            block = readouts.get(dose)
+            if type(block) is not dict:
+                continue
+            curves = block.get("curves")
+            curve = curves.get(name) if type(curves) is dict else None
+            if type(curve) is not dict:
+                continue
+            points = ", ".join(
+                escape(str(depth)) + "% " + _rate(point.get("rate"))
+                for depth, point in sorted(curve.items(), key=lambda kv: int(kv[0]))
+                if type(point) is dict
+            )
+            line = (
+                "Dose "
+                + escape(dose)
+                + " (headline n "
+                + _count(block.get("n_population"))
+                + "): "
+                + points
+            )
+            deficits = block.get("deficit")
+            deficit = deficits.get(name) if type(deficits) is dict else None
+            if deficit is None:
+                line += "; deficit withheld (population below floor)"
+            else:
+                line += "; mid-depth deficit " + _rate(deficit)
+            if type(floors) is dict and type(floors.get(dose)) is dict:
+                line += "; false-recall floor " + _rate(floors[dose].get("rate"))
+            if type(duplicates) is dict and type(duplicates.get(dose)) is dict:
+                dup = duplicates[dose]
+                line += (
+                    "; duplicate pass "
+                    + _rate(dup.get("pass_rate"))
+                    + " vs independence "
+                    + _rate(dup.get("independence_expected"))
+                    + " (excess "
+                    + _rate(dup.get("excess_over_independence"))
+                    + "), rescued "
+                    + _count(dup.get("n_rescued"))
+                    + " of "
+                    + _count(dup.get("n_mid_fail"))
+                    + " mid-depth failures"
+                )
+            bits.append("<div>" + line + ".</div>")
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="needle">'
+        "<h2>Needle depth</h2>"
+        "<p>Twenty generated cases plant one fact sentence "
+        "with a unique synthetic code inside neutral filler at "
+        "five depths of the bulk; the model is asked for the "
+        "code. Dose is the rendered-token growth over the same "
+        "case with no filler, and each depth offset is verified "
+        "on the candidate's own rendered tokens, so the curves "
+        "compare templates, not tokenizers. Curves, deficit, "
+        "and first failure share one headline population per "
+        "dose: the cases every candidate passed with no filler "
+        "and completed at all five depths. The deficit is the "
+        "edge mean minus the middle rate. The filler is "
+        "topically dissimilar prose, so these curves are a "
+        "lower bound on position effects under realistic "
+        "retrieval bulk, and each cell is one greedy "
+        "generation; at the 4096 dose the filler stream wraps "
+        "the corpus about three times. A flat curve at both "
+        "doses, at the candidate's own false-recall floor, is "
+        "what 'no position effect for this template' looks "
+        "like.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -7969,6 +8107,7 @@ def render_html(result: dict[str, Any]) -> str:
     numform_html = _numform_section(result)
     dateline_html = _dateline_section(result)
     multiturn_html = _multiturn_section(result)
+    needle_html = _needle_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -8123,6 +8262,11 @@ def render_html(result: dict[str, Any]) -> str:
                 multiturn_html,
             ),
             (
+                "needle",
+                "Needle depth",
+                needle_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8214,6 +8358,7 @@ def render_html(result: dict[str, Any]) -> str:
         + numform_html
         + dateline_html
         + multiturn_html
+        + needle_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

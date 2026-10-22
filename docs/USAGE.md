@@ -2086,6 +2086,72 @@ in `docs/MULTITURN_DESIGN.md`. Informational only: the
 probe never affects selection, and the stage never fails
 the run.
 
+### 8.45 Needle depth (`needle`)
+
+Opt-in with `model-protocol-lab run --needle`. A
+generation stage over cases the probe generates itself
+from the run seed: twenty cases, each planting one fact
+sentence — a topic, a synthetic code like
+`velvet-4821` — inside neutral filler, and asking for
+the code. The filler is sized per candidate so the
+prompt grows by exactly 1024 or 4096 rendered tokens
+over the same case with no filler, and the needle sits
+at 0, 25, 50, 75, or 100 percent of that span, the
+offset verified on the candidate's own rendered tokens
+by a prefix-anchored measurement that cancels the
+template head's token merges. Around the ten treated
+cells per case sit a no-filler control (`dose_0`), a
+needle-absent cell per dose whose pass rate is the
+false-recall floor, and a duplicate-needle cell per
+dose (the fact at 25% and 75%) whose pass rate is
+reported against the independence baseline of the two
+single-needle rates, so "two chances" is not mistaken
+for "position stopped mattering". Monday-morning use:
+you paste retrieved chunks around a question — this
+tells you, per template family, at which depth of that
+bulk your checkpoint stops finding a planted fact,
+instead of a single long-context number measured
+through somebody else's template.
+
+Curves, the mid-depth deficit (edge mean minus the
+50% rate, the *Lost in the Middle* functional form),
+and first-failure counts share one headline population
+per dose: the cases every candidate passed with no
+filler and completed at all five depths, so a flat
+curve makes the deficit exactly zero and candidates
+are compared over the same cases. The deficit and
+first failure are withheld when that population drops
+below six; the curves print at any size because they
+are counts with their denominator attached. Per-cell
+selection readouts re-apply the conservative rule over
+each cell's completed set, with the flip baseline
+recomputed on the same set. Two scope limits are part
+of the readout: the filler is topically dissimilar
+prose (similar distractors hurt more in the published
+work, so these curves are a lower bound on position
+effects under realistic retrieval bulk), and each cell
+is one greedy generation. The 4096 dose needs
+`--max-context` above 4096 plus the needle, question,
+and generation budget; under the default 2048 cap every
+4096 cell is reported `arm_context_exceeded`, never
+truncated into existence, and the 1024 layer carries
+the full control set. Records carry answer digests
+only, and `diff-reports` regenerates the case set from
+the protocol seed with its own generator mirror and
+recomputes every readout before comparing
+(`diff_needle`, `needle_changed` / `needle_asymmetric`
+feed `identical`). Needle cells sit outside
+`verify --determinism` scope: they are generations on
+generated cases, not recorded search observations.
+Cost: 15 generations per candidate per case (7,200 at
+the legal maximum); the CLI help states the count and
+the context arithmetic before the run. The full
+contract, including the red-team adjudication that
+replaced the first construction, is in
+`docs/NEEDLE_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

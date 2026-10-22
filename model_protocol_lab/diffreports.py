@@ -606,6 +606,7 @@ def diff_reports(
     numform_diff = diff_numform(old.get("numform"), new.get("numform"))
     dateline_diff = diff_dateline(old.get("dateline"), new.get("dateline"))
     multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
+    needle_diff = diff_needle(old.get("needle"), new.get("needle"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -666,6 +667,10 @@ def diff_reports(
         "neither",
     )
     multiturn_asymmetric = multiturn_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    needle_asymmetric = needle_diff["available"] not in (
         "both",
         "neither",
     )
@@ -756,6 +761,8 @@ def diff_reports(
         and not dateline_asymmetric
         and not multiturn_diff["changed"]
         and not multiturn_asymmetric
+        and not needle_diff["changed"]
+        and not needle_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -836,6 +843,8 @@ def diff_reports(
         "dateline_asymmetric": dateline_asymmetric,
         "multiturn_changed": multiturn_diff["changed"],
         "multiturn_asymmetric": multiturn_asymmetric,
+        "needle_changed": needle_diff["changed"],
+        "needle_asymmetric": needle_asymmetric,
         "identical": identical,
     }
     return {
@@ -875,6 +884,7 @@ def diff_reports(
         "numform": numform_diff,
         "dateline": dateline_diff,
         "multiturn": multiturn_diff,
+        "needle": needle_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -8752,6 +8762,894 @@ def diff_multiturn(old: Any, new: Any) -> dict[str, Any]:
         or multiturn_protocol_drift
         or multiturn_generator_drift
         or multiturn_backend_drift
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# needle mirror (cycle 191): independent recompute -- never imports
+# needle.py. The generator, the case material, the aggregates, the
+# headline readouts, and the selections are re-implemented from the
+# frozen design literals, so a payload is accepted only when two
+# independent implementations agree. The stage-attested links are
+# the needle offsets (checked against the frozen targets; the
+# validator has no renders) and the absolute level of input_tokens
+# (every identity checked here is a difference) -- both disclosed
+# in docs/NEEDLE_DESIGN.md.
+# ---------------------------------------------------------------------------
+
+_NEEDLE_DOSES = (1024, 4096)
+_NEEDLE_DEPTHS = (0, 25, 50, 75, 100)
+_NEEDLE_CASE_COUNT = 20
+_NEEDLE_FACT_TEMPLATE = "The {topic} code is {value}. "
+_NEEDLE_QUESTION_TEMPLATE = "What is the {topic} code?"
+_NEEDLE_TOPICS = (
+    "astronomy society",
+    "beekeeping circle",
+    "chess club",
+    "rowing team",
+    "radio club",
+    "pottery class",
+    "fencing team",
+    "archive office",
+    "textile guild",
+    "mountain rescue",
+    "vineyard crew",
+    "observatory staff",
+    "printing workshop",
+    "cycling club",
+    "dance academy",
+    "karate school",
+    "model railway club",
+    "stamp society",
+    "hiking group",
+    "choir society",
+)
+_NEEDLE_WORDS = (
+    "ochre",
+    "velvet",
+    "cobalt",
+    "harbor",
+    "saffron",
+    "tundra",
+    "zephyr",
+    "marble",
+    "onyx",
+    "pepper",
+    "quartz",
+    "riddle",
+    "saddle",
+    "temple",
+    "umbrella",
+    "violet",
+    "walnut",
+    "yonder",
+    "zipper",
+    "anchor",
+    "beacon",
+    "cinder",
+    "dagger",
+    "ember",
+    "falcon",
+    "garnet",
+    "helmet",
+    "inkwell",
+    "jubilee",
+    "kestrel",
+    "basalt",
+    "magnet",
+    "nectar",
+    "obelisk",
+    "pumice",
+    "quiver",
+    "rampart",
+    "scepter",
+    "sienna",
+    "utensil",
+    "vortex",
+    "willow",
+    "yonks",
+    "zenith",
+    "almond",
+    "birch",
+    "copper",
+    "drizzle",
+    "elmwood",
+    "fjord",
+    "glacier",
+    "mauve",
+    "ivory",
+    "juniper",
+    "kraken",
+    "linden",
+    "meteor",
+    "nickel",
+    "opal",
+    "pyrite",
+    "quill",
+    "russet",
+    "sorrel",
+    "topaz",
+)
+_NEEDLE_SIZING_RULE_TEXT = (
+    "needle-phased-exact-v1: spans are whole sentences plus one "
+    "truncated suffix (span_text) over the cycled neutral corpus "
+    "stream, consumed in stream order; a truncated sentence "
+    "counts as consumed and the next span continues after it. "
+    "Treated cells size in two phases: prefix candidates in "
+    "span_candidates closeness order, probed as (prefix + needle "
+    "+ question) against the comparator (prefix + question), "
+    "accepting the first whose D equals the target offset (the "
+    "empty prefix at depth 0, no search); then suffix candidates "
+    "continuing the stream, probed as the full arm render, "
+    "accepting the first whose rendered delta over the dose-0 "
+    "render equals the dose with D re-verified on the same ids "
+    "(the empty suffix at depth 100, verified on a single "
+    "render). Duplicate cells insert a middle phase between "
+    "them: mid candidates continuing the stream, probed as "
+    "(prefix + needle + mid + needle + question) against "
+    "(prefix + needle + mid + question), accepting the first "
+    "whose D equals the second target offset; the suffix phase "
+    "then targets the duplicate delta (dose + needle_len) and "
+    "re-verifies both offsets on the final ids. Absent cells "
+    "size a single span against the question-only render. The "
+    "encode budget counts every probe encode in the phases "
+    "(two per prefix or middle probe, one per suffix or absent "
+    "probe); the cached question-only, dose-0, and accepted-"
+    "comparator renders are infrastructure and the joint final "
+    "verification reuses the accepted renders, adding none."
+)
+_NEEDLE_SCREENING_RULE_TEXT = (
+    "needle-screen-v1: per constructed filler span, case-folded: "
+    "the span is screened when it contains the case value, or "
+    "when the candidate's decoded boundary text occurs in it. "
+    "The needle sentence itself is the plant and is never "
+    "screened. Stage-level, the frozen texts (fact template "
+    "with slots emptied, topics, words, neutral corpus) are "
+    "audited for special-token literals against every candidate "
+    "format, and the generated texts (fact template with slots "
+    "emptied, topics, words) are checked for containment of "
+    "any candidate's decoded boundary text; a hit fails the "
+    "whole stage closed before any generation."
+)
+_NEEDLE_MIN_HEADLINE_POPULATION = 6
+_NEEDLE_STREAM_CYCLES = 6
+_NEEDLE_MAX_GROUND_RECORDS = 480
+_NEEDLE_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_NEEDLE_GENERATION_BUDGET = 7200
+_NEEDLE_DETAILS = (
+    "arm_context_exceeded",
+    "arm_evaluation_failed",
+    "arm_screened",
+    "arm_unmatchable",
+)
+_NEEDLE_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "needle_offsets",
+}
+
+
+def _needle_key_treated(dose: int, depth: int) -> str:
+    return f"dose_{dose}_depth_{depth}"
+
+
+def _needle_key_absent(dose: int) -> str:
+    return f"absent_{dose}"
+
+
+def _needle_key_duplicate(dose: int) -> str:
+    return f"duplicate_{dose}"
+
+
+_NEEDLE_CELL_KEYS = (
+    ("dose_0",)
+    + tuple(_needle_key_treated(d, p) for d in _NEEDLE_DOSES for p in _NEEDLE_DEPTHS)
+    + tuple(_needle_key_absent(d) for d in _NEEDLE_DOSES)
+    + tuple(_needle_key_duplicate(d) for d in _NEEDLE_DOSES)
+)
+
+
+def _needle_digest(text: str) -> str:
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _needle_digest_ok(value: Any) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _needle_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    import hashlib as _hashlib
+
+    material = f"{seed}|needle|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _needle_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of the frozen case generation: slot 0 is the code
+    word, slot 1 the number; a value colliding with an earlier
+    case redraws both slots at the next counter."""
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_NEEDLE_CASE_COUNT):
+        topic = _NEEDLE_TOPICS[index]
+        counter = 0
+        while True:
+            word = _NEEDLE_WORDS[_needle_derive(seed, index, 0, counter) % len(_NEEDLE_WORDS)]
+            number = 1000 + _needle_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        cases.append(
+            {
+                "fixture_id": f"needle-{index:02d}",
+                "topic": topic,
+                "value": value,
+            }
+        )
+    return cases
+
+
+def _needle_case_material_sha() -> str:
+    import hashlib as _hashlib
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _NEEDLE_FACT_TEMPLATE,
+            _NEEDLE_QUESTION_TEMPLATE,
+            list(_NEEDLE_TOPICS),
+            list(_NEEDLE_WORDS),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _needle_ground_sha(seed: int) -> str:
+    import hashlib as _hashlib
+    import json as _json
+
+    rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _needle_generate(seed)]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = {
+        "version": 1,
+        "doses": list(_NEEDLE_DOSES),
+        "depths": list(_NEEDLE_DEPTHS),
+        "case_count": _NEEDLE_CASE_COUNT,
+        "cell_keys": list(_NEEDLE_CELL_KEYS),
+        "case_material_sha256": _needle_case_material_sha(),
+        "ground_sha256": _needle_ground_sha(seed),
+        "sizing_rule_sha256": _needle_digest(_NEEDLE_SIZING_RULE_TEXT),
+        "sizing_encode_budget": 512,
+        "screening_rule_sha256": _needle_digest(_NEEDLE_SCREENING_RULE_TEXT),
+        "stream_cycles": _NEEDLE_STREAM_CYCLES,
+        "min_headline_population": _NEEDLE_MIN_HEADLINE_POPULATION,
+        "generation_budget": _NEEDLE_GENERATION_BUDGET,
+        "max_ground_records": _NEEDLE_MAX_GROUND_RECORDS,
+        "max_records_bytes": _NEEDLE_MAX_RECORDS_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    fingerprint = _hashlib.sha256(
+        _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    protocol["fingerprint"] = fingerprint
+    return protocol
+
+
+def _needle_cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if type(cells) is not dict:
+        return None
+    cell = cells.get(key)
+    return cell if type(cell) is dict else None
+
+
+def _needle_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _needle_cell(record, key)
+    return bool(cell["verdict"]) if cell is not None else False
+
+
+def _needle_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and the verdict binding
+    ``verdict == (answer_digest == expected_digest) and
+    boundary_found``. The expected digest is the record's,
+    itself checked against the mirror-regenerated case."""
+    if type(cell) is not dict or set(cell) != _NEEDLE_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if cell["answer_digest"] is not None and not _needle_digest_ok(cell["answer_digest"]):
+        return False
+    offsets = cell["needle_offsets"]
+    if type(offsets) is not list or any(type(o) is not int or o < 0 for o in offsets):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _needle_expected_offsets(key: str) -> list[int] | None:
+    """The frozen needle offsets a cell key must carry."""
+    if key == "dose_0":
+        return [0]
+    for dose in _NEEDLE_DOSES:
+        if key == _needle_key_absent(dose):
+            return []
+        if key == _needle_key_duplicate(dose):
+            return [dose * 25 // 100, dose * 75 // 100]
+        for depth in _NEEDLE_DEPTHS:
+            if key == _needle_key_treated(dose, depth):
+                return [dose * depth // 100]
+    return None
+
+
+def _needle_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of needle.aggregate_candidate."""
+    n_recorded = 0
+    n_pass = 0
+    for record in records:
+        cell = _needle_cell(record, "dose_0")
+        if cell is None:
+            continue
+        n_recorded += 1
+        if cell["verdict"]:
+            n_pass += 1
+    dose0_control = {
+        "n_recorded": n_recorded,
+        "n_pass": n_pass,
+        "rate": (n_pass / n_recorded) if n_recorded else None,
+    }
+    false_recall: dict[str, Any] = {}
+    for dose in _NEEDLE_DOSES:
+        key = _needle_key_absent(dose)
+        n_evaluable = 0
+        n_false_pass = 0
+        for record in records:
+            cell = _needle_cell(record, key)
+            if cell is None:
+                continue
+            n_evaluable += 1
+            if cell["verdict"]:
+                n_false_pass += 1
+        false_recall[str(dose)] = {
+            "n_evaluable": n_evaluable,
+            "n_false_pass": n_false_pass,
+            "rate": (n_false_pass / n_evaluable) if n_evaluable else None,
+        }
+    duplicate: dict[str, Any] = {}
+    for dose in _NEEDLE_DOSES:
+        population = [
+            record
+            for record in records
+            if _needle_verdict(record, "dose_0")
+            and _needle_cell(record, _needle_key_duplicate(dose)) is not None
+            and _needle_cell(record, _needle_key_treated(dose, 25)) is not None
+            and _needle_cell(record, _needle_key_treated(dose, 50)) is not None
+            and _needle_cell(record, _needle_key_treated(dose, 75)) is not None
+        ]
+        n_population = len(population)
+        if not n_population:
+            duplicate[str(dose)] = {
+                "n_population": 0,
+                "n_pass": 0,  # nosec B105 -- verdict count key, not a credential
+                "pass_rate": None,  # nosec B105 -- verdict rate key, not a credential
+                "rate_25": None,
+                "rate_75": None,
+                "independence_expected": None,
+                "excess_over_independence": None,
+                "n_mid_fail": 0,
+                "n_rescued": 0,
+                "rescue_rate": None,
+            }
+            continue
+        dup_key = _needle_key_duplicate(dose)
+        n_dup_pass = sum(1 for r in population if _needle_verdict(r, dup_key))
+        rate_25 = (
+            sum(1 for r in population if _needle_verdict(r, _needle_key_treated(dose, 25)))
+            / n_population
+        )
+        rate_75 = (
+            sum(1 for r in population if _needle_verdict(r, _needle_key_treated(dose, 75)))
+            / n_population
+        )
+        expected = 1.0 - (1.0 - rate_25) * (1.0 - rate_75)
+        pass_rate = n_dup_pass / n_population
+        mid_fails = [r for r in population if not _needle_verdict(r, _needle_key_treated(dose, 50))]
+        n_rescued = sum(1 for r in mid_fails if _needle_verdict(r, dup_key))
+        duplicate[str(dose)] = {
+            "n_population": n_population,
+            "n_pass": n_dup_pass,
+            "pass_rate": pass_rate,
+            "rate_25": rate_25,
+            "rate_75": rate_75,
+            "independence_expected": expected,
+            "excess_over_independence": pass_rate - expected,
+            "n_mid_fail": len(mid_fails),
+            "n_rescued": n_rescued,
+            "rescue_rate": (n_rescued / len(mid_fails)) if mid_fails else None,
+        }
+    return {
+        "dose0_control": dose0_control,
+        "false_recall": false_recall,
+        "duplicate": duplicate,
+    }
+
+
+def _needle_headline(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Mirror of needle.headline_readouts."""
+    out: dict[str, Any] = {}
+    by_fixture: dict[str, dict[str, dict[str, Any]]] = {
+        name: {record["fixture"]: record for record in records}
+        for name, records in records_by_candidate.items()
+    }
+    names = list(records_by_candidate)
+    for dose in _NEEDLE_DOSES:
+        keys = [_needle_key_treated(dose, depth) for depth in _NEEDLE_DEPTHS]
+        population: list[str] = []
+        if names:
+            for record in records_by_candidate[names[0]]:
+                fixture = record["fixture"]
+                ok = True
+                for name in names:
+                    match = by_fixture[name].get(fixture)
+                    if match is None or not _needle_verdict(match, "dose_0"):
+                        ok = False
+                        break
+                    if any(_needle_cell(match, key) is None for key in keys):
+                        ok = False
+                        break
+                if ok:
+                    population.append(fixture)
+        n_population = len(population)
+        curves: dict[str, Any] = {}
+        deficit: dict[str, Any] = {}
+        first_failure: dict[str, Any] = {}
+        for name in names:
+            points: dict[str, Any] = {}
+            rates: dict[int, float | None] = {}
+            for depth in _NEEDLE_DEPTHS:
+                key = _needle_key_treated(dose, depth)
+                n_pass = sum(
+                    1 for fixture in population if _needle_verdict(by_fixture[name][fixture], key)
+                )
+                rate = (n_pass / n_population) if n_population else None
+                rates[depth] = rate
+                points[str(depth)] = {"n_pass": n_pass, "rate": rate}
+            curves[name] = points
+            rate_0 = rates[0]
+            rate_50 = rates[50]
+            rate_100 = rates[100]
+            if (
+                n_population < _NEEDLE_MIN_HEADLINE_POPULATION
+                or rate_0 is None
+                or rate_50 is None
+                or rate_100 is None
+            ):
+                deficit[name] = None
+                first_failure[name] = None
+                continue
+            deficit[name] = (rate_0 + rate_100) / 2 - rate_50
+            counts = {str(depth): 0 for depth in _NEEDLE_DEPTHS}
+            n_no_failure = 0
+            for fixture in population:
+                record = by_fixture[name][fixture]
+                first: int | None = None
+                for depth in _NEEDLE_DEPTHS:
+                    if not _needle_verdict(record, _needle_key_treated(dose, depth)):
+                        first = depth
+                        break
+                if first is None:
+                    n_no_failure += 1
+                else:
+                    counts[str(first)] += 1
+            first_failure[name] = {"counts": counts, "n_no_failure": n_no_failure}
+        out[str(dose)] = {
+            "population": population,
+            "n_population": n_population,
+            "curves": curves,
+            "deficit": deficit,
+            "first_failure": first_failure,
+        }
+    return out
+
+
+def _needle_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    """Mirror of needle._selection_over."""
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            record["fixture"]
+            for record in records
+            if record["fixture"] in fixtures and _needle_cell(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _needle_verdict(record, key) for record in records if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _needle_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]], key: str
+) -> dict[str, Any]:
+    """Mirror of needle.cell_selection, including the
+    paired-restricted flip baseline."""
+    all_fixtures = frozenset(
+        record["fixture"] for records in records_by_candidate.values() for record in records
+    )
+    own = _needle_selection_over(records_by_candidate, key, all_fixtures)
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+            "flip": None,
+        }
+    if key == "dose_0":
+        flip: bool | None = False
+    else:
+        completed = frozenset(
+            record["fixture"]
+            for records in records_by_candidate.values()
+            for record in records
+            if _needle_cell(record, key) is not None
+        )
+        baseline = _needle_selection_over(records_by_candidate, "dose_0", completed)
+        flip = None if baseline is None else own != baseline
+    return {
+        "decision": own["decision"],
+        "detail": "",
+        "winner": own["winner"],
+        "withheld": False,
+        "flip": flip,
+    }
+
+
+def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a needle payload from its ground records.
+
+    The protocol is rebuilt from this module's own literals and
+    the mirror generator (never imported from needle.py) and
+    compared whole; every record is checked against the
+    mirror-regenerated case in canonical order; every cell's
+    verdict is re-derived from its digest identity; the delta
+    identities and frozen needle offsets are checked wherever
+    the cells they relate are both present; aggregates,
+    headline readouts, and per-cell selections are recomputed
+    and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or type(backend_fingerprint) is not str:
+        return None
+    if protocol != _needle_protocol(seed, backend_fingerprint):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _needle_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict or set(entry) != {
+            "status",
+            "detail",
+            "dose0_control",
+            "false_recall",
+            "duplicate",
+            "records",
+        }:
+            return None
+        if entry["status"] != "available" or entry["detail"] != "":
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _NEEDLE_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "question_tokens",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _needle_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            if type(record["question_tokens"]) is not int or record["question_tokens"] < 0:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_NEEDLE_CELL_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(_NEEDLE_CELL_KEYS):
+                return None
+            for key in _NEEDLE_CELL_KEYS:
+                cell = cells[key]
+                detail = details[key]
+                if cell is None:
+                    if detail not in _NEEDLE_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _needle_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["needle_offsets"] != _needle_expected_offsets(key):
+                        return None
+            dose0 = cells["dose_0"]
+            if dose0 is not None and dose0["input_tokens"] <= record["question_tokens"]:
+                return None
+            needle_len = (
+                dose0["input_tokens"] - record["question_tokens"] if dose0 is not None else None
+            )
+            for dose in _NEEDLE_DOSES:
+                absent = cells[_needle_key_absent(dose)]
+                if absent is not None and (
+                    absent["input_tokens"] - record["question_tokens"] != dose
+                ):
+                    return None
+                if dose0 is None:
+                    continue
+                for depth in _NEEDLE_DEPTHS:
+                    treated = cells[_needle_key_treated(dose, depth)]
+                    if treated is not None and (
+                        treated["input_tokens"] - dose0["input_tokens"] != dose
+                    ):
+                        return None
+                duplicate = cells[_needle_key_duplicate(dose)]
+                if (
+                    duplicate is not None
+                    and needle_len is not None
+                    and (duplicate["input_tokens"] - dose0["input_tokens"] != dose + needle_len)
+                ):
+                    return None
+        raw_records[name] = records
+        aggregates[name] = _needle_aggregate(records)
+    if total_records > _NEEDLE_MAX_GROUND_RECORDS:
+        return None
+    return {
+        "aggregates": aggregates,
+        "readouts": _needle_headline(raw_records),
+        "conditions": {key: _needle_selection(raw_records, key) for key in _NEEDLE_CELL_KEYS},
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_needle(payload: Any) -> bool:
+    """Structural check for a ``needle`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "readouts",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _needle_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("dose0_control") != expected["dose0_control"]:
+            return False
+        if entry.get("false_recall") != expected["false_recall"]:
+            return False
+        if entry.get("duplicate") != expected["duplicate"]:
+            return False
+    if payload.get("readouts") != recomputed["readouts"]:
+        return False
+    if payload.get("conditions") != recomputed["conditions"]:
+        return False
+    if payload.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(payload.get("n_cases") == recomputed["n_cases"])
+
+
+def diff_needle(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``needle`` probe payloads; deterministic.
+
+    Answers "did the depth story change between runs?":
+    per-candidate deficit and dose-0 drift, false-recall and
+    duplicate-excess drift, per-cell selection drift,
+    candidates added/removed, and protocol / generator /
+    backend drift (any of which marks the comparison not
+    comparable, with the drift still listed -- the generated
+    set is the treatment, so a changed generator is protocol
+    drift). A side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_needle(old)
+    new_ok = _valid_needle(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    needle_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    needle_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    needle_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    needle_comparable = (
+        not needle_protocol_drift and not needle_generator_drift and not needle_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    needle_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    needle_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    needle_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                needle_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        if old_entry["dose0_control"]["rate"] != new_entry["dose0_control"]["rate"]:
+            needle_candidate_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "dose0_rate",
+                    "old": old_entry["dose0_control"]["rate"],
+                    "new": new_entry["dose0_control"]["rate"],
+                }
+            )
+        for dose in ("1024", "4096"):
+            old_deficit = old["readouts"][dose]["deficit"][name]
+            new_deficit = new["readouts"][dose]["deficit"][name]
+            if old_deficit != new_deficit:
+                needle_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose}_deficit",
+                        "old": old_deficit,
+                        "new": new_deficit,
+                    }
+                )
+            for depth in ("0", "50", "100"):
+                old_rate = old["readouts"][dose]["curves"][name][depth]["rate"]
+                new_rate = new["readouts"][dose]["curves"][name][depth]["rate"]
+                if old_rate != new_rate:
+                    needle_candidate_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"dose_{dose}_depth_{depth}_rate",
+                            "old": old_rate,
+                            "new": new_rate,
+                        }
+                    )
+            old_floor = old_entry["false_recall"][dose]["rate"]
+            new_floor = new_entry["false_recall"][dose]["rate"]
+            if old_floor != new_floor:
+                needle_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose}_false_recall",
+                        "old": old_floor,
+                        "new": new_floor,
+                    }
+                )
+            old_excess = old_entry["duplicate"][dose]["excess_over_independence"]
+            new_excess = new_entry["duplicate"][dose]["excess_over_independence"]
+            if old_excess != new_excess:
+                needle_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose}_duplicate_excess",
+                        "old": old_excess,
+                        "new": new_excess,
+                    }
+                )
+    needle_condition_drift: list[dict[str, Any]] = []
+    for key in _NEEDLE_CELL_KEYS:
+        if old["conditions"][key] != new["conditions"][key]:
+            needle_condition_drift.append(
+                {
+                    "condition": key,
+                    "old": old["conditions"][key],
+                    "new": new["conditions"][key],
+                }
+            )
+    result["candidate_drift"] = needle_candidate_drift
+    result["condition_drift"] = needle_condition_drift
+    result["candidates_added"] = needle_candidates_added
+    result["candidates_removed"] = needle_candidates_removed
+    result["protocol_drift"] = needle_protocol_drift
+    result["generator_drift"] = needle_generator_drift
+    result["backend_drift"] = needle_backend_drift
+    result["comparable"] = needle_comparable
+    result["changed"] = bool(
+        needle_candidate_drift
+        or needle_condition_drift
+        or needle_candidates_added
+        or needle_candidates_removed
+        or needle_protocol_drift
+        or needle_generator_drift
+        or needle_backend_drift
     )
     return result
 

@@ -8096,3 +8096,66 @@ checkpoint at a large --max-new-tokens can now reach
 consequence, cap unchanged. Pre-cycle-190 numform
 payloads are rejected by diff-reports; no migration
 shim, by design.
+
+## Cycle 191 — needle-depth × template (wave-8 rank 3, pre-build)
+
+Uniqueness pass (researcher brief executed against primary
+sources; coordinator spot-checks: NoLiMa arXiv:2502.05167
+confirmed live; in-tree distract conditions re-read in
+`distraction.py` — dose × placement of filler, no depth axis).
+
+Prior art, credited: Liu et al., *Lost in the Middle*
+(arXiv:2307.03172) — U-shaped recall over position in
+API-served models, closed-book/open-book bounds, edge-mean
+functional form (this probe's `mid_depth_deficit` is that
+form, credited in the design doc). NoLiMa
+(arXiv:2502.05167) — minimal-lexical-overlap needles,
+unique-token counting, needles inserted at 25/50/75% within
+the relevant text in its question-type analysis, literal
+(code-word) mark needles. RULER (arXiv:2404.06654) —
+configurable needle depth in local synthetic tasks, pass@k
+over 25 samples, substring acceptance tier alongside strict
+equality. BABILong (arXiv:2406.10149) — multiple facts
+distributed through book text, ~10% depth bins. Chroma,
+*Context Rot* (July 2025, research.trychroma.com/context-rot)
+— total length varied with a fixed median needle position
+(not depth-rotated), distractor-count and similarity effects,
+needle–question similarity effects. Paulsen, *Needle in a
+Haystack — The Problem of Base Hits and Impossible Needles*
+(arXiv:2604.03996) — temperature-0.7 single samples vary up to
+15 points run-to-run; pass demands are configuration choices.
+
+Verdict: the combination holds with narrowing, and the
+narrowing is recorded here so the docs stay inside it. Depth
+as an axis is NOT novel (LitM, NoLiMa, RULER, BABILong);
+token-exact placement is NOT a differentiator (NoLiMa counts
+exact tokens; RULER/BABILong place exactly); literal needles
+and distributed facts are prior art (NoLiMa, BABILong);
+needle-only controls are prior art (LitM's closed-book bound,
+NIAH's no-needle test). What no surveyed harness (LM
+Evaluation Harness, HELM, OpenAI evals, DSPy, Inspect AI,
+promptfoo, RULER, LongBench/-v2, NoLiMa, BABILong) reports is
+the conjunction: a recall-vs-depth curve as a function of
+hand-rendered chat-template family on one local checkpoint —
+same weights, same cases, only the prompt format varying —
+with the depth offset verified on each candidate's own
+rendered token sequence, a needle-absent false-recall floor
+and a duplicate-needle control as arms of the same probe, and
+the lab's abstention selection rule re-applied per depth
+cell. One claim rests on secondary sources only (lm-eval's
+RULER port, from its task registry and docs pages) and the
+framing does not lean on it.
+
+Design traps taken from the literature, and the settlements
+in docs/NEEDLE_DESIGN.md: depth is defined on the candidate's
+own rendered tokens (LitM measured fraction of context;
+vendor-template rendering is exactly what shifts token
+boundaries here); the question and needle share lexical
+material by construction (Chroma: unmatched pairs confound
+retrieval with guessing); the filler is topically dissimilar
+prose, so curves are a lower bound (Chroma's similarity
+result), stated in the readout; scoring is the lab's strict
+boundary-cut exact match, with RULER's looser substring tier
+deliberately not offered; each cell is one greedy generation
+with denominators printed (Paulsen's variance point is met by
+determinism plus denominators, not by sampling).
