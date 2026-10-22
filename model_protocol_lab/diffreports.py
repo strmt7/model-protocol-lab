@@ -607,6 +607,7 @@ def diff_reports(
     dateline_diff = diff_dateline(old.get("dateline"), new.get("dateline"))
     multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
     needle_diff = diff_needle(old.get("needle"), new.get("needle"))
+    placement_diff = diff_placement(old.get("placement"), new.get("placement"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -671,6 +672,10 @@ def diff_reports(
         "neither",
     )
     needle_asymmetric = needle_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    placement_asymmetric = placement_diff["available"] not in (
         "both",
         "neither",
     )
@@ -763,6 +768,8 @@ def diff_reports(
         and not multiturn_asymmetric
         and not needle_diff["changed"]
         and not needle_asymmetric
+        and not placement_diff["changed"]
+        and not placement_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -845,6 +852,8 @@ def diff_reports(
         "multiturn_asymmetric": multiturn_asymmetric,
         "needle_changed": needle_diff["changed"],
         "needle_asymmetric": needle_asymmetric,
+        "placement_changed": placement_diff["changed"],
+        "placement_asymmetric": placement_asymmetric,
         "identical": identical,
     }
     return {
@@ -885,6 +894,7 @@ def diff_reports(
         "dateline": dateline_diff,
         "multiturn": multiturn_diff,
         "needle": needle_diff,
+        "placement": placement_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -9650,6 +9660,814 @@ def diff_needle(old: Any, new: Any) -> dict[str, Any]:
         or needle_protocol_drift
         or needle_generator_drift
         or needle_backend_drift
+    )
+    return result
+
+
+_PLACEMENT_ARM_KEYS = (
+    "question_first",
+    "payload_first",
+    "sandwich",
+    "closed_book",
+)
+_PLACEMENT_LAYOUT_ARMS = ("question_first", "payload_first", "sandwich")
+_PLACEMENT_BASELINE_ARM = "payload_first"
+_PLACEMENT_CASE_COUNT = 24
+_PLACEMENT_JOINER = "\n\n"
+_PLACEMENT_FACT_TEMPLATE = "The {topic} inspection code is {value}."
+_PLACEMENT_QUESTION_TEMPLATE = "What is the {topic} inspection code?"
+_PLACEMENT_TOPICS = (
+    "archive vault",
+    "boiler room",
+    "loading dock",
+    "records office",
+    "north gate",
+    "pump house",
+    "storage annex",
+    "mail room",
+    "server closet",
+    "roof access",
+    "east stairwell",
+    "water tower",
+    "fuel depot",
+    "tool library",
+    "greenhouse bay",
+    "ferry office",
+    "signal box",
+    "customs shed",
+    "observatory dome",
+    "print workshop",
+    "harbor office",
+    "tunnel control",
+    "solar array",
+    "wind station",
+)
+_PLACEMENT_WORDS = (
+    "amber",
+    "birch",
+    "cobalt",
+    "dune",
+    "ember",
+    "flint",
+    "garnet",
+    "jasper",
+    "kestrel",
+    "linden",
+    "magnet",
+    "nutmeg",
+    "onyx",
+    "sorrel",
+    "quartz",
+    "rowan",
+    "saddle",
+    "timber",
+    "umber",
+    "velvet",
+    "walnut",
+    "yonder",
+    "zephyr",
+    "copper",
+)
+_PLACEMENT_NEUTRAL_POOL = (
+    "The corridor lights hum softly after the evening shift ends.",
+    "A kettle sits on the counter beside a chipped blue mug.",
+    "Rain taps the window above the wooden bench all morning.",
+    "The notice board by the door holds a faded timetable.",
+    "Someone left a grey umbrella leaning against the wall.",
+    "The floor tiles are cool even on the warmest afternoons.",
+    "A narrow shelf holds jars of screws, washers, and twine.",
+    "The clock over the sink runs a few minutes fast.",
+    "Dust gathers on the ledge where the plants used to sit.",
+    "The hallway smells faintly of soap and old paper.",
+    "A folded map rests on top of the filing cabinet.",
+    "The radiator clicks twice before the heat comes on.",
+    "Paper clips and rubber bands fill the shallow drawer.",
+    "The yard outside is quiet except for sparrows at dawn.",
+    "A chipped enamel sign hangs crooked by the entrance.",
+    "The mop bucket stands in the corner by the sink.",
+)
+_PLACEMENT_MIN_PAIRED_EVALUABLE = 6
+_PLACEMENT_MIN_DISCORDANT = 2
+_PLACEMENT_MAX_GROUND_RECORDS = 24 * _PLACEMENT_CASE_COUNT
+_PLACEMENT_GENERATION_BUDGET = len(_PLACEMENT_ARM_KEYS) * _PLACEMENT_MAX_GROUND_RECORDS
+_PLACEMENT_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_PLACEMENT_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_PLACEMENT_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_PLACEMENT_AGGREGATE_KEYS = {
+    "arms",
+    "closed_book",
+    "headline",
+    "sandwich",
+    "control_level",
+    "n_control",
+    "placement_effect_falsified",
+    "n_fixtures",
+    "n_screened",
+    "n_closed_book_incomplete",
+}
+
+
+def _placement_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    placement.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _placement_digest_ok(value: Any) -> bool:
+    """Whether a stored answer digest is None or a well-formed
+    SHA-256 hex digest (fails closed on lone surrogates, the
+    cycle-190 discipline)."""
+    if value is None:
+        return True
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _placement_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of placement._derive (frozen material string)."""
+    import hashlib as _hashlib
+
+    material = f"{seed}|placement|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _placement_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of placement.generate_cases: the frozen case set
+    for a seed, regenerated from the protocol's own seed so a
+    fabricated set is rejected (the numform F2 lesson)."""
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_PLACEMENT_CASE_COUNT):
+        topic = _PLACEMENT_TOPICS[index]
+        counter = 0
+        while True:
+            word = _PLACEMENT_WORDS[
+                _placement_derive(seed, index, 0, counter) % len(_PLACEMENT_WORDS)
+            ]
+            number = 1000 + _placement_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        first = _placement_derive(seed, index, 2, 0) % len(_PLACEMENT_NEUTRAL_POOL)
+        second = _placement_derive(seed, index, 3, 0) % len(_PLACEMENT_NEUTRAL_POOL)
+        if second == first:
+            second = (first + 1) % len(_PLACEMENT_NEUTRAL_POOL)
+        cases.append(
+            {
+                "fixture_id": f"placement-{index:02d}",
+                "topic": topic,
+                "value": value,
+                "sentence_indices": [first, second],
+            }
+        )
+    return cases
+
+
+def _placement_case_material_sha256() -> str:
+    """Mirror of placement.case_material_sha256."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _PLACEMENT_FACT_TEMPLATE,
+            _PLACEMENT_QUESTION_TEMPLATE,
+            list(_PLACEMENT_TOPICS),
+            list(_PLACEMENT_WORDS),
+            list(_PLACEMENT_NEUTRAL_POOL),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _placement_digest(canonical)
+
+
+def _placement_ground_sha256(seed: int) -> str:
+    """Mirror of placement.ground_sha256."""
+    import json as _json
+
+    rows = [
+        [case["fixture_id"], case["topic"], case["value"], list(case["sentence_indices"])]
+        for case in _placement_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _placement_digest(canonical)
+
+
+def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The placement protocol rebuilt from this module's own
+    literals plus the payload's seed and backend fingerprint,
+    fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_PLACEMENT_ARM_KEYS),
+        "layout_arms": list(_PLACEMENT_LAYOUT_ARMS),
+        "baseline_arm": _PLACEMENT_BASELINE_ARM,
+        "case_count": _PLACEMENT_CASE_COUNT,
+        "case_material_sha256": _placement_case_material_sha256(),
+        "ground_sha256": _placement_ground_sha256(seed),
+        "min_paired_evaluable": _PLACEMENT_MIN_PAIRED_EVALUABLE,
+        "min_discordant": _PLACEMENT_MIN_DISCORDANT,
+        "generation_budget": _PLACEMENT_GENERATION_BUDGET,
+        "max_ground_records": _PLACEMENT_MAX_GROUND_RECORDS,
+        "max_records_bytes": _PLACEMENT_MAX_RECORDS_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _placement_digest(canonical)
+    return protocol
+
+
+def _placement_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    import math as _math
+
+    n = a_only + b_only
+    if n == 0:
+        return None
+    k = min(a_only, b_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _placement_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _placement_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _placement_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _placement_screened(record: dict[str, Any]) -> bool:
+    cell = _placement_cell_get(record, "closed_book")
+    return cell is not None and bool(cell["verdict"])
+
+
+def _placement_pair_block(
+    records: list[dict[str, Any]],
+    key_a: str,
+    key_b: str,
+    restrict: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    """Mirror of placement._pair_block."""
+    n_paired = 0
+    n_a_only = 0
+    n_b_only = 0
+    n_both = 0
+    n_pass_a = 0
+    n_pass_b = 0
+    for record in records:
+        if restrict is not None and record.get("fixture") not in restrict:
+            continue
+        cell_a = _placement_cell_get(record, key_a)
+        cell_b = _placement_cell_get(record, key_b)
+        if cell_a is None or cell_b is None:
+            continue
+        n_paired += 1
+        verdict_a = bool(cell_a["verdict"])
+        verdict_b = bool(cell_b["verdict"])
+        if verdict_a:
+            n_pass_a += 1
+        if verdict_b:
+            n_pass_b += 1
+        if verdict_a and verdict_b:
+            n_both += 1
+        elif verdict_a:
+            n_a_only += 1
+        elif verdict_b:
+            n_b_only += 1
+    return {
+        "n_paired": n_paired,
+        "n_a_only": n_a_only,
+        "n_b_only": n_b_only,
+        "n_both": n_both,
+        "n_neither": n_paired - n_a_only - n_b_only - n_both,
+        "rate_a": (n_pass_a / n_paired) if n_paired else None,
+        "rate_b": (n_pass_b / n_paired) if n_paired else None,
+        "mcnemar_p": _placement_mcnemar_p(n_a_only, n_b_only),
+    }
+
+
+def _placement_both_fail(qf_only: int, pf_only: int, n_neither: int) -> bool:
+    """Mirror of placement.both_fail_dominant."""
+    return n_neither >= max(qf_only, pf_only) and n_neither >= _PLACEMENT_MIN_DISCORDANT
+
+
+def _placement_classify(
+    n_paired: int,
+    qf_only: int,
+    pf_only: int,
+    n_control: int,
+    control_level: int | None,
+    joint_collapse: bool,
+) -> str:
+    """Mirror of placement.classify_placement."""
+    d = qf_only + pf_only
+    if n_paired < _PLACEMENT_MIN_PAIRED_EVALUABLE:
+        return "insufficient"
+    if d == 0 and not joint_collapse:
+        return "no_discordance_observed"
+    if n_control < _PLACEMENT_MIN_PAIRED_EVALUABLE:
+        return "control_set_too_small"
+    if control_level is None:
+        return "control_unavailable"
+    if d <= control_level:
+        return "within_sandwich_control"
+    if qf_only == pf_only and qf_only >= _PLACEMENT_MIN_DISCORDANT:
+        return "discordant_balanced"
+    if max(qf_only, pf_only) >= _PLACEMENT_MIN_DISCORDANT:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _placement_falsified(
+    n_paired: int,
+    qf_only: int,
+    pf_only: int,
+    n_control: int,
+    control_level: int | None,
+    joint_collapse: bool,
+) -> bool:
+    """Mirror of placement.effect_falsified."""
+    if n_paired < _PLACEMENT_MIN_PAIRED_EVALUABLE or joint_collapse:
+        return False
+    d = qf_only + pf_only
+    if d == 0:
+        return True
+    return (
+        n_control >= _PLACEMENT_MIN_PAIRED_EVALUABLE
+        and control_level is not None
+        and d <= control_level
+    )
+
+
+def _placement_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of placement.aggregate_candidate."""
+    live = [r for r in records if not _placement_screened(r)]
+    arms: dict[str, Any] = {}
+    for key in _PLACEMENT_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        for record in live:
+            cell = _placement_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+        }
+    cb_completed = 0
+    cb_pass = 0
+    for record in records:
+        cell = _placement_cell_get(record, "closed_book")
+        if cell is None:
+            continue
+        cb_completed += 1
+        if cell["verdict"]:
+            cb_pass += 1
+    headline_raw = _placement_pair_block(live, "question_first", "payload_first")
+    paired_ids = frozenset(
+        str(record.get("fixture"))
+        for record in live
+        if _placement_cell_get(record, "question_first") is not None
+        and _placement_cell_get(record, "payload_first") is not None
+    )
+    sb_pf = _placement_pair_block(live, "sandwich", "payload_first", paired_ids)
+    sb_qf = _placement_pair_block(live, "sandwich", "question_first", paired_ids)
+    n_control = sb_pf["n_paired"]
+    control_level: int | None = None
+    if n_control:
+        control_level = max(
+            sb_pf["n_a_only"] + sb_pf["n_b_only"],
+            sb_qf["n_a_only"] + sb_qf["n_b_only"],
+        )
+    qf_only = headline_raw["n_a_only"]
+    pf_only = headline_raw["n_b_only"]
+    joint = _placement_both_fail(qf_only, pf_only, headline_raw["n_neither"])
+    headline = {
+        "n_paired": headline_raw["n_paired"],
+        "n_qf_only": qf_only,
+        "n_pf_only": pf_only,
+        "n_both": headline_raw["n_both"],
+        "n_neither": headline_raw["n_neither"],
+        "rate_qf": headline_raw["rate_a"],
+        "rate_pf": headline_raw["rate_b"],
+        "mcnemar_p": headline_raw["mcnemar_p"],
+        "both_fail_dominant": joint,
+        "classification": _placement_classify(
+            headline_raw["n_paired"], qf_only, pf_only, n_control, control_level, joint
+        ),
+    }
+    return {
+        "arms": arms,
+        "closed_book": {
+            "n_completed": cb_completed,
+            "n_pass": cb_pass,
+            "pass_rate": (cb_pass / cb_completed) if cb_completed else None,
+        },
+        "headline": headline,
+        "sandwich": {
+            "vs_payload_first": sb_pf,
+            "vs_question_first": sb_qf,
+        },
+        "control_level": control_level,
+        "n_control": n_control,
+        "placement_effect_falsified": _placement_falsified(
+            headline_raw["n_paired"], qf_only, pf_only, n_control, control_level, joint
+        ),
+        "n_fixtures": len(records),
+        "n_screened": len(records) - len(live),
+        "n_closed_book_incomplete": sum(
+            1 for record in records if _placement_cell_get(record, "closed_book") is None
+        ),
+    }
+
+
+def _placement_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    """Mirror of placement._selection_over."""
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _placement_cell_get(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _placement_verdict(record, key) for record in records if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _placement_arm_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    arm: str,
+) -> dict[str, Any]:
+    """Mirror of placement.arm_selection."""
+    populations: list[frozenset[str]] = []
+    for records in records_by_candidate.values():
+        populations.append(
+            frozenset(str(r.get("fixture")) for r in records if not _placement_screened(r))
+        )
+    shared: frozenset[str] = frozenset.intersection(*populations) if populations else frozenset()
+    own = _placement_selection_over(records_by_candidate, arm, shared)
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+            "flip": None,
+        }
+    if arm == _PLACEMENT_BASELINE_ARM:
+        flip: bool | None = False
+    else:
+        completed = frozenset(
+            str(record["fixture"])
+            for records in records_by_candidate.values()
+            for record in records
+            if record["fixture"] in shared and _placement_cell_get(record, arm) is not None
+        )
+        baseline = _placement_selection_over(
+            records_by_candidate, _PLACEMENT_BASELINE_ARM, completed
+        )
+        flip = None if baseline is None else own != baseline
+    return {
+        "decision": own["decision"],
+        "detail": "",
+        "winner": own["winner"],
+        "withheld": False,
+        "flip": flip,
+    }
+
+
+def _placement_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and the verdict binding
+    ``verdict == (answer_digest == expected_digest) and
+    boundary_found``. The expected digest is the record's,
+    itself checked against the mirror-regenerated case."""
+    if type(cell) is not dict or set(cell) != _PLACEMENT_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _placement_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a placement payload from its ground records.
+
+    The validator carries its own generator mirror, templates,
+    pools, and aggregators (no imports from placement.py): the
+    protocol is rebuilt from frozen scalars plus the payload's
+    seed and backend fingerprint and compared whole; the case
+    set is regenerated from the seed and every record's
+    construction is compared against it; every cell's verdict
+    is re-derived from its digest identity; every completed
+    cell's ``input_tokens`` must equal the record's
+    ``arm_tokens`` for that arm; the aggregates and the per-arm
+    selections are recomputed and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if protocol != _placement_protocol(seed, backend_fingerprint):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _placement_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _PLACEMENT_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _PLACEMENT_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "question_tokens",
+                "arm_tokens",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _placement_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            if type(arm_tokens) is not dict or set(arm_tokens) != set(_PLACEMENT_ARM_KEYS):
+                return None
+            if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                return None
+            if record["question_tokens"] != arm_tokens["closed_book"]:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_PLACEMENT_ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(_PLACEMENT_ARM_KEYS):
+                return None
+            for arm in _PLACEMENT_ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _PLACEMENT_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _placement_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != arm_tokens[arm]:
+                        return None
+        raw_records[name] = records
+        aggregates[name] = _placement_aggregate(records)
+    if total_records > _PLACEMENT_MAX_GROUND_RECORDS:
+        return None
+    if not raw_records:
+        return None
+    return {
+        "aggregates": aggregates,
+        "conditions": {
+            arm: _placement_arm_selection(raw_records, arm) for arm in _PLACEMENT_LAYOUT_ARMS
+        },
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_placement(payload: Any) -> bool:
+    """Structural check for a ``placement`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _placement_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if entry.get(key) != value:
+                return False
+    if payload.get("conditions") != recomputed["conditions"]:
+        return False
+    if payload.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(payload.get("n_cases") == recomputed["n_cases"])
+
+
+def diff_placement(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``placement`` probe payloads; deterministic.
+
+    Answers "did the placement story change between runs?":
+    per-candidate classification and falsification drift, the
+    directional discordant counts, control drift, screening
+    drift, per-arm selection drift, candidates added/removed,
+    and protocol / generator / backend drift (any of which
+    marks the comparison not comparable, with the drift still
+    listed -- the generated set is the treatment, so a changed
+    generator is protocol drift). A side without a valid
+    payload is reported plainly.
+    """
+    old_ok = _valid_placement(old)
+    new_ok = _valid_placement(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    placement_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    placement_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    placement_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    placement_comparable = (
+        not placement_protocol_drift
+        and not placement_generator_drift
+        and not placement_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    placement_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    placement_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    placement_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                placement_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        placement_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "classification",
+                old_entry["headline"]["classification"],
+                new_entry["headline"]["classification"],
+            ),
+            (
+                "placement_effect_falsified",
+                old_entry["placement_effect_falsified"],
+                new_entry["placement_effect_falsified"],
+            ),
+            (
+                "n_qf_only",
+                old_entry["headline"]["n_qf_only"],
+                new_entry["headline"]["n_qf_only"],
+            ),
+            (
+                "n_pf_only",
+                old_entry["headline"]["n_pf_only"],
+                new_entry["headline"]["n_pf_only"],
+            ),
+            (
+                "control_level",
+                old_entry["control_level"],
+                new_entry["control_level"],
+            ),
+            (
+                "n_screened",
+                old_entry["n_screened"],
+                new_entry["n_screened"],
+            ),
+        ]
+        for metric, old_value, new_value in placement_metrics:
+            if old_value != new_value:
+                placement_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    placement_condition_drift: list[dict[str, Any]] = []
+    for arm in _PLACEMENT_LAYOUT_ARMS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            placement_condition_drift.append(
+                {
+                    "condition": arm,
+                    "old": old["conditions"][arm],
+                    "new": new["conditions"][arm],
+                }
+            )
+    result["candidate_drift"] = placement_candidate_drift
+    result["condition_drift"] = placement_condition_drift
+    result["candidates_added"] = placement_candidates_added
+    result["candidates_removed"] = placement_candidates_removed
+    result["protocol_drift"] = placement_protocol_drift
+    result["generator_drift"] = placement_generator_drift
+    result["backend_drift"] = placement_backend_drift
+    result["comparable"] = placement_comparable
+    result["changed"] = bool(
+        placement_candidate_drift
+        or placement_condition_drift
+        or placement_candidates_added
+        or placement_candidates_removed
+        or placement_protocol_drift
+        or placement_generator_drift
+        or placement_backend_drift
     )
     return result
 

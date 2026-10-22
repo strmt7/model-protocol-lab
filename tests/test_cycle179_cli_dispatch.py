@@ -14,8 +14,8 @@ probe never raises):
 
 - TestFlagParsing: every stage flag in STAGE_FLAGS sets its
   argparse dest when present and leaves it falsy when absent.
-- TestHelperDispatch: the `_run_*_probe` helpers in cli.py (28
-  after cycle 191 added needle). With
+- TestHelperDispatch: the `_run_*_probe` helpers in cli.py (29
+  after cycle 193 added placement). With
   the helper's experiments functions stubbed to a sentinel, the
   helper attaches a non-marker payload under its result key; with
   the first experiments function stubbed to raise, the helper
@@ -110,6 +110,7 @@ STAGE_FLAGS = [
     ("--dateline", "dateline", None),
     ("--multiturn", "multiturn", None),
     ("--needle", "needle", None),
+    ("--placement", "placement", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -279,6 +280,12 @@ HELPER_DISPATCH = [
         "needle",
         "needle_unavailable",
         ["needle_stage", "needle_analysis"],
+    ),
+    (
+        "_run_placement_probe",
+        "placement",
+        "placement_unavailable",
+        ["placement_stage", "placement_analysis"],
     ),
     (
         "_run_cache_profile_probe",

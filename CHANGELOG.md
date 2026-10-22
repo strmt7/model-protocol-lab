@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 193 — question/payload placement, 2026-10-22)
+
+- `run --placement`: a generation stage over 24 cases it
+  generates itself from the run seed — a three-sentence
+  payload with the one answer-bearing fact frozen in the
+  middle sentence — asking the same question four ways per
+  candidate: before the payload, after it, twice around it
+  (sandwich control), and alone (closed-book screen; a pass
+  without the payload excludes the case for that candidate,
+  counted, never silently dropped). The headline is the
+  directional discordant split between the two
+  single-question layouts on the paired cases; the
+  sandwich control is computed on the same cases, and a
+  directional placement effect is falsified when the
+  headline discordance does not exceed the control level —
+  a deliberately conservative maximum that bounds recency
+  and exposure jointly. Joint both-layout failures are a
+  separate dominant state, never falsification evidence.
+  New pure module `placement.py`; the diff validator
+  regenerates the case set from the protocol seed with its
+  own literal-table mirror and recomputes every readout
+  (`diff_placement`). Design and red-team adjudication:
+  `docs/PLACEMENT_DESIGN.md`.
+
 ### Added (cycle 192 — the real batch path, 2026-10-22)
 
 - `LocalHFBackend.generate_batch`: the batch path cycle 153's

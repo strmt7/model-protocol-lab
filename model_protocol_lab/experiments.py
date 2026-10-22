@@ -8837,6 +8837,259 @@ def needle_analysis(
     }
 
 
+class _PlacementCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    placement stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _placement_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One placement generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm
+    render's ids, measured by the stage at construction for
+    the record's ``arm_tokens``; the cell's ``input_tokens``
+    come from the evaluation's own observation, so a backend
+    whose encode disagreed with itself surfaces as a validator
+    rejection downstream, never a silently wrong record. The
+    cancel event is checked before and after ``evaluate`` (the
+    multiturn rule: a cancel observed during a generation is
+    never mislabelled an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _PlacementCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _PlacementCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+    return "arm_evaluation_failed", None
+
+
+def placement_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Instruction placement stage (cycle 193): generated
+    single-fact cases with the question moved around a frozen
+    short payload, per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no native arm and no dependence on the user's
+    fixtures or the primary run. Each case contributes four
+    cells (question-first, payload-first, sandwich, closed-book
+    screen) whose contents differ only in where the question
+    sits. Cells degrade individually in the fixed detail
+    vocabulary; cancellation unwinds the whole stage to its
+    fail-closed payload. Design: docs/PLACEMENT_DESIGN.md.
+    """
+    from . import placement as _pl
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_pl.protocol_object(seed, str(backend.fingerprint)))
+    protocol["fingerprint"] = _pl.protocol_fingerprint(seed, str(backend.fingerprint))
+    cases = _pl.generate_cases(seed)
+    if len(formats) * len(cases) > _pl.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "placement_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    generated_text = (
+        _pl.FACT_TEMPLATE.replace("{topic}", "").replace("{value}", "")
+        + _pl.QUESTION_TEMPLATE.replace("{topic}", "")
+        + "".join(_pl.TOPICS)
+        + "".join(_pl.WORDS)
+        + "".join(_pl.NEUTRAL_POOL)
+    )
+    if audit_special_token_literals(generated_text, formats):
+        # A special-token literal in the frozen texts would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "placement_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in generated_text:
+            return {
+                "available": False,
+                "detail": "placement_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                value = str(case["expected"])
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "topic": str(case["topic"]),
+                    "expected_digest": _pl.digest_text(value),
+                    "question_tokens": 0,
+                    "arm_tokens": dict.fromkeys(_pl.ARM_KEYS, 0),
+                    "cells": dict.fromkeys(_pl.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_pl.ARM_KEYS, ""),
+                }
+                records.append(record)
+                for arm in _pl.ARM_KEYS:
+                    if _cancelled():
+                        raise _PlacementCancelled
+                    content = _pl.arm_content(case, arm)
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", content),),
+                        expected=value,
+                        group=_pl.GROUP,
+                    )
+                    arm_ids = tuple(backend.encode(fmt.render(fixture.messages)))
+                    record["arm_tokens"][arm] = len(arm_ids)
+                    detail, cell = _placement_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        arm_ids,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+                record["question_tokens"] = record["arm_tokens"]["closed_book"]
+        except _PlacementCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def placement_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a placement stage into the stored payload
+    (cycle 193).
+
+    Per-candidate readouts come from
+    placement.aggregate_candidate; the per-arm selections come
+    from placement.arm_selection over the shared live
+    population. Design: docs/PLACEMENT_DESIGN.md.
+    """
+    from . import placement as _pl
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "placement_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    records_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _pl.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+        records_by_candidate[name] = entry["records"]
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "conditions": {
+            arm: _pl.arm_selection(records_by_candidate, arm) for arm in _pl.LAYOUT_ARMS
+        },
+        "n_candidates": len(candidate_names),
+        "n_cases": len(_pl.generate_cases(int(stage["protocol"]["seed"]))),
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

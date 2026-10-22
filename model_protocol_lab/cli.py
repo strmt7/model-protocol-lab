@@ -604,6 +604,30 @@ def build_parser() -> argparse.ArgumentParser:
         "stage never fails the run.",
     )
     run.add_argument(
+        "--placement",
+        action="store_true",
+        help="Instruction placement probe (cycle 193, research wave-8 "
+        "rank 5): 24 generated cases from the run seed, each a "
+        "three-sentence payload carrying exactly one answer-bearing "
+        "fact in its middle sentence, asked in four arms per "
+        "candidate -- question-first, payload-first, a sandwich "
+        "control (question, payload, question repeated verbatim), "
+        "and a closed-book screen (question alone; a pass excludes "
+        "the case from that candidate's placement populations). "
+        "Headline: the question-first vs payload-first discordant "
+        "count split by direction, against the sandwich control's "
+        "level on the same cases, with a pre-registered "
+        "falsification rule. Monday morning: 'does putting the "
+        "question before or after the passage change verdicts on "
+        "this template, and which layout does the winner reward?' "
+        "Costs 4 generations per candidate per case (2,304 at the "
+        "legal maximum: 24 candidates x 24 cases x 4); each "
+        "generation is one greedy decode over the arm's rendered "
+        "prompt (the payload is three sentences by construction). "
+        "Informational only; never touches selection. The stage "
+        "never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1680,6 +1704,49 @@ def _run_multiturn_probe(
         result["multiturn"] = {
             "available": False,
             "detail": "multiturn_unavailable",
+        }
+
+
+def _run_placement_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the instruction placement probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import placement_analysis, placement_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = placement_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["placement"] = placement_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- placement must not fail the run
+        result["placement"] = {
+            "available": False,
+            "detail": "placement_unavailable",
         }
 
 
@@ -3320,6 +3387,24 @@ def main(argv: list[str] | None = None) -> int:
                 # never changes selection. Never fails the run.
                 if args.needle:
                     _run_needle_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Instruction placement probe (cycle 193, research
+                # wave-8 rank 5): generated single-fact cases with
+                # the question moved around a frozen short payload,
+                # the run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.placement:
+                    _run_placement_probe(
                         backend,
                         formats,
                         result,
