@@ -69,8 +69,14 @@ _CONTROL_CHARS = re.compile(
 
 def _safe(value: str) -> str:
     """Strip control characters so hostile authoring input cannot inject
-    terminal escape sequences into error messages."""
-    return _CONTROL_CHARS.sub("", value)
+    terminal escape sequences into error messages, and apply the R4-7
+    200-character preview cap: before the cap, one 131,071-character
+    id produced a 131,115-character exception message (oversight
+    security S-9a)."""
+    cleaned = _CONTROL_CHARS.sub("", value)
+    if len(cleaned) > 200:
+        return cleaned[:200] + "..."
+    return cleaned
 
 
 def read_authoring_file(path: str | Path) -> str:

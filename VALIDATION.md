@@ -7,10 +7,10 @@ Consolidated record for the continuous autonomous development period
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **7880 tests collected**
-  (cycle 195, 2026-10-22). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **7914 tests collected**
+  (cycle 196, 2026-10-22). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **7880 tests (cycle 195,
+- `python -m unittest discover -s tests -t .` — **7914 tests (cycle 196,
   2026-10-22; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -44,7 +44,7 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   (+1.894) is auditable rather than inferred from the display.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (269 files in that CI scope; the repo-root scope counts more.
+  (270 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (57 source files).

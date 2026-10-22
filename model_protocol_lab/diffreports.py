@@ -65,7 +65,12 @@ def _display_id(value: Any) -> str:
         return "(none)"
     if type(value) is not str:
         value = str(value)
-    return _CONTROL_CHARS.sub("", value)
+    cleaned = _CONTROL_CHARS.sub("", value)
+    if len(cleaned) > 200:
+        # The R4-7 200-character preview cap (oversight security
+        # S-9): display only — never a comparison input.
+        return cleaned[:200] + "..."
+    return cleaned
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -75,6 +80,81 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError("results_duplicate_field")
         result[key] = value
     return result
+
+
+#: The run-level decision vocabulary a probe section's
+#: ``primary_decision`` can legitimately carry (the values
+#: run_experiment's assembly produces; reporting._DECISION_CLASS
+#: renders exactly these). The first two are the winner-bearing
+#: class: the section mapping rewrites them to "selected".
+_PRIMARY_DECISIONS = frozenset(
+    {
+        "compatible_on_fixture_set",
+        "held_out_failed",
+        "ambiguous",
+        "no_candidate",
+        "cancelled",
+        "failed",
+    }
+)
+_PRIMARY_WINNER_DECISIONS = frozenset({"compatible_on_fixture_set", "held_out_failed"})
+
+
+def _valid_primary_pair(payload: dict[str, Any]) -> bool:
+    """Bind a section's ``primary_decision``/``primary_winner`` pair.
+
+    The recompute validators map the pair into per-arm selections
+    and compare those, but the pair itself used to be only
+    type-checked: any string in the same equality class as the arm
+    outcomes validated, so the label could contradict its own
+    section (oversight edge-case F3). The binding is: the decision
+    is in the run-decision vocabulary; the winner is one of the
+    payload's own candidate names exactly when the decision is in
+    the winner-bearing class, and None otherwise. What this does
+    NOT do: recompute the parent run's decision — the section does
+    not carry the parent run's fixture outcomes, so within the
+    vocabulary the decision remains stage-attested (documented in
+    docs/DATELINE_DESIGN.md)."""
+    decision = payload.get("primary_decision")
+    winner = payload.get("primary_winner")
+    if decision not in _PRIMARY_DECISIONS:
+        return False
+    candidates = payload.get("candidates")
+    if decision in _PRIMARY_WINNER_DECISIONS:
+        return type(winner) is str and type(candidates) is dict and winner in candidates
+    return winner is None
+
+
+def _recomputed_equal(stored: Any, expected: Any) -> bool:
+    """Type-strict equality for validator recompute comparisons.
+
+    Bare ``==`` lets a JSON ``true`` validate as the integer 1 (bool
+    is an int subclass), so an equality-compared count or version in
+    a hostile payload could slip past a recompute check in the wrong
+    type (oversight edge-case F2 — behaviourally inert, since the
+    value is only ever compared, but a strictness wart in validators
+    whose whole contract is exactness). Ints and bools must match in
+    type AND value; dicts and lists recurse; everything else uses
+    plain equality."""
+    if type(expected) is bool:
+        return type(stored) is bool and stored == expected
+    if type(expected) is int:
+        return type(stored) is int and stored == expected
+    if type(expected) is dict:
+        return (
+            type(stored) is dict
+            and stored.keys() == expected.keys()
+            and all(_recomputed_equal(stored[key], value) for key, value in expected.items())
+        )
+    if type(expected) is list:
+        return (
+            type(stored) is list
+            and len(stored) == len(expected)
+            and all(
+                _recomputed_equal(item, value) for item, value in zip(stored, expected, strict=True)
+            )
+        )
+    return bool(stored == expected)
 
 
 def _reject_constant(_value: Any) -> Any:
@@ -4689,6 +4769,8 @@ def _valid_repetition(payload: Any) -> bool:
         value = payload.get(key)
         if value is not None and type(value) is not str:
             return False
+    if not _valid_primary_pair(payload):
+        return False
     recomputed = _repetition_recompute(payload)
     if recomputed is None:
         return False
@@ -4696,15 +4778,15 @@ def _valid_repetition(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("arms") != recomputed["arms"]:
+    if not _recomputed_equal(payload.get("arms"), recomputed["arms"]):
         return False
-    if payload.get("think_groups") != recomputed["think_groups"]:
+    if not _recomputed_equal(payload.get("think_groups"), recomputed["think_groups"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(payload.get("n_distinct_renders") == recomputed["n_distinct_renders"])
+    return _recomputed_equal(payload.get("n_distinct_renders"), recomputed["n_distinct_renders"])
 
 
 def diff_repetition(old: Any, new: Any) -> dict[str, Any]:
@@ -5224,6 +5306,8 @@ def _valid_distraction(payload: Any) -> bool:
         value = payload.get(key)
         if value is not None and type(value) is not str:
             return False
+    if not _valid_primary_pair(payload):
+        return False
     recomputed = _distraction_recompute(payload)
     if recomputed is None:
         return False
@@ -5231,11 +5315,11 @@ def _valid_distraction(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("conditions") != recomputed["conditions"]:
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
         return False
-    return bool(payload.get("n_candidates") == recomputed["n_candidates"])
+    return _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"])
 
 
 def diff_distraction(old: Any, new: Any) -> dict[str, Any]:
@@ -5610,7 +5694,7 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
         return None
-    if protocol.get("version") != 1 or protocol.get("joiner") != "\n":
+    if not _recomputed_equal(protocol.get("version"), 1) or protocol.get("joiner") != "\n":
         return None
     if protocol.get("claim_templates") != _LEADING_TEMPLATES:
         return None
@@ -5932,6 +6016,8 @@ def _valid_leading(payload: Any) -> bool:
         value = payload.get(key)
         if value is not None and type(value) is not str:
             return False
+    if not _valid_primary_pair(payload):
+        return False
     recomputed = _leading_recompute(payload)
     if recomputed is None:
         return False
@@ -5939,13 +6025,13 @@ def _valid_leading(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("conditions") != recomputed["conditions"]:
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
         return False
-    if payload.get("common_population") != recomputed["common_population"]:
+    if not _recomputed_equal(payload.get("common_population"), recomputed["common_population"]):
         return False
-    return bool(payload.get("n_candidates") == recomputed["n_candidates"])
+    return _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"])
 
 
 def diff_leading(old: Any, new: Any) -> dict[str, Any]:
@@ -6966,7 +7052,8 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "generator_sha256": generator_sha,
         "backend_fingerprint": backend_fingerprint,
     }
-    if protocol != {**expected_protocol, "fingerprint": protocol.get("fingerprint")}:
+    expected_with_fingerprint = {**expected_protocol, "fingerprint": protocol.get("fingerprint")}
+    if not _recomputed_equal(protocol, expected_with_fingerprint):
         return None
     fingerprint = _hashlib.sha256(
         _json.dumps(
@@ -7556,7 +7643,7 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "fingerprint",
     }:
         return None
-    if protocol.get("version") != 1:
+    if not _recomputed_equal(protocol.get("version"), 1):
         return None
     if protocol.get("block_template") != _DATELINE_BLOCK_TEMPLATE:
         return None
@@ -7879,6 +7966,8 @@ def _valid_dateline(payload: Any) -> bool:
         value = payload.get(key)
         if value is not None and type(value) is not str:
             return False
+    if not _valid_primary_pair(payload):
+        return False
     recomputed = _dateline_recompute(payload)
     if recomputed is None:
         return False
@@ -7886,17 +7975,19 @@ def _valid_dateline(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("arms") != recomputed["arms"]:
+    if not _recomputed_equal(payload.get("arms"), recomputed["arms"]):
         return False
-    if payload.get("common_population") != recomputed["common_population"]:
+    if not _recomputed_equal(payload.get("common_population"), recomputed["common_population"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    if payload.get("n_search_fixtures") != recomputed["n_search_fixtures"]:
+    if not _recomputed_equal(payload.get("n_search_fixtures"), recomputed["n_search_fixtures"]):
         return False
-    return bool(payload.get("n_multi_turn_fixtures") == recomputed["n_multi_turn_fixtures"])
+    return _recomputed_equal(
+        payload.get("n_multi_turn_fixtures"), recomputed["n_multi_turn_fixtures"]
+    )
 
 
 def diff_dateline(old: Any, new: Any) -> dict[str, Any]:
@@ -8489,7 +8580,7 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         ).encode("utf-8")
     ).hexdigest()
     expected_protocol["fingerprint"] = fingerprint
-    if protocol != expected_protocol:
+    if not _recomputed_equal(protocol, expected_protocol):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -8648,15 +8739,15 @@ def _valid_multiturn(payload: Any) -> bool:
     candidates = payload["candidates"]
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
-        if entry.get("depths") != expected["depths"]:
+        if not _recomputed_equal(entry.get("depths"), expected["depths"]):
             return False
-        if entry.get("classification") != expected["classification"]:
+        if not _recomputed_equal(entry.get("classification"), expected["classification"]):
             return False
-    if payload.get("selections") != recomputed["selections"]:
+    if not _recomputed_equal(payload.get("selections"), recomputed["selections"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(payload.get("n_fixtures") == recomputed["n_fixtures"])
+    return _recomputed_equal(payload.get("n_fixtures"), recomputed["n_fixtures"])
 
 
 def diff_multiturn(old: Any, new: Any) -> dict[str, Any]:
@@ -9395,7 +9486,7 @@ def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     backend_fingerprint = protocol.get("backend_fingerprint")
     if type(seed) is not int or type(backend_fingerprint) is not str:
         return None
-    if protocol != _needle_protocol(seed, backend_fingerprint):
+    if not _recomputed_equal(protocol, _needle_protocol(seed, backend_fingerprint)):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -9525,19 +9616,19 @@ def _valid_needle(payload: Any) -> bool:
     candidates = payload["candidates"]
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
-        if entry.get("dose0_control") != expected["dose0_control"]:
+        if not _recomputed_equal(entry.get("dose0_control"), expected["dose0_control"]):
             return False
-        if entry.get("false_recall") != expected["false_recall"]:
+        if not _recomputed_equal(entry.get("false_recall"), expected["false_recall"]):
             return False
-        if entry.get("duplicate") != expected["duplicate"]:
+        if not _recomputed_equal(entry.get("duplicate"), expected["duplicate"]):
             return False
-    if payload.get("readouts") != recomputed["readouts"]:
+    if not _recomputed_equal(payload.get("readouts"), recomputed["readouts"]):
         return False
-    if payload.get("conditions") != recomputed["conditions"]:
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(payload.get("n_cases") == recomputed["n_cases"])
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
 
 
 def diff_needle(old: Any, new: Any) -> dict[str, Any]:
@@ -10235,7 +10326,7 @@ def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     backend_fingerprint = protocol.get("backend_fingerprint")
     if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
         return None
-    if protocol != _placement_protocol(seed, backend_fingerprint):
+    if not _recomputed_equal(protocol, _placement_protocol(seed, backend_fingerprint)):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -10347,13 +10438,13 @@ def _valid_placement(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("conditions") != recomputed["conditions"]:
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(payload.get("n_cases") == recomputed["n_cases"])
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
 
 
 def diff_placement(old: Any, new: Any) -> dict[str, Any]:
@@ -10894,7 +10985,7 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         ).encode("utf-8")
     ).hexdigest()
-    if protocol != expected_protocol:
+    if not _recomputed_equal(protocol, expected_protocol):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -11059,15 +11150,15 @@ def _valid_choiceaudit(payload: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, value in expected.items():
-            if entry.get(key) != value:
+            if not _recomputed_equal(entry.get(key), value):
                 return False
-    if payload.get("method_comparison") != recomputed["method_comparison"]:
+    if not _recomputed_equal(payload.get("method_comparison"), recomputed["method_comparison"]):
         return False
-    if payload.get("discordance") != recomputed["discordance"]:
+    if not _recomputed_equal(payload.get("discordance"), recomputed["discordance"]):
         return False
-    if payload.get("n_candidates") != recomputed["n_candidates"]:
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(payload.get("n_fixtures") == recomputed["n_fixtures"])
+    return _recomputed_equal(payload.get("n_fixtures"), recomputed["n_fixtures"])
 
 
 def diff_choiceaudit(old: Any, new: Any) -> dict[str, Any]:
