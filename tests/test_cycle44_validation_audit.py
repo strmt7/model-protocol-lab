@@ -187,15 +187,16 @@ class ValidationToolchainTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertGreater(int(match.group(1)), 66)
 
-    def test_mypy_clean_55_source_files(self):
-        # Doc: "mypy model_protocol_lab -- clean (55 source files)".
+    def test_mypy_clean_56_source_files(self):
+        # Doc: "mypy model_protocol_lab -- clean (56 source files)".
         # (50 through cycle 184; leading.py is the 51st, cycle 185;
         # numform.py is the 52nd, cycle 186; dateline.py is the
         # 53rd, cycle 188; multiturn.py is the 54th, cycle 189;
-        # needle.py is the 55th, cycle 191.)
+        # needle.py is the 55th, cycle 191; placement.py is the
+        # 56th, cycle 193.)
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("55 source files", proc.stdout)
+        self.assertIn("56 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:

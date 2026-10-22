@@ -151,6 +151,7 @@ from model_protocol_lab import (
     multiturn,
     needle,
     numform,
+    placement,
     refusals,
     repetition,
     scorerlens,
@@ -281,6 +282,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "dateline": {"available": "neither", "changed": False},
         "multiturn": {"available": "neither", "changed": False},
         "needle": {"available": "neither", "changed": False},
+        "placement": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -366,6 +368,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "multiturn_asymmetric": False,
             "needle_changed": False,
             "needle_asymmetric": False,
+            "placement_changed": False,
+            "placement_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -5567,6 +5571,275 @@ def _o_needle(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_placement_digest_ok(item: Any) -> bool:
+    if item is None:
+        return True
+    if type(item) is not str or len(item) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in item)
+
+
+def _o_placement_cell_ok(cell: Any, expected_digest: str) -> bool:
+    if type(cell) is not dict or set(cell) != {
+        "verdict",
+        "boundary_found",
+        "boundary_text_match",
+        "input_tokens",
+        "answer_digest",
+    }:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _o_placement_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle placement recompute: mirrors
+    diffreports._placement_recompute. The oracle rebuilds the
+    protocol and the case set through the producer module
+    (placement) where the implementation rebuilds them from
+    literal tables -- a drift in either side's constants breaks
+    the agreement the fuzz harness asserts."""
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(placement.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = placement.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = placement.generate_cases(seed)
+    total = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != {
+            "arms",
+            "closed_book",
+            "headline",
+            "sandwich",
+            "control_level",
+            "n_control",
+            "placement_effect_falsified",
+            "n_fixtures",
+            "n_screened",
+            "n_closed_book_incomplete",
+            "status",
+            "detail",
+            "records",
+        }:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > placement.MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "question_tokens",
+                "arm_tokens",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            if type(arm_tokens) is not dict or set(arm_tokens) != set(placement.ARM_KEYS):
+                return None
+            if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                return None
+            if record["question_tokens"] != arm_tokens["closed_book"]:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(placement.ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(placement.ARM_KEYS):
+                return None
+            for arm in placement.ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in placement.CELL_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_placement_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != arm_tokens[arm]:
+                        return None
+        raw[name] = records
+        aggregates[name] = placement.aggregate_candidate(records)
+    if total > placement.MAX_GROUND_RECORDS:
+        return None
+    if not raw:
+        return None
+    return {
+        "aggregates": aggregates,
+        "conditions": {arm: placement.arm_selection(raw, arm) for arm in placement.LAYOUT_ARMS},
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_placement_valid(value: Any) -> bool:
+    """Oracle placement validator: mirrors diffreports._valid_placement."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_placement_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("conditions") != recomputed["conditions"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_placement(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle placement section: mirrors diffreports.diff_placement."""
+    old_ok = _o_placement_valid(old)
+    new_ok = _o_placement_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            (
+                "classification",
+                old_entry["headline"]["classification"],
+                new_entry["headline"]["classification"],
+            ),
+            (
+                "placement_effect_falsified",
+                old_entry["placement_effect_falsified"],
+                new_entry["placement_effect_falsified"],
+            ),
+            ("n_qf_only", old_entry["headline"]["n_qf_only"], new_entry["headline"]["n_qf_only"]),
+            ("n_pf_only", old_entry["headline"]["n_pf_only"], new_entry["headline"]["n_pf_only"]),
+            ("control_level", old_entry["control_level"], new_entry["control_level"]),
+            ("n_screened", old_entry["n_screened"], new_entry["n_screened"]),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    condition_drift: list[dict[str, Any]] = []
+    for arm in placement.LAYOUT_ARMS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            condition_drift.append(
+                {"condition": arm, "old": old["conditions"][arm], "new": new["conditions"][arm]}
+            )
+    diff["candidate_drift"] = candidate_drift
+    diff["condition_drift"] = condition_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or condition_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -7693,6 +7966,7 @@ def _oracle_diff(
     o_dt, o_dt_changed, o_dt_asymmetric = _o_dateline(old.get("dateline"), new.get("dateline"))
     o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
     o_nd, o_nd_changed, o_nd_asymmetric = _o_needle(old.get("needle"), new.get("needle"))
+    o_pl, o_pl_changed, o_pl_asymmetric = _o_placement(old.get("placement"), new.get("placement"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -7826,6 +8100,7 @@ def _oracle_diff(
         "dateline": o_dt,
         "multiturn": o_mt,
         "needle": o_nd,
+        "placement": o_pl,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -7907,6 +8182,8 @@ def _oracle_diff(
             "multiturn_asymmetric": o_mt_asymmetric,
             "needle_changed": o_nd_changed,
             "needle_asymmetric": o_nd_asymmetric,
+            "placement_changed": o_pl_changed,
+            "placement_asymmetric": o_pl_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -8836,6 +9113,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "multiturn_asymmetric": False,
                 "needle_changed": False,
                 "needle_asymmetric": False,
+                "placement_changed": False,
+                "placement_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -10128,6 +10407,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["dateline"] = _fuzz_dateline_section(rng)
         report["multiturn"] = _fuzz_multiturn_section(rng)
         report["needle"] = _fuzz_needle_section(rng)
+        report["placement"] = _fuzz_placement_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -11568,6 +11848,94 @@ def _fuzz_needle_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzPlacementBackend:
+    """Byte-level scripted backend for the placement fuzz
+    builder. The answer is the planted inspection code parsed
+    out of the decoded prompt; ``payloadfirst_fail`` mode
+    answers wrongly when the question sits after the payload,
+    which produces genuine one-directional discordance. The
+    closed-book arm carries no fact, so it answers "unknown"
+    and never trips the screen in either mode."""
+
+    fingerprint = "sha256:fuzz-placement"
+
+    def __init__(self, mode: str):
+        self.mode = mode
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        import re as _re
+
+        text = self.decode(list(input_ids))
+        found = _re.findall(r"inspection code is ([a-z]+-\d+)\.", text)
+        if found:
+            answer = found[-1]
+            if self.mode == "payloadfirst_fail":
+                question_at = text.find("What is")
+                fact_at = text.find("inspection code is")
+                if fact_at != -1 and question_at > fact_at:
+                    answer = "wrong-0000"
+        else:
+            answer = "unknown"
+        boundary = list(self.encode("endmark"))
+        out = list(self.encode(answer)) + boundary
+        return Generation(
+            token_ids=tuple((out + boundary * max_new_tokens)[:max_new_tokens]),
+            reason="limit",
+        )
+
+
+def _fuzz_placement_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    backend = _FuzzPlacementBackend(rng.choice(["perfect", "payloadfirst_fail"]))
+    seed = rng.choice([0, 1, 2])
+    stage = experiments.placement_stage(
+        backend,
+        formats,
+        boundary=tuple(backend.encode("endmark")),
+        max_context=65536,
+        seed=seed,
+    )
+    payload = experiments.placement_analysis(stage, tuple(fmt.name for fmt in formats))
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        cell = record["cells"].get("question_first")
+        if cell is not None:
+            cell["verdict"] = not cell["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        record = available[0]["records"][1]
+        cell = record["cells"].get("payload_first")
+        if cell is not None:
+            cell["input_tokens"] = cell["input_tokens"] + 1  # hostile: token binding breaks
+    if available and rng.random() < 0.10:
+        available[0]["headline"]["classification"] = "bogus"  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(placement.protocol_object(seed, "sha256:other-backend"))
+        protocol["fingerprint"] = placement.protocol_fingerprint(seed, "sha256:other-backend")
+        payload["protocol"] = protocol  # coherent foreign backend
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -12095,6 +12463,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not multiturn_asymmetric\n"
             '        and not needle_diff["changed"]\n'
             "        and not needle_asymmetric\n"
+            '        and not placement_diff["changed"]\n'
+            "        and not placement_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -12177,6 +12547,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or multiturn_asymmetric\n"
             '        or needle_diff["changed"]\n'
             "        or needle_asymmetric\n"
+            '        or placement_diff["changed"]\n'
+            "        or placement_asymmetric\n"
             "    )\n",
             scenario,
         )

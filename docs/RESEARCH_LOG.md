@@ -8213,3 +8213,77 @@ calls is the one forbidden implementation — a test pins
 that `generate_batch` issues one batched forward per
 generation step for the whole batch. Design and invariants:
 `docs/BATCH_PATH_DESIGN.md`.
+
+## Cycle 193 — question-first vs payload-first placement (wave-8 rank 5, pre-build)
+
+The probe varies where the task question sits relative to a
+short payload inside one user turn — question-first,
+payload-first, a sandwich control (question, payload, question
+repeated verbatim), and a closed-book screening arm — crossed
+with the lab's hand-rendered template families, on generated
+fixtures whose payload carries exactly one answer-bearing
+fact, under exact-match greedy scoring with the conservative
+selection readout. Design contract and the red-team record:
+`docs/PLACEMENT_DESIGN.md`.
+
+Uniqueness pass (researcher, primary sources checked live
+2026-10-22; full brief in the wave-8 cycle-193 research
+notes). The nearest work sits on adjacent axes and each axis
+was verified, not taken on the wave-8 brief's word:
+
+- arXiv:2605.28188 (framing-sensitivity mitigation) varies
+  segment placement inside few-shot prompt design only: the
+  manipulated segments are question-type anchor segments and
+  the answer options of demonstration exemplars, on hosted chat
+  models, with the question inside each demonstration —
+  multiple-choice accuracy is the readout and there is no
+  selection or abstention. Two corrections to the wave-8
+  brief's rank-5 section are recorded here so they do not
+  propagate: its "value anchor" characterization is wrong (the
+  segments are question-type anchors, not values), and the
+  paper's mitigation — order swaps plus majority vote — is an
+  ensemble procedure, never a placement instrument, and must
+  not be described as one.
+- arXiv:2601.03286 (healthcare over-alignment; recorded in
+  docs/FAQ.md, not in this log — the wave-8 brief misattributed
+  its home) relocates an expert role between the user turn and
+  the system prompt inside one vendor's own rendering, on
+  closed-weights hosted models, over clinical vignettes with
+  human-anchored rubrics. Role relocation is not within-turn
+  question/payload order, and nothing in it is hand-rendered,
+  local, or exact-scored.
+- Lost in the Middle (arXiv:2307.03172) varies the position of
+  a gold document inside a multi-document context with the
+  question fixed after the documents; it never tests
+  question-first order or a sandwich arm.
+- The harness survey (LM Evaluation Harness source,
+  promptfoo, Inspect AI, HELM scenarios, OpenAI evals, DSPy)
+  found no shipped question-order or instruction-placement
+  probe: lm-eval's `--fewshot_as_multiturn` replays few-shot
+  examples as turns, promptfoo's ordering surface is test-case
+  execution order and plugin strategy order, and HELM's one
+  ordering manipulation is few-shot example order. None varies
+  the question's position relative to its payload, none uses a
+  question-sandwich control, and none crosses the variable with
+  a template family under an abstention readout.
+
+In-tree, the boundary was re-verified against source:
+hierarchy varies a privilege-marked block folded into the user
+turn (position inside the turn, not question-vs-payload
+order); position permutes answer options inside one question;
+distract splices filler at token doses around an unchanged
+question; needle varies burial depth in long filler; repeat
+varies whole-prompt duplication. None varies question/payload
+order.
+
+Verdict: the combination — within-turn question/payload order
+(question-first, payload-first, question-sandwich control,
+closed-book screen) × hand-rendered template family, on
+generated single-fact fixtures, exact-match greedy scoring
+with a per-arm selection/abstention readout and a
+pre-registered falsification bar — is not shipped by any
+surveyed harness and not measured by the adjacent papers. The
+claim is the combination, in exactly those words; "hand-
+rendered" stays in the sentence, because a vendor-API variant
+of this probe would be a different instrument's result, not a
+refutation of this one's gap.

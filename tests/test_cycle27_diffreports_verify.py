@@ -4968,6 +4968,157 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_placement_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_placement: exact top-level
+        # shape, the protocol rebuilt through the producer
+        # module (placement) where the implementation rebuilds
+        # it from literal tables, every record checked against
+        # the producer-regenerated case set in canonical order,
+        # every cell's verdict re-derived from its digest
+        # identity, completed cells bound to the record's
+        # arm_tokens, aggregates and per-arm selections
+        # recomputed. A drift in either side's constants breaks
+        # the agreement.
+        import hashlib as _hashlib
+        import json as _json
+
+        from model_protocol_lab import placement as _pl
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "conditions",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_pl.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _pl.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _pl.generate_cases(seed)
+        total = 0
+        records_bytes = 0
+        raw: dict[str, Any] = {}
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _pl.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, generated, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "topic",
+                    "expected_digest",
+                    "question_tokens",
+                    "arm_tokens",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                    return False
+                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                if record["expected_digest"] != expected_digest:
+                    return False
+                arm_tokens = record["arm_tokens"]
+                if type(arm_tokens) is not dict or set(arm_tokens) != set(_pl.ARM_KEYS):
+                    return False
+                if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                    return False
+                if record["question_tokens"] != arm_tokens["closed_book"]:
+                    return False
+                cells = record["cells"]
+                details = record["cell_details"]
+                if type(cells) is not dict or set(cells) != set(_pl.ARM_KEYS):
+                    return False
+                if type(details) is not dict or set(details) != set(_pl.ARM_KEYS):
+                    return False
+                for arm in _pl.ARM_KEYS:
+                    cell = cells[arm]
+                    detail = details[arm]
+                    if cell is None:
+                        if detail not in _pl.CELL_DETAILS:
+                            return False
+                    else:
+                        if detail != "":
+                            return False
+                        if type(cell) is not dict or set(cell) != {
+                            "verdict",
+                            "boundary_found",
+                            "boundary_text_match",
+                            "input_tokens",
+                            "answer_digest",
+                        }:
+                            return False
+                        if type(cell["verdict"]) is not bool:
+                            return False
+                        if type(cell["boundary_found"]) is not bool:
+                            return False
+                        if (
+                            cell["boundary_text_match"] is not None
+                            and type(cell["boundary_text_match"]) is not bool
+                        ):
+                            return False
+                        if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+                            return False
+                        digest = cell["answer_digest"]
+                        if digest is not None and not (
+                            type(digest) is str
+                            and len(digest) == 64
+                            and all(c in "0123456789abcdef" for c in digest)
+                        ):
+                            return False
+                        verdict = (digest == expected_digest) and cell["boundary_found"]
+                        if cell["verdict"] != verdict:
+                            return False
+                        if cell["input_tokens"] != arm_tokens[arm]:
+                            return False
+            raw[name] = records
+            expected = _pl.aggregate_candidate(records)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total > _pl.MAX_GROUND_RECORDS:
+            return False
+        if not raw:
+            return False
+        conditions = {arm: _pl.arm_selection(raw, arm) for arm in _pl.LAYOUT_ARMS}
+        if value.get("conditions") != conditions:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(generated))
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -5376,6 +5527,18 @@ def oracle_diff_reports(
         _o_nd_available = "neither"
     _o_nd_asymmetric = _o_nd_available not in ("both", "neither")
 
+    _pl_old_ok = _or_placement_valid(old.get("placement"))
+    _pl_new_ok = _or_placement_valid(new.get("placement"))
+    if _pl_old_ok and _pl_new_ok:
+        _o_pl_available = "both"
+    elif _pl_old_ok:
+        _o_pl_available = "old"
+    elif _pl_new_ok:
+        _o_pl_available = "new"
+    else:
+        _o_pl_available = "neither"
+    _o_pl_asymmetric = _o_pl_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -5449,6 +5612,7 @@ def oracle_diff_reports(
         and not _o_dt_asymmetric
         and not _o_mt_asymmetric
         and not _o_nd_asymmetric
+        and not _o_pl_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -5526,6 +5690,8 @@ def oracle_diff_reports(
         "multiturn_asymmetric": _o_mt_asymmetric,
         "needle_changed": False,
         "needle_asymmetric": _o_nd_asymmetric,
+        "placement_changed": False,
+        "placement_asymmetric": _o_pl_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -5576,6 +5742,7 @@ def oracle_diff_reports(
         "dateline": {"available": _o_dt_available, "changed": False},
         "multiturn": {"available": _o_mt_available, "changed": False},
         "needle": {"available": _o_nd_available, "changed": False},
+        "placement": {"available": _o_pl_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

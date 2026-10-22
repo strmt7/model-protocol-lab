@@ -6781,6 +6781,146 @@ def _needle_section(result: dict[str, Any]) -> str:
     )
 
 
+def _placement_section(result: dict[str, Any]) -> str:
+    """Instruction placement probe: question before or after the payload.
+
+    Renders the ``placement`` payload (see
+    experiments.placement_analysis): per candidate, the
+    question-first vs payload-first discordant counts split by
+    direction over the paired cases, the classification, the
+    sandwich control level on the same cases, the closed-book
+    screening yield, and the per-arm selection winners. The
+    scope limits are printed with the numbers, not under them:
+    the sandwich bounds what recency and exposure together
+    produce without identifying which, the control is a
+    deliberately conservative bar, and each cell is one greedy
+    generation on generated fixtures. Counts and rates only;
+    no payload, question, or answer text is rendered. Every
+    interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("placement")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    conditions = probe.get("conditions")
+    if type(candidates) is not dict or type(conditions) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            bits.append(
+                "<div>Paired cases "
+                + _count(headline.get("n_paired"))
+                + ": question-first only "
+                + _count(headline.get("n_qf_only"))
+                + ", payload-first only "
+                + _count(headline.get("n_pf_only"))
+                + ", both "
+                + _count(headline.get("n_both"))
+                + ", neither "
+                + _count(headline.get("n_neither"))
+                + " ("
+                + escape(str(headline.get("classification", "")))
+                + ").</div>"
+            )
+        control = entry.get("control_level")
+        bits.append(
+            "<div>Sandwich control level "
+            + (_count(control) if type(control) is int else "n/a")
+            + " over "
+            + _count(entry.get("n_control"))
+            + " shared cases; directional placement effect falsified: "
+            + ("yes" if entry.get("placement_effect_falsified") is True else "no")
+            + ".</div>"
+        )
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            rates = ", ".join(
+                escape(arm.replace("_", " ")) + " " + _rate(arms[arm].get("rate"))
+                if type(arms.get(arm)) is dict
+                else ""
+                for arm in ("question_first", "payload_first", "sandwich")
+            )
+            bits.append("<div>Arm pass rates: " + rates + ".</div>")
+        closed = entry.get("closed_book")
+        if type(closed) is dict:
+            bits.append(
+                "<div>Closed-book screen: "
+                + _count(entry.get("n_screened"))
+                + " cases excluded (closed-book pass rate "
+                + _rate(closed.get("pass_rate"))
+                + "), "
+                + _count(entry.get("n_closed_book_incomplete"))
+                + " cases with no closed-book verdict.</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    winners: list[str] = []
+    for arm in ("question_first", "payload_first", "sandwich"):
+        cond = conditions.get(arm)
+        if type(cond) is not dict:
+            continue
+        if cond.get("withheld"):
+            winners.append(escape(arm.replace("_", " ")) + ": selection withheld")
+        else:
+            winner = cond.get("winner")
+            winners.append(
+                escape(arm.replace("_", " "))
+                + ": "
+                + (escape(str(winner)) if winner else "no unique winner")
+                + (" (flip vs payload-first)" if cond.get("flip") is True else "")
+            )
+    return (
+        '<section class="card" id="placement">'
+        "<h2>Question/payload placement</h2>"
+        "<p>Twenty-four generated cases each bury one "
+        "answer-bearing fact in the middle sentence of a "
+        "three-sentence payload; the same question is asked "
+        "before the payload, after it, twice around it (the "
+        "sandwich control), and alone (the closed-book screen: "
+        "a pass without the payload excludes the case for that "
+        "candidate). The headline is the discordant count "
+        "between the two single-question layouts, split by "
+        "direction; the falsification bar is the sandwich "
+        "control's discordance on the same cases, a deliberately "
+        "conservative maximum that bounds what recency and "
+        "exposure together produce without identifying which. "
+        "Each cell is one greedy generation.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + ("<p>Per-arm selection: " + "; ".join(winners) + ".</p>" if winners else "")
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -8108,6 +8248,7 @@ def render_html(result: dict[str, Any]) -> str:
     dateline_html = _dateline_section(result)
     multiturn_html = _multiturn_section(result)
     needle_html = _needle_section(result)
+    placement_html = _placement_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -8267,6 +8408,11 @@ def render_html(result: dict[str, Any]) -> str:
                 needle_html,
             ),
             (
+                "placement",
+                "Question/payload placement",
+                placement_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8359,6 +8505,7 @@ def render_html(result: dict[str, Any]) -> str:
         + dateline_html
         + multiturn_html
         + needle_html
+        + placement_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

@@ -2166,6 +2166,74 @@ replaced the first construction, is in
 never affects selection, and the stage never fails the
 run.
 
+### 8.46 Question/payload placement (`placement`)
+
+Opt-in with `model-protocol-lab run --placement`. A
+practitioner assembling prompts from a retrieved passage
+plus a question learns, per template family, whether
+putting the question before or after the payload changes
+verdicts on their checkpoint — and picks the layout their
+winning template actually rewards — instead of copying a
+layout convention from a blog post measured on a different
+model.
+
+Twenty-four cases are generated from the run seed. Each
+payload is three sentences — a neutral scene sentence, the
+one answer-bearing fact, a second neutral sentence — with
+the fact frozen in the middle position, and the question
+wording is byte-identical in every arm. Four cells per
+case move only the question: before the payload
+(`question_first`), after it (`payload_first`), both
+(`sandwich`, the control), and alone (`closed_book`, the
+screen: a case the model answers with no payload in view
+is excluded from that candidate's readouts, and the
+exclusion count and closed-book pass rate are reported,
+never silently dropped).
+
+The headline is the paired discordant count between the
+two single-question layouts, split by direction. The
+sandwich arm is computed on the same paired cases and its
+discordance against each layout sets the control level:
+the falsification bar for a directional placement effect
+is exceeding that level. The sandwich bounds what recency
+and exposure together produce; it does not identify which
+of the two drives an excess, and the readouts never claim
+otherwise. The bar is a maximum of two noisy counts, so
+it acquits readily at small discordance — that asymmetry
+is the registered price of a control with no multiplicity
+adjustment, and the design document prints the acquittal
+rates. A case where both layouts fail together
+(`both_fail_dominant`) is a joint collapse, not placement
+evidence, and never counts as falsified. Per-arm
+selection winners are computed over the population
+screened for no candidate in the run, so one candidate's
+memorized answer cannot shrink another's denominator.
+
+Placement is not the neighbouring probes: hierarchy
+varies privilege-block position inside the turn; position
+permutes answer options; distract varies filler dose and
+placement; needle varies burial depth in long filler;
+placement varies where the task question sits relative to
+a short payload inside one user turn. The payload is
+frozen short by design — placement is not dilution and
+not depth.
+
+Records carry answer digests only, and `diff-reports`
+regenerates the case set from the protocol seed with its
+own generator mirror and recomputes every readout before
+comparing (`diff_placement`, `placement_changed` /
+`placement_asymmetric` feed `identical`). Placement
+cells sit outside `verify --determinism` scope: they are
+generations on generated cases, not recorded search
+observations. Cost: 4 generations per candidate per case
+(2,304 at the legal maximum: 24 candidates x 24 cases
+x 4). The full contract, including the falsification
+formula and the red-team adjudication that replaced the
+first classification scheme, is in
+`docs/PLACEMENT_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
