@@ -8253,9 +8253,16 @@ was verified, not taken on the wave-8 brief's word:
   question/payload order, and nothing in it is hand-rendered,
   local, or exact-scored.
 - Lost in the Middle (arXiv:2307.03172) varies the position of
-  a gold document inside a multi-document context with the
-  question fixed after the documents; it never tests
-  question-first order or a sandwich arm.
+  a gold document inside a multi-document context. Its main
+  design places the query after the documents, and its §4.2
+  query-aware-contextualization condition places the query
+  before *and* after the documents — a sandwich arm, with
+  near-perfect key-value retrieval but only minimal change to
+  the multi-document QA trends. It never tests a
+  question-first arm (the query on its own, before the
+  payload) and reports no placement readout: its axis is the
+  relevant document's position, not the question's position
+  relative to a single short payload.
 - The harness survey (LM Evaluation Harness source,
   promptfoo, Inspect AI, HELM scenarios, OpenAI evals, DSPy)
   found no shipped question-order or instruction-placement

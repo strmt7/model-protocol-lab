@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 194 — placement documentation corrections, 2026-10-22)
+
+- Three documentation defects from the cycle-193 red-team
+  record, corrected in place; no code or contract changed.
+  The cycle-193 research-log entry said Lost in the Middle
+  never tests "question-first order or a sandwich arm" — its
+  §4.2 does ship a query-before-and-after (sandwich) arm; the
+  entry now records that arm and scopes the claim to what the
+  paper lacks: a question-first arm and a placement readout.
+  `docs/PLACEMENT_DESIGN.md` grounded the `arm_tokens`
+  equality in a citation to a scoring document that does not
+  exist in the tree; both citations now ground it in
+  `core.evaluate()`'s recorded observation (and
+  `scoring.py`'s alignment check). The
+  design's falsification "Reading" paragraph stated the
+  falsified boolean and the classification as equivalent
+  without qualification; it now states the joint-collapse
+  exception the shipped enumeration test pins.
+
 ### Added (cycle 193 — question/payload placement, 2026-10-22)
 
 - `run --placement`: a generation stage over 24 cases it
