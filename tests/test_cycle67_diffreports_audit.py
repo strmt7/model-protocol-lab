@@ -143,6 +143,7 @@ from typing import Any
 
 from model_protocol_lab import (
     cacheprofile,
+    choiceaudit,
     dateline,
     diffreports,
     distraction,
@@ -283,6 +284,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "multiturn": {"available": "neither", "changed": False},
         "needle": {"available": "neither", "changed": False},
         "placement": {"available": "neither", "changed": False},
+        "choice_audit": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -370,6 +372,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "needle_asymmetric": False,
             "placement_changed": False,
             "placement_asymmetric": False,
+            "choice_audit_changed": False,
+            "choice_audit_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -5840,6 +5844,353 @@ def _o_placement(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle choice-audit recompute: mirrors
+    diffreports._choiceaudit_recompute. The oracle rebuilds the
+    protocol and the aggregates through the producer module
+    (choiceaudit) where the implementation rebuilds them from
+    literal tables; the construction block and every record are
+    checked structurally and every stored float is asserted
+    float32-representable. A drift in either side's constants
+    breaks the agreement."""
+    import math as _math
+    import struct as _struct
+
+    def _f32(v: float) -> float:
+        if _math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
+            return _math.copysign(_math.inf, v)
+        return _struct.unpack("<f", _struct.pack("<f", v))[0]
+
+    protocol = value.get("protocol")
+    block = value.get("fixtures")
+    if type(protocol) is not dict or type(block) is not list or not block:
+        return None
+    fixture_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for entry in block:
+        if type(entry) is not dict or set(entry) != {
+            "fixture",
+            "group",
+            "excluded",
+            "numeric",
+            "choices",
+            "n_distinct_choices",
+            "constructible",
+        }:
+            return None
+        if type(entry["fixture"]) is not str or type(entry["group"]) is not str:
+            return None
+        if entry["fixture"] in seen_ids:
+            return None
+        seen_ids.add(entry["fixture"])
+        fixture_ids.append(entry["fixture"])
+        if entry["excluded"] not in (None, "blank_expected"):
+            return None
+        if type(entry["numeric"]) is not bool or type(entry["constructible"]) is not bool:
+            return None
+        choices = entry["choices"]
+        if type(choices) is not list or entry["n_distinct_choices"] != len(choices):
+            return None
+        if entry["excluded"] is not None:
+            if choices or entry["constructible"]:
+                return None
+            continue
+        if entry["constructible"] != (len(choices) == 1 + choiceaudit.K_DONORS):
+            return None
+        digests: list[str] = []
+        for index, choice in enumerate(choices):
+            if type(choice) is not dict or set(choice) != {
+                "source_fixture",
+                "group",
+                "digest",
+            }:
+                return None
+            if type(choice["group"]) is not str:
+                return None
+            digest = choice["digest"]
+            if (
+                type(digest) is not str
+                or len(digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in digest)
+            ):
+                return None
+            digests.append(digest)
+            if index == 0:
+                if choice["source_fixture"] is not None or choice["group"] != entry["group"]:
+                    return None
+            else:
+                if type(choice["source_fixture"]) is not str:
+                    return None
+                if choice["group"] == entry["group"]:
+                    return None
+        if len(set(digests)) != len(digests):
+            return None
+    by_id = {entry["fixture"]: entry for entry in block}
+    for entry in block:
+        for choice in entry["choices"][1:]:
+            donor_entry = by_id.get(choice["source_fixture"])
+            if donor_entry is None or donor_entry["excluded"] is not None:
+                return None
+            if donor_entry["group"] != choice["group"]:
+                return None
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(choiceaudit.protocol_object(fixture_ids, block, backend_fp))
+    expected_protocol["fingerprint"] = choiceaudit.protocol_fingerprint(
+        fixture_ids, block, backend_fp
+    )
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(block):
+            return None
+        total += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > choiceaudit.MAX_RECORDS_BYTES:
+            return None
+        for record, fixture_entry in zip(records, block, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "obs_status",
+                "exact_match",
+                "boundary_found",
+                "prompt_reason",
+                "cells",
+            }:
+                return None
+            if record["fixture"] != fixture_entry["fixture"]:
+                return None
+            if record["obs_status"] is not None and type(record["obs_status"]) is not str:
+                return None
+            for fact in ("exact_match", "boundary_found"):
+                if record[fact] is not None and type(record[fact]) is not bool:
+                    return None
+            if record["prompt_reason"] is not None and type(record["prompt_reason"]) is not str:
+                return None
+            cells = record["cells"]
+            if type(cells) is not list:
+                return None
+            if record["prompt_reason"] is not None or not fixture_entry["constructible"]:
+                if cells:
+                    return None
+                continue
+            if len(cells) != 1 + choiceaudit.K_DONORS:
+                return None
+            for cell in cells:
+                if type(cell) is not dict or set(cell) != {
+                    "status",
+                    "reason",
+                    "total",
+                    "mean",
+                    "tokens",
+                    "bytes",
+                }:
+                    return None
+                if type(cell["tokens"]) is not int or type(cell["bytes"]) is not int:
+                    return None
+                if cell["status"] == "ok":
+                    if cell["reason"] is not None:
+                        return None
+                    for cell_value in (cell["total"], cell["mean"]):
+                        if (
+                            type(cell_value) is not float
+                            or not _math.isfinite(cell_value)
+                            or _f32(cell_value) != cell_value
+                        ):
+                            return None
+                    if cell["tokens"] < 1 or cell["bytes"] < 1:
+                        return None
+                elif cell["status"] == "ok_empty":
+                    if (
+                        cell["reason"] is not None
+                        or cell["total"] != 0.0
+                        or cell["mean"] is not None
+                        or cell["tokens"] != 0
+                        or cell["bytes"] != 0
+                    ):
+                        return None
+                elif cell["status"] == "unavailable":
+                    if type(cell["reason"]) is not str:
+                        return None
+                    if cell["total"] is not None or cell["mean"] is not None:
+                        return None
+                    if cell["tokens"] < 0 or cell["bytes"] < 0:
+                        return None
+                else:
+                    return None
+        raw_aggregates[name] = choiceaudit.aggregate_candidate(records, block)
+        aggregates[name] = {
+            key: val for key, val in raw_aggregates[name].items() if key != "_verdicts"
+        }
+    if total > choiceaudit.MAX_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    method = value.get("method_comparison")
+    if type(method) is not dict:
+        return None
+    expected_method = choiceaudit.method_comparison(
+        raw_aggregates,
+        tuple(sorted(candidates)),
+        method.get("primary_decision"),
+        method.get("primary_winner"),
+    )
+    return {
+        "aggregates": aggregates,
+        "method_comparison": expected_method,
+        "discordance": choiceaudit.discordance_summary(raw_aggregates),
+        "n_candidates": len(candidates),
+        "n_fixtures": len(block),
+    }
+
+
+def _o_choiceaudit_valid(value: Any) -> bool:
+    """Oracle choice-audit validator: mirrors diffreports._valid_choiceaudit."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "fixtures",
+        "candidates",
+        "method_comparison",
+        "discordance",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_choiceaudit_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if set(entry) != set(expected) | {"status", "detail", "records"}:
+            return False
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("method_comparison") != recomputed["method_comparison"]:
+        return False
+    if value.get("discordance") != recomputed["discordance"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_fixtures") == recomputed["n_fixtures"])
+
+
+def _o_choiceaudit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle choice-audit section: mirrors diffreports.diff_choiceaudit."""
+    old_ok = _o_choiceaudit_valid(old)
+    new_ok = _o_choiceaudit_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    donor_drift = old["protocol"].get("donor_map_sha256") != new["protocol"].get("donor_map_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not donor_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            (
+                "accuracy_total_correct",
+                old_entry["accuracy"]["total"]["correct"],
+                new_entry["accuracy"]["total"]["correct"],
+            ),
+            (
+                "accuracy_total_n",
+                old_entry["accuracy"]["total"]["n"],
+                new_entry["accuracy"]["total"]["n"],
+            ),
+            (
+                "n_discordant",
+                old_entry["discordance"]["n_discordant"],
+                new_entry["discordance"]["n_discordant"],
+            ),
+            ("n_evaluable", old_entry["n_evaluable"], new_entry["n_evaluable"]),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    method_drift: list[dict[str, Any]] = []
+    if old["method_comparison"] != new["method_comparison"]:
+        method_drift.append({"old": old["method_comparison"], "new": new["method_comparison"]})
+    if old["discordance"] != new["discordance"]:
+        method_drift.append({"old": old["discordance"], "new": new["discordance"]})
+    diff["candidate_drift"] = candidate_drift
+    diff["method_drift"] = method_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["donor_drift"] = donor_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or method_drift
+        or added
+        or removed
+        or protocol_drift
+        or donor_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -7967,6 +8318,9 @@ def _oracle_diff(
     o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
     o_nd, o_nd_changed, o_nd_asymmetric = _o_needle(old.get("needle"), new.get("needle"))
     o_pl, o_pl_changed, o_pl_asymmetric = _o_placement(old.get("placement"), new.get("placement"))
+    o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
+        old.get("choice_audit"), new.get("choice_audit")
+    )
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -8051,6 +8405,8 @@ def _oracle_diff(
         and not o_mt_asymmetric
         and not o_nd_changed
         and not o_nd_asymmetric
+        and not o_ca_changed
+        and not o_ca_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -8101,6 +8457,7 @@ def _oracle_diff(
         "multiturn": o_mt,
         "needle": o_nd,
         "placement": o_pl,
+        "choice_audit": o_ca,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -8184,6 +8541,8 @@ def _oracle_diff(
             "needle_asymmetric": o_nd_asymmetric,
             "placement_changed": o_pl_changed,
             "placement_asymmetric": o_pl_asymmetric,
+            "choice_audit_changed": o_ca_changed,
+            "choice_audit_asymmetric": o_ca_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -9115,6 +9474,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "needle_asymmetric": False,
                 "placement_changed": False,
                 "placement_asymmetric": False,
+                "choice_audit_changed": False,
+                "choice_audit_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -10408,6 +10769,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["multiturn"] = _fuzz_multiturn_section(rng)
         report["needle"] = _fuzz_needle_section(rng)
         report["placement"] = _fuzz_placement_section(rng)
+        report["choice_audit"] = _fuzz_choiceaudit_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -11936,6 +12298,124 @@ def _fuzz_placement_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzChoiceAuditBackend:
+    """Byte-level scripted backend for the choice-audit fuzz
+    builder. ``echo`` mode favours the actual next byte at every
+    position (every choice scores near-perfectly, totals track
+    length); ``flat`` mode returns uniform logits (per-token
+    means tie exactly across choices). Both produce coherent
+    payloads through the real stage, exercising ties and
+    length-driven rankings without a checkpoint."""
+
+    fingerprint = "sha256:fuzz-choiceaudit"
+
+    def __init__(self, mode: str):
+        self.mode = mode
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8")
+
+    def forward_logits(self, input_ids):
+        import torch
+
+        seq = list(input_ids)
+        logits = torch.zeros((len(seq), 256))
+        if self.mode == "echo":
+            for pos in range(len(seq) - 1):
+                logits[pos][seq[pos + 1]] = 6.0
+        return logits
+
+
+def _fuzz_choiceaudit_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    cases = tuple(
+        Fixture(
+            id=f"cf{i}",
+            messages=(Message(role="user", content=f"question {i}?"),),
+            expected=answer,
+            group=group,
+        )
+        for i, (answer, group) in enumerate(
+            [
+                ("42", "numbers"),
+                ("Paris", "geo"),
+                ("blue", "colors"),
+                ("17", "numbers"),
+                ("London", "geo"),
+                ("red", "colors"),
+                ("100", "numbers"),
+                ("Berlin", "geo"),
+            ]
+        )
+    )
+    backend = _FuzzChoiceAuditBackend(rng.choice(["echo", "flat"]))
+    search = []
+    for name in ("fz-alpha", "fz-beta"):
+        observations = []
+        for case in cases:
+            observations.append(
+                {
+                    "fixture": case.id,
+                    "input_ids": list(backend.encode(f"prompt {case.id} for {name}")),
+                    "status": "completed",
+                    "exact_match": (name == "fz-alpha") == (case.id in ("cf0", "cf1", "cf2")),
+                    "boundary_found": True,
+                }
+            )
+        search.append(
+            {
+                "format": {"name": name},
+                "summary": {"aggregate_eligible": True},
+                "observations": observations,
+            }
+        )
+    stage = experiments.choiceaudit_stage(backend, formats, cases, search)
+    payload = experiments.choiceaudit_analysis(
+        stage, "compatible_on_fixture_set", "fz-alpha", tuple(fmt.name for fmt in formats)
+    )
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        available[0]["accuracy"]["total"]["correct"] += 1  # hostile: aggregate off records
+    if available and rng.random() < 0.10:
+        record = available[0]["records"][0]
+        if record["cells"]:
+            record["cells"][0]["total"] = -3.5  # hostile: value off recompute
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        ids = [entry["fixture"] for entry in payload["fixtures"]]
+        protocol = dict(
+            choiceaudit.protocol_object(ids, payload["fixtures"], "sha256:other-backend")
+        )
+        protocol["fingerprint"] = choiceaudit.protocol_fingerprint(
+            ids, payload["fixtures"], "sha256:other-backend"
+        )
+        payload["protocol"] = protocol  # coherent foreign backend
+    if available and rng.random() < 0.08:
+        name = next(iter(payload["candidates"]))
+        payload["candidates"][name] = {
+            "status": "unavailable",
+            "detail": "native_search_unavailable",
+            "records": [],
+        }  # coherent status change
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -12465,6 +12945,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not needle_asymmetric\n"
             '        and not placement_diff["changed"]\n'
             "        and not placement_asymmetric\n"
+            '        and not choiceaudit_diff["changed"]\n'
+            "        and not choiceaudit_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -12549,6 +13031,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or needle_asymmetric\n"
             '        or placement_diff["changed"]\n'
             "        or placement_asymmetric\n"
+            '        or choiceaudit_diff["changed"]\n'
+            "        or choiceaudit_asymmetric\n"
             "    )\n",
             scenario,
         )

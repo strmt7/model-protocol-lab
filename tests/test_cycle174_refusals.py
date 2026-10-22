@@ -727,6 +727,17 @@ class TestValidatorBattery(unittest.TestCase):
     def test_baseline_is_valid(self) -> None:
         self.assertTrue(diffreports._valid_refusals(self._good()))
 
+    def test_lone_surrogate_opener_fails_closed_not_raises(self) -> None:
+        # Oversight edge-case F1: a lone-surrogate opener passes the
+        # str guard but cannot be UTF-8 encoded; the digest
+        # recomputation must fail closed (False), never raise, and
+        # the diff must still return its ordinary verdict dict.
+        payload = self._good()
+        payload["method"]["openers"] = ["\ud800"]
+        self.assertFalse(diffreports._valid_refusals(payload))
+        diff = diffreports.diff_refusals(payload, payload)
+        self.assertEqual(diff["available"], "neither")
+
     def test_each_broken_identity_is_rejected(self) -> None:
         cases: list[tuple[str, Any]] = []
 
@@ -740,6 +751,7 @@ class TestValidatorBattery(unittest.TestCase):
         case("detector_not_str", lambda p: p["method"].update(detector=7))
         case("digest_missing", lambda p: p["method"].pop("openers_sha256"))
         case("digest_empty", lambda p: p["method"].update(openers_sha256=""))
+        case("opener_lone_surrogate", lambda p: p["method"].update(openers=["\ud800"]))
         case("mismatch_not_bool", lambda p: p.update(evaluable_mismatch="yes"))
         case("candidates_not_list", lambda p: p.update(candidates={}))
         case("n_candidates_wrong", lambda p: p.update(n_candidates=99))

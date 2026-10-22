@@ -608,6 +608,7 @@ def diff_reports(
     multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
     needle_diff = diff_needle(old.get("needle"), new.get("needle"))
     placement_diff = diff_placement(old.get("placement"), new.get("placement"))
+    choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -676,6 +677,10 @@ def diff_reports(
         "neither",
     )
     placement_asymmetric = placement_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    choiceaudit_asymmetric = choiceaudit_diff["available"] not in (
         "both",
         "neither",
     )
@@ -770,6 +775,8 @@ def diff_reports(
         and not needle_asymmetric
         and not placement_diff["changed"]
         and not placement_asymmetric
+        and not choiceaudit_diff["changed"]
+        and not choiceaudit_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -854,6 +861,8 @@ def diff_reports(
         "needle_asymmetric": needle_asymmetric,
         "placement_changed": placement_diff["changed"],
         "placement_asymmetric": placement_asymmetric,
+        "choice_audit_changed": choiceaudit_diff["changed"],
+        "choice_audit_asymmetric": choiceaudit_asymmetric,
         "identical": identical,
     }
     return {
@@ -895,6 +904,7 @@ def diff_reports(
         "multiturn": multiturn_diff,
         "needle": needle_diff,
         "placement": placement_diff,
+        "choice_audit": choiceaudit_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -3261,10 +3271,15 @@ def _valid_refusals(payload: Any) -> bool:
         or not all(type(opener) is str and opener for opener in openers)
     ):
         return False
-    if (
-        method.get("openers_sha256")
-        != hashlib.sha256("\n".join(openers).encode("utf-8")).hexdigest()
-    ):
+    try:
+        openers_digest = hashlib.sha256("\n".join(openers).encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        # A lone-surrogate opener passes the str check above but can
+        # never be the recorded digest's input (the producer's list
+        # is real text); fail closed instead of raising (oversight
+        # edge-case F1, the cycle-190 discipline).
+        return False
+    if method.get("openers_sha256") != openers_digest:
         return False
     if type(payload.get("evaluable_mismatch")) is not bool:
         return False
@@ -10468,6 +10483,706 @@ def diff_placement(old: Any, new: Any) -> dict[str, Any]:
         or placement_protocol_drift
         or placement_generator_drift
         or placement_backend_drift
+    )
+    return result
+
+
+_CA_K_DONORS = 3
+_CA_RANKINGS = ("total", "byte", "mean")
+_CA_MIN_COMMON_EVALUABLE = 6
+_CA_MAX_RECORDS = 2400
+_CA_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_CA_DONOR_RULE = "smallest-eligible-id-first-three-v1"
+_CA_SCREEN = "scorerlens-r4-plus-containment-v1"
+_CA_EXCLUSIONS = (None, "blank_expected")
+_CA_AGGREGATE_KEYS = {
+    "n_fixtures",
+    "n_constructible",
+    "n_evaluable",
+    "n_choice_unavailable",
+    "n_prompt_failures",
+    "unavailable_reasons",
+    "n_generation_missing",
+    "accuracy",
+    "discordance",
+    "strata",
+}
+_CA_METHOD_KEYS = {
+    "n_common",
+    "floor",
+    "withheld",
+    "detail",
+    "common_accuracy",
+    "choice_top_candidate",
+    "choice_top_tied",
+    "primary_decision",
+    "primary_winner",
+    "agreement",
+}
+
+
+def _ca_f32(value: float) -> float:
+    """Mirror of scoring._f32 (struct-based float32 rounding)."""
+    import math as _math
+    import struct as _struct
+
+    if _math.isfinite(value) and abs(value) > float.fromhex("0x1.fffffep+127"):
+        return _math.copysign(_math.inf, value)
+    rounded: float = _struct.unpack("<f", _struct.pack("<f", value))[0]
+    return rounded
+
+
+def _ca_donor_map_sha256(block: list[dict[str, Any]]) -> str:
+    canonical = json.dumps(block, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _ca_fixture_set_sha256(fixture_ids: list[str]) -> str | None:
+    """SHA-256 over the sorted fixture id set, or None when an id
+    cannot be UTF-8 encoded (a lone surrogate): the expected
+    protocol then mismatches any recorded payload, so the recompute
+    fails closed instead of raising (cycle-190 discipline)."""
+    try:
+        return hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
+def _ca_protocol_object(
+    fixture_ids: list[str], block: list[dict[str, Any]], backend_fingerprint: str
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "donor_rule": _CA_DONOR_RULE,
+        "screen": _CA_SCREEN,
+        "k_donors": _CA_K_DONORS,
+        "rankings": list(_CA_RANKINGS),
+        "min_common_evaluable": _CA_MIN_COMMON_EVALUABLE,
+        "max_records": _CA_MAX_RECORDS,
+        "max_records_bytes": _CA_MAX_RECORDS_BYTES,
+        "fixture_set_sha256": _ca_fixture_set_sha256(fixture_ids),
+        "donor_map_sha256": _ca_donor_map_sha256(block),
+        "backend_fingerprint": backend_fingerprint,
+    }
+
+
+def _ca_generation_verdict(status: Any, exact_match: Any, boundary_found: Any) -> str:
+    if status != "completed":
+        return "missing"
+    return "pass" if (exact_match is True and boundary_found is True) else "fail"
+
+
+def _ca_ranking_values(cells: list[dict[str, Any]], ranking: str) -> list[float]:
+    if ranking == "total":
+        return [float(cell["total"]) for cell in cells]
+    if ranking == "mean":
+        return [float(cell["mean"]) for cell in cells]
+    return [float(cell["total"]) / int(cell["bytes"]) for cell in cells]
+
+
+def _ca_rank_verdict(values: list[float]) -> str:
+    top = max(values)
+    if values[0] < top:
+        return "incorrect"
+    return "tied" if sum(1 for value in values if value == top) > 1 else "correct"
+
+
+def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) -> bool:
+    import math as _math
+
+    if not fixture_entry["constructible"]:
+        return False
+    cells = record["cells"]
+    if len(cells) != 1 + _CA_K_DONORS:
+        return False
+    return all(
+        cell["status"] == "ok"
+        and type(cell["total"]) is float
+        and _math.isfinite(cell["total"])
+        and type(cell["mean"]) is float
+        and _math.isfinite(cell["mean"])
+        for cell in cells
+    )
+
+
+def _ca_accuracy_block(verdicts: list[str]) -> dict[str, Any]:
+    correct = sum(1 for verdict in verdicts if verdict == "correct")
+    incorrect = sum(1 for verdict in verdicts if verdict == "incorrect")
+    tied = sum(1 for verdict in verdicts if verdict == "tied")
+    n = len(verdicts)
+    return {
+        "correct": correct,
+        "incorrect": incorrect,
+        "tied": tied,
+        "n": n,
+        "accuracy": (correct / n) if n else None,
+        "detail": "" if n else "no_evaluable_fixtures",
+    }
+
+
+def _ca_aggregate(
+    records: list[dict[str, Any]], fixtures: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, dict[str, str]]]:
+    """Mirror of choiceaudit.aggregate_candidate (public keys + verdicts)."""
+    by_id = {entry["fixture"]: entry for entry in fixtures}
+    verdicts: dict[str, list[str]] = {ranking: [] for ranking in _CA_RANKINGS}
+    verdict_by_fixture: dict[str, dict[str, str]] = {}
+    unavailable_reasons: dict[str, int] = {}
+    n_constructible = 0
+    n_evaluable = 0
+    n_prompt_failures = 0
+    n_generation_missing = 0
+    paired = {
+        "gen_pass_choice_correct": 0,  # nosec B105 -- verdict-count schema key, not a credential
+        "gen_pass_choice_incorrect": 0,  # nosec B105 -- verdict-count schema key, not a credential
+        "gen_fail_choice_correct": 0,
+        "gen_fail_choice_incorrect": 0,
+    }
+    n_choice_tied = 0
+    gen_fail_boundary_found = 0
+    gen_fail_boundary_not_found = 0
+    strata_verdicts: dict[str, list[str]] = {
+        "numeric": [],
+        "non_numeric": [],
+        "length_matched": [],
+    }
+    agreement: dict[str, dict[str, int]] = {
+        "byte_vs_total": {"agree": 0, "disagree": 0},
+        "mean_vs_total": {"agree": 0, "disagree": 0},
+    }
+    for record in records:
+        entry = by_id[record["fixture"]]
+        gen = _ca_generation_verdict(
+            record["obs_status"], record["exact_match"], record["boundary_found"]
+        )
+        if gen == "missing":
+            n_generation_missing += 1
+        if not entry["constructible"]:
+            continue
+        n_constructible += 1
+        if record["prompt_reason"] is not None:
+            n_prompt_failures += 1
+            reason = str(record["prompt_reason"])
+            unavailable_reasons[reason] = unavailable_reasons.get(reason, 0) + 1
+        if not _ca_record_evaluable(record, entry):
+            for cell in record["cells"]:
+                if cell["status"] == "unavailable":
+                    reason = str(cell["reason"])
+                    unavailable_reasons[reason] = unavailable_reasons.get(reason, 0) + 1
+                elif cell["status"] != "ok":
+                    unavailable_reasons[cell["status"]] = (
+                        unavailable_reasons.get(cell["status"], 0) + 1
+                    )
+            continue
+        n_evaluable += 1
+        cells = record["cells"]
+        per_ranking = {
+            ranking: _ca_rank_verdict(_ca_ranking_values(cells, ranking))
+            for ranking in _CA_RANKINGS
+        }
+        verdict_by_fixture[record["fixture"]] = per_ranking
+        for ranking in _CA_RANKINGS:
+            verdicts[ranking].append(per_ranking[ranking])
+        strata_verdicts["numeric" if entry["numeric"] else "non_numeric"].append(
+            per_ranking["total"]
+        )
+        true_tokens = int(cells[0]["tokens"])
+        if all(abs(int(cell["tokens"]) - true_tokens) <= 1 for cell in cells[1:]):
+            strata_verdicts["length_matched"].append(per_ranking["total"])
+        for key, ranking in (("byte_vs_total", "byte"), ("mean_vs_total", "mean")):
+            same = per_ranking[ranking] == per_ranking["total"]
+            agreement[key]["agree" if same else "disagree"] += 1
+        if gen in ("pass", "fail"):
+            total_verdict = per_ranking["total"]
+            if total_verdict == "tied":
+                n_choice_tied += 1
+            else:
+                paired[f"gen_{gen}_choice_{total_verdict}"] += 1
+                if gen == "fail":
+                    if record["boundary_found"] is True:
+                        gen_fail_boundary_found += 1
+                    else:
+                        gen_fail_boundary_not_found += 1
+    n_paired = sum(paired.values())
+    n_discordant = paired["gen_pass_choice_incorrect"] + paired["gen_fail_choice_correct"]
+    aggregates = {
+        "n_fixtures": len(fixtures),
+        "n_constructible": n_constructible,
+        "n_evaluable": n_evaluable,
+        "n_choice_unavailable": n_constructible - n_evaluable,
+        "n_prompt_failures": n_prompt_failures,
+        "unavailable_reasons": unavailable_reasons,
+        "n_generation_missing": n_generation_missing,
+        "accuracy": {ranking: _ca_accuracy_block(verdicts[ranking]) for ranking in _CA_RANKINGS},
+        "discordance": {
+            "n_paired": n_paired,
+            **paired,
+            "n_discordant": n_discordant,
+            "n_choice_tied": n_choice_tied,
+            "gen_fail_boundary_found": gen_fail_boundary_found,
+            "gen_fail_boundary_not_found": gen_fail_boundary_not_found,
+        },
+        "strata": {
+            "numeric": _ca_accuracy_block(strata_verdicts["numeric"]),
+            "non_numeric": _ca_accuracy_block(strata_verdicts["non_numeric"]),
+            "length_matched": _ca_accuracy_block(strata_verdicts["length_matched"]),
+            "ranking_agreement": agreement,
+        },
+    }
+    return aggregates, verdict_by_fixture
+
+
+def _ca_method_comparison(
+    verdicts_by_candidate: dict[str, dict[str, dict[str, str]]],
+    candidate_names: list[str],
+    primary_decision: Any,
+    primary_winner: Any,
+) -> dict[str, Any]:
+    """Mirror of choiceaudit.method_comparison over recomputed verdicts."""
+    evaluable_sets = [set(verdicts_by_candidate.get(name, {})) for name in candidate_names]
+    common = set.intersection(*evaluable_sets) if evaluable_sets else set()
+    n_common = len(common)
+    common_accuracy: dict[str, Any] = {}
+    for name in candidate_names:
+        per_fixture = verdicts_by_candidate.get(name, {})
+        correct = sum(
+            1 for fixture in common if per_fixture.get(fixture, {}).get("total") == "correct"
+        )
+        common_accuracy[name] = {
+            "correct": correct,
+            "n": n_common,
+            "accuracy": (correct / n_common) if n_common else None,
+        }
+    if primary_decision in ("compatible_on_fixture_set", "held_out_failed"):
+        mapped_decision: Any = "selected"
+        mapped_winner: Any = primary_winner
+    else:
+        mapped_decision = primary_decision
+        mapped_winner = primary_winner
+    withheld = n_common < _CA_MIN_COMMON_EVALUABLE
+    top_candidate: str | None = None
+    top_tied: list[str] = []
+    if not withheld and n_common:
+        best = max(common_accuracy[name]["correct"] for name in candidate_names)
+        leaders = sorted(
+            name for name in candidate_names if common_accuracy[name]["correct"] == best
+        )
+        if len(leaders) == 1:
+            top_candidate = leaders[0]
+        else:
+            top_tied = leaders
+    if withheld:
+        agreement = "withheld"
+    elif mapped_decision != "selected" or type(mapped_winner) is not str:
+        agreement = "native_abstain"
+    elif top_tied:
+        agreement = "choice_tied"
+    elif top_candidate == mapped_winner:
+        agreement = "agree"
+    else:
+        agreement = "disagree"
+    return {
+        "n_common": n_common,
+        "floor": _CA_MIN_COMMON_EVALUABLE,
+        "withheld": withheld,
+        "detail": "choiceaudit_common_population_below_floor" if withheld else "",
+        "common_accuracy": common_accuracy,
+        "choice_top_candidate": top_candidate,
+        "choice_top_tied": top_tied,
+        "primary_decision": mapped_decision,
+        "primary_winner": mapped_winner,
+        "agreement": agreement,
+    }
+
+
+def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a choice-audit payload from its ground records.
+
+    The validator carries its own mirrors (no imports from
+    choiceaudit.py): the protocol is rebuilt from the stored
+    construction block and compared whole, the donor-map digest
+    is recomputed over the stored block, every stored float is
+    asserted float32-representable, and every derived value --
+    per-ranking verdicts and ties, accuracies, the discordance
+    table and its boundary split, the strata, the common
+    population, the method-level agreement -- is recomputed
+    from the per-cell reported values. What this cannot verify
+    is stated in docs/CHOICE_AUDIT_DESIGN.md: the equivalence
+    screen and donor provenance against the fixture texts
+    (records carry digests, not texts).
+    """
+    import math as _math
+
+    protocol = payload.get("protocol")
+    block = payload.get("fixtures")
+    if type(protocol) is not dict or type(block) is not list or not block:
+        return None
+    fixture_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for entry in block:
+        if type(entry) is not dict or set(entry) != {
+            "fixture",
+            "group",
+            "excluded",
+            "numeric",
+            "choices",
+            "n_distinct_choices",
+            "constructible",
+        }:
+            return None
+        if type(entry["fixture"]) is not str or type(entry["group"]) is not str:
+            return None
+        if entry["fixture"] in seen_ids:
+            return None
+        seen_ids.add(entry["fixture"])
+        fixture_ids.append(entry["fixture"])
+        if entry["excluded"] not in _CA_EXCLUSIONS:
+            return None
+        if type(entry["numeric"]) is not bool or type(entry["constructible"]) is not bool:
+            return None
+        choices = entry["choices"]
+        if type(choices) is not list or entry["n_distinct_choices"] != len(choices):
+            return None
+        if entry["excluded"] is not None:
+            if choices or entry["constructible"]:
+                return None
+            continue
+        if entry["constructible"] != (len(choices) == 1 + _CA_K_DONORS):
+            return None
+        digests: list[str] = []
+        for index, choice in enumerate(choices):
+            if type(choice) is not dict or set(choice) != {
+                "source_fixture",
+                "group",
+                "digest",
+            }:
+                return None
+            if type(choice["group"]) is not str:
+                return None
+            digest = choice["digest"]
+            if (
+                type(digest) is not str
+                or len(digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in digest)
+            ):
+                return None
+            digests.append(digest)
+            if index == 0:
+                if choice["source_fixture"] is not None or choice["group"] != entry["group"]:
+                    return None
+            else:
+                if type(choice["source_fixture"]) is not str:
+                    return None
+                if choice["group"] == entry["group"]:
+                    return None
+        if len(set(digests)) != len(digests):
+            return None
+    by_id = {entry["fixture"]: entry for entry in block}
+    for entry in block:
+        for choice in entry["choices"][1:]:
+            donor_entry = by_id.get(choice["source_fixture"])
+            if donor_entry is None or donor_entry["excluded"] is not None:
+                return None
+            if donor_entry["group"] != choice["group"]:
+                return None
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(backend_fingerprint) is not str:
+        return None
+    expected_protocol = _ca_protocol_object(fixture_ids, block, backend_fingerprint)
+    expected_protocol["fingerprint"] = hashlib.sha256(
+        json.dumps(
+            expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+    if protocol != expected_protocol:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    verdicts_by_candidate: dict[str, dict[str, dict[str, str]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _CA_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(block):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _CA_MAX_RECORDS_BYTES:
+            return None
+        for record, fixture_entry in zip(records, block, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "obs_status",
+                "exact_match",
+                "boundary_found",
+                "prompt_reason",
+                "cells",
+            }:
+                return None
+            if record["fixture"] != fixture_entry["fixture"]:
+                return None
+            if record["obs_status"] is not None and type(record["obs_status"]) is not str:
+                return None
+            for fact in ("exact_match", "boundary_found"):
+                if record[fact] is not None and type(record[fact]) is not bool:
+                    return None
+            if record["prompt_reason"] is not None and type(record["prompt_reason"]) is not str:
+                return None
+            cells = record["cells"]
+            if type(cells) is not list:
+                return None
+            if record["prompt_reason"] is not None or not fixture_entry["constructible"]:
+                if cells:
+                    return None
+                continue
+            if len(cells) != 1 + _CA_K_DONORS:
+                return None
+            for cell in cells:
+                if type(cell) is not dict or set(cell) != {
+                    "status",
+                    "reason",
+                    "total",
+                    "mean",
+                    "tokens",
+                    "bytes",
+                }:
+                    return None
+                if type(cell["tokens"]) is not int or type(cell["bytes"]) is not int:
+                    return None
+                if cell["status"] == "ok":
+                    if cell["reason"] is not None:
+                        return None
+                    for value in (cell["total"], cell["mean"]):
+                        if (
+                            type(value) is not float
+                            or not _math.isfinite(value)
+                            or _ca_f32(value) != value
+                        ):
+                            return None
+                    if cell["tokens"] < 1 or cell["bytes"] < 1:
+                        return None
+                elif cell["status"] == "ok_empty":
+                    if (
+                        cell["reason"] is not None
+                        or cell["total"] != 0.0
+                        or cell["mean"] is not None
+                        or cell["tokens"] != 0
+                        or cell["bytes"] != 0
+                    ):
+                        return None
+                elif cell["status"] == "unavailable":
+                    if type(cell["reason"]) is not str:
+                        return None
+                    if cell["total"] is not None or cell["mean"] is not None:
+                        return None
+                    if cell["tokens"] < 0 or cell["bytes"] < 0:
+                        return None
+                else:
+                    return None
+        candidate_aggregates, candidate_verdicts = _ca_aggregate(records, block)
+        aggregates[name] = candidate_aggregates
+        verdicts_by_candidate[name] = candidate_verdicts
+    if total_records > _CA_MAX_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    names = sorted(candidates)
+    method = payload.get("method_comparison")
+    if type(method) is not dict or set(method) != _CA_METHOD_KEYS:
+        return None
+    # The stored method block carries the *mapped* primary
+    # values; the mirror's mapping is the identity on "selected"
+    # and on abstention-shaped decisions, so feeding the stored
+    # values back reproduces the block exactly when the producer
+    # mapped them honestly. A stored decision of
+    # compatible_on_fixture_set / held_out_failed (an unmapped
+    # passthrough) recomputes to "selected" and mismatches --
+    # rejected, as forged.
+    recomputed_method = _ca_method_comparison(
+        verdicts_by_candidate,
+        names,
+        method["primary_decision"],
+        method["primary_winner"],
+    )
+    n_cells = sum(entry["discordance"]["n_paired"] for entry in aggregates.values())
+    n_discordant = sum(entry["discordance"]["n_discordant"] for entry in aggregates.values())
+    return {
+        "aggregates": aggregates,
+        "method_comparison": recomputed_method,
+        "discordance": {
+            "n_cells": n_cells,
+            "n_discordant": n_discordant,
+            "falsified": (n_discordant == 0) if n_cells else None,
+        },
+        "n_candidates": len(candidates),
+        "n_fixtures": len(block),
+    }
+
+
+def _valid_choiceaudit(payload: Any) -> bool:
+    """Structural check for a ``choice_audit`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "fixtures",
+        "candidates",
+        "method_comparison",
+        "discordance",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _choiceaudit_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if entry.get(key) != value:
+                return False
+    if payload.get("method_comparison") != recomputed["method_comparison"]:
+        return False
+    if payload.get("discordance") != recomputed["discordance"]:
+        return False
+    if payload.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(payload.get("n_fixtures") == recomputed["n_fixtures"])
+
+
+def diff_choiceaudit(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``choice_audit`` payloads; deterministic.
+
+    Answers "did the second opinion change between runs?":
+    per-candidate choice accuracy and discordance drift, the
+    method-level agreement, candidates added/removed, and
+    protocol / donor-map / backend drift (any of which marks
+    the comparison not comparable, with the drift still listed
+    -- the choice sets are the treatment, so a changed donor
+    map is protocol drift). A side without a valid payload is
+    reported plainly.
+    """
+    old_ok = _valid_choiceaudit(old)
+    new_ok = _valid_choiceaudit(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    choiceaudit_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    choiceaudit_donor_drift = old["protocol"].get("donor_map_sha256") != new["protocol"].get(
+        "donor_map_sha256"
+    )
+    choiceaudit_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    choiceaudit_comparable = (
+        not choiceaudit_protocol_drift
+        and not choiceaudit_donor_drift
+        and not choiceaudit_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    choiceaudit_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    choiceaudit_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    choiceaudit_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                choiceaudit_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        choiceaudit_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "accuracy_total_correct",
+                old_entry["accuracy"]["total"]["correct"],
+                new_entry["accuracy"]["total"]["correct"],
+            ),
+            (
+                "accuracy_total_n",
+                old_entry["accuracy"]["total"]["n"],
+                new_entry["accuracy"]["total"]["n"],
+            ),
+            (
+                "n_discordant",
+                old_entry["discordance"]["n_discordant"],
+                new_entry["discordance"]["n_discordant"],
+            ),
+            (
+                "n_evaluable",
+                old_entry["n_evaluable"],
+                new_entry["n_evaluable"],
+            ),
+        ]
+        for metric, old_value, new_value in choiceaudit_metrics:
+            if old_value != new_value:
+                choiceaudit_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    choiceaudit_method_drift: list[dict[str, Any]] = []
+    if old["method_comparison"] != new["method_comparison"]:
+        choiceaudit_method_drift.append(
+            {"old": old["method_comparison"], "new": new["method_comparison"]}
+        )
+    if old["discordance"] != new["discordance"]:
+        choiceaudit_method_drift.append({"old": old["discordance"], "new": new["discordance"]})
+    result["candidate_drift"] = choiceaudit_candidate_drift
+    result["method_drift"] = choiceaudit_method_drift
+    result["candidates_added"] = choiceaudit_candidates_added
+    result["candidates_removed"] = choiceaudit_candidates_removed
+    result["protocol_drift"] = choiceaudit_protocol_drift
+    result["donor_drift"] = choiceaudit_donor_drift
+    result["backend_drift"] = choiceaudit_backend_drift
+    result["comparable"] = choiceaudit_comparable
+    result["changed"] = bool(
+        choiceaudit_candidate_drift
+        or choiceaudit_method_drift
+        or choiceaudit_candidates_added
+        or choiceaudit_candidates_removed
+        or choiceaudit_protocol_drift
+        or choiceaudit_donor_drift
+        or choiceaudit_backend_drift
     )
     return result
 

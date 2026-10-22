@@ -5119,6 +5119,243 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_choiceaudit_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_choiceaudit: exact top-level
+        # shape, the protocol rebuilt through the producer module
+        # (choiceaudit) where the implementation rebuilds it from
+        # literal tables, the construction block and every record
+        # checked structurally, every stored float asserted
+        # float32-representable, and every derived value
+        # recomputed through the producer's pure aggregation.
+        # A drift in either side's constants breaks the agreement.
+        import json as _json
+        import math as _math
+        import struct as _struct
+
+        from model_protocol_lab import choiceaudit as _ca
+
+        def _f32(v: float) -> float:
+            if _math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
+                return _math.copysign(_math.inf, v)
+            return _struct.unpack("<f", _struct.pack("<f", v))[0]
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "fixtures",
+            "candidates",
+            "method_comparison",
+            "discordance",
+            "n_candidates",
+            "n_fixtures",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        block = value.get("fixtures")
+        protocol = value.get("protocol")
+        if type(block) is not list or not block or type(protocol) is not dict:
+            return False
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(backend_fp) is not str:
+            return False
+        fixture_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for entry in block:
+            if type(entry) is not dict or set(entry) != {
+                "fixture",
+                "group",
+                "excluded",
+                "numeric",
+                "choices",
+                "n_distinct_choices",
+                "constructible",
+            }:
+                return False
+            if type(entry["fixture"]) is not str or type(entry["group"]) is not str:
+                return False
+            if entry["fixture"] in seen_ids:
+                return False
+            seen_ids.add(entry["fixture"])
+            fixture_ids.append(entry["fixture"])
+            if entry["excluded"] not in (None, "blank_expected"):
+                return False
+            if type(entry["numeric"]) is not bool or type(entry["constructible"]) is not bool:
+                return False
+            choices = entry["choices"]
+            if type(choices) is not list or entry["n_distinct_choices"] != len(choices):
+                return False
+            if entry["excluded"] is not None:
+                if choices or entry["constructible"]:
+                    return False
+                continue
+            if entry["constructible"] != (len(choices) == 1 + _ca.K_DONORS):
+                return False
+            digests: list[str] = []
+            for index, choice in enumerate(choices):
+                if type(choice) is not dict or set(choice) != {
+                    "source_fixture",
+                    "group",
+                    "digest",
+                }:
+                    return False
+                if type(choice["group"]) is not str:
+                    return False
+                digest = choice["digest"]
+                if (
+                    type(digest) is not str
+                    or len(digest) != 64
+                    or any(ch not in "0123456789abcdef" for ch in digest)
+                ):
+                    return False
+                digests.append(digest)
+                if index == 0:
+                    if choice["source_fixture"] is not None or choice["group"] != entry["group"]:
+                        return False
+                else:
+                    if type(choice["source_fixture"]) is not str:
+                        return False
+                    if choice["group"] == entry["group"]:
+                        return False
+            if len(set(digests)) != len(digests):
+                return False
+        by_id = {entry["fixture"]: entry for entry in block}
+        for entry in block:
+            for choice in entry["choices"][1:]:
+                donor_entry = by_id.get(choice["source_fixture"])
+                if donor_entry is None or donor_entry["excluded"] is not None:
+                    return False
+                if donor_entry["group"] != choice["group"]:
+                    return False
+        expected_protocol = dict(_ca.protocol_object(fixture_ids, block, backend_fp))
+        expected_protocol["fingerprint"] = _ca.protocol_fingerprint(fixture_ids, block, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        total = 0
+        records_bytes = 0
+        aggregates: dict[str, Any] = {}
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(block):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _ca.MAX_RECORDS_BYTES:
+                return False
+            for record, fixture_entry in zip(records, block, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "obs_status",
+                    "exact_match",
+                    "boundary_found",
+                    "prompt_reason",
+                    "cells",
+                }:
+                    return False
+                if record["fixture"] != fixture_entry["fixture"]:
+                    return False
+                if record["obs_status"] is not None and type(record["obs_status"]) is not str:
+                    return False
+                for fact in ("exact_match", "boundary_found"):
+                    if record[fact] is not None and type(record[fact]) is not bool:
+                        return False
+                if record["prompt_reason"] is not None and type(record["prompt_reason"]) is not str:
+                    return False
+                cells = record["cells"]
+                if type(cells) is not list:
+                    return False
+                if record["prompt_reason"] is not None or not fixture_entry["constructible"]:
+                    if cells:
+                        return False
+                    continue
+                if len(cells) != 1 + _ca.K_DONORS:
+                    return False
+                for cell in cells:
+                    if type(cell) is not dict or set(cell) != {
+                        "status",
+                        "reason",
+                        "total",
+                        "mean",
+                        "tokens",
+                        "bytes",
+                    }:
+                        return False
+                    if type(cell["tokens"]) is not int or type(cell["bytes"]) is not int:
+                        return False
+                    if cell["status"] == "ok":
+                        if cell["reason"] is not None:
+                            return False
+                        for cell_value in (cell["total"], cell["mean"]):
+                            if (
+                                type(cell_value) is not float
+                                or not _math.isfinite(cell_value)
+                                or _f32(cell_value) != cell_value
+                            ):
+                                return False
+                        if cell["tokens"] < 1 or cell["bytes"] < 1:
+                            return False
+                    elif cell["status"] == "ok_empty":
+                        if (
+                            cell["reason"] is not None
+                            or cell["total"] != 0.0
+                            or cell["mean"] is not None
+                            or cell["tokens"] != 0
+                            or cell["bytes"] != 0
+                        ):
+                            return False
+                    elif cell["status"] == "unavailable":
+                        if type(cell["reason"]) is not str:
+                            return False
+                        if cell["total"] is not None or cell["mean"] is not None:
+                            return False
+                        if cell["tokens"] < 0 or cell["bytes"] < 0:
+                            return False
+                    else:
+                        return False
+            aggregates[name] = _ca.aggregate_candidate(records, block)
+            public = {key: val for key, val in aggregates[name].items() if key != "_verdicts"}
+            if set(entry) != set(public) | {"status", "detail", "records"}:
+                return False
+            for key, val in public.items():
+                if entry.get(key) != val:
+                    return False
+        if total > _ca.MAX_RECORDS:
+            return False
+        if not aggregates:
+            return False
+        method = value.get("method_comparison")
+        if type(method) is not dict:
+            return False
+        expected_method = _ca.method_comparison(
+            aggregates,
+            tuple(sorted(candidates)),
+            method.get("primary_decision"),
+            method.get("primary_winner"),
+        )
+        if method != expected_method:
+            return False
+        if value.get("discordance") != _ca.discordance_summary(aggregates):
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_fixtures") == len(block))
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -5539,6 +5776,18 @@ def oracle_diff_reports(
         _o_pl_available = "neither"
     _o_pl_asymmetric = _o_pl_available not in ("both", "neither")
 
+    _ca_old_ok = _or_choiceaudit_valid(old.get("choice_audit"))
+    _ca_new_ok = _or_choiceaudit_valid(new.get("choice_audit"))
+    if _ca_old_ok and _ca_new_ok:
+        _o_ca_available = "both"
+    elif _ca_old_ok:
+        _o_ca_available = "old"
+    elif _ca_new_ok:
+        _o_ca_available = "new"
+    else:
+        _o_ca_available = "neither"
+    _o_ca_asymmetric = _o_ca_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -5613,6 +5862,7 @@ def oracle_diff_reports(
         and not _o_mt_asymmetric
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
+        and not _o_ca_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -5692,6 +5942,8 @@ def oracle_diff_reports(
         "needle_asymmetric": _o_nd_asymmetric,
         "placement_changed": False,
         "placement_asymmetric": _o_pl_asymmetric,
+        "choice_audit_changed": False,
+        "choice_audit_asymmetric": _o_ca_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -5743,6 +5995,7 @@ def oracle_diff_reports(
         "multiturn": {"available": _o_mt_available, "changed": False},
         "needle": {"available": _o_nd_available, "changed": False},
         "placement": {"available": _o_pl_available, "changed": False},
+        "choice_audit": {"available": _o_ca_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

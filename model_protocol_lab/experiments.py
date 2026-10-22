@@ -10435,3 +10435,287 @@ def answer_collision_profile(
     result = _profile(candidates, per_candidate, protocol)
     result["n_fixtures"] = n_fixtures
     return result
+
+
+def _choiceaudit_cell(score: TargetScore) -> dict[str, Any]:
+    """One ground-record cell from an engine score (non-finite demoted).
+
+    A reported total or mean can be non-finite with status
+    ``ok`` (float32 saturation of an extreme finite sum, the
+    cycle-76 pin); verbatim storage would crash the
+    allow_nan=False report write, so the cell is demoted to
+    unavailable under the fixed ``non_finite_score`` reason.
+    """
+    from . import choiceaudit as _ca
+
+    if score.status == STATUS_OK and (
+        score.total_logprob is None
+        or score.mean_logprob is None
+        or not math.isfinite(score.total_logprob)
+        or not math.isfinite(score.mean_logprob)
+    ):
+        return {
+            "status": "unavailable",
+            "reason": _ca.REASON_NON_FINITE,
+            "total": None,
+            "mean": None,
+            "tokens": score.scored_token_count,
+            "bytes": score.target_byte_length,
+        }
+    return {
+        "status": score.status,
+        "reason": score.reason,
+        "total": score.total_logprob,
+        "mean": score.mean_logprob,
+        "tokens": score.scored_token_count,
+        "bytes": score.target_byte_length,
+    }
+
+
+def choiceaudit_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    search_entries: Any,
+    *,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Choice-scoring audit stage (cycle 195): teacher-forced choice cells.
+
+    Post-hoc over the recorded search: for every search fixture
+    a four-choice set is constructed from the split itself
+    (choiceaudit.build_choice_sets), and every choice is
+    teacher-forced under every candidate over that candidate's
+    recorded search prompt via the scoring engine. Zero free
+    generations. Cells degrade individually (alignment,
+    provider, context); a fixture's verdict exists only when
+    every constructed cell scored ok and finite -- the pure
+    aggregation in choiceaudit owns that rule. Design:
+    docs/CHOICE_AUDIT_DESIGN.md.
+    """
+    from . import choiceaudit as _ca
+    from .scoring import check_alignment
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    fixture_ids = [case.id for case in cases]
+    block = _ca.build_choice_sets(cases)
+    protocol: dict[str, Any] = dict(
+        _ca.protocol_object(fixture_ids, block, str(backend.fingerprint))
+    )
+    protocol["fingerprint"] = _ca.protocol_fingerprint(fixture_ids, block, str(backend.fingerprint))
+    if len(formats) * len(cases) > _ca.MAX_RECORDS:
+        return {
+            "available": False,
+            "detail": _ca.DETAIL_BUDGET_EXCEEDED,
+            "protocol": protocol,
+            "candidates": {},
+        }
+    if not callable(getattr(backend, "forward_logits", None)):
+        return {
+            "available": False,
+            "detail": "logits_not_supported",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    entries: dict[str, Any] = {}
+    if type(search_entries) is list:
+        for entry in search_entries:
+            if type(entry) is not dict:
+                continue
+            fmt_dict = entry.get("format")
+            entry_name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+            if type(entry_name) is str and entry_name:
+                entries[entry_name] = entry
+    expected_by_id = {case.id: case.expected for case in cases}
+    # Choice texts and their encodings are candidate-independent:
+    # encode once per fixture, reuse under every candidate's
+    # recorded prompt. An encoding failure becomes a per-cell
+    # encode_failed at score time, never a stage failure.
+    encoded: dict[str, list[tuple[int, ...] | None]] = {}
+    for entry in block:
+        if not entry["constructible"]:
+            continue
+        texts = [expected_by_id[entry["fixture"]]]
+        texts += [expected_by_id[choice["source_fixture"]] for choice in entry["choices"][1:]]
+        ids_for_fixture: list[tuple[int, ...] | None] = []
+        for text in texts:
+            try:
+                ids = backend.encode(text)
+            except Exception:  # noqa: BLE001 -- encode problems become fixed codes
+                ids = None
+            if type(ids) is not tuple or any(type(t) is not int or t < 0 for t in ids):
+                ids = None
+            ids_for_fixture.append(ids)
+        encoded[entry["fixture"]] = ids_for_fixture
+    block_by_id = {entry["fixture"]: entry for entry in block}
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    records_bytes = 0
+    for fmt in formats:
+        name = fmt.name
+        entry = entries.get(name)
+        summary = entry.get("summary") if type(entry) is dict else None
+        observations = entry.get("observations") if type(entry) is dict else None
+        if (
+            type(entry) is not dict
+            or type(observations) is not list
+            or not observations
+            or (type(summary) is dict and summary.get("aggregate_eligible") is False)
+        ):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        obs_by_fixture: dict[str, Any] = {}
+        usable = True
+        for obs in observations:
+            if type(obs) is not dict or type(obs.get("fixture")) is not str:
+                usable = False
+                break
+            obs_by_fixture[obs["fixture"]] = obs
+        if not usable or any(case.id not in obs_by_fixture for case in cases):
+            candidates[name] = {
+                "status": "unavailable",
+                "detail": "native_search_unavailable",
+                "records": [],
+            }
+            continue
+        records: list[dict[str, Any]] = []
+        for case in cases:
+            obs = obs_by_fixture[case.id]
+            record: dict[str, Any] = {
+                "fixture": case.id,
+                "obs_status": obs.get("status") if type(obs.get("status")) is str else None,
+                "exact_match": (
+                    obs.get("exact_match") if type(obs.get("exact_match")) is bool else None
+                ),
+                "boundary_found": (
+                    obs.get("boundary_found") if type(obs.get("boundary_found")) is bool else None
+                ),
+                "prompt_reason": None,
+                "cells": [],
+            }
+            records.append(record)
+            if not block_by_id[case.id]["constructible"]:
+                continue
+            raw_ids = obs.get("input_ids")
+            prompt_ids = tuple(raw_ids) if isinstance(raw_ids, (list, tuple)) else ()
+            if not prompt_ids or any(type(t) is not int or t < 0 for t in prompt_ids):
+                record["prompt_reason"] = _ca.REASON_OBSERVATION_MISSING
+                continue
+            if _cancelled():
+                return {
+                    "available": False,
+                    "detail": "cancelled",
+                    "protocol": protocol,
+                    "candidates": {},
+                }
+            # The prompt span is alignment-checked once per
+            # (candidate, fixture): a prompt-side failure voids
+            # all four cells with that reason and is counted once,
+            # reserving per-cell reasons for target-side causes.
+            prompt_check = check_alignment(backend, prompt_ids, ())
+            if not prompt_check.ok:
+                record["prompt_reason"] = (
+                    prompt_check.reason if type(prompt_check.reason) is str else "forward_failed"
+                )
+                continue
+            cells: list[dict[str, Any]] = []
+            for target_ids in encoded[case.id]:
+                if target_ids is None:
+                    cells.append(
+                        {
+                            "status": "unavailable",
+                            "reason": "encode_failed",
+                            "total": None,
+                            "mean": None,
+                            "tokens": 0,
+                            "bytes": 0,
+                        }
+                    )
+                    continue
+                score = score_target_logprobs(backend, prompt_ids, target_ids)
+                cells.append(_choiceaudit_cell(score))
+            record["cells"] = cells
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _ca.MAX_RECORDS_BYTES:
+            return {
+                "available": False,
+                "detail": _ca.DETAIL_BUDGET_EXCEEDED,
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "fixtures": block,
+        "candidates": candidates,
+    }
+
+
+def choiceaudit_analysis(
+    stage: dict[str, Any],
+    primary_decision: Any,
+    primary_winner: Any,
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a choice-audit stage into the stored payload (cycle 195).
+
+    Per-candidate aggregates come from the pure
+    choiceaudit.aggregate_candidate over the ground records;
+    the method-level headline (common-population agreement with
+    the primary outcome) and the probe-level falsification
+    readout are computed once, here, from the same aggregates
+    the diff validator recomputes. Design:
+    docs/CHOICE_AUDIT_DESIGN.md.
+    """
+    from . import choiceaudit as _ca
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "choiceaudit_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    block = stage["fixtures"]
+    aggregates_all: dict[str, dict[str, Any]] = {}
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage["candidates"][name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _ca.aggregate_candidate(entry["records"], block)
+        aggregates_all[name] = aggregates
+        out = {key: value for key, value in aggregates.items() if key != "_verdicts"}
+        out.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = out
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "fixtures": block,
+        "candidates": candidates_out,
+        "method_comparison": _ca.method_comparison(
+            aggregates_all, candidate_names, primary_decision, primary_winner
+        ),
+        "discordance": _ca.discordance_summary(aggregates_all),
+        "n_candidates": len(candidate_names),
+        "n_fixtures": len(block),
+    }

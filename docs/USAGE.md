@@ -2234,6 +2234,83 @@ first classification scheme, is in
 never affects selection, and the stage never fails the
 run.
 
+### 8.47 Choice-scoring audit (`choice_audit`)
+
+Opt-in with `model-protocol-lab run --choice-audit`. A
+practitioner deciding how to score their checkpoints
+learns whether log-likelihood choice scoring picks the
+same answers — and the same template — as the greedy
+generation the lab selects on, on their own fixtures,
+instead of assuming the two scoring methods agree because
+a benchmark paper reported them side by side.
+
+For each search fixture a four-choice set is built from
+the run's own fixtures: the expected answer plus three
+donor expecteds from other groups, taken in ascending
+fixture-id order and screened so no donor is the same
+answer as any expected in the fixture's own group (the
+scorer-lens equivalence ladder plus folded containment).
+A fixture that cannot field three screened donors is
+recorded as not constructible and excluded from every
+choice population; the shortfall is counted, never
+repaired with a fabricated string. Every choice is then
+teacher-forced under every candidate over that
+candidate's recorded search prompt — the audit performs
+zero extra generations.
+
+Each set is ranked three ways from the reported scores:
+by total log-likelihood (the headline; the quantity
+lm-eval calls `acc`), by reported total over target byte
+length (lm-eval's `acc_norm` semantics), and by per-token
+mean — a third quantity the harness deliberately does not
+report, carried here for the comparison and never
+labelled `acc_norm`. A fixture's verdict exists only
+when all four of its cells scored cleanly; a tie at the
+maximum is reported as tied, never broken and never
+counted correct. Per candidate the audit reports the
+three accuracies with their denominators, the
+generation × choice discordance table (with the
+generation-failure cells split by whether the boundary
+was found, so a boundary failure is not mistaken for a
+scoring disagreement), accuracy strata for numeric and
+non-numeric answers and for token-length-matched sets,
+and how often the per-byte and per-token rankings agree
+with the total ranking's verdict.
+
+The method headline compares the choice method's top
+candidate against the primary (generation) winner over
+the common evaluable population only — the fixtures with
+a choice verdict under every candidate — and is withheld
+below a floor of six, with the population size always
+reported. Donors are not difficulty-matched to the true
+answers, so a candidate's choice accuracy is an upper
+bound on its discrimination, and the report says so. The
+registered falsification claim is narrow: zero
+generation × choice discordance over the completed,
+fully-evaluable paired cells under the total ranking
+would falsify "the two scoring ontologies disagree on
+this checkpoint"; the readout states the denominator it
+ran over, and claims nothing when that denominator is
+zero.
+
+Choice-audit is not the neighbouring probes: the
+logprob diagnostic reports per-answer log-likelihoods
+without constructing choice sets or ranking rivals, and
+scorer-lens regrades recorded generation answers under
+text normalisation — it never scores un-generated
+alternatives. Records carry choice digests and reported
+scores, never answer texts, and `diff-reports`
+recomputes every readout from the ground records before
+comparing (`choice_audit_changed` /
+`choice_audit_asymmetric` feed `identical`). Cost: 4
+forward passes per candidate per fixture (9,600 at the
+legal maximum: 24 candidates x 100 fixtures x 4). The
+full contract, including the donor rule, the evaluability
+rule, and the red-team adjudication that reshaped both,
+is in `docs/CHOICE_AUDIT_DESIGN.md`. Informational only:
+the audit never affects selection, and the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
