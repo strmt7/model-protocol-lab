@@ -164,9 +164,10 @@ One record per (candidate, case):
   encode disagreed with itself surfaces as a validator
   rejection downstream, never a silently wrong record (the
   needle discipline). The equality's grounding is the tree's
-  own contract — docs/SCORING.md's "one id sequence per
-  fixture" plus `evaluate()`'s recorded observation
-  (red-team F3's citation, adopted).
+  own contract: one id sequence per fixture, as recorded by
+  `core.evaluate()` — the cell's `input_tokens` is read from
+  the very encode the stage measures (red-team F3's citation,
+  adopted).
 - `question_tokens`: the rendered token length of the question
   alone under this candidate — identical by construction to
   `arm_tokens["closed_book"]`, and carried as its own field so
@@ -255,15 +256,21 @@ not `J` and (`d == 0` or (`n_control >= 6` and `control_level`
 is not `None` and `d <= control_level`)).
 
 Reading: the falsified condition and the classification are
-two views of one condition — falsified holds exactly when the
-classification is `no_discordance_observed` or
-`within_sandwich_control` at a sufficient population (the
-control-set steps in between report *why* a non-falsified
-candidate could not be acquitted: no usable control). Zero
-discordance falsifies with or without a control; joint
+two views of one condition, with joint collapse as the one
+stated exception. Absent joint collapse, falsified holds
+exactly when the classification is
+`no_discordance_observed` or `within_sandwich_control` at a
+sufficient population (the control-set steps in between
+report *why* a non-falsified candidate could not be
+acquitted: no usable control). Under joint collapse the two
+views part: a candidate whose discordance sits at or below a
+usable control level is still classified
+`within_sandwich_control` while the formula returns false.
+Zero discordance falsifies with or without a control; joint
 collapse (`J`) never falsifies — a candidate failing the same
 cases under both layouts has a capability story, not an
-acquittal. Discordance above the control level with a
+acquittal. The shipped enumeration test pins the equivalence
+in this joint-collapse-qualified form. Discordance above the control level with a
 one-sided split is the only outcome that supports a directional
 placement claim, and even then the claim is a verdict-flip
 count on generated fixtures, not a recommendation (the utility
@@ -381,9 +388,10 @@ failure). `MAX_GROUND_RECORDS = 576`,
    is computed on the headline paired population.
 4. *`arm_tokens` equality as a false-reject surface*: the
    grounding is the tree's own scoring contract (one id
-   sequence per fixture, docs/SCORING.md; the evaluation's
-   recorded observation in `evaluate()`), the same grounding
-   needle already ships. A backend whose encode is
+   sequence per fixture — the recorded observation in
+   `core.evaluate()`, with `scoring.py`'s alignment check
+   failing closed on encode inconsistency), the same
+   grounding needle already ships. A backend whose encode is
    non-deterministic within a run violates that contract
    everywhere, not just here; the rejection is the instrument
    working.
