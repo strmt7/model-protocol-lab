@@ -877,6 +877,39 @@ class _MissingHfExtraError(Exception):
     """
 
 
+_BATCH_FORWARD_BYTE_BUDGET = 1 << 33
+"""Ceiling on one batched forward's estimated transient peak, in bytes.
+
+The estimate (see :func:`_batch_peak_bytes`) covers the tensors a single
+forward materializes. 8 GiB sits just above the batch-invariance audit's
+default caller scale; the bound exists so an oversize batch degrades to
+the labelled ``batch_size_exceeded`` refusal instead of an OOM kill,
+which no Python exception handler could convert into the audit's
+fail-closed payload. It is an estimate against a stated budget, not a
+memory guarantee: weights are already resident and allocator behaviour
+varies. See docs/BATCH_PATH_DESIGN.md.
+"""
+
+
+def _batch_peak_bytes(rows: int, length: int, vocab_size: int, heads: int) -> int:
+    """Estimated peak transient bytes of one batched forward.
+
+    ``length`` is the batch's final padded length (longest prompt +
+    max_new_tokens): the last generation step is the largest, so sizing
+    to it bounds every step. Terms: full-sequence fp32 logits
+    ``rows * length * vocab``; eager attention scores
+    ``rows * heads * length**2`` with a factor of two, because the
+    matmul output and the softmax output are both live; the additive
+    ``(rows, 1, length, length)`` fp32 mask held for the whole forward.
+    Pure arithmetic -- no model, no torch.
+    """
+    return (
+        4 * rows * length * vocab_size
+        + 8 * rows * heads * length * length
+        + 4 * rows * length * length
+    )
+
+
 class LocalHFBackend:
     """Built-in GPT-2/Llama only; self-contained local assets; no download fallback.
 
@@ -1316,3 +1349,145 @@ class LocalHFBackend:
             output.clear()
             if acquired:
                 self._lock.release()
+
+    def generate_batch(
+        self,
+        prompts: tuple[tuple[int, ...], ...],
+        *,
+        max_new_tokens: int,
+        seed: int,
+        cancel: Event,
+    ) -> tuple[tuple[int, ...], ...]:
+        """Greedy-generate every prompt together in one batched execution.
+
+        The batch path the batch-invariance audit (cycle 153) probes
+        for: all prompts are decoded together -- left-padded, one
+        forward per generation step over the whole batch -- under the
+        same fp32 full-prefix recompute discipline as :meth:`generate`,
+        so the audit compares solo vs batched continuations of
+        identical token sequences. Returns one continuation tuple per
+        prompt, in input order, each exactly ``max_new_tokens`` long.
+
+        Raises ``ValueError`` / ``RuntimeError`` with the fixed
+        vocabulary of docs/BATCH_PATH_DESIGN.md, validated in the
+        order pinned there. The audit stage fails closed on any raise,
+        so this method never returns partial rows: a cancelled batch
+        raises the ``local_batch_cancelled`` code rather than returning
+        rows a caller could mistake for a complete measurement, and a
+        batch whose estimated forward peak exceeds the byte budget
+        raises ``batch_size_exceeded`` before any forward runs.
+        """
+        if type(prompts) is not tuple or any(
+            not _ids_valid(prompt, self._vocab_size) or not prompt for prompt in prompts
+        ):
+            raise ValueError("invalid_input_ids")
+        if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:
+            raise ValueError("invalid_output_cap")
+        if type(seed) is not int or not 0 <= seed < 2**64:
+            raise ValueError("invalid_seed")
+        if not isinstance(cancel, Event):
+            raise ValueError("invalid_cancellation_event")
+        if cancel.is_set():
+            raise RuntimeError("local_batch_cancelled")
+        if any(len(prompt) + max_new_tokens > self._context_limit for prompt in prompts):
+            raise ValueError("context_limit_exceeded")
+        _, model = self._ready()
+        if not prompts:
+            return ()
+        config = model.config
+        heads = getattr(config, "num_attention_heads", None)
+        if type(heads) is not int or heads < 1:
+            heads = getattr(config, "n_head", None)
+        if type(heads) is not int or heads < 1:
+            raise RuntimeError("local_batch_failed")
+        longest = max(len(prompt) for prompt in prompts)
+        peak = _batch_peak_bytes(len(prompts), longest + max_new_tokens, self._vocab_size, heads)
+        if peak > _BATCH_FORWARD_BYTE_BUDGET:
+            raise ValueError("batch_size_exceeded")
+        torch = self._torch
+        rows = len(prompts)
+        outputs: list[list[int]] = [[] for _ in prompts]
+        acquired = False
+        while not acquired:
+            if cancel.is_set():
+                raise RuntimeError("local_batch_cancelled")
+            acquired = self._lock.acquire(timeout=0.05)
+        try:
+            if cancel.is_set():
+                raise RuntimeError("local_batch_cancelled")
+            cancelled = False
+            failed = False
+            sequence = mask = result = logits = None
+            try:
+                with torch.inference_mode():
+                    sequence = torch.tensor(
+                        [[0] * (longest - len(prompt)) + list(prompt) for prompt in prompts],
+                        dtype=torch.long,
+                        device=self._device,
+                    )
+                    mask = torch.zeros_like(sequence)
+                    for row, prompt in enumerate(prompts):
+                        mask[row, longest - len(prompt) :] = 1
+                    for step in range(max_new_tokens):
+                        if cancel.is_set():
+                            cancelled = True
+                            break
+                        # Position ids are recomputed from the current
+                        # mask at every step: generated columns extend
+                        # the mask, and each row's next position is its
+                        # own count of real tokens, as in its solo run.
+                        positions = (mask.cumsum(-1) - 1).clamp(min=0)
+                        result = model(
+                            input_ids=sequence,
+                            attention_mask=mask,
+                            position_ids=positions,
+                            past_key_values=None,
+                            use_cache=False,
+                            output_attentions=False,
+                            output_hidden_states=False,
+                            return_dict=True,
+                        )
+                        logits = result.logits[:, -1, :]
+                        if (
+                            logits.ndim != 2
+                            or logits.shape[0] != rows
+                            or logits.shape[1] != self._vocab_size
+                            or not bool(torch.isfinite(logits).all().item())
+                        ):
+                            failed = True
+                            break
+                        tokens = [int(torch.argmax(row).item()) for row in logits]
+                        # Drop the step's tensors before anything else
+                        # can retain them: a kept slice would pin every
+                        # step's full logits tensor for the whole call.
+                        result = logits = None
+                        if cancel.is_set():
+                            cancelled = True
+                            break
+                        for row, token in enumerate(tokens):
+                            outputs[row].append(token)
+                        if step + 1 < max_new_tokens:
+                            column = torch.tensor(
+                                [[token] for token in tokens],
+                                dtype=torch.long,
+                                device=self._device,
+                            )
+                            sequence = torch.cat((sequence, column), dim=1)
+                            mask = torch.cat(
+                                (
+                                    mask,
+                                    torch.ones((rows, 1), dtype=mask.dtype, device=self._device),
+                                ),
+                                dim=1,
+                            )
+            except Exception:  # noqa: BLE001 -- inference errors become the fixed code below
+                failed = True
+            finally:
+                sequence = mask = result = logits = None
+            if cancelled:
+                raise RuntimeError("local_batch_cancelled")
+            if failed:
+                raise RuntimeError("local_batch_failed")
+            return tuple(tuple(row) for row in outputs)
+        finally:
+            self._lock.release()

@@ -8159,3 +8159,57 @@ boundary-cut exact match, with RULER's looser substring tier
 deliberately not offered; each cell is one greedy generation
 with denominators printed (Paulsen's variance point is met by
 determinism plus denominators, not by sampling).
+
+## Cycle 192 — a real batch path for the local backend (wave-8 rank 4, pre-build)
+
+This is a capability cycle, not a new probe: cycle 153 built
+the batch-invariance audit (`batchinv.py`,
+`experiments.batch_stage`, `run --batch-invariance`) around
+an optional backend contract, and pre-registered as its
+claim 1 that no backend in the tree exposes a batch path, so
+the audit records `batch_unsupported` on the real local
+backend rather than synthesizing a batch out of sequential
+calls. This cycle removes that gap by building the real
+path — `LocalHFBackend.generate_batch` — and supersedes
+claim 1 by construction. The audit itself, its verdict
+vocabulary, and the fail-closed treatment of backends
+without a batch path do not change.
+
+Uniqueness pass (coordinator, primary sources re-checked
+live 2026-10-22): Thinking Machines, *Defeating
+Nondeterminism in LLM Inference*
+(https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
+— the forward pass is run-to-run deterministic but not
+batch-invariant: RMSNorm/matmul/attention kernel shapes
+change with batch composition, so one request's greedy
+output can depend on its batch companions; their fix is
+batch-invariant kernels, a serving-stack change. vLLM and
+SGLang document the same nondeterminism from the serving
+side (their docs are cited in that post); a practitioner
+report of 23/200 temperature-0 vLLM answers changing under
+batching (dev.to, corroboration only) echoes it. lm-eval
+batches for throughput and restores result order afterwards
+— batching there is a performance feature, not a measured
+variable. No surveyed evaluation tool (LM Evaluation
+Harness, HELM, OpenAI evals, DSPy, Inspect AI, promptfoo)
+ships a solo-vs-batched token-exact audit of its own
+verdicts as a first-class result, and none builds the batch
+path in order to make its own audit answerable.
+
+Verdict: the combination is the lab's existing one, now
+made real on its own backend — the same exact-token audit
+cycle 153 specified, executed against a genuinely batched
+forward path instead of an honest `batch_unsupported`. The
+claim is deliberately narrow: this cycle claims no new
+measurement, only that the measurement now runs. Two
+pre-commitments, recorded before code: (1) batch-vs-solo
+equivalence is measured, never assumed — any divergence on
+a real checkpoint is reported by the audit as
+`batch_variant` with first-divergence positions, and is a
+finding, not a defect to tune away (the lab's fp32
+full-prefix recompute may legitimately differ numerically
+under batched kernel shapes); (2) secretly looping solo
+calls is the one forbidden implementation — a test pins
+that `generate_batch` issues one batched forward per
+generation step for the whole batch. Design and invariants:
+`docs/BATCH_PATH_DESIGN.md`.

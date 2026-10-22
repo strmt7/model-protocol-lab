@@ -3859,9 +3859,10 @@ def batch_stage(
 
     For every prompt (``{prompt_id: input_ids}``) the backend's plain
     :meth:`generate` runs in isolation (solo) and its optional
-    ``generate_batch`` path runs all prompts together (batched); the
-    continuation token-id sequences are compared token-for-token with
-    :func:`batchinv.compare_solo_vs_batched`. Greedy, exact.
+    ``generate_batch`` path runs the solo-evaluable prompts together
+    (batched); the continuation token-id sequences are compared
+    token-for-token with :func:`batchinv.compare_solo_vs_batched`.
+    Greedy, exact.
 
     Fail-closed contract (see :mod:`batchinv`): a backend with no
     ``generate_batch`` attribute records ``{"available": False,
@@ -3873,6 +3874,17 @@ def batch_stage(
     divergence rate, never silently dropped and never a phantom
     divergence.
 
+    Cycle 192: only the solo-evaluable prompts are fed to the batch
+    path -- a solo-failed prompt's row could never be compared, and on
+    the real backend one over-context prompt would otherwise make the
+    whole batch raise and collapse an otherwise measurable audit to
+    ``batch_failed``. When no prompt is evaluable the batch call is
+    skipped entirely and the stage returns the available payload with
+    verdict ``"unavailable"``. A batch path raising
+    ``ValueError("batch_size_exceeded")`` records that detail instead
+    of ``batch_failed``: a labelled size refusal is a different
+    operator signal than a mid-run crash.
+
     Returns the audit payload (``available`` True/False). Raises
     ``ValueError`` on a None backend, malformed prompts, or bad
     ``max_new_tokens``/``seed``.
@@ -3880,6 +3892,7 @@ def batch_stage(
     from .batchinv import (
         BATCH_CONTRACT_FAILED,
         BATCH_FAILED,
+        BATCH_SIZE_EXCEEDED,
         BATCH_UNSUPPORTED,
         audit_verdict,
         compare_solo_vs_batched,
@@ -3928,32 +3941,40 @@ def batch_stage(
             continue
         solo[pid] = generation.token_ids
 
-    try:
-        batched_raw = generate_batch(
-            tuple(clean_prompts[pid] for pid in ordered_ids),
-            max_new_tokens=max_new_tokens,
-            seed=seed,
-            cancel=Event(),
-        )
-    except Exception:  # noqa: BLE001 -- the batch path failed; fail closed
-        return {"available": False, "detail": BATCH_FAILED}
-    if (
-        type(batched_raw) is not tuple
-        or len(batched_raw) != len(ordered_ids)
-        or any(not _valid_token_ids(out, nonempty=True) for out in batched_raw)
-    ):
-        # A malformed batch response poisons the whole comparison: it
-        # cannot be attributed per prompt, so the stage fails closed.
-        return {"available": False, "detail": BATCH_CONTRACT_FAILED}
-    batched = dict(zip(ordered_ids, batched_raw, strict=True))
-
     evaluable = {pid: solo[pid] for pid in ordered_ids if pid in solo}
-    comparison = compare_solo_vs_batched(evaluable, {pid: batched[pid] for pid in evaluable})
-    per_prompt_cmp = cast("dict[str, dict[str, int | bool | None]]", comparison["per_prompt"])
-    for pid, entry in per_prompt_cmp.items():
-        per_prompt[pid] = {**entry, "error": None}
+    n_diverged = 0
+    if evaluable:
+        try:
+            batched_raw = generate_batch(
+                tuple(clean_prompts[pid] for pid in evaluable),
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=Event(),
+            )
+        except ValueError as exc:
+            # The size refusal is a labelled, expected outcome, not a
+            # failure: keep its detail distinct from batch_failed.
+            if str(exc) == BATCH_SIZE_EXCEEDED:
+                return {"available": False, "detail": BATCH_SIZE_EXCEEDED}
+            return {"available": False, "detail": BATCH_FAILED}
+        except Exception:  # noqa: BLE001 -- the batch path failed; fail closed
+            return {"available": False, "detail": BATCH_FAILED}
+        if (
+            type(batched_raw) is not tuple
+            or len(batched_raw) != len(evaluable)
+            or any(not _valid_token_ids(out, nonempty=True) for out in batched_raw)
+        ):
+            # A malformed batch response poisons the whole comparison: it
+            # cannot be attributed per prompt, so the stage fails closed.
+            return {"available": False, "detail": BATCH_CONTRACT_FAILED}
+        batched = dict(zip(evaluable, batched_raw, strict=True))
+
+        comparison = compare_solo_vs_batched(evaluable, batched)
+        per_prompt_cmp = cast("dict[str, dict[str, int | bool | None]]", comparison["per_prompt"])
+        for pid, entry in per_prompt_cmp.items():
+            per_prompt[pid] = {**entry, "error": None}
+        n_diverged = cast(int, comparison["n_diverged"])
     n_evaluable = len(evaluable)
-    n_diverged = cast(int, comparison["n_diverged"])
     return {
         "available": True,
         "n_prompts": len(ordered_ids),

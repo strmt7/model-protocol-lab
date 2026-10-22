@@ -914,6 +914,8 @@ _KNOWN_LOCAL_FAILURE_CODES = (
     "local_decode_failed",
     "local_forward_failed",
     "local_heal_failed",
+    "local_batch_cancelled",
+    "local_batch_failed",
 )
 """Backend RuntimeError codes the CLI is allowed to echo.
 
