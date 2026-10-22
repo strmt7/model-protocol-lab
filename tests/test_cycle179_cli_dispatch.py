@@ -14,8 +14,8 @@ probe never raises):
 
 - TestFlagParsing: every stage flag in STAGE_FLAGS sets its
   argparse dest when present and leaves it falsy when absent.
-- TestHelperDispatch: the `_run_*_probe` helpers in cli.py (29
-  after cycle 193 added placement). With
+- TestHelperDispatch: the `_run_*_probe` helpers in cli.py (30
+  after cycle 195 added choice-audit). With
   the helper's experiments functions stubbed to a sentinel, the
   helper attaches a non-marker payload under its result key; with
   the first experiments function stubbed to raise, the helper
@@ -111,6 +111,7 @@ STAGE_FLAGS = [
     ("--multiturn", "multiturn", None),
     ("--needle", "needle", None),
     ("--placement", "placement", None),
+    ("--choice-audit", "choice_audit", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -286,6 +287,12 @@ HELPER_DISPATCH = [
         "placement",
         "placement_unavailable",
         ["placement_stage", "placement_analysis"],
+    ),
+    (
+        "_run_choiceaudit_probe",
+        "choice_audit",
+        "choiceaudit_unavailable",
+        ["choiceaudit_stage", "choiceaudit_analysis"],
     ),
     (
         "_run_cache_profile_probe",

@@ -8294,3 +8294,186 @@ claim is the combination, in exactly those words; "hand-
 rendered" stays in the sentence, because a vendor-API variant
 of this probe would be a different instrument's result, not a
 refutation of this one's gap.
+
+## Cycle 195 — choice-scoring audit (wave-8 rank 6, pre-build)
+
+The audit runs a second scoring ontology over the same
+hand-rendered template candidates on the same local checkpoint:
+teacher-forced choice scoring over donor-screened choice sets
+built from the run's own search fixtures, audited against the
+run's greedy-generation verdicts per fixture (the full
+generation × choice 2×2) and at the method level (whether the
+two methods' top candidates agree, ties reported as ties). It
+is a second opinion by construction — it never selects.
+Design contract: `docs/CHOICE_AUDIT_DESIGN.md`.
+
+Uniqueness pass (researcher, primary sources checked live
+2026-10-22; full brief in the wave-8 cycle-195 research
+notes). Three statements in the wave-8 brief's rank-6 section
+were wrong or imprecise and are corrected here so they do not
+propagate:
+
+- lm-eval's `acc_norm` is **byte-length**-normalised, not
+  generically "length-normalised" (EleutherAI's own
+  normalisation post,
+  https://blog.eleuther.ai/multiple-choice-normalization/,
+  retrieved and re-verified by the coordinator). The per-token
+  mean is a third quantity the harness deliberately does not
+  report; the brief's cited secondary explainer divides by
+  *characters*, a fourth quantity, and is dropped from the
+  design. The audit reports all three rankings the engine's
+  data supports — total (headline, `acc` semantics), per-byte
+  (`acc_norm` semantics), per-token mean (never labelled
+  `acc_norm`).
+- The brief's HELM sentence inverted HELM's design: HELM
+  standardises one prompt and varies the *model*
+  (arXiv:2211.09110). Its likelihood-relevant contribution is
+  the *separate* vs *joint* adaptation comparison (HellaSwag,
+  OPT 175B: 79.1% vs 30.2%) — the strongest published prior
+  art for "the scoring method changes the answer", now cited
+  as such.
+- The donor machinery is **not** leading's reuse: leading
+  assigns exactly one donor under a group-wide rung-4 +
+  containment screen with a digit-surgery fallback. The
+  audit's rule is new (smallest-eligible-id order extended to
+  the first three distinct-class donors; the fallback is
+  rejected on the record — a fabricated string is not a
+  plausible choice, and it would relieve shortfall selectively
+  for numeric fixtures).
+
+Nearest neighbours, each missing at least two limbs of the
+combination: HELM's adaptation comparison (across models,
+dataset-native choice sets, no abstention winner); Molfese et
+al., arXiv:2503.14996 (its "Logprobs" scores the answer
+*letter* token, not the full answer string); the MCQ vs
+free-generation study, arXiv:2403.17752 (a study, not a tool;
+no template candidates, no winner audited). Length bias is
+cited to primary sources, not folklore: the EleutherAI post
+for the mechanism, Holtzman et al. (arXiv:2104.08315) for
+surface-form competition. No counterexample tool was found
+across eight searches and six frameworks (lm-eval, HELM,
+Inspect, lighteval, promptfoo, OpenAI evals); the claim is
+stated only in the "no surveyed tool" form.
+
+In-tree, the boundary was re-verified against source:
+`--logprob-diagnostic` teacher-forces only each fixture's
+expected answer and bands its mean logprob beside the native
+verdicts (`experiments.py` `logprob_diagnostic`); it
+constructs no choice set, ranks nothing, and has no diff
+validator. `--scorer-lens` re-grades the *recorded
+generations* under normalisation rungs; the audit scores
+answers the model never generated.
+
+Red-team record (A attacked the design as written; B's job
+was to disprove A; every executed claim of A's was re-run by
+B bit-identically, and the coordinator spot-verified B's
+load-bearing citations). A's verdict BUILD WITH AMENDMENTS
+survived; a third of its framing did not. What the build
+carries, in final adjudicated form: a frozen per-fixture tie
+vocabulary (the design's only tie sentence covered the
+method level; the headline was undefined without it — A's
+"rounding ties are routine" frequency claim and its
+first-wins inflation direction were refuted by B and are not
+relied on); all-cells evaluability (a fixture's choice
+verdict exists only when every constructed cell is `ok` and
+finite — B upheld this over the researcher's shrink-and-
+record alternative, and corrected A's wording: `ok_empty`
+is a distinct engine status, not `ok`); the group-wide
+rung-4 + containment screen with pairwise dedup by
+equivalence class and counted shortfall; the common-
+population rule for the method-level headline with a
+probe-local floor and always-reported `n_common` (B's
+compounding arithmetic: at 99% per-cell availability the
+24-candidate intersection survives at 0.38 — a withheld
+headline is a routine property of the instrument, stated in
+the design doc); generation verdicts gated on completed
+observations with an explicit native-outcome mapping (B
+refuted A's manufacture mechanism — `exact_match` is
+construction-gated on completion at `core.py`'s single
+observation site — the gate and mapping are adopted for
+denominator honesty and foreign-payload safety); non-finite
+cells demoted to `unavailable`/`non_finite_score` (reachable
+with status `ok` per the cycle-76 pin; a verbatim `-inf`
+crashes the `allow_nan=False` report write — a latent
+exposure the shipped logprob per-fixture path already
+carries, recorded here, not silently absorbed); the
+validator recomputes every derived value from the reported
+float32 values and asserts float32-representability, never
+derives a mean from a total, and states what it cannot
+verify (the screen and provenance against fixture texts);
+the generation-fail row of the 2×2 split by `boundary_found`
+with boundary-caused discordance reported as a named
+component, not discounted; difficulty strata (numeric split,
+token-length-matched subset, cross-ranking agreement) with
+the unmatched-donor upper-bound sentence; and namespaced
+second-opinion vocabulary — B refuted A's blanket
+`winner`/`selected` ban against scorer-lens's
+`winner_by_rung` and leading's namespaced per-condition
+`decision`/`winner` precedent, and the build follows the
+namespacing rule instead.
+
+Verdict: the combination — donor-screened choice sets ×
+template family × generation-winner discordance audit,
+recomputed from reported float32 values under a digest-bound
+protocol — is not shipped by any surveyed tool. The claim is
+the combination, in exactly those words.
+
+Build outcome (cycle 195, shipped): `model_protocol_lab/
+choiceaudit.py` (57th source file) plus the stage/analysis
+in `experiments.py`, the `--choice-audit` flag, the report
+section, and the `diff-reports` recompute validator, all as
+frozen in `docs/CHOICE_AUDIT_DESIGN.md`. Two build-time
+corrections are on the record. First, the frozen two-reason
+exclusion vocabulary collapsed to one: the scorer-lens
+rung-1 normaliser begins with a trim, so rung-1-empty and
+strip-empty are the same set, and the shipped screen
+reports the single reason `blank_expected` (the design
+document and all three validator mirrors were corrected
+together). Second, a genuine producer defect the validator
+mirror caught before any test did: the first
+`method_comparison` compared per-fixture verdicts against
+the per-ranking mapping instead of its `total` entry, so
+the common accuracy silently read zero and agreement
+degraded to tied on every real payload; the mirror
+recomputed from the records and disagreed, the producer
+was fixed, and the battery now pins the behaviour. The
+validator battery additionally covers the stored-primary
+forgery (an unmapped `held_out_failed` in the stored
+method block recomputes to `selected` and is rejected) and
+two tempdir mutation gates prove the recompute's
+float32-representability check and tie verdict can
+actually fail.
+
+Coordinator-handoff addendum (cycle 195, pre-push): the build
+coordinator rotated mid-gate; the incoming coordinator ran the
+post-interruption audit before trusting the tree — blob-hash of
+every tracked file against main at `dd49802d337a` (differing
+files exactly this cycle's intended edit set, no deletions)
+plus an automated mutant-pattern audit over the six in-place
+mutation gates (22 (original, mutant) pairs: every original
+present, every mutant absent; the one textual hit,
+`"changed": False,` in `diff_surface_noise`'s initial result
+dict, is a legitimate literal in a different function,
+adjudicated by context). Tree clean. Two oversight catches
+landed in this push, both verified by execution before the
+fix: (1) the edge-case audit's F1 — `_valid_refusals` raised
+`UnicodeEncodeError` on a lone-surrogate opener instead of
+returning False — now fails closed behind a try/except in the
+cycle-190 form, with a battery case and an end-to-end diff
+test; the same audit proved refusals is the sole unguarded
+site of its class in the tree, which closes the cycle-190
+lone-surrogate debt's disposition (a crash, not a forgery
+vector). (2) The same strict join/encode pattern in the new
+`_ca_fixture_set_sha256` mirror — now returns None on an
+unencodable fixture id, so the expected protocol mismatches
+and the recompute fails closed; the producer's
+`fixture_set_sha256` keeps the strict form deliberately: its
+ids come only from the fixture loader, which has rejected
+lone surrogates since cycle 172, so the producer is not
+payload-facing. Claims-audit F-06 also landed here: the
+README gained the missing choice-audit Capabilities bullet,
+the sample-report section enumeration and the `diff-reports`
+enumeration now name the date-line, multi-turn, needle-depth,
+placement and choice-scoring sections, and the cycle-178
+docs-currency pin's flag list now covers all five wave-8
+flags so the next stage cannot slip the same way.

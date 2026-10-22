@@ -628,6 +628,31 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--choice-audit",
+        action="store_true",
+        help="Choice-scoring audit (cycle 195, research wave-8 "
+        "rank 6): a second opinion on the generation winner. "
+        "For each search fixture a four-choice set is built from "
+        "the run's own fixtures -- the expected answer plus three "
+        "donor expecteds from other groups, screened so no donor "
+        "is the same answer twice -- and every choice is "
+        "teacher-forced under every candidate over the recorded "
+        "search prompt (zero extra generations). Reports per "
+        "candidate: choice accuracy under the total "
+        "log-likelihood ranking (with per-byte and per-token-mean "
+        "rankings beside it; the per-token mean is not lm-eval's "
+        "acc_norm, which is per-byte), the generation x choice "
+        "discordance table, and whether the choice method's top "
+        "candidate agrees with the primary winner over the "
+        "common evaluable population. Monday morning: 'does "
+        "log-likelihood choice scoring pick the same answers and "
+        "the same template as greedy generation on this "
+        "checkpoint?' Costs 4 forward passes per candidate per "
+        "fixture (9,600 at the legal maximum: 24 candidates x "
+        "100 fixtures x 4). Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1747,6 +1772,51 @@ def _run_placement_probe(
         result["placement"] = {
             "available": False,
             "detail": "placement_unavailable",
+        }
+
+
+def _run_choiceaudit_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    cancel: Any,
+) -> None:
+    """Run the choice-scoring audit; never raises.
+
+    The audit's native arm is the recorded native search, so a
+    failed, cancelled, or truncated search gates it to zero
+    forwards (leading's wrapper gate). Teacher forcing runs
+    over the recorded prompts; the run's cancel event is
+    threaded into the stage.
+    """
+    try:
+        from .experiments import choiceaudit_analysis, choiceaudit_stage
+
+        search = result.get("search")
+        names = tuple(fmt.name for fmt in formats)
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["choice_audit"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        stage = choiceaudit_stage(backend, formats, cases, search, cancel=cancel)
+        result["choice_audit"] = choiceaudit_analysis(
+            stage,
+            result.get("decision"),
+            result.get("selected_candidate"),
+            names,
+        )
+    except Exception:  # noqa: BLE001 -- choice audit must not fail the run
+        result["choice_audit"] = {
+            "available": False,
+            "detail": "choiceaudit_unavailable",
         }
 
 
@@ -3413,6 +3483,20 @@ def main(argv: list[str] | None = None) -> int:
                         max_new_tokens=args.max_new_tokens,
                         max_context=args.max_context,
                         seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Choice-scoring audit (cycle 195, research
+                # wave-8 rank 6): teacher-forced choice sets over
+                # the recorded search prompts, audited against
+                # the generation verdicts; a second opinion,
+                # never a selection. Informational only -- never
+                # changes selection. Never fails the run.
+                if args.choice_audit:
+                    _run_choiceaudit_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         cancel=cancel,
                     )
                 # Prefix-cache sharability profile (cycle 168, research

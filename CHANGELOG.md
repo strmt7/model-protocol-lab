@@ -6,6 +6,63 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 195 — choice-scoring audit, 2026-10-22)
+
+- `run --choice-audit`: a post-hoc second opinion on the
+  generation winner (research wave-8 rank 6). For each
+  search fixture a four-choice set is built from the
+  run's own fixtures — the expected answer plus three
+  donor expecteds from other groups under the frozen
+  `smallest-eligible-id-first-three-v1` rule, screened
+  with the scorer-lens equivalence ladder plus folded
+  containment against every expected in the fixture's
+  own group; a fixture that cannot field three screened
+  donors is counted not constructible, never repaired.
+  Every choice is teacher-forced under every candidate
+  over the recorded search prompt (zero extra
+  generations; 4 forward passes per candidate per
+  fixture, 9,600 at the legal maximum). Reports three
+  rankings of the reported scores — total log-likelihood
+  (lm-eval `acc` semantics), per-byte (`acc_norm`
+  semantics), and per-token mean (never labelled
+  `acc_norm`) — with a fixture evaluable only when all
+  four cells score `ok` with finite values, ties at the
+  maximum reported as tied and never counted correct,
+  the generation × choice discordance table with its
+  boundary split, numeric and length-matched strata, and
+  a method-level agreement readout against the primary
+  winner computed over the common evaluable population
+  only (withheld below six; the population size is
+  always reported). New pure module `choiceaudit.py`
+  (57th source file); ground records carry digests and
+  reported scores only, bound by a donor-map digest, and
+  `diff-reports` recomputes the full payload before
+  comparing (`choice_audit_changed` /
+  `choice_audit_asymmetric`). The contract, the
+  uniqueness pass (lm-eval / HELM / Molfese et al. /
+  MCQ-vs-LFGQ neighbours), and the two-round red-team
+  adjudication are recorded in
+  `docs/CHOICE_AUDIT_DESIGN.md` and the cycle-195
+  research-log entry. Informational only; never touches
+  selection.
+
+### Fixed (cycle 195 — oversight catches landed pre-push, 2026-10-22)
+
+- `diff-reports` refusals validation no longer raises
+  `UnicodeEncodeError` on a lone-surrogate opener in a
+  crafted results file; the opener-digest recomputation
+  fails closed (`False`) instead (oversight edge-case F1;
+  the sole unguarded site of its class in the tree, which
+  closes the cycle-190 lone-surrogate debt's disposition).
+  The new choice-audit mirror's fixture-set digest applies
+  the same fail-closed form to unencodable fixture ids.
+- README currency: the choice-scoring audit gained its
+  Capabilities bullet, and the report-section and
+  `diff-reports` enumerations now name the date-line,
+  multi-turn, needle-depth, placement and choice-scoring
+  sections (claims-audit F-06); the docs-currency pin's
+  flag list covers all five wave-8 flags.
+
 ### Fixed (cycle 194 — placement documentation corrections, 2026-10-22)
 
 - Three documentation defects from the cycle-193 red-team

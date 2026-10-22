@@ -6921,6 +6921,207 @@ def _placement_section(result: dict[str, Any]) -> str:
     )
 
 
+def _choiceaudit_section(result: dict[str, Any]) -> str:
+    """Choice-scoring audit: does likelihood scoring pick what generation picks?
+
+    Renders the ``choice_audit`` payload (see
+    experiments.choiceaudit_analysis): per candidate, choice
+    accuracy under three rankings of the same teacher-forced
+    cells, the generation x choice discordance table with the
+    generation-fail row split by boundary, and the method-level
+    agreement over the common evaluable population. The scope
+    limits are printed with the numbers, not under them: the
+    donors are unmatched answers to other fixtures (choice
+    accuracy is an upper bound on item-matched accuracy), the
+    per-token mean is not lm-eval's acc_norm (which is
+    per-byte), the generation side is greedy only, and the
+    audit is a second opinion that never selects. Counts and
+    rates only; no fixture, prompt, or answer text is rendered.
+    Every interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("choice_audit")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    method = probe.get("method_comparison")
+    discordance = probe.get("discordance")
+    if type(candidates) is not dict or type(method) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        accuracy = entry.get("accuracy")
+        if type(accuracy) is dict:
+            parts = []
+            for ranking, label in (
+                ("total", "total"),
+                ("byte", "per-byte"),
+                ("mean", "per-token mean"),
+            ):
+                block = accuracy.get(ranking)
+                if type(block) is dict:
+                    parts.append(
+                        label
+                        + " "
+                        + _rate(block.get("accuracy"))
+                        + " ("
+                        + _count(block.get("correct"))
+                        + "/"
+                        + _count(block.get("n"))
+                        + ", "
+                        + _count(block.get("tied"))
+                        + " tied)"
+                    )
+            bits.append("<div>Choice accuracy: " + "; ".join(parts) + ".</div>")
+        disc = entry.get("discordance")
+        if type(disc) is dict:
+            bits.append(
+                "<div>Discordance over "
+                + _count(disc.get("n_paired"))
+                + " paired fixtures: generation-pass/choice-incorrect "
+                + _count(disc.get("gen_pass_choice_incorrect"))
+                + ", generation-fail/choice-correct "
+                + _count(disc.get("gen_fail_choice_correct"))
+                + " (discordant "
+                + _count(disc.get("n_discordant"))
+                + "); generation failures split by boundary found "
+                + _count(disc.get("gen_fail_boundary_found"))
+                + " / not found "
+                + _count(disc.get("gen_fail_boundary_not_found"))
+                + "; "
+                + _count(disc.get("n_choice_tied"))
+                + " choice ties reported beside the table.</div>"
+            )
+        bits.append(
+            "<div>Evaluable "
+            + _count(entry.get("n_evaluable"))
+            + " of "
+            + _count(entry.get("n_constructible"))
+            + " constructible fixtures; "
+            + _count(entry.get("n_choice_unavailable"))
+            + " without a choice verdict, "
+            + _count(entry.get("n_generation_missing"))
+            + " without a generation verdict.</div>"
+        )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    agreement = str(method.get("agreement", ""))
+    if agreement == "agree":
+        method_line = (
+            "Over the common evaluable population ("
+            + _count(method.get("n_common"))
+            + " fixtures), the choice method's top candidate agrees with "
+            "the primary winner (" + escape(str(method.get("primary_winner"))) + ")."
+        )
+    elif agreement == "disagree":
+        method_line = (
+            "Over the common evaluable population ("
+            + _count(method.get("n_common"))
+            + " fixtures), the choice method's top candidate ("
+            + escape(str(method.get("choice_top_candidate")))
+            + ") disagrees with the primary winner ("
+            + escape(str(method.get("primary_winner")))
+            + ")."
+        )
+    elif agreement == "choice_tied":
+        method_line = (
+            "Over the common evaluable population ("
+            + _count(method.get("n_common"))
+            + " fixtures), the choice method's top is tied between "
+            + escape(", ".join(str(n) for n in method.get("choice_top_tied", [])))
+            + "; ties are reported, never broken."
+        )
+    elif agreement == "native_abstain":
+        method_line = (
+            "The primary run abstained ("
+            + escape(str(method.get("primary_decision")))
+            + "), so there is no primary winner for the choice method "
+            "to agree with; the comparison is reported as an abstention."
+        )
+    else:
+        method_line = (
+            "The method-level agreement is withheld: the common "
+            "evaluable population ("
+            + _count(method.get("n_common"))
+            + ") is below the floor of "
+            + _count(method.get("floor"))
+            + ". The counts above still stand; only the agreement "
+            "claim is gated."
+        )
+    falsified_line = ""
+    if type(discordance) is dict:
+        falsified = discordance.get("falsified")
+        if falsified is True:
+            falsified_line = (
+                "<p>Zero discordance on "
+                + _count(discordance.get("n_cells"))
+                + " completed, fully-evaluable cells under the total "
+                "ranking: 'the scoring method matters for this "
+                "checkpoint/fixture set' is falsified for greedy "
+                "generation on this fixture set.</p>"
+            )
+        elif falsified is False:
+            falsified_line = (
+                "<p>Discordance on "
+                + _count(discordance.get("n_discordant"))
+                + " of "
+                + _count(discordance.get("n_cells"))
+                + " completed, fully-evaluable cells: the scoring "
+                "method changes answers on this checkpoint/fixture "
+                "set.</p>"
+            )
+    return (
+        '<section class="card" id="choice-audit">'
+        "<h2>Choice-scoring audit (second opinion)</h2>"
+        "<p>Each search fixture's answer is scored against three "
+        "donor answers drawn from other fixtures' expected "
+        "answers, screened so no donor is the same answer twice; "
+        "every choice is teacher-forced under each candidate over "
+        "the recorded search prompt, with no extra generations. "
+        "The headline ranking is total log-likelihood (lm-eval's "
+        "<em>acc</em> semantics); the per-byte ranking is its "
+        "<em>acc_norm</em>. The per-token mean is a third quantity "
+        "the harness does not report and is never labelled "
+        "acc_norm here. Donors are unmatched -- answers to "
+        "unrelated fixtures, screened for equivalence only -- so "
+        "choice accuracy is an upper bound on item-matched "
+        "choice accuracy. A choice cell marked unavailable for a "
+        "boundary-merge reason failed tokenisation alignment at "
+        "the prompt/answer seam; that is a different fact from a "
+        "generation boundary not being found, and the two are "
+        "never pooled. This audit is a second opinion: it never "
+        "changes the selection.</p>"
+        '<table class="data"><thead><tr><th scope="col">Candidate</th>'
+        '<th scope="col">Choice scoring vs generation</th></tr></thead>'
+        "<tbody>" + "".join(rows) + "</tbody></table>"
+        "<p>" + method_line + "</p>" + falsified_line + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -8249,6 +8450,7 @@ def render_html(result: dict[str, Any]) -> str:
     multiturn_html = _multiturn_section(result)
     needle_html = _needle_section(result)
     placement_html = _placement_section(result)
+    choiceaudit_html = _choiceaudit_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -8413,6 +8615,11 @@ def render_html(result: dict[str, Any]) -> str:
                 placement_html,
             ),
             (
+                "choice-audit",
+                "Choice-scoring audit (second opinion)",
+                choiceaudit_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8506,6 +8713,7 @@ def render_html(result: dict[str, Any]) -> str:
         + multiturn_html
         + needle_html
         + placement_html
+        + choiceaudit_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html
