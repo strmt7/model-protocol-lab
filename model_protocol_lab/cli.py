@@ -580,6 +580,30 @@ def build_parser() -> argparse.ArgumentParser:
         "the run.",
     )
     run.add_argument(
+        "--needle",
+        action="store_true",
+        help="Needle-depth probe (cycle 191, research wave-8 "
+        "rank 3): 20 generated cases from the run seed, each "
+        "planting one fact sentence with a unique synthetic "
+        "code inside neutral filler at five depths (0/25/50/75/"
+        "100 percent) of two filler doses (1024 and 4096 "
+        "rendered tokens), plus a no-filler control, a "
+        "needle-absent false-recall floor, and a duplicate-"
+        "needle arm per dose -- a recall-vs-depth curve per "
+        "template family, with every depth offset verified on "
+        "the candidate's own rendered tokens. Monday morning: "
+        "'at which depth of the context I paste around a "
+        "question does this template stop finding the fact?' "
+        "Costs 15 generations per candidate per case (7,200 "
+        "at the legal maximum: 24 candidates x 20 cases x 15). "
+        "The 4096 dose needs --max-context above 4096 plus "
+        "the needle, question, and generation budget; under "
+        "the default 2048 cap every 4096 cell is reported "
+        "context-exceeded, never truncated into existence. "
+        "Informational only; never touches selection. The "
+        "stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1654,6 +1678,50 @@ def _run_multiturn_probe(
         result["multiturn"] = {
             "available": False,
             "detail": "multiturn_unavailable",
+        }
+
+
+def _run_needle_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the needle-depth probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so -- unlike the native-arm probes -- it
+    consults neither the recorded search nor the primary
+    decision, and a failed user run cannot silently suppress
+    it. The run's cancel event is threaded dispatch -> wrapper
+    -> stage -> evaluate, so SIGINT/SIGTERM stop the stage
+    cooperatively.
+    """
+    try:
+        from .experiments import needle_analysis, needle_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = needle_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["needle"] = needle_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- needle must not fail the run
+        result["needle"] = {
+            "available": False,
+            "detail": "needle_unavailable",
         }
 
 
@@ -3232,6 +3300,24 @@ def main(argv: list[str] | None = None) -> int:
                 # selection. Never fails the run.
                 if args.multiturn:
                     _run_multiturn_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Needle-depth probe (cycle 191, research
+                # wave-8 rank 3): generated code-recall cases
+                # sized to exact rendered-token depths per
+                # candidate, the run's cancel event threaded
+                # into the stage loop. Informational only --
+                # never changes selection. Never fails the run.
+                if args.needle:
+                    _run_needle_probe(
                         backend,
                         formats,
                         result,

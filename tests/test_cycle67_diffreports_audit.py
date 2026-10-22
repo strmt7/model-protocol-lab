@@ -149,6 +149,7 @@ from model_protocol_lab import (
     experiments,
     leading,
     multiturn,
+    needle,
     numform,
     refusals,
     repetition,
@@ -279,6 +280,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "numform": {"available": "neither", "changed": False},
         "dateline": {"available": "neither", "changed": False},
         "multiturn": {"available": "neither", "changed": False},
+        "needle": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -362,6 +364,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "dateline_asymmetric": False,
             "multiturn_changed": False,
             "multiturn_asymmetric": False,
+            "needle_changed": False,
+            "needle_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -5219,6 +5223,350 @@ def _o_multiturn(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+_O_ND_DETAILS = frozenset(
+    {"arm_context_exceeded", "arm_evaluation_failed", "arm_screened", "arm_unmatchable"}
+)
+_O_ND_CELL_KEYS = frozenset(
+    {
+        "verdict",
+        "boundary_found",
+        "boundary_text_match",
+        "input_tokens",
+        "answer_digest",
+        "needle_offsets",
+    }
+)
+_O_ND_HEX = frozenset("0123456789abcdef")
+
+
+def _o_needle_digest_ok(item: Any) -> bool:
+    return type(item) is str and len(item) == 64 and all(c in _O_ND_HEX for c in item)
+
+
+def _o_needle_expected_offsets(key: str) -> list[int] | None:
+    if key == "dose_0":
+        return [0]
+    for dose in needle.DOSES:
+        if key == needle.cell_key_absent(dose):
+            return []
+        if key == needle.cell_key_duplicate(dose):
+            return [dose * 25 // 100, dose * 75 // 100]
+        for depth in needle.DEPTHS:
+            if key == needle.cell_key_treated(dose, depth):
+                return [needle.target_offset(dose, depth)]
+    return None
+
+
+def _o_needle_cell_ok(cell: Any, expected_digest: str) -> bool:
+    if type(cell) is not dict or frozenset(cell) != _O_ND_CELL_KEYS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] not in (True, False, None):
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if cell["answer_digest"] is not None and not _o_needle_digest_ok(cell["answer_digest"]):
+        return False
+    offsets = cell["needle_offsets"]
+    if type(offsets) is not list or any(type(o) is not int or o < 0 for o in offsets):
+        return False
+    return bool(
+        cell["verdict"] == bool(cell["answer_digest"] == expected_digest and cell["boundary_found"])
+    )
+
+
+def _o_needle_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle needle recompute: mirrors diffreports._needle_recompute.
+
+    The oracle rebuilds the protocol and the case set through
+    the producer module (needle) where the implementation
+    rebuilds them from literal tables -- a drift in either
+    side's constants breaks the agreement the fuzz harness
+    asserts. Records are checked in canonical generation
+    order, the order the implementation's validator enforces.
+    """
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(needle.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = needle.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = needle.generate_cases(seed)
+    total = 0
+    records_bytes = 0
+    raw: dict[str, list[dict[str, Any]]] = {}
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict or set(entry) != {
+            "status",
+            "detail",
+            "dose0_control",
+            "false_recall",
+            "duplicate",
+            "records",
+        }:
+            return None
+        if entry["status"] != "available" or entry["detail"] != "":
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > needle.MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "question_tokens",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = hashlib.sha256(str(case["value"]).encode("utf-8")).hexdigest()
+            if record["expected_digest"] != expected_digest:
+                return None
+            if type(record["question_tokens"]) is not int or record["question_tokens"] < 0:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(needle.CELL_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(needle.CELL_KEYS):
+                return None
+            for key in needle.CELL_KEYS:
+                cell = cells[key]
+                detail = details[key]
+                if cell is None:
+                    if detail not in _O_ND_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_needle_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["needle_offsets"] != _o_needle_expected_offsets(key):
+                        return None
+            dose0 = cells["dose_0"]
+            if dose0 is not None and dose0["input_tokens"] <= record["question_tokens"]:
+                return None
+            needle_len = (
+                dose0["input_tokens"] - record["question_tokens"] if dose0 is not None else None
+            )
+            for dose in needle.DOSES:
+                absent = cells[needle.cell_key_absent(dose)]
+                if absent is not None and (
+                    absent["input_tokens"] - record["question_tokens"] != dose
+                ):
+                    return None
+                if dose0 is None:
+                    continue
+                for depth in needle.DEPTHS:
+                    treated = cells[needle.cell_key_treated(dose, depth)]
+                    if treated is not None and (
+                        treated["input_tokens"] - dose0["input_tokens"] != dose
+                    ):
+                        return None
+                duplicate = cells[needle.cell_key_duplicate(dose)]
+                if (
+                    duplicate is not None
+                    and needle_len is not None
+                    and (duplicate["input_tokens"] - dose0["input_tokens"] != dose + needle_len)
+                ):
+                    return None
+        raw[name] = records
+        aggregates[name] = needle.aggregate_candidate(records)
+    if total > needle.MAX_GROUND_RECORDS:
+        return None
+    return {
+        "aggregates": aggregates,
+        "readouts": needle.headline_readouts(raw),
+        "conditions": {key: needle.cell_selection(raw, key) for key in needle.CELL_KEYS},
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_needle_valid(value: Any) -> bool:
+    """Oracle needle validator: mirrors diffreports._valid_needle."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "readouts",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_needle_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        if entry.get("dose0_control") != expected["dose0_control"]:
+            return False
+        if entry.get("false_recall") != expected["false_recall"]:
+            return False
+        if entry.get("duplicate") != expected["duplicate"]:
+            return False
+    if value.get("readouts") != recomputed["readouts"]:
+        return False
+    if value.get("conditions") != recomputed["conditions"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_needle(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle needle section: mirrors diffreports.diff_needle."""
+    old_ok = _o_needle_valid(old)
+    new_ok = _o_needle_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        if old_entry["dose0_control"]["rate"] != new_entry["dose0_control"]["rate"]:
+            candidate_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "dose0_rate",
+                    "old": old_entry["dose0_control"]["rate"],
+                    "new": new_entry["dose0_control"]["rate"],
+                }
+            )
+        for dose_key in ("1024", "4096"):
+            old_deficit = old["readouts"][dose_key]["deficit"][name]
+            new_deficit = new["readouts"][dose_key]["deficit"][name]
+            if old_deficit != new_deficit:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose_key}_deficit",
+                        "old": old_deficit,
+                        "new": new_deficit,
+                    }
+                )
+            for depth_key in ("0", "50", "100"):
+                old_rate = old["readouts"][dose_key]["curves"][name][depth_key]["rate"]
+                new_rate = new["readouts"][dose_key]["curves"][name][depth_key]["rate"]
+                if old_rate != new_rate:
+                    candidate_drift.append(
+                        {
+                            "candidate": name,
+                            "metric": f"dose_{dose_key}_depth_{depth_key}_rate",
+                            "old": old_rate,
+                            "new": new_rate,
+                        }
+                    )
+            old_floor = old_entry["false_recall"][dose_key]["rate"]
+            new_floor = new_entry["false_recall"][dose_key]["rate"]
+            if old_floor != new_floor:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose_key}_false_recall",
+                        "old": old_floor,
+                        "new": new_floor,
+                    }
+                )
+            old_excess = old_entry["duplicate"][dose_key]["excess_over_independence"]
+            new_excess = new_entry["duplicate"][dose_key]["excess_over_independence"]
+            if old_excess != new_excess:
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": f"dose_{dose_key}_duplicate_excess",
+                        "old": old_excess,
+                        "new": new_excess,
+                    }
+                )
+    condition_drift: list[dict[str, Any]] = []
+    for key in needle.CELL_KEYS:
+        if old["conditions"][key] != new["conditions"][key]:
+            condition_drift.append(
+                {
+                    "condition": key,
+                    "old": old["conditions"][key],
+                    "new": new["conditions"][key],
+                }
+            )
+    diff["candidate_drift"] = candidate_drift
+    diff["condition_drift"] = condition_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or condition_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -7344,6 +7692,7 @@ def _oracle_diff(
     o_nf, o_nf_changed, o_nf_asymmetric = _o_numform(old.get("numform"), new.get("numform"))
     o_dt, o_dt_changed, o_dt_asymmetric = _o_dateline(old.get("dateline"), new.get("dateline"))
     o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
+    o_nd, o_nd_changed, o_nd_asymmetric = _o_needle(old.get("needle"), new.get("needle"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -7426,6 +7775,8 @@ def _oracle_diff(
         and not o_dt_asymmetric
         and not o_mt_changed
         and not o_mt_asymmetric
+        and not o_nd_changed
+        and not o_nd_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -7474,6 +7825,7 @@ def _oracle_diff(
         "numform": o_nf,
         "dateline": o_dt,
         "multiturn": o_mt,
+        "needle": o_nd,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -7553,6 +7905,8 @@ def _oracle_diff(
             "dateline_asymmetric": o_dt_asymmetric,
             "multiturn_changed": o_mt_changed,
             "multiturn_asymmetric": o_mt_asymmetric,
+            "needle_changed": o_nd_changed,
+            "needle_asymmetric": o_nd_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -8480,6 +8834,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "dateline_asymmetric": False,
                 "multiturn_changed": False,
                 "multiturn_asymmetric": False,
+                "needle_changed": False,
+                "needle_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -9771,6 +10127,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["numform"] = _fuzz_numform_section(rng)
         report["dateline"] = _fuzz_dateline_section(rng)
         report["multiturn"] = _fuzz_multiturn_section(rng)
+        report["needle"] = _fuzz_needle_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -11120,6 +11477,97 @@ def _fuzz_multiturn_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzNeedleBackend:
+    """Byte-level scripted backend for the needle fuzz builder.
+
+    Byte tokens keep the real stage fast (a full two-candidate
+    run is about a second) while still exercising the sizing
+    search end to end. The answer is the planted code parsed
+    out of the decoded prompt; ``midfail`` mode answers wrongly
+    when the needle sits in the middle stretch of the prompt,
+    which produces genuine U-shaped curves and partial
+    headline populations.
+    """
+
+    fingerprint = "sha256:fuzz-needle"
+
+    def __init__(self, mode: str):
+        self.mode = mode
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        import re as _re
+
+        text = self.decode(list(input_ids))
+        found = _re.findall(r"code is ([a-z]+-\d+)\.", text)
+        if found:
+            answer = found[-1]
+            if self.mode == "midfail" and len(text) > 1000:
+                at = text.find("code is")
+                fraction = at / max(1, len(text))
+                if 0.2 < fraction < 0.8:
+                    answer = "wrong-0000"
+        else:
+            answer = "unknown"
+        boundary = list(self.encode("endmark"))
+        out = list(self.encode(answer)) + boundary
+        return Generation(
+            token_ids=tuple((out + boundary * max_new_tokens)[:max_new_tokens]),
+            reason="limit",
+        )
+
+
+def _fuzz_needle_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    backend = _FuzzNeedleBackend(rng.choice(["perfect", "midfail"]))
+    seed = rng.choice([0, 1, 2])
+    stage = experiments.needle_stage(
+        backend,
+        formats,
+        boundary=tuple(backend.encode("endmark")),
+        max_context=65536,
+        seed=seed,
+    )
+    payload = experiments.needle_analysis(stage, tuple(fmt.name for fmt in formats))
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        cell = record["cells"].get("dose_1024_depth_50")
+        if cell is not None:
+            cell["verdict"] = not cell["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        record = available[0]["records"][1]
+        cell = record["cells"].get("dose_1024_depth_25")
+        if cell is not None:
+            cell["input_tokens"] = cell["input_tokens"] + 1  # hostile: delta breaks
+    if available and rng.random() < 0.10:
+        payload["readouts"]["1024"]["deficit"]["fz-alpha"] = 0.5  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(needle.protocol_object(seed, "sha256:other-backend"))
+        protocol["fingerprint"] = needle.protocol_fingerprint(seed, "sha256:other-backend")
+        payload["protocol"] = protocol  # coherent foreign backend
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -11645,6 +12093,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not dateline_asymmetric\n"
             '        and not multiturn_diff["changed"]\n'
             "        and not multiturn_asymmetric\n"
+            '        and not needle_diff["changed"]\n'
+            "        and not needle_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -11725,6 +12175,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or dateline_asymmetric\n"
             '        or multiturn_diff["changed"]\n'
             "        or multiturn_asymmetric\n"
+            '        or needle_diff["changed"]\n'
+            "        or needle_asymmetric\n"
             "    )\n",
             scenario,
         )

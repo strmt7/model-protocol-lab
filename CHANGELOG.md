@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 191 — needle depth, 2026-10-21)
+
+- `run --needle`: needle-depth × template. The probe
+  generates twenty cases from the run seed, each planting
+  one fact sentence with a unique synthetic code inside
+  neutral filler at five depths (0/25/50/75/100 percent)
+  of two filler doses (1024 and 4096 rendered tokens),
+  plus a no-filler control, a needle-absent false-recall
+  floor, and a duplicate-needle arm per dose reported
+  against its independence baseline. Dose is a
+  rendered-token delta over the case's own control
+  render and each depth offset is verified on the
+  candidate's own rendered tokens by a prefix-anchored
+  measurement; curves, the mid-depth deficit, and first
+  failure share one headline population per dose (the
+  cases every candidate passed with no filler), so
+  cross-candidate comparison is like-for-like.
+  `diff-reports` gains the `needle` section with a
+  full-recompute validator holding a seed-regenerating
+  generator mirror. The design survived a red-team
+  DO-NOT-BUILD verdict and cross-check (contiguous-run
+  acceptance and the marker-derived offset anchor were
+  both replaced on executed evidence); the depth
+  phenomenon and the deficit's functional form are
+  prior art (Lost in the Middle, NoLiMa, RULER,
+  BABILong), credited in `docs/NEEDLE_DESIGN.md`.
+
 ### Added (cycle 189 — multi-turn drift, 2026-10-21)
 
 - `run --multiturn`: true multi-turn drift with
