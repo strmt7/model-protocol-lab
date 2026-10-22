@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import stat
 import sys
@@ -1485,10 +1486,28 @@ def _build_cli_backend(args: Any) -> Any:
 
 def _load_probe_json(path: Path) -> Any:
     target = Path(path)
+    # Single-fd discipline (the datasets/diffreports/pack pattern):
+    # O_NONBLOCK so opening a named FIFO with no writer cannot block
+    # forever, fstat on the opened fd refuses anything that is not a
+    # regular file, and the read is capped before the size check —
+    # the previous read_bytes() form hung on FIFOs and read /dev/zero
+    # unbounded, with the 16 MiB check firing only after the full
+    # read (oversight security S-1; the H1 class).
     try:
-        raw = target.read_bytes()
+        fd = os.open(target, os.O_RDONLY | os.O_NONBLOCK)
     except OSError as exc:
         raise ValueError(f"cannot read {path}: {exc}") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"{path} is not a regular file")
+        with os.fdopen(fd, "rb") as handle:
+            fd = -1  # ownership moved to the file object
+            raw = handle.read((16 << 20) + 1)
+    except OSError as exc:
+        raise ValueError(f"cannot read {path}: {exc}") from exc
+    finally:
+        if fd != -1:
+            os.close(fd)
     if len(raw) > 16 << 20:
         raise ValueError(f"{path} exceeds 16 MiB")
     try:
@@ -1575,14 +1594,33 @@ def run_surface_noise(args: Any, parser: Any) -> int:
             file=sys.stderr,
         )
         return 1
-    out_dir.mkdir(parents=True)
-    (out_dir / "probe.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True), encoding="utf-8"
-    )
-    (out_dir / "dashboard.html").write_text(
-        render_surface_noise_dashboard(report, prompt_text=prompt_text),
-        encoding="utf-8",
-    )
+    # The save_report permission discipline (oversight security S-7):
+    # the directory chain is owner-only (0o700) and both files are
+    # written 0o600 with O_EXCL, so probe output — which embeds the
+    # operator's prompt — is never world-readable under a permissive
+    # umask the way a plain mkdir/write_text left it (0o755/0o644).
+    missing: list[Path] = []
+    probe_path = out_dir
+    while not probe_path.exists():
+        missing.append(probe_path)
+        probe_path = probe_path.parent
+    out_dir.mkdir(parents=True, mode=0o700)
+    for component in missing:
+        if not component.is_symlink():
+            os.chmod(component, 0o700)
+    for name, text in (
+        ("probe.json", json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True)),
+        ("dashboard.html", render_surface_noise_dashboard(report, prompt_text=prompt_text)),
+    ):
+        fd = os.open(
+            out_dir / name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        try:
+            os.write(fd, text.encode("utf-8"))
+        finally:
+            os.close(fd)
     print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
     operators = report.get("operators") or {}
     stable = sum(1 for op in operators.values() if type(op) is dict and op.get("stability") == 1.0)

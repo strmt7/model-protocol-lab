@@ -34,8 +34,13 @@ _CONTROL_CHARS = re.compile(
 def _display_id(value: str) -> str:
     """Fixture IDs are operator-visible; strip control characters so a
     hostile fixture file cannot inject terminal escape sequences into
-    stderr warnings."""
-    return _CONTROL_CHARS.sub("", value)
+    stderr warnings, and apply the R4-7 200-character preview cap so
+    a hostile ID cannot flood the output either (oversight security
+    S-9)."""
+    cleaned = _CONTROL_CHARS.sub("", value)
+    if len(cleaned) > 200:
+        return cleaned[:200] + "..."
+    return cleaned
 
 
 def _warn_contamination(command: str, contamination: dict[str, Any]) -> None:

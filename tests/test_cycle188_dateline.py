@@ -1018,7 +1018,12 @@ class TestAnalysisEdges(unittest.TestCase):
     def test_non_selection_primary_decision_payload_valid(self):
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
-        payload = dateline_analysis(stage, "abstain", None, tuple(f.name for f in FORMATS))
+        # Cycle 196 (oversight edge-case F3): the validator binds
+        # primary_decision to the run-decision vocabulary, so this
+        # uses a real abstention decision ("ambiguous"); the earlier
+        # synthetic "abstain" label is not producible by any run and
+        # no longer validates.
+        payload = dateline_analysis(stage, "ambiguous", None, tuple(f.name for f in FORMATS))
         self.assertTrue(_valid_dateline(payload))
 
     def test_context_exceeded_payload_valid(self):

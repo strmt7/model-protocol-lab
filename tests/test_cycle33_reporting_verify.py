@@ -1339,8 +1339,8 @@ _MUTANTS = [
         "m02_config_escape",
         [
             (
-                '<dt>" + escape(key) + "</dt><dd>" + escape(value) + "</dd>',
-                '<dt>" + escape(key) + "</dt><dd>" + value + "</dd>',
+                '<dt>" + _escape_text(key) + "</dt><dd>" + _escape_text(value) + "</dd>',
+                '<dt>" + _escape_text(key) + "</dt><dd>" + value + "</dd>',
             )
         ],
         ["hostile_escaping", "config_section"],

@@ -143,8 +143,17 @@ def _parse_fixtures(raw: object) -> tuple[Fixture, ...]:
 
 
 def _parse_boundary(raw: object) -> tuple[int, ...]:
-    if type(raw) is not list or not raw or any(type(t) is not int or t < 0 for t in raw):
-        raise MCPError(-32602, "params.boundary must be a nonempty list of token ids")
+    # Parity with the CLI's --boundary-ids discipline (oversight
+    # security S-11): 1-16 IDs, each in [0, 2^31). Before the parity
+    # fix, arrays of 200,000 IDs and IDs like 2**100 passed here
+    # while the CLI refused them.
+    if (
+        type(raw) is not list
+        or not raw
+        or len(raw) > 16
+        or any(type(t) is not int or t < 0 or t >= 2**31 for t in raw)
+    ):
+        raise MCPError(-32602, "params.boundary must be 1-16 token ids, each in [0, 2^31)")
     return tuple(raw)
 
 
@@ -396,9 +405,16 @@ TOOLS = {
 
 
 def handle_request(request: dict) -> dict | None:
+    # JSON-RPC notification discipline (oversight security S-13): a
+    # frame with NO "id" member is a notification — it is never
+    # answered and, for this server, never executed (a misdirected
+    # notification must not start an expensive probe run). An
+    # explicit "id": null is a request: it dispatches normally and
+    # its errors are reported like any other request's.
+    if "id" not in request:
+        return None
     method = request.get("method")
     request_id = request.get("id")
-    is_notification = request_id is None
 
     try:
         # Stateless: no initialize required. The 2024-11-05 handshake is
@@ -443,28 +459,35 @@ def handle_request(request: dict) -> dict | None:
                 },
             }
         if method == "tools/call":
-            params = request.get("params") or {}
+            params = request.get("params")
+            if params is None:
+                params = {}
+            if type(params) is not dict:
+                raise MCPError(-32602, "params must be an object")
             name = params.get("name")
-            if name not in TOOLS:
+            if type(name) is not str or name not in TOOLS:
                 raise MCPError(-32602, f"unknown tool: {name}")
-            result = TOOLS[name]["handler"](params.get("arguments") or {})
+            arguments = params.get("arguments") or {}
+            if type(arguments) is not dict:
+                raise MCPError(-32602, "arguments must be an object")
+            result = TOOLS[name]["handler"](arguments)
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
         raise MCPError(-32601, f"method not found: {method}")
     except MCPError as exc:
-        if is_notification:
-            return None
         return {
             "jsonrpc": "2.0",
             "id": request_id,
             "error": {"code": exc.code, "message": exc.message},
         }
-    except Exception as exc:  # noqa: BLE001 -- the server never crashes on a tool failure
-        if is_notification:
-            return None
+    except Exception:  # noqa: BLE001 -- the server never crashes on a tool failure
+        # Fixed text (oversight security S-12): the generic path used
+        # to echo the exception's type and message, which leaks
+        # library internals (and, for UnicodeEncodeError, hostile
+        # input bytes) to the client. The code stays -32603.
         return {
             "jsonrpc": "2.0",
             "id": request_id,
-            "error": {"code": -32603, "message": f"{type(exc).__name__}: {exc}"},
+            "error": {"code": -32603, "message": "internal error"},
         }
 
 
@@ -503,33 +526,89 @@ def self_test() -> int:
     return 0
 
 
+# Framing bound (oversight security S-5): one request line may be at
+# most 16 MiB — far above any legitimate frame (a 1 MiB prompt plus
+# 50 capped fixtures) — so an unterminated line can no longer grow
+# the input buffer without bound.
+MAX_LINE_CHARS = 16 * 1024 * 1024
+
+
+def _parse_error_response() -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "parse error"},
+    }
+
+
+def _unique_frame_object(pairs):
+    """Duplicate keys in a frame are a parse error (oversight
+    security S-13): every JSON loader in the repo rejects duplicate
+    fields; the MCP frame parser now applies the same discipline
+    instead of Python's last-wins default."""
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate key in frame")
+        obj[key] = value
+    return obj
+
+
+def _write_response(response: dict) -> None:
+    sys.stdout.write(json.dumps(response, default=str) + "\n")
+    sys.stdout.flush()
+
+
 def serve() -> int:
     if "--self-test" in sys.argv[1:]:
         return self_test()
-    for line in sys.stdin:
-        line = line.strip()
+    stdin = sys.stdin.buffer
+    while True:
+        raw = stdin.readline(MAX_LINE_CHARS + 1)
+        if not raw:
+            break
+        if len(raw) > MAX_LINE_CHARS:
+            # Overlong line: fail this frame closed and discard
+            # through its newline so framing resynchronises on the
+            # next line instead of the tail being parsed as a frame
+            # of its own.
+            while raw and not raw.endswith(b"\n"):
+                raw = stdin.readline(MAX_LINE_CHARS + 1)
+            _write_response(_parse_error_response())
+            if not raw:
+                break
+            continue
+        try:
+            line = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            _write_response(_parse_error_response())
+            continue
         if not line:
             continue
         try:
-            request = json.loads(line)
-        except json.JSONDecodeError:
-            response: dict | None = {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32700, "message": "parse error"},
-            }
-        else:
-            if type(request) is not dict:
-                response = {
+            # The parse boundary normalises every malformed-frame
+            # class into -32700 (oversight security S-3): syntax,
+            # duplicate keys (ValueError from the hook), the
+            # interpreter's integer-length limit (ValueError), and
+            # pathological nesting depth (RecursionError). Only
+            # JSONDecodeError was caught before, and deeply-nested
+            # JSON killed the process.
+            request = json.loads(line, object_pairs_hook=_unique_frame_object)
+        except (json.JSONDecodeError, RecursionError, ValueError):
+            _write_response(_parse_error_response())
+            continue
+        if type(request) is not dict:
+            _write_response(
+                {
                     "jsonrpc": "2.0",
                     "id": None,
                     "error": {"code": -32600, "message": "invalid request"},
                 }
-            else:
-                response = handle_request(request)
+            )
+            continue
+        response = handle_request(request)
         if response is not None:
-            sys.stdout.write(json.dumps(response, default=str) + "\n")
-            sys.stdout.flush()
+            _write_response(response)
     return 0
 
 

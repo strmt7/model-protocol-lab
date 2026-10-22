@@ -248,7 +248,12 @@ crashes on non-string dict keys fixed fail-closed).
    `"unavailable"` (cycle-116 fix). Residual: off the main thread or on
    non-Unix platforms the watchdog cannot be installed and the render
    runs unbounded -- the same exposure as HF's own `apply_chat_template`.
-   Run unfamiliar checkpoints with resource limits.
+   Run unfamiliar checkpoints with resource limits. (Re-verified
+   dynamically in the 2026-10-22 oversight audit: rendering a
+   CPU-bomb template (a `{% for %}` loop over a 200k range, ~1.6e10
+   inner steps) from a worker thread left the render still running
+   after 16 s while the calling thread proceeded — confirming the
+   watchdog never arms off the main thread, exactly as stated here.)
 7. `template_diff` degrades (not hangs) after a 10 s budget per
    (format, fixture) pair on adversarially fragmented inputs; a fully
    hostile checkpoint can still cost ~10 s per pair before each degrades.

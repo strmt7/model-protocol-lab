@@ -7,9 +7,28 @@ import heapq
 import json
 import math
 import os
+import re
 from html import escape
 from pathlib import Path
 from typing import Any
+
+# Payload-derived text (candidate names, fixture IDs, config values)
+# is stripped of C0/C1 control characters and lone surrogates before
+# HTML-escaping in the main rendering paths (oversight security
+# S-14: bare escape() alone left NUL/ESC/CR/LF bytes verbatim in
+# report.html). The class is deliberately narrower than the
+# per-probe sections' local strips: U+2028/U+2029 and the bidi marks
+# stay in the main paths — the cycle-100 injection audit pins the
+# escaped payload as present in the output, and SECURITY.md
+# residual #9 accepts invisible format characters for diagnostic
+# fidelity.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]")
+
+
+def _escape_text(value: Any) -> str:
+    """HTML-escape a payload-derived string with controls stripped."""
+    return escape(_CONTROL_CHARS.sub("", str(value)))
+
 
 # Table sorting: the only script in the report, and the zero-JS -> tiny-JS
 # change. The report is fully readable with scripting disabled (plain
@@ -1092,7 +1111,7 @@ def _outcome_grid_section(result: dict[str, Any]) -> str:
         return ""
     winner = result.get("selected_candidate")
     header = "".join(
-        '<th scope="col">' + escape(name) + (" \u2605" if name == winner else "") + "</th>"
+        '<th scope="col">' + _escape_text(name) + (" \u2605" if name == winner else "") + "</th>"
         for name in names
     )
     rows = []
@@ -1114,9 +1133,9 @@ def _outcome_grid_section(result: dict[str, Any]) -> str:
                 )
         rows.append(
             '<tr><th scope="row" data-sort="'
-            + escape(fid)
+            + _escape_text(fid)
             + '">'
-            + escape(fid)
+            + _escape_text(fid)
             + "</th>"
             + "".join(cells)
             + "</tr>"
@@ -1157,7 +1176,11 @@ def _decisive_section(result: dict[str, Any]) -> str:
             continue
         solo[passed[0]].append(fid)
     items = "".join(
-        "<li><strong>" + escape(name) + "</strong>: " + escape(", ".join(fids)) + "</li>"
+        "<li><strong>"
+        + _escape_text(name)
+        + "</strong>: "
+        + _escape_text(", ".join(fids))
+        + "</li>"
         for name, fids in solo.items()
         if fids
     )
@@ -1819,21 +1842,21 @@ def _search_rows(result: dict[str, Any]) -> str:
             planned = summary.get("planned", "?")
             bar = (
                 '<span class="bar" role="img" aria-label="'
-                + escape(f"{percent} pass rate")
+                + _escape_text(f"{percent} pass rate")
                 + '"><span class="bar-fill '
                 + color
                 + '" style="width:'
-                + escape(percent)
+                + _escape_text(percent)
                 + '"></span></span>'
             )
             cell = (
                 '<span class="badge '
                 + color
                 + '">'
-                + escape(percent)
+                + _escape_text(percent)
                 + "</span> "
                 + '<span class="rate-text">'
-                + escape(f"{passes}/{planned}")
+                + _escape_text(f"{passes}/{planned}")
                 + "</span>"
             )
         fingerprint = _short_fingerprint(run.get("candidate_fingerprint"))
@@ -1842,38 +1865,38 @@ def _search_rows(result: dict[str, Any]) -> str:
         attempted_key = str(attempted) if type(attempted) is int else ""
         rows.append(
             '<tr><th scope="row" data-sort="'
-            + escape(str(name))
+            + _escape_text(str(name))
             + '">'
-            + escape(str(name))
+            + _escape_text(str(name))
             + '</th><td data-sort="'
-            + escape(rate_key)
+            + _escape_text(rate_key)
             + '">'
             + bar
             + cell
             + '</td><td data-sort="'
-            + escape(str(summary.get("status", "?")))
+            + _escape_text(str(summary.get("status", "?")))
             + '">'
-            + escape(str(summary.get("status", "?")))
+            + _escape_text(str(summary.get("status", "?")))
             + '</td><td data-sort="'
-            + escape(attempted_key)
+            + _escape_text(attempted_key)
             + '">'
-            + escape(f"{summary.get('attempted', '?')}/{summary.get('planned', '?')}")
+            + _escape_text(f"{summary.get('attempted', '?')}/{summary.get('planned', '?')}")
             + '</td><td class="mono" data-sort="'
-            + escape(boundary_text)
+            + _escape_text(boundary_text)
             + '">'
-            + escape(boundary_text)
+            + _escape_text(boundary_text)
             + '</td><td data-sort="'
-            + escape(str(run.get("candidate_fingerprint", "")))
+            + _escape_text(str(run.get("candidate_fingerprint", "")))
             + '">'
             + '<details name="candidate-details"><summary class="mono">'
-            + escape(fingerprint)
+            + _escape_text(fingerprint)
             + "</summary>"
             + '<p class="mono">'
-            + escape(str(run.get("candidate_fingerprint", "")))
+            + _escape_text(str(run.get("candidate_fingerprint", "")))
             + "<br>encoded input tokens: "
-            + escape(str(summary.get("encoded_input_tokens", "?")))
+            + _escape_text(str(summary.get("encoded_input_tokens", "?")))
             + "<br>retained output tokens: "
-            + escape(str(summary.get("retained_output_tokens", "?")))
+            + _escape_text(str(summary.get("retained_output_tokens", "?")))
             + "</p></details>"
             + "</td></tr>"
         )
@@ -1938,7 +1961,8 @@ def _config_section(result: dict[str, Any]) -> str:
         ("Compute comparison", str(result.get("compute_comparison", ""))),
     )
     terms = "".join(
-        "<dt>" + escape(key) + "</dt><dd>" + escape(value) + "</dd>" for key, value in items
+        "<dt>" + _escape_text(key) + "</dt><dd>" + _escape_text(value) + "</dd>"
+        for key, value in items
     )
     return (
         '<section id="run-configuration"><h2>Run configuration</h2>'
@@ -1947,7 +1971,7 @@ def _config_section(result: dict[str, Any]) -> str:
         + "</dl>"
         + '<details name="config-details">'
         + '<summary>Full backend fingerprint</summary><p class="mono">'
-        + escape(str(result.get("backend_fingerprint", "")))
+        + _escape_text(str(result.get("backend_fingerprint", "")))
         + "</p></details></section>"
     )
 
@@ -1970,9 +1994,9 @@ def _held_out_section(result: dict[str, Any]) -> str:
     rate_text = "incomplete" if valid_rate is None else f"{valid_rate:.0%}"
     cards = "".join(
         '<div class="card"><div class="k">'
-        + escape(key)
+        + _escape_text(key)
         + '</div><div class="v">'
-        + escape(value)
+        + _escape_text(value)
         + "</div></div>"
         for key, value in (
             ("Status", str(summary.get("status", "?"))),

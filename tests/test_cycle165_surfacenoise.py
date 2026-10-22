@@ -1231,6 +1231,24 @@ class CoverageGapTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sn._load_probe_json(bad)
 
+    def test_load_probe_json_refuses_fifo(self):
+        # Oversight security S-1: the single-fd reader refuses a FIFO
+        # at fstat; the previous read_bytes() form blocked forever.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fifo = Path(tmpdir) / "probe.json"
+            os.mkfifo(fifo)
+            with self.assertRaises(ValueError):
+                sn._load_probe_json(fifo)
+
+    def test_load_probe_json_refuses_dev_zero(self):
+        # A character device is refused at fstat, never read
+        # unbounded (the S-1 /dev/zero half).
+        zero = Path("/dev/zero")
+        if not zero.exists():
+            self.skipTest("/dev/zero not present")
+        with self.assertRaises(ValueError):
+            sn._load_probe_json(zero)
+
     def test_cli_diff_protocol_drift_warning(self):
         import io
         from contextlib import redirect_stderr

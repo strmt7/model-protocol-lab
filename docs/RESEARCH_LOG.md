@@ -8477,3 +8477,164 @@ enumeration now name the date-line, multi-turn, needle-depth,
 placement and choice-scoring sections, and the cycle-178
 docs-currency pin's flag list now covers all five wave-8
 flags so the next stage cannot slip the same way.
+
+## Cycle 196 — oversight correction round: security + edge-case fixes
+
+This cycle ships no feature. It consumes the three read-only
+oversight briefs of 2026-10-22 (security, claims, edge cases;
+21 confirmed findings, none above Low–Medium, every defect
+fail-closed) in the parent's sequencing: the security and
+edge-case code fixes here, the claims corrections in cycle 197.
+Every finding was re-verified by the coordinator's own execution
+before any fix; the PoCs below are the coordinator's, and each
+fix is proven by the same PoC failing closed afterwards plus a
+regression test in `tests/test_cycle196_oversight_fixes.py`
+(32 tests) or the finding's home suite.
+
+Security (auditor's order):
+
+- **S-1** — `surface-noise diff` hung on a FIFO and read
+  `/dev/zero` unbounded: `surfacenoise._load_probe_json` used
+  `read_bytes()` with no regular-file check, the H1 class
+  SECURITY.md claims fixed tree-wide. Now the single-fd pattern
+  (O_RDONLY|O_NONBLOCK, fstat S_ISREG, capped read). The FIFO
+  case reproduces pre-fix as a timeout kill and post-fix as an
+  instant "is not a regular file" refusal; regression tests
+  cover FIFO and `/dev/zero`.
+- **S-4 / S-6 / L-C (pack)** — `verify --bundle` leaked bare
+  interpreter exceptions instead of the documented
+  `manifest_unparseable` report: a manifest with a 20,000-deep
+  nested array escaped as RecursionError, a >4300-digit integer
+  as a raw ValueError, and an invalid-UTF-8 entry name as a raw
+  UnicodeDecodeError escaping the ZipFile construction. The
+  manifest boundary now normalises RecursionError and ValueError
+  (the datasets/diffreports precedent), rejects nonfinite
+  constants via `parse_constant` (the pack parser was the only
+  one accepting NaN/Infinity, in unknown keys), and the container
+  boundary maps filename-decode failure to
+  `bundle_container_invalid`. All four PoCs verify
+  `failed`/`manifest_unparseable` afterwards; the genuine bundle
+  still verifies `ok`.
+- **S-3 / S-5 / S-13 (MCP)** — the surface-noise MCP server died
+  on deeply-nested JSON (uncaught RecursionError past the
+  JSONDecodeError-only catch), buffered unterminated lines
+  without bound (64 MiB line fully resident), executed
+  `tools/call` notifications and answered them, swallowed errors
+  for explicit `"id": null`, and parsed duplicate keys last-wins.
+  `serve()` now reads bounded lines (16 MiB) from the binary
+  buffer with discard-and-resync on overlong frames, decodes
+  UTF-8 explicitly, parses with a duplicate-rejecting hook, and
+  maps every malformed-frame class to -32700; a frame with no
+  `id` member is a notification — never answered, never
+  executed. All 18 pre-existing MCP contract tests pass
+  unchanged.
+- **S-11 / S-12 (MCP)** — `_parse_boundary` now matches the CLI
+  discipline (1–16 IDs, each in [0, 2^31); 200,000-ID arrays and
+  2**100 were accepted before), non-object `params`/`arguments`
+  are -32602, and the generic error path returns the fixed text
+  "internal error" instead of echoing the exception type and
+  message.
+- **S-7** — `surface-noise probe` output ignored the save_report
+  permission discipline (0755/0644 under umask 022). The output
+  directory chain is now created 0700 and both files written
+  0600 with O_EXCL; verified by stat under umask 022.
+- **S-8** — the bundle verifier ignored ZIP entry file types, so
+  symlink/FIFO/device-typed entries passed all five seal checks.
+  Decision (recorded in docs/SEALED_BUNDLE_DESIGN.md): every
+  bundle entry is a regular file; `seal_container` rejects an
+  explicitly non-regular Unix file type as
+  `entry_type_not_regular`. Entries making no type claim (the
+  lab's own writer among them) are judged by the other checks.
+- **S-9** — the R4-7 200-character preview cap now lives in the
+  display sanitizers themselves (`verify`/`cli`/`diffreports`
+  `_display_id`, `fixtures._safe`) instead of only at the call
+  sites the earlier round fixed; before the cap, one crafted id
+  produced a 131,115-character exception message and one entry
+  name a 60,013-character seal detail.
+- **S-10** — a non-UTF-8 (surrogateescape) filename in a report
+  directory escaped `pack` as a raw UnicodeEncodeError during
+  serialisation. `_valid_segment` now requires UTF-8
+  encodability, so the name fails as `pack_entry_name_invalid`
+  (and a manifest path with a lone surrogate fails as
+  `entry_path_invalid` on the verify side).
+- **S-14** — C0 controls reached report.html verbatim through
+  the main rendering paths (bare `escape()` does not strip).
+  The main sections now route payload-derived strings through
+  `_escape_text` (control/bidi strip, then escape) — the
+  discipline the newer per-probe sections already applied
+  locally. Verified by rendering the sample report with
+  C0-laden candidate names and fixture IDs planted: no raw
+  NUL/ESC/CR in the output.
+- **S-2** — accepted residual #6 (the Jinja watchdog cannot arm
+  off the main thread) was re-verified dynamically by the
+  auditor's PoC; the confirmation is recorded in
+  docs/SECURITY.md and the residual stays open by design.
+  Residuals #5 and #7 were NOT re-verified in this round and
+  are not cited as freshly confirmed.
+
+Edge cases:
+
+- **F2** — bool-for-int slips on equality-compared validator
+  fields (needle `protocol.version`; dateline `protocol.version`,
+  `n_screened`, `n_multi_turn_fixtures`, and the same pattern
+  tree-wide in the recompute family). The validators now compare
+  through `_recomputed_equal`, which is type-strict for ints and
+  bools and recurses through dicts and lists; applied at the six
+  aggregate loops, the trailing scalar compares of all eight
+  recompute-standard validators, needle/multiturn sub-dict
+  compares, and all seven protocol rebuild/version sites. The
+  placement/multiturn sweep the auditor left undone is covered
+  by the same application (placement `protocol.version` pinned
+  by test). The fingerprint-family validators (repetition,
+  distraction, leading) bind their protocol version through the
+  canonical-JSON fingerprint, which already distinguishes
+  `true` from `1`; their aggregate compares use the helper too.
+- **F3** — dateline's `primary_decision`/`primary_winner` were
+  type-checked but never content-bound, so a label could
+  contradict its own section. They are now bound to the
+  run-decision vocabulary with winner consistency (a payload
+  candidate name exactly for the winner-bearing decisions,
+  `None` otherwise), via `_valid_primary_pair`; the same binding
+  covers repetition, distraction, and leading, which carry the
+  same pair under the same mapping. What is NOT claimed:
+  recomputing the parent run's decision — the section does not
+  carry its fixture outcomes, so within the vocabulary the
+  decision remains stage-attested (docs/DATELINE_DESIGN.md).
+  One pre-existing test pinned the old permissive behaviour
+  with a synthetic `"abstain"` label no run can produce; it now
+  uses the real abstention decision `"ambiguous"`, preserving
+  its intent.
+- **Needle HTML leak check** — the auditor's attempt was
+  vacuous (the section returned "" on a bare payload). Redone
+  through the real reporting path: a genuine full needle
+  payload renders the section, a marker planted in free-text
+  fields (`needle_value`, `expected_answer`, protocol
+  `needle_text`) never appears in the HTML, and a hostile
+  candidate name appears only escaped. The check passes and is
+  pinned as a regression test.
+
+Process: a runtime restart killed the first scoped run of this
+cycle mid-suite; the post-restart protocol (blob/mutant audit)
+found the tree exact — all 24 in-place-gate (original, mutant)
+pairs verified with originals present and mutants absent (the
+one textual hit adjudicated as the known legitimate
+`"changed": False,` literal), and every cycle-196 edit intact —
+before anything re-ran. Verdicts for the scoped suites:
+599 passed (oracles + six probe suites), 32 passed (this
+cycle's regression file); the full gate follows below.
+
+Cycle-196 gate addendum: the first full run caught two
+blast-radius effects of the S-14 change, both fixed in this
+same push. (1) `test_cycle33`'s m02 mutation gate anchors on
+the config-section source line; the anchor and its mutant moved
+to the `_escape_text` form in the same pass, and the
+mutant-sensitivity suite verifies the moved mutant is still
+killed by its named checks. (2) The first strip class was
+broader than the finding: the cycle-100 injection audit pins
+U+2028/U+2029 as *preserved* (escaped) in the main paths, so
+the shipped `_CONTROL_CHARS` class is exactly C0/C1 controls
+plus lone surrogates — the S-14 scope — with the wider
+invisible-character class left to the per-probe sections'
+local strips and SECURITY.md residual #9. The new test file
+also moved VALIDATION.md's CI-scope ruff count (269 → 270),
+which the cycle-178 pin caught live, as designed.

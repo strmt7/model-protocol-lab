@@ -49,8 +49,15 @@ _CONTROL_CHARS = re.compile(
 
 
 def _display_id(value: str) -> str:
-    """Operator-visible names/IDs with control characters stripped."""
-    return _CONTROL_CHARS.sub("", value)
+    """Operator-visible names/IDs with control characters stripped
+    and the R4-7 200-character preview cap applied: a hostile name
+    must not be able to flood a report detail or a terminal
+    (oversight security S-9b — one 60,000-character entry name
+    produced a 60,013-character seal detail before the cap)."""
+    cleaned = _CONTROL_CHARS.sub("", value)
+    if len(cleaned) > 200:
+        return cleaned[:200] + "..."
+    return cleaned
 
 
 _PASSED = "passed"

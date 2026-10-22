@@ -457,6 +457,20 @@ validator-specific rules:
   constancy (leading's reference-field pattern) but cannot re-derive
   them. This sentence also appears, in substance, in the validator's
   docstring, as leading's does.
+- **Primary-pair binding (cycle 196, oversight edge-case F3):**
+  `primary_decision` / `primary_winner` are bound to the run-level
+  decision vocabulary (`compatible_on_fixture_set`,
+  `held_out_failed`, `ambiguous`, `no_candidate`, `cancelled`,
+  `failed`), with the winner required to be one of the payload's
+  own candidate names exactly when the decision is winner-bearing,
+  and `None` otherwise. Before the binding, the pair was only
+  type-checked, so a label contradicting its own section's arm
+  outcomes could validate. What the binding does *not* do is
+  recompute the parent run's decision: the section does not carry
+  the parent run's fixture outcomes, so within the vocabulary the
+  decision remains stage-attested. The same binding applies to the
+  repetition, distraction, and leading validators, which carry the
+  same pair under the same mapping.
 
 Both test oracles (cycle-27 and cycle-67) mirror the validator in
 the same push, per the standing oracle blast-radius rule; after

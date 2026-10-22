@@ -48,6 +48,22 @@ Entries:
   Verifiers hash the stored bytes once; they never re-serialise the parsed
   manifest to recompute the digest.
 
+Entry types (decision recorded cycle 196, oversight security S-8):
+every entry in a bundle is a regular file. `pack` only ever writes
+regular files (with `create_system=0` and permission-only
+`external_attr`, so its own entries carry no Unix file-type bits at
+all). The verifier's `seal_container` check additionally rejects —
+as `entry_type_not_regular` — any entry whose stored Unix file
+type (from a `create_system=3` creator) is explicitly something
+other than a regular file: symlink, FIFO, device, socket, or a
+directory entry whose name lacks the trailing slash. Entries whose
+creator or attributes make no file-type claim are judged by the
+name, caps, and hash checks alone. Nothing in the lab extracts a
+bundle to disk; the rule exists so that a bundle the lab calls
+verified cannot change meaning when a user extracts it with an
+external tool, where a symlink entry composed with later entries
+beneath it is the classic zip-slip shape.
+
 ### Manifest
 
 Canonical JSON (sorted keys, compact separators, `ensure_ascii`), exact

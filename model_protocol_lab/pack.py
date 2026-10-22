@@ -100,10 +100,34 @@ def catalog_digest() -> str:
     return _sha256_hex(_canonical_json_bytes(definitions))
 
 
+def _entry_type_not_regular(info: zipfile.ZipInfo) -> bool:
+    """True when the entry's stored Unix file type is explicitly NOT
+    a regular file — symlink, FIFO, device, socket, or a directory
+    entry whose name lacks the trailing slash the name check keys
+    on (oversight security S-8; the decision is recorded in
+    docs/SEALED_BUNDLE_DESIGN.md). Entries from non-Unix creators,
+    and Unix entries whose type bits were never set, make no type
+    claim and are judged by the name/content checks alone; the
+    lab's own writer leaves the type bits unset."""
+    if info.create_system != 3:
+        return False
+    file_type = stat.S_IFMT(info.external_attr >> 16)
+    return file_type not in (0, stat.S_IFREG)
+
+
 def _valid_segment(segment: str) -> bool:
     """One canonical path segment: non-empty, not ``.``/``..``, no
     separator, backslash, drive colon at path start handled by the caller,
-    and no control characters."""
+    and no control characters. A segment that cannot be UTF-8
+    encoded (a lone surrogate, e.g. from a surrogateescape filename
+    on the pack side or a JSON escape in a manifest path) is not a
+    segment at all — it must fail here in the fixed vocabulary, not
+    later as a raw codec error during serialisation (oversight
+    security S-10)."""
+    try:
+        segment.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
     return (
         segment not in ("", ".", "..")
         and "/" not in segment
@@ -134,6 +158,14 @@ def _unique_manifest_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise _ManifestDuplicateField("bundle_manifest_duplicate_field")
         obj[key] = value
     return obj
+
+
+def _reject_manifest_constant(_value: str) -> Any:
+    """``parse_constant`` hook: NaN/Infinity are not manifest JSON
+    (the tree-wide nonfinite discipline; oversight lead L-C). The
+    ValueError is normalised to ``manifest_unparseable`` by the
+    caller's widened catch."""
+    raise ValueError("manifest_nonfinite_constant")
 
 
 def build_manifest(files: list[dict[str, Any]], context: dict[str, str]) -> dict[str, Any]:
@@ -455,10 +487,14 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
     comment, entry_count = _preparse_container(data)
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
+        infos = archive.infolist()
+    except (zipfile.BadZipFile, UnicodeDecodeError):
+        # A name carrying the UTF-8 flag with invalid UTF-8 bytes
+        # fails filename decoding (oversight security S-6b): that is
+        # a container defect, in the fixed vocabulary — never a raw
+        # codec traceback.
         raise ValueError("bundle_container_invalid") from None
     checks: list[dict[str, str]] = []
-    infos = archive.infolist()
     names = [info.filename for info in infos]
 
     # seal_container: duplicates, path grammar, directory entries, and
@@ -470,6 +506,8 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
         container_detail = "duplicate_entry_name"
     elif any(name.endswith("/") for name in names):
         container_detail = "directory_entry_present"
+    elif any(_entry_type_not_regular(info) for info in infos):
+        container_detail = "entry_type_not_regular"
     elif any(not _valid_bundle_path(name) for name in names):
         container_detail = "entry_path_invalid"
     _record(
@@ -520,11 +558,29 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
             parsed = json.loads(
                 manifest_raw.decode("utf-8"),
                 object_pairs_hook=_unique_manifest_object,
+                parse_constant=_reject_manifest_constant,
             )
-        except (UnicodeDecodeError, json.JSONDecodeError, _ManifestDuplicateField):
+            schema_detail = _valid_manifest(parsed) or ""
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            _ManifestDuplicateField,
+            RecursionError,
+            ValueError,
+        ):
+            # The manifest boundary normalises EVERY parse/validation
+            # escape into the documented code (oversight security
+            # S-4/S-6): a deeply-nested manifest (RecursionError),
+            # an over-limit integer literal (the interpreter's plain
+            # ValueError), and nonfinite constants (the hook above)
+            # are all "unparseable" — datasets.parse_dataset and
+            # diffreports.parse_results_bytes already convert the
+            # same classes; a bare traceback here broke the verify
+            # report contract. JSONDecodeError and
+            # _ManifestDuplicateField are ValueError subclasses,
+            # named for the record.
             schema_detail = "manifest_unparseable"
         else:
-            schema_detail = _valid_manifest(parsed) or ""
             if not schema_detail:
                 manifest = parsed
     _record(
