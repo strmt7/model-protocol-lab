@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 200 — heap-address flake in a cycle-195 test fake, 2026-10-23)
+
+- The choice-audit drift test's fake backends defined
+  `fingerprint` as a method, violating the Backend protocol
+  (`fingerprint: str`); the stage embedded the bound-method
+  repr — memory address included — as the payload's backend
+  fingerprint, so the foreign-backend drift assertion held
+  only when two objects occupied different heap addresses.
+  It failed in CI on Python 3.13 with torch 2.14.1+cu130
+  (address reuse after garbage collection) while passing in
+  every other configuration. The fakes now expose string
+  fingerprints, and a new pin asserts the payload carries the
+  protocol string itself. No shipped code changed: every
+  production backend conforms to the protocol. The same
+  cycle's adjudication of the wave-9 red-team brief (seven
+  findings, none surviving verification against the tree) is
+  recorded in `docs/RESEARCH_LOG.md`.
+
 ### Added (cycle 199 — verbalized confidence, 2026-10-23)
 
 - `run --confidence`: verbalized-confidence elicitation

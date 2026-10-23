@@ -8989,3 +8989,67 @@ stage-attested (their final lines are ordinary answer text
 and are never carried), and screen classes are checked for
 protocol/record consistency rather than recomputed, because
 the fixture texts are not in the payload.
+
+## Cycle 200 — adjudication of the wave-9 red-team brief, and the CI-only failure it led to
+
+Two work items, one outcome each, both verified by execution in the
+shipped tree at `547543c8596c` rather than taken from any brief.
+
+**The wave-9 red-team brief does not survive verification.** Its seven
+findings (one Medium, the rest Low/Info) cite six symbols or
+mechanisms that do not exist in the tree — `validate_boundary_spec`,
+`cli.evaluate`, a `McpServer.copy`, a package `server.py`, a
+`_DIGEST_RE`, a `_pf_mirror` — so its "executed PoCs" cannot have
+executed against this code for F-1/F-2/F-4/F-5/F-6 as stated. The
+coordinator's adjudication (full evidence pack in the wave-9 working
+papers): F-1 refuted (no `SystemExit` raise is reachable from any
+stage; `core.evaluate` propagates operator interrupts by design);
+F-2/F-5 refuted (the only MCP server, `tools/surface_noise_mcp_server.py`,
+has no state class and no `copy()`); F-3 refuted for the shipped
+surface (the run CLI takes one `--family`; `catalog.candidates`
+names are suffix-distinct by construction; hostile results files
+fail closed in the diff validators); F-4 refuted (digest checks are
+exact 64-hex comparisons; no truncating regex exists); F-6 refuted
+as stated and measured linear where it matters (the confidence
+validator takes 0.016 s on a 1,000-record payload); F-7 is the
+documented design (stage wrappers degrade on `Exception`,
+`KeyboardInterrupt`/`SystemExit` propagate). A narrowed verifier
+pass over the same brief converged: nothing in it is a shipped
+defect. The one durable requirement it leaves behind: if a
+formats-list input is ever added, candidate-name uniqueness must be
+validated at that surface.
+
+**The cycle-199 CI failure was real, and it was not in cycle 199's
+code.** The Python 3.13 job failed its test step twice (initial run
+and rerun) while 3.11/3.12 and every local configuration passed.
+Reproducing the full matrix locally (3.12/3.13 × pytest/unittest ×
+torch 2.14.1+cpu/+cu130) isolated it to one cell — 3.13, unittest,
+torch+cu130 — with exactly one failure:
+`test_cycle195_choiceaudit`'s `test_diff_foreign_backend_flags_drift`.
+Root cause: that file's `_CharBackend` family defined `fingerprint`
+as a method returning a dict, violating the Backend protocol
+(`core.py` declares `fingerprint: str`). The choice-audit stage
+embeds `str(backend.fingerprint)`; for the method that is the
+bound-method repr, memory address included. The drift assertion
+then compared two address-bearing strings and held only when the
+two objects occupied different heap addresses — under the cu130
+build's allocation pattern the freed echo backend's address was
+reused by the flat backend, the strings collided, and drift read
+False. Every other drift-asserting test file uses conforming
+string fingerprints; only cycle 195's fakes were non-conforming.
+Fix: the three fakes now expose `fingerprint` as a string property
+(`fake-char:<mode>`, `fake-keyed`, `fake-nologits`), and a new pin
+(`test_stage_fingerprint_is_the_protocol_string`) asserts the
+payload carries the protocol string itself. Verified: the file
+passes under the failing configuration (101 tests, unittest,
+3.13+cu130), under 3.12 pytest, and a 50-iteration in-process
+drift stress under cu130 shows zero failures.
+
+Recorded residual, deliberately not fixed here: the probe stages
+read `str(backend.fingerprint)` without the type check
+`run_experiment` applies (`experiments.py` raises on a non-string
+fingerprint). For protocol-conforming backends — every shipped
+backend — the value is the string itself and payloads are
+deterministic. A future hardening cycle can add the shared guard
+across the stage read sites; doing it piecemeal for one stage
+would leave the contract less consistent, not more.

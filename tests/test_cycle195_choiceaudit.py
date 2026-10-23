@@ -630,8 +630,14 @@ class _CharBackend:
         self.mode = mode
         self._seed = seed
 
+    @property
     def fingerprint(self):
-        return {"backend": "fake-char", "mode": self.mode}
+        # The Backend protocol declares fingerprint: str (core.py).
+        # A plain method here made the stage embed the bound-method
+        # repr -- memory address included -- so the drift test's
+        # outcome depended on heap address reuse (it failed under
+        # torch 2.14.1+cu130 on Python 3.13 in CI, cycle 200).
+        return f"fake-char:{self.mode}"
 
     def encode(self, text):
         return tuple(text.encode("utf-8"))
@@ -665,8 +671,9 @@ class _KeyedBackend(_CharBackend):
     and nothing else; the byte-9 candidate answers nothing
     correctly (ties at best) -- a deterministic unique top."""
 
+    @property
     def fingerprint(self):
-        return {"backend": "fake-keyed"}
+        return "fake-keyed"
 
     def forward_logits(self, input_ids):
         seq = [int(i) for i in input_ids]
@@ -687,8 +694,9 @@ class _NoLogitsBackend:
 
     supports_prompt_logprobs = False
 
+    @property
     def fingerprint(self):
-        return {"backend": "fake-nologits"}
+        return "fake-nologits"
 
     def encode(self, text):
         return tuple(text.encode("utf-8"))
@@ -800,6 +808,16 @@ class TestStage(unittest.TestCase):
         self.assertEqual(self_diff["available"], "both")
         self.assertFalse(self_diff["changed"])
         self.assertTrue(self_diff["comparable"])
+
+    def test_stage_fingerprint_is_the_protocol_string(self):
+        # Regression pin (cycle 200): the payload must carry the
+        # backend's fingerprint string itself, never a repr of the
+        # attribute object. With a method-style fingerprint the stage
+        # embedded "<bound method ... object at 0x...>" and the
+        # foreign-backend drift test passed or failed with heap
+        # address reuse (CI Python 3.13, torch 2.14.1+cu130).
+        _, payload = _run_stage()
+        self.assertEqual(payload["protocol"]["backend_fingerprint"], "fake-char:echo")
 
     def test_logits_not_supported(self):
         _, payload = _run_stage(_NoLogitsBackend())
