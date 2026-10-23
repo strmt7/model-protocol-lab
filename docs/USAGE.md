@@ -2367,6 +2367,67 @@ time. The full contract is in
 never affects selection, and the stage never fails the
 run.
 
+### 8.49 Verbalized confidence (`confidence`)
+
+Opt-in with `model-protocol-lab run --confidence`. When
+this checkpoint states a confidence under each template,
+does the number track whether it was right — and does it
+drop when the answer is not in the prompt?
+
+Every search fixture is re-run once per candidate with one
+frozen suffix appended to its last user message, asking
+the model to end its reply with a line of the form
+`Confidence: <integer 0-100>`. The elicited text is parsed
+under a frozen grammar (ASCII digits only, no sign, no
+leading zeros — five outcome codes, and the answer span
+without the compliant line is what gets scored), so the
+stated number is set against the same exact-match verdicts
+as the native run. Reports per candidate: the compliance
+rate, mean stated confidence on correct vs incorrect
+compliant answers with their descriptive gap (withheld with
+a named reason when a class is empty), a frozen four-bin
+table, and the verdict flips the suffix itself caused
+against the recorded native run. A generated pair runs
+alongside: 24 planted-fact cases whose value the prompt
+states, against the same cases with the payload binding a
+different key — nothing false is stated about the asked
+key; the binding is simply absent, so a model confidently
+answering there is copying the only value it can see. The
+knowability readout compares the two arms' stated means
+over cases where both complied, withheld below 6 paired
+cases.
+
+Read the numbers at their stated scope. A stated
+confidence is model output text, not a probability, and
+the gap and bins describe agreement between the number and
+the verdict — they are not calibration scores, and no
+published calibration number is comparable to them (the
+ground truths differ). Search split only: held-out
+fixtures are never treated, and the determinism
+certificate covers the recorded native search observations
+only, so the elicited cells are outside its scope.
+Fixtures whose expected answer is blank, already contains
+a confidence line, or whose last user message is empty are
+screened out of the populations and counted, never
+silently dropped.
+
+Records carry digests, never answer text — the one
+exception is a compliant cell's final line, which is a
+bijection with the confidence scalar already in the
+record and lets `diff-reports` derive the number instead
+of trusting it (`confidence_changed` /
+`confidence_asymmetric` feed `identical`); a drifted
+protocol or backend fingerprint marks the comparison not
+comparable while still listing it. Cost: one full extra
+search evaluation (2,400 generations at the legal
+maximum: 24 candidates x 100 fixtures) plus the generated
+paired control (2 arms x 24 cases x 24 candidates =
+1,152) — 3,552 extra generations in total, each on a
+suffix-lengthened prompt. The full contract is in
+`docs/CONFIDENCE_DESIGN.md`. Informational only: the
+probe never affects selection, and the stage never fails
+the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

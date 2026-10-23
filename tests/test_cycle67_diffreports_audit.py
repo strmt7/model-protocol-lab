@@ -136,6 +136,7 @@ import importlib.util
 import json
 import os
 import random
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -144,6 +145,7 @@ from typing import Any
 from model_protocol_lab import (
     cacheprofile,
     choiceaudit,
+    confidence,
     dateline,
     diffreports,
     distraction,
@@ -287,6 +289,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "placement": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
+        "confidence": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -378,6 +381,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "choice_audit_asymmetric": False,
             "precision_changed": False,
             "precision_asymmetric": False,
+            "confidence_changed": False,
+            "confidence_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -6668,6 +6673,468 @@ def _o_precision(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+_O_CONFIDENCE_GRAMMAR = re.compile(r"^Confidence: (0|[1-9][0-9]?|100)$")
+
+
+def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle confidence recompute: mirrors
+    diffreports._confidence_recompute. The protocol digest and
+    the generated case set are rebuilt through the producer
+    module (confidence) where the implementation rebuilds them
+    from literal tables and its own mirror; every record and
+    cell is checked structurally, the carried-line binding
+    re-derives the confidence scalar, screens are checked for
+    protocol/record consistency, and the derived aggregation
+    (compliance, joint tables, gap, bins, flips, knowability)
+    is mirrored independently here."""
+    from model_protocol_lab import confidence as _cf
+
+    def _dig(v: Any) -> bool:
+        return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+    def _cell_ok(cell: Any, expected_digest: str) -> bool:
+        if type(cell) is not dict or set(cell) != {
+            "answer_digest",
+            "boundary_found",
+            "code",
+            "confidence",
+            "final_line",
+            "final_line_length",
+            "input_tokens",
+            "span_digest",
+            "verdict",
+        }:
+            return False
+        if not _dig(cell["answer_digest"]) or not _dig(cell["span_digest"]):
+            return False
+        if type(cell["boundary_found"]) is not bool or type(cell["verdict"]) is not bool:
+            return False
+        if cell["verdict"] != (cell["span_digest"] == expected_digest and cell["boundary_found"]):
+            return False
+        if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 1:
+            return False
+        code = cell["code"]
+        if code not in {
+            "ok",
+            "missing_line",
+            "malformed_line",
+            "multiple_lines",
+            "confidence_not_final",
+        }:
+            return False
+        conf = cell["confidence"]
+        line = cell["final_line"]
+        length = cell["final_line_length"]
+        if code == "ok":
+            if cell["span_digest"] == cell["answer_digest"]:
+                return False
+            if type(conf) is not int or not 0 <= conf <= 100:
+                return False
+            if type(line) is not str:
+                return False
+            m = _O_CONFIDENCE_GRAMMAR.match(line)
+            if m is None or int(m.group(1)) != conf:
+                return False
+            return length == len(line)
+        if cell["span_digest"] != cell["answer_digest"]:
+            return False
+        if code == "malformed_line":
+            if conf is not None or type(line) is not str or not 1 <= len(line) <= 32:
+                return False
+            if type(length) is not int or length < len(line) or length < 11:
+                return False
+            if length > len(line) and len(line) != 32:
+                return False
+            if not (line.startswith("Confidence:") or line.lower().startswith("confidence:")):
+                return False
+            return not (length == len(line) and _O_CONFIDENCE_GRAMMAR.match(line))
+        return conf is None and line is None and length is None
+
+    def _block(cells: list, n_population: int) -> dict[str, Any]:
+        compliant = [c for c in cells if c["code"] == "ok"]
+        correct = [c for c in compliant if c["verdict"]]
+        incorrect = [c for c in compliant if not c["verdict"]]
+
+        def _mean(xs: list) -> float | None:
+            return (sum(xs) / len(xs)) if xs else None
+
+        mc = _mean([int(c["confidence"]) for c in correct])
+        mi = _mean([int(c["confidence"]) for c in incorrect])
+        if not compliant:
+            gap, detail = None, "no_compliant_cells"
+        elif not correct:
+            gap, detail = None, "no_correct_compliant"
+        elif not incorrect:
+            gap, detail = None, "no_incorrect_compliant"
+        else:
+            gap, detail = float(mc) - float(mi), ""
+        bins = []
+        for lo, hi in ((0, 24), (25, 49), (50, 74), (75, 100)):
+            members = [c for c in compliant if lo <= int(c["confidence"]) <= hi]
+            nc = sum(1 for c in members if c["verdict"])
+            bins.append(
+                {
+                    "lo": lo,
+                    "hi": hi,
+                    "n": len(members),
+                    "n_correct": nc,
+                    "accuracy": (nc / len(members)) if members else None,
+                }
+            )
+        return {
+            "n_population": n_population,
+            "n_completed": len(cells),
+            "n_compliant": len(compliant),
+            "compliance_rate": (len(compliant) / len(cells)) if cells else None,
+            "mean_confidence": _mean([int(c["confidence"]) for c in compliant]),
+            "mean_correct": mc,
+            "mean_incorrect": mi,
+            "gap": gap,
+            "gap_detail": detail,
+            "joint": {
+                "compliant_correct": len(correct),
+                "compliant_incorrect": len(incorrect),
+                "noncompliant": len(cells) - len(compliant),
+            },
+            "bins": bins,
+        }
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict or set(protocol) != {
+        "backend_fingerprint",
+        "bin_edges",
+        "boundaries",
+        "candidates",
+        "case_count",
+        "control_cases",
+        "fingerprint",
+        "fixture_set_sha256",
+        "max_control_records",
+        "max_new_tokens",
+        "max_records",
+        "max_records_bytes",
+        "min_paired_compliant",
+        "screens",
+        "seed",
+        "suffix_sha256",
+        "version",
+    }:
+        return None
+    if protocol["version"] != 1 or type(protocol["version"]) is not int:
+        return None
+    if type(protocol["seed"]) is not int or protocol["seed"] < 0:
+        return None
+    if type(protocol["max_new_tokens"]) is not int or not 1 <= protocol["max_new_tokens"] <= 4096:
+        return None
+    if protocol["max_records"] != 2400 or protocol["max_control_records"] != 576:
+        return None
+    if protocol["max_records_bytes"] != 12 * 1024 * 1024:
+        return None
+    if protocol["case_count"] != 24 or protocol["min_paired_compliant"] != 6:
+        return None
+    if protocol["bin_edges"] != [[0, 24], [25, 49], [50, 74], [75, 100]]:
+        return None
+    if not _dig(protocol["suffix_sha256"]) or not _dig(protocol["fixture_set_sha256"]):
+        return None
+    candidates = protocol["candidates"]
+    if (
+        type(candidates) is not list
+        or not candidates
+        or any(type(n) is not str or not n for n in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return None
+    boundaries = protocol["boundaries"]
+    if type(boundaries) is not dict or set(boundaries) != set(candidates):
+        return None
+    for name in candidates:
+        ids = boundaries[name]
+        if type(ids) is not list or not ids or any(type(t) is not int or t < 0 for t in ids):
+            return None
+    if type(protocol["backend_fingerprint"]) is not str or not protocol["backend_fingerprint"]:
+        return None
+    screens = protocol["screens"]
+    if type(screens) is not dict:
+        return None
+    for fid, screen in screens.items():
+        if type(fid) is not str or screen not in {
+            "expected_blank",
+            "expected_confidence_shaped",
+            "vacuous_last_user",
+            "no_user_turn",
+        }:
+            return None
+    if protocol["control_cases"] != _cf.case_protocol(protocol["seed"]):
+        return None
+    if protocol["fingerprint"] != _cf.protocol_fingerprint(protocol):
+        return None
+    decision = value.get("primary_decision")
+    winner = value.get("primary_winner")
+    if decision not in {
+        "compatible_on_fixture_set",
+        "held_out_failed",
+        "ambiguous",
+        "no_candidate",
+        "cancelled",
+        "failed",
+    }:
+        return None
+    blocks_in = value.get("candidates")
+    if type(blocks_in) is not dict or set(blocks_in) != set(candidates):
+        return None
+    if decision in ("compatible_on_fixture_set", "held_out_failed"):
+        if type(winner) is not str or winner not in blocks_in:
+            return None
+    elif winner is not None:
+        return None
+    records = value.get("records")
+    control_records = value.get("control_records")
+    if type(records) is not list or len(records) > protocol["max_records"]:
+        return None
+    if type(control_records) is not list or len(control_records) > protocol["max_control_records"]:
+        return None
+    blob = json.dumps(
+        {"records": records, "control_records": control_records},
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    if len(blob.encode("utf-8")) > protocol["max_records_bytes"]:
+        return None
+    case_expected = {e["id"]: e["expected_digest"] for e in protocol["control_cases"]}
+    seen: set = set()
+    universe: set = set()
+    per_candidate: dict[str, set] = {name: set() for name in candidates}
+    zero_cell = dict.fromkeys(candidates, True)
+    for record in records:
+        if type(record) is not dict or set(record) != {
+            "candidate",
+            "elicited",
+            "expected_digest",
+            "fixture",
+            "native_verdict",
+            "screen",
+        }:
+            return None
+        name = record["candidate"]
+        fixture = record["fixture"]
+        if type(name) is not str or name not in candidates or type(fixture) is not str:
+            return None
+        if (name, fixture) in seen:
+            return None
+        seen.add((name, fixture))
+        universe.add(fixture)
+        per_candidate[name].add(fixture)
+        if record["screen"] != screens.get(fixture, ""):
+            return None
+        if not _dig(record["expected_digest"]):
+            return None
+        if record["native_verdict"] not in (True, False, None):
+            return None
+        cell = record["elicited"]
+        if record["screen"] != "" and cell is not None:
+            return None
+        if cell is not None:
+            if not _cell_ok(cell, str(record["expected_digest"])):
+                return None
+            zero_cell[name] = False
+    if any(per_candidate[name] != universe for name in candidates):
+        return None
+    seen_control: set = set()
+    control_per_candidate: dict[str, set] = {name: set() for name in candidates}
+    for record in control_records:
+        if type(record) is not dict or set(record) != {
+            "candidate",
+            "case",
+            "control",
+            "expected_digest",
+            "knowable",
+        }:
+            return None
+        name = record["candidate"]
+        case_id = record["case"]
+        if type(name) is not str or name not in candidates or case_id not in case_expected:
+            return None
+        if (name, case_id) in seen_control:
+            return None
+        seen_control.add((name, case_id))
+        control_per_candidate[name].add(case_id)
+        if record["expected_digest"] != case_expected[case_id]:
+            return None
+        for arm in ("knowable", "control"):
+            cell = record[arm]
+            if cell is not None:
+                if not _cell_ok(cell, str(record["expected_digest"])):
+                    return None
+                zero_cell[name] = False
+    if any(control_per_candidate[name] != set(case_expected) for name in candidates):
+        return None
+    if value.get("unavailable_candidates") != sorted(n for n in candidates if zero_cell[n]):
+        return None
+    n_population = sum(1 for f in universe if screens.get(f, "") == "")
+    blocks: dict[str, Any] = {}
+    for name in candidates:
+        own = [r for r in records if r["candidate"] == name]
+        elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
+        operator = _block(elicited, n_population)
+        flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}
+        for record in own:
+            cell = record["elicited"]
+            native = record["native_verdict"]
+            if type(cell) is not dict or type(native) is not bool:
+                continue
+            flips["n_compared"] += 1
+            if native and not cell["verdict"]:
+                flips["pass_to_fail"] += 1
+            elif not native and cell["verdict"]:
+                flips["fail_to_pass"] += 1
+        operator["flips"] = flips
+        own_control = [r for r in control_records if r["candidate"] == name]
+        knowable = _block([r["knowable"] for r in own_control if type(r["knowable"]) is dict], 24)
+        control_block = _block(
+            [r["control"] for r in own_control if type(r["control"]) is dict], 24
+        )
+        paired = [
+            r
+            for r in own_control
+            if type(r["knowable"]) is dict
+            and type(r["control"]) is dict
+            and r["knowable"]["code"] == "ok"
+            and r["control"]["code"] == "ok"
+        ]
+        if len(paired) >= 6:
+            km = sum(int(r["knowable"]["confidence"]) for r in paired) / len(paired)
+            cm = sum(int(r["control"]["confidence"]) for r in paired) / len(paired)
+            knowability = {
+                "n_paired_compliant": len(paired),
+                "knowable_mean": km,
+                "control_mean": cm,
+                "difference": km - cm,
+                "falsified": cm >= km,
+                "detail": "",
+            }
+        else:
+            knowability = {
+                "n_paired_compliant": len(paired),
+                "knowable_mean": None,
+                "control_mean": None,
+                "difference": None,
+                "falsified": None,
+                "detail": "insufficient_paired_compliant",
+            }
+        blocks[name] = {
+            "operator": operator,
+            "generated": {
+                "knowable": knowable,
+                "control": control_block,
+                "knowability": knowability,
+            },
+        }
+    return {
+        "candidates": blocks,
+        "totals": {"n_records": len(records), "n_control_records": len(control_records)},
+    }
+
+
+def _o_confidence_valid(value: Any) -> bool:
+    """Oracle confidence validator: mirrors diffreports._valid_confidence."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "candidates",
+        "control_records",
+        "detail",
+        "primary_decision",
+        "primary_winner",
+        "protocol",
+        "records",
+        "totals",
+        "unavailable_candidates",
+    }:
+        return False
+    if value.get("detail") is not None:
+        return False
+    recomputed = _o_confidence_recompute(value)
+    if recomputed is None:
+        return False
+    return all(value.get(key) == recomputed[key] for key in ("candidates", "totals"))
+
+
+def _o_confidence(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle confidence section: mirrors diffreports.diff_confidence."""
+    old_ok = _o_confidence_valid(old)
+    new_ok = _o_confidence_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        metrics = [
+            (
+                "operator_compliance_rate",
+                old_entry["operator"]["compliance_rate"],
+                new_entry["operator"]["compliance_rate"],
+            ),
+            ("operator_gap", old_entry["operator"]["gap"], new_entry["operator"]["gap"]),
+            (
+                "operator_flips",
+                old_entry["operator"]["flips"]["pass_to_fail"]
+                + old_entry["operator"]["flips"]["fail_to_pass"],
+                new_entry["operator"]["flips"]["pass_to_fail"]
+                + new_entry["operator"]["flips"]["fail_to_pass"],
+            ),
+            (
+                "knowable_mean_confidence",
+                old_entry["generated"]["knowable"]["mean_confidence"],
+                new_entry["generated"]["knowable"]["mean_confidence"],
+            ),
+            (
+                "control_mean_confidence",
+                old_entry["generated"]["control"]["mean_confidence"],
+                new_entry["generated"]["control"]["mean_confidence"],
+            ),
+            (
+                "knowability_falsified",
+                old_entry["generated"]["knowability"]["falsified"],
+                new_entry["generated"]["knowability"]["falsified"],
+            ),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(candidate_drift or added or removed or protocol_drift or backend_drift)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -8799,6 +9266,9 @@ def _oracle_diff(
         old.get("choice_audit"), new.get("choice_audit")
     )
     o_pr, o_pr_changed, o_pr_asymmetric = _o_precision(old.get("precision"), new.get("precision"))
+    o_cfd, o_cfd_changed, o_cfd_asymmetric = _o_confidence(
+        old.get("confidence"), new.get("confidence")
+    )
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -8883,8 +9353,14 @@ def _oracle_diff(
         and not o_mt_asymmetric
         and not o_nd_changed
         and not o_nd_asymmetric
+        and not o_pl_changed
+        and not o_pl_asymmetric
         and not o_ca_changed
         and not o_ca_asymmetric
+        and not o_pr_changed
+        and not o_pr_asymmetric
+        and not o_cfd_changed
+        and not o_cfd_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -8937,6 +9413,7 @@ def _oracle_diff(
         "placement": o_pl,
         "choice_audit": o_ca,
         "precision": o_pr,
+        "confidence": o_cfd,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -9024,6 +9501,8 @@ def _oracle_diff(
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
             "precision_asymmetric": o_pr_asymmetric,
+            "confidence_changed": o_cfd_changed,
+            "confidence_asymmetric": o_cfd_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -9959,6 +10438,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
                 "precision_asymmetric": False,
+                "confidence_changed": False,
+                "confidence_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -11254,6 +11735,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["placement"] = _fuzz_placement_section(rng)
         report["choice_audit"] = _fuzz_choiceaudit_section(rng)
         report["precision"] = _fuzz_precision_section(rng)
+        report["confidence"] = _fuzz_confidence_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -13058,6 +13540,175 @@ def _fuzz_precision_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzConfidenceBackend:
+    """Scripted backend for the confidence fuzz builder.
+
+    Operator fixtures: the native prompt (no suffix marker) gets
+    the plain answer; the treated prompt gets the per-fixture
+    shape the builder chose (compliant correct/incorrect, missing
+    line, malformed line, trailing prose). Generated cases: the
+    prompt is parsed -- when the payload binds the asked key the
+    backend answers the stated value at high confidence; on the
+    donor-key control it answers ``unknown`` at a mode-dependent
+    confidence (low when faithful, high when theatrical)."""
+
+    def __init__(self, native_answers, shapes, *, control_confidence, fingerprint):
+        self.native_answers = native_answers
+        self.shapes = shapes
+        self.control_confidence = control_confidence
+        self.fingerprint = fingerprint
+        self.dtype = "float32"
+        self.declared_dtype = "float32"
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
+
+    def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
+        from model_protocol_lab.core import Generation
+
+        prompt = self.decode(prompt_ids)
+        answer = ""
+        bound = re.search(r"the code for (key-[0-9a-f]+) is ([0-9a-f]+)\.", prompt)
+        asked = re.search(r"What is the code for (key-[0-9a-f]+)\?", prompt)
+        if bound and asked:
+            if bound.group(1) == asked.group(1):
+                answer = f"{bound.group(2)}\nConfidence: 95"
+            else:
+                answer = f"unknown\nConfidence: {self.control_confidence}"
+        else:
+            treated = "Confidence: <number>" in prompt
+            for question, text in self.native_answers.items():
+                if question in prompt:
+                    answer = self.shapes.get(question, text) if treated else text
+                    break
+        ids = tuple((answer + "\x07").encode("utf-8"))
+        ids = ids + (0,) * max(0, max_new_tokens - len(ids))
+        return Generation(token_ids=ids, reason="limit")
+
+
+def _fuzz_confidence_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage over a scripted
+    # backend (hand-built native search, the precision fuzz
+    # pattern); hostile mutations then try to break them, and
+    # oracle and implementation must agree on every rejection.
+    # A coherent foreign backend fingerprint exercises backend
+    # drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    cases = tuple(
+        Fixture(
+            id=f"pf{i}",
+            messages=(Message(role="user", content=f"question {i}?"),),
+            expected=answer,
+            group=group,
+        )
+        for i, (answer, group) in enumerate(
+            [
+                ("42", "numbers"),
+                ("Paris", "geo"),
+                ("blue", "colors"),
+                ("17", "numbers"),
+                ("London", "geo"),
+                ("red", "heldout"),
+            ]
+        )
+    )
+    search_cases = cases[:5]
+    native_answers = {f"question {i}?": case.expected for i, case in enumerate(cases)}
+    shape_pool = [
+        lambda exp: f"{exp}\nConfidence: 90",
+        lambda exp: f"{exp}\nConfidence: 40",
+        lambda exp: "wrong\nConfidence: 80",
+        lambda exp: exp,
+        lambda exp: f"{exp}\nConfidence: 85 ",
+        lambda exp: f"{exp}\nConfidence: 70\nConfidence: 60",
+        lambda exp: f"{exp}\nConfidence: 55\nprose after",
+    ]
+    shapes = {}
+    for i, case in enumerate(search_cases):
+        shapes[f"question {i}?"] = rng.choice(shape_pool)(case.expected)
+    backend = _FuzzConfidenceBackend(
+        native_answers,
+        shapes,
+        control_confidence=rng.choice([5, 95]),
+        fingerprint="sha256:fuzz-confidence",
+    )
+    search = []
+    for fmt in formats:
+        observations = []
+        for case in search_cases:
+            answer = case.expected
+            if fmt.name == "fz-beta" and case.id == "pf2":
+                answer = "wrong-native"
+            observations.append(
+                {
+                    "fixture": case.id,
+                    "status": "completed",
+                    "answer": answer,
+                    "exact_match": answer == case.expected,
+                    "boundary_found": True,
+                    "input_ids": list(backend.encode(f"prompt {case.id} for {fmt.name}")),
+                    "output_ids": list(backend.encode(answer + "\x07")),
+                }
+            )
+        search.append(
+            {
+                "format": {"name": fmt.name},
+                "summary": {"aggregate_eligible": True},
+                "observations": observations,
+            }
+        )
+    result = {
+        "decision": "compatible_on_fixture_set",
+        "selected_candidate": "fz-alpha",
+        "search": search,
+    }
+    seed = rng.choice([0, 1, 2])
+    payload = experiments.confidence_stage(
+        backend, formats, search_cases, result, boundary=(7,), max_new_tokens=16, seed=seed
+    )
+    if payload.get("available") is True and rng.random() < 0.12:
+        for record in payload["records"]:
+            cell = record["elicited"]
+            if type(cell) is dict and cell["code"] == "ok":
+                cell["confidence"] = 100 - cell["confidence"]  # hostile: scalar off line
+                break
+    if payload.get("available") is True and rng.random() < 0.10:
+        for record in payload["records"]:
+            cell = record["elicited"]
+            if type(cell) is dict:
+                cell["verdict"] = not cell["verdict"]  # hostile: verdict off binding
+                break
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        block = payload["candidates"]["fz-alpha"]["generated"]["knowability"]
+        block["falsified"] = not block["falsified"] if block["falsified"] is not None else True
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["control_records"][0]["expected_digest"] = "0" * 64  # hostile: case binding
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(
+            confidence.protocol_object(
+                seed=seed,
+                max_new_tokens=16,
+                fixture_ids=[case.id for case in search_cases],
+                candidates=[fmt.name for fmt in formats],
+                boundaries=payload["protocol"]["boundaries"],
+                backend_fingerprint="sha256:other-backend",
+                screens=payload["protocol"]["screens"],
+                cases=payload["protocol"]["control_cases"],
+            )
+        )
+        protocol["fingerprint"] = confidence.protocol_fingerprint(protocol)
+        payload["protocol"] = protocol  # coherent foreign backend fingerprint
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -13591,6 +14242,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
             "        and not precision_asymmetric\n"
+            '        and not confidence_diff["changed"]\n'
+            "        and not confidence_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -13679,6 +14332,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
             "        or precision_asymmetric\n"
+            '        or confidence_diff["changed"]\n'
+            "        or confidence_asymmetric\n"
             "    )\n",
             scenario,
         )

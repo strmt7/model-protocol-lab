@@ -7340,6 +7340,206 @@ def _precision_section(result: dict[str, Any]) -> str:
     )
 
 
+def _confidence_section(result: dict[str, Any]) -> str:
+    """Verbalized confidence: does the stated number track correctness?
+
+    Renders the ``confidence`` payload (see experiments.confidence_stage):
+    per candidate, the elicitation compliance rate under the frozen line
+    grammar, mean stated confidence on correct vs incorrect compliant
+    answers with their descriptive gap, the frozen four-bin table, the
+    verdict flips the suffix itself caused against the recorded native
+    run, and -- over the generated pair -- whether stated confidence
+    drops when the answer is not knowable from the prompt (knowable
+    planted-fact cases vs their donor-key controls). The framing limits
+    are printed with the numbers: a stated confidence is model output
+    text, not a probability, and no readout here is a calibration
+    score; the probe covers the search split only (held-out fixtures
+    are never treated), and the determinism certificate covers the
+    recorded native search observations only -- these elicited cells
+    are outside its scope. Counts, rates, and digests only; no answer
+    text is rendered. Every interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("confidence")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _num(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.1f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    def _block_lines(block: Any, label: str) -> list[str]:
+        if type(block) is not dict:
+            return []
+        joint = block.get("joint")
+        if type(joint) is not dict:
+            return []
+        lines = [
+            "<div>"
+            + escape(label)
+            + ": completed "
+            + _count(block.get("n_completed"))
+            + " of "
+            + _count(block.get("n_population"))
+            + ", compliant "
+            + _count(block.get("n_compliant"))
+            + " (rate "
+            + _rate(block.get("compliance_rate"))
+            + "); compliant answers split correct "
+            + _count(joint.get("compliant_correct"))
+            + " / incorrect "
+            + _count(joint.get("compliant_incorrect"))
+            + ", non-compliant "
+            + _count(joint.get("noncompliant"))
+            + ".</div>"
+        ]
+        gap = block.get("gap")
+        if isinstance(gap, (int, float)) and not isinstance(gap, bool):
+            lines.append(
+                "<div>Mean stated confidence: correct "
+                + _num(block.get("mean_correct"))
+                + ", incorrect "
+                + _num(block.get("mean_incorrect"))
+                + " -- descriptive gap "
+                + escape(f"{float(gap):+.1f}")
+                + " (agreement between the stated number and the "
+                "verdict on compliant cells; not a calibration "
+                "score).</div>"
+            )
+        else:
+            lines.append(
+                "<div>Separation gap withheld ("
+                + escape(str(block.get("gap_detail")))
+                + "); the compliant counts above still stand.</div>"
+            )
+        bins = block.get("bins")
+        if type(bins) is list and bins:
+            parts = []
+            for entry in bins:
+                if type(entry) is not dict:
+                    continue
+                parts.append(
+                    escape(str(entry.get("lo")))
+                    + "-"
+                    + escape(str(entry.get("hi")))
+                    + ": n "
+                    + _count(entry.get("n"))
+                    + ", accuracy "
+                    + _rate(entry.get("accuracy"))
+                )
+            if parts:
+                lines.append(
+                    "<div>Stated-confidence bins (compliant cells): " + "; ".join(parts) + ".</div>"
+                )
+        return lines
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        operator = entry.get("operator")
+        generated = entry.get("generated")
+        if type(operator) is not dict or type(generated) is not dict:
+            continue
+        bits = _block_lines(operator, "Search fixtures (elicited)")
+        flips = operator.get("flips")
+        if type(flips) is dict:
+            bits.append(
+                "<div>Elicitation cost vs the recorded native run: "
+                + _count(flips.get("n_compared"))
+                + " compared, pass to fail "
+                + _count(flips.get("pass_to_fail"))
+                + ", fail to pass "
+                + _count(flips.get("fail_to_pass"))
+                + ".</div>"
+            )
+        bits += _block_lines(generated.get("knowable"), "Generated knowable cases")
+        bits += _block_lines(generated.get("control"), "Generated donor-key control")
+        knowability = generated.get("knowability")
+        if type(knowability) is dict:
+            falsified = knowability.get("falsified")
+            if falsified is True:
+                verdict = (
+                    "mean stated confidence on the control arm is at "
+                    "or above the knowable arm over paired compliant "
+                    "cases: knowability sensitivity is falsified on "
+                    "this generated instrument, for this checkpoint "
+                    "and seed."
+                )
+            elif falsified is False:
+                verdict = (
+                    "mean stated confidence drops from the knowable "
+                    "arm to the donor-key control over paired "
+                    "compliant cases."
+                )
+            else:
+                verdict = (
+                    "knowability readout withheld ("
+                    + escape(str(knowability.get("detail")))
+                    + "); the per-arm counts above still stand."
+                )
+            bits.append(
+                "<div>Knowability: paired compliant cases "
+                + _count(knowability.get("n_paired_compliant"))
+                + ", knowable mean "
+                + _num(knowability.get("knowable_mean"))
+                + ", control mean "
+                + _num(knowability.get("control_mean"))
+                + " -- "
+                + verdict
+                + "</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(name)
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    unavailable = probe.get("unavailable_candidates")
+    unavailable_line = ""
+    if type(unavailable) is list and unavailable:
+        unavailable_line = (
+            "<p>Candidates with no completed elicited cell: "
+            + _escape_text(", ".join(str(n) for n in unavailable))
+            + ".</p>"
+        )
+    return (
+        '<section class="card" id="confidence">'
+        "<h2>Verbalized confidence</h2>"
+        "<p>Every search fixture was re-run with one frozen suffix "
+        "asking the model to end its reply with a stated confidence "
+        "line, parsed under a frozen grammar and scored against the "
+        "same exact-match verdicts as the native run. A stated "
+        "confidence is model output text, not a probability; the "
+        "gap and bins below describe agreement between the number "
+        "and the verdict, and are not calibration scores. The "
+        "generated cases are instrument cases (planted synthetic "
+        "facts), not operator fixtures. Search split only; the "
+        "determinism certificate covers the recorded native search "
+        "observations only, so these elicited cells are outside its "
+        "scope.</p>"
+        '<table class="data"><thead><tr><th scope="col">Candidate</th>'
+        '<th scope="col">Stated confidence vs verdicts</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
+        + unavailable_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -8671,6 +8871,7 @@ def render_html(result: dict[str, Any]) -> str:
     placement_html = _placement_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
+    confidence_html = _confidence_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -8845,6 +9046,11 @@ def render_html(result: dict[str, Any]) -> str:
                 precision_html,
             ),
             (
+                "confidence",
+                "Verbalized confidence",
+                confidence_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8940,6 +9146,7 @@ def render_html(result: dict[str, Any]) -> str:
         + placement_html
         + choiceaudit_html
         + precision_html
+        + confidence_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

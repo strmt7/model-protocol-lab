@@ -8843,3 +8843,149 @@ bound the comparison are).
 Counts and cost: the cycle-67 differential fuzz now runs
 ~9.5 minutes locally (the precision builder runs the real
 stage per fuzz report); noted for the CI-duration watch.
+
+## Cycle 199 — verbalized confidence: does the stated number track correctness? (`run --confidence`)
+
+Wave-8 rank #8, the last wave-8 item. One frozen suffix is
+appended to each search fixture's last user message, asking
+the model to end its reply with `Confidence: <integer
+0-100>`; the elicited text is parsed under a frozen grammar
+and the span without the compliant line is scored by the
+ordinary exact-match verdict, per candidate template.
+Readouts: compliance rate, mean stated confidence on correct
+vs incorrect compliant answers with the descriptive
+separation gap (withheld, with a named reason, when a class
+is empty), a frozen four-bin table, and elicitation-cost
+verdict flips against the recorded native run. A generated
+pair — 24 planted-fact knowable cases vs their donor-key
+controls — carries the knowability readout. The payload
+never touches the run's decision, selection, or exit code;
+the HTML section prints the scope limits with the numbers
+(a stated confidence is model output text, not a
+probability; no readout is a calibration score; search
+split only; the determinism certificate covers the recorded
+native search observations only). Design:
+docs/CONFIDENCE_DESIGN.md.
+
+Uniqueness pass (researcher, primary sources; framing is
+the combination, as always):
+
+- The combination survives: (1) per-template candidate
+  crossing of verbalized confidence, (2) the confidence line
+  separated from the scored span under a frozen grammar so
+  verdicts are the lab's exact-match verdicts rather than a
+  judge model's, (3) elicitation-cost flips against the
+  recorded native run, (4) a prompt-side knowability control,
+  (5) a fail-closed diff-validated report section. No
+  surveyed tool ships it (lm-evaluation-harness, HELM,
+  Inspect AI, OpenAI Evals, promptfoo, DSPy; Inspect's
+  primitives could assemble something similar — primitives
+  are not a shipped measurement).
+- Citation corrections, all re-verified against the primary
+  texts by the verifier: Kadavath et al. (arXiv:2207.05221)
+  is logit self-evaluation, never a verbalized precedent;
+  Lin et al. (arXiv:2205.14334) is a fine-tuning result, not
+  zero-shot evidence; Tian et al. (arXiv:2305.14975) uses a
+  float scale and GPT-judged correctness, so no numeric
+  comparison to this probe is valid; Xiong et al.
+  (arXiv:2306.13063) supplies the exact surface form and the
+  pre-registered expected shape (values cluster at
+  multiples of 5, 80–100, peak 95); Seo et al., ADVICE
+  (arXiv:2510.10913) is a primary fine-tuning study — an
+  earlier brief's "survey" genre was wrong — whose §7
+  answer-masking experiment is the nearest knowability
+  neighbour and is cited by name; the RLCR calibration
+  number (ECE 0.37 → 0.03 on HotpotQA) belongs to Damani et
+  al. (arXiv:2507.16806), NOT to the single-author
+  observability survey (arXiv:2604.26152) an earlier brief
+  cited — the survey is dropped as a source; Yang, Tsai &
+  Yamada (arXiv:2412.14737), missed by the brief, is the
+  strongest published prompt-method-sensitivity result and
+  is named in the design doc.
+
+Adversarial pass: red-team A returned BUILD WITH AMENDMENTS
+with two DO-NOT-BUILDs as specified (the brief's scramble is
+undefined on operator fixtures — the schema has no
+payload/fact field — and its judge-the-pair and donor-swap
+repairs change the construct or degenerate on legal
+duplicate expecteds, executed against core.Split); red-team
+B's job was to disprove A, and its disproofs of A's positive
+amendments all survived the verifier (V1–V12, 12/12
+confirmed; the only blemish found anywhere was a one-count
+overstatement in B's own M1 rhetoric, which touched no
+disposition). The adjudicated contract adopts B's repairs
+over A's originals on every contested point:
+
+- Control: A's value-replacement (state a false value for
+  the asked key) is refuted by execution — a definitionally
+  payload-faithful backend answers the stated value at
+  Confidence 95 and the falsification boolean convicts
+  correct behaviour (95 ≥ 95). Shipped instead: B's
+  donor-key control — the payload binds a different key,
+  nothing false is stated about the asked key, and the same
+  backend drops 95 → 5.
+- Records: A's bare attested confidence integer is refuted
+  by execution — editing only the integers moves the gap
+  +5 → ±100 and flips the falsification boolean under A's
+  own consistency checks. Shipped instead: B's carried-line
+  binding — an `ok` cell carries its grammar line verbatim
+  (a bijection with the scalar; the validator derives the
+  number), a `malformed_line` cell carries a 32-character
+  prefix plus the full length. A's proposed digest exception
+  for single-line answers is struck (sha256("") ≠
+  sha256("Confidence: 50"), executed twice).
+- Parser: A's grammar core is confirmed (the int() traps
+  are real: `+85`, `8_5`, non-ASCII digits all parse), but
+  its unstated count-first precedence is replaced by
+  final-line-first, and its single M1 mutation is split
+  into three (sign / leading zeros / non-ASCII digits)
+  after B executed that the `+85` case cannot kill the
+  `(\d+)` mutant. The shipped gate carries eight mutants,
+  each killed by a named battery case.
+- Screens: B's anywhere-grammar-line screen replaces A's
+  final-line-only screen (executed counterexample: an
+  expected of "Confidence: 50\nParis" manufactures a
+  multiple_lines cell from an honest generation); "blank"
+  is strip()-empty per the dateline/leading precedent
+  lines; vacuous last-user fixtures are excluded, not kept.
+- Cost: A's forwards figure is short by 576 (it copied a
+  record count as a generation count; placement.py's own
+  comment separates the two). The honest legal maximum is
+  3,552 extra generations, printed in the CLI help and
+  USAGE in that decomposed form.
+- Falsification: B refuted the brief's paired-compliant
+  conditioning as pre-registered (it selects out compliance
+  collapse, the strongest drop signal; placement's floor of
+  6 was missing; "elicited_mean" was ambiguous). Shipped:
+  paired-compliant boolean with the floor of 6, per-arm
+  compliance and means always printed beside it, the
+  conditioning stated as a scope limit in the report text,
+  and the gap given a named withholding vocabulary
+  (precision's WITHHELD discipline).
+
+Process note, recorded honestly: red-team B's brief file
+was truncated mid-write on disk (23,453 bytes, ending
+mid-§6(i)); its complete conclusions were recovered from
+its final report, and every claim the build relies on was
+re-executed or re-read by the verifier from B's probes, so
+no disposition rests on the truncated text. One further
+repair landed in this cycle's blast radius: the cycle-67
+oracle's `identical` conjunction had silently omitted two
+shipped sections (placement and precision); both are
+restored, and confidence joins it — the omission class the
+cycle-180 lesson names, caught this time by auditing the
+conjunction while extending it rather than after a failure.
+
+Diff support: `confidence` joins diff_reports with a
+full-recompute validator (protocol fingerprint recomputed,
+the generated case set regenerated from the seed by the
+validator's own mirror, every derived value recomputed
+from the records and compared type-strictly, the scalar
+derived from the carried line). The cycle-67 differential
+fuzz and the cycle-27 oracle both carry independent
+mirrors. Named residue, recorded in the design doc:
+finality, multiplicity, and the span split are
+stage-attested (their final lines are ordinary answer text
+and are never carried), and screen classes are checked for
+protocol/record consistency rather than recomputed, because
+the fixture texts are not in the payload.
