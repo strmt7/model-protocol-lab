@@ -1404,7 +1404,8 @@ exact McNemar p-value; the profile reports the most/least resistant
 candidates, the positive set (gap > 0 with at least 2 discordant
 control-only pairs), and `uniform_nonpositive` -- the null result, where
 the label conferred no measurable selective protection anywhere (the
-Tensor Trust Appendix H reading, and a publishable negative).
+analogue of Tensor Trust Appendix H's small-difference
+role-scheme result, and a publishable negative).
 
 Read the numbers as a **verbatim-exposure lower bound**, never as a
 confidentiality certification: paraphrase, translation, and
