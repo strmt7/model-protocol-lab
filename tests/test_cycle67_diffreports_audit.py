@@ -153,6 +153,7 @@ from model_protocol_lab import (
     needle,
     numform,
     placement,
+    precision,
     refusals,
     repetition,
     scorerlens,
@@ -285,6 +286,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "needle": {"available": "neither", "changed": False},
         "placement": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
+        "precision": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -374,6 +376,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "placement_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
+            "precision_changed": False,
+            "precision_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -6191,6 +6195,479 @@ def _o_choiceaudit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle precision recompute: mirrors
+    diffreports._precision_recompute. The protocol digest is
+    rebuilt through the producer module (precision) where the
+    implementation rebuilds it from literal tables; every record
+    and cell is checked structurally, the digest verdict binding
+    is re-derived, the stage-attested arm-passed verdicts are
+    consistency-checked against the record universe, and the
+    derived aggregation (paired flip matrix, unpaired list,
+    divergence and logprob summaries, paired-population
+    selections, survival, falsification) is mirrored
+    independently here. A drift in either side's constants
+    breaks the agreement."""
+    from model_protocol_lab import precision as _prec
+
+    def _dig(v: Any) -> bool:
+        return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+    def _cell_ok(cell: Any, expected_digest: str) -> bool:
+        if type(cell) is not dict or set(cell) != {
+            "answer_digest",
+            "boundary_found",
+            "logprob",
+            "output_digest",
+            "verdict",
+        }:
+            return False
+        if not _dig(cell["answer_digest"]) or not _dig(cell["output_digest"]):
+            return False
+        if type(cell["boundary_found"]) is not bool or type(cell["verdict"]) is not bool:
+            return False
+        lp = cell["logprob"]
+        if lp is not None and (
+            type(lp) not in (int, float)
+            or isinstance(lp, bool)
+            or (type(lp) is float and (lp != lp or lp in (float("inf"), float("-inf"))))
+        ):
+            return False
+        return cell["verdict"] == (
+            cell["answer_digest"] == expected_digest and cell["boundary_found"]
+        )
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict or set(protocol) != {
+        "arm_dtype",
+        "bf16_fingerprint",
+        "boundaries",
+        "candidates",
+        "declared_dtype",
+        "fingerprint",
+        "fixture_set_sha256",
+        "fp32_fingerprint",
+        "max_new_tokens",
+        "max_records",
+        "max_records_bytes",
+        "native_dtype",
+        "seed",
+        "version",
+    }:
+        return None
+    if protocol["version"] != 1 or type(protocol["version"]) is not int:
+        return None
+    if type(protocol["seed"]) is not int or protocol["seed"] < 0:
+        return None
+    if type(protocol["max_new_tokens"]) is not int or not 1 <= protocol["max_new_tokens"] <= 4096:
+        return None
+    if protocol["max_records"] != 2400 or protocol["max_records_bytes"] != 12 * 1024 * 1024:
+        return None
+    if not _dig(protocol["fixture_set_sha256"]):
+        return None
+    candidates = protocol["candidates"]
+    if (
+        type(candidates) is not list
+        or not candidates
+        or any(type(n) is not str or not n for n in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return None
+    boundaries = protocol["boundaries"]
+    if type(boundaries) is not dict or set(boundaries) != set(candidates):
+        return None
+    for name in candidates:
+        ids = boundaries[name]
+        if type(ids) is not list or not ids or any(type(t) is not int or t < 0 for t in ids):
+            return None
+    for key in ("fp32_fingerprint", "bf16_fingerprint"):
+        if type(protocol[key]) is not str or not protocol[key]:
+            return None
+    if protocol["fp32_fingerprint"] == protocol["bf16_fingerprint"]:
+        return None
+    if protocol["native_dtype"] != "float32" or protocol["arm_dtype"] != "bfloat16":
+        return None
+    if protocol["declared_dtype"] is not None and type(protocol["declared_dtype"]) is not str:
+        return None
+    if protocol["fingerprint"] != _prec.protocol_fingerprint(protocol):
+        return None
+    decision = value.get("primary_decision")
+    winner = value.get("primary_winner")
+    if decision not in {
+        "compatible_on_fixture_set",
+        "held_out_failed",
+        "ambiguous",
+        "no_candidate",
+        "cancelled",
+        "failed",
+    }:
+        return None
+    blocks_in = value.get("candidates")
+    if type(blocks_in) is not dict or set(blocks_in) != set(candidates):
+        return None
+    if decision in ("compatible_on_fixture_set", "held_out_failed"):
+        if type(winner) is not str or winner not in blocks_in:
+            return None
+    elif winner is not None:
+        return None
+    records = value.get("records")
+    if type(records) is not list or len(records) > protocol["max_records"]:
+        return None
+    blob = json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    if len(blob.encode("utf-8")) > protocol["max_records_bytes"]:
+        return None
+    seen: set = set()
+    universe: set = set()
+    record_candidates: set = set()
+    for record in records:
+        if type(record) is not dict or set(record) != {
+            "bf16",
+            "candidate",
+            "diverged",
+            "expected_digest",
+            "first_divergence",
+            "fixture",
+            "fp32",
+        }:
+            return None
+        name = record["candidate"]
+        fixture = record["fixture"]
+        if type(name) is not str or name not in candidates or type(fixture) is not str:
+            return None
+        if (name, fixture) in seen:
+            return None
+        seen.add((name, fixture))
+        universe.add(fixture)
+        record_candidates.add(name)
+        if not _dig(record["expected_digest"]):
+            return None
+        for arm in ("fp32", "bf16"):
+            cell = record[arm]
+            if cell is not None and not _cell_ok(cell, str(record["expected_digest"])):
+                return None
+        both = type(record["fp32"]) is dict and type(record["bf16"]) is dict
+        if (record["diverged"] is None) == both:
+            return None
+        if record["diverged"] is False and record["first_divergence"] is not None:
+            return None
+        if record["diverged"] is True and (
+            type(record["first_divergence"]) is not int or record["first_divergence"] < 0
+        ):
+            return None
+    unavailable = value.get("unavailable_candidates")
+    if (
+        type(unavailable) is not list
+        or unavailable != sorted(unavailable)
+        or any(type(n) is not str for n in unavailable)
+        or set(unavailable) & record_candidates
+        or set(unavailable) | record_candidates != set(candidates)
+    ):
+        return None
+    ordered = sorted(records, key=lambda r: (str(r["candidate"]), str(r["fixture"])))
+    blocks: dict[str, Any] = {}
+    flips_all: list = []
+    total_paired = 0
+    total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}
+    total_diverged = 0
+    for name in candidates:
+        stored = blocks_in[name]
+        if type(stored) is not dict:
+            return None
+        own = [r for r in ordered if r["candidate"] == name]
+        for arm in ("fp32", "bf16"):
+            passed = stored.get(f"{arm}_passed")
+            if passed not in (True, False, None):
+                return None
+            arm_fixtures = {str(r["fixture"]) for r in own if type(r[arm]) is dict}
+            complete = arm_fixtures == universe
+            all_pass = complete and all(r[arm]["verdict"] for r in own if type(r[arm]) is dict)
+            if passed is True and not all_pass:
+                return None
+            if passed is False and not (complete and not all_pass):
+                return None
+            if passed is None and complete:
+                return None
+        paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
+        cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}
+        flips: list = []
+        n_diverged = 0
+        deltas: list[float] = []
+        for record in paired:
+            fp32_v = bool(record["fp32"]["verdict"])
+            bf16_v = bool(record["bf16"]["verdict"])
+            if fp32_v and bf16_v:
+                cells["pass_pass"] += 1
+            elif fp32_v:
+                cells["pass_fail"] += 1
+                flips.append({"fixture": record["fixture"], "direction": "pass_to_fail"})
+            elif bf16_v:
+                cells["fail_pass"] += 1
+                flips.append({"fixture": record["fixture"], "direction": "fail_to_pass"})
+            else:
+                cells["fail_fail"] += 1
+            if record["diverged"] is True:
+                n_diverged += 1
+            fp32_lp = record["fp32"]["logprob"]
+            bf16_lp = record["bf16"]["logprob"]
+            if type(fp32_lp) is float and type(bf16_lp) is float:
+                deltas.append(bf16_lp - fp32_lp)
+        blocks[name] = {
+            "fp32_passed": stored.get("fp32_passed"),
+            "bf16_passed": stored.get("bf16_passed"),
+            "n_paired": len(paired),
+            "cells": cells,
+            "flips": flips,
+            "n_fp32_only": sum(1 for r in own if type(r["fp32"]) is dict and r["bf16"] is None),
+            "n_bf16_only": sum(1 for r in own if type(r["bf16"]) is dict and r["fp32"] is None),
+            "n_diverged": n_diverged,
+            "divergence_rate": (n_diverged / len(paired)) if paired else None,
+            "logprob": {
+                "n": len(deltas),
+                "mean_delta": (sum(deltas) / len(deltas)) if deltas else None,
+                "min_delta": min(deltas) if deltas else None,
+                "max_delta": max(deltas) if deltas else None,
+            },
+        }
+        for flip in flips:
+            flips_all.append(
+                {"candidate": name, "fixture": flip["fixture"], "direction": flip["direction"]}
+            )
+        total_paired += len(paired)
+        total_diverged += n_diverged
+        for key in total_cells:
+            total_cells[key] += cells[key]
+    flips_all.sort(key=lambda f: (str(f["candidate"]), str(f["fixture"])))
+    unpaired: list = []
+    for record in ordered:
+        if type(record["fp32"]) is dict and record["bf16"] is None:
+            unpaired.append(
+                {"candidate": record["candidate"], "fixture": record["fixture"], "arm": "fp32"}
+            )
+        elif type(record["bf16"]) is dict and record["fp32"] is None:
+            unpaired.append(
+                {"candidate": record["candidate"], "fixture": record["fixture"], "arm": "bf16"}
+            )
+    totals = {
+        "n_paired": total_paired,
+        "cells": total_cells,
+        "n_flips": len(flips_all),
+        "n_diverged": total_diverged,
+        "divergence_rate": (total_diverged / total_paired) if total_paired else None,
+    }
+    falsified = None if total_paired == 0 else len(flips_all) == 0
+    shared: frozenset | None = None
+    mismatched = False
+    for name in candidates:
+        fp32_done = frozenset(
+            str(r["fixture"]) for r in records if r["candidate"] == name and type(r["fp32"]) is dict
+        )
+        bf16_done = frozenset(
+            str(r["fixture"]) for r in records if r["candidate"] == name and type(r["bf16"]) is dict
+        )
+        if fp32_done != bf16_done:
+            mismatched = True
+        pair = fp32_done & bf16_done
+        shared = pair if shared is None else (shared & pair)
+    if shared is None:
+        shared = frozenset()
+
+    def _select(arm: str) -> dict[str, Any] | None:
+        completed_sets: list = []
+        all_pass: dict[str, bool] = {}
+        for cand in candidates:
+            cells_by_fixture = {
+                str(r["fixture"]): r[arm]
+                for r in records
+                if r["candidate"] == cand and type(r[arm]) is dict
+            }
+            completed = frozenset(f for f in cells_by_fixture if f in shared)
+            completed_sets.append(completed)
+            if not completed:
+                return None
+            all_pass[cand] = all(
+                _prec.cell_verdict(
+                    cells_by_fixture[f],
+                    str(
+                        next(
+                            r["expected_digest"]
+                            for r in records
+                            if r["candidate"] == cand and r["fixture"] == f
+                        )
+                    ),
+                )
+                for f in completed
+            )
+        if len(set(completed_sets)) > 1:
+            return None
+        passers = [n for n, ok in all_pass.items() if ok]
+        if len(passers) == 1:
+            return {"decision": "selected", "winner": passers[0]}
+        if len(passers) > 1:
+            return {"decision": "ambiguous", "winner": None}
+        return {"decision": "no_candidate", "winner": None}
+
+    if decision not in ("compatible_on_fixture_set", "held_out_failed"):
+        selection = {
+            "paired_population": sorted(shared),
+            "fp32": None,
+            "bf16": None,
+            "survived": None,
+            "withheld": "primary_not_winner_bearing",
+        }
+    elif mismatched:
+        selection = {
+            "paired_population": sorted(shared),
+            "fp32": None,
+            "bf16": None,
+            "survived": None,
+            "withheld": "mismatched_sets",
+        }
+    elif not shared:
+        selection = {
+            "paired_population": [],
+            "fp32": None,
+            "bf16": None,
+            "survived": None,
+            "withheld": "no_paired_fixtures",
+        }
+    else:
+        fp32_sel = _select("fp32")
+        bf16_sel = _select("bf16")
+        if fp32_sel is None or bf16_sel is None:
+            selection = {
+                "paired_population": sorted(shared),
+                "fp32": fp32_sel,
+                "bf16": bf16_sel,
+                "survived": None,
+                "withheld": "mismatched_sets",
+            }
+        else:
+            selection = {
+                "paired_population": sorted(shared),
+                "fp32": fp32_sel,
+                "bf16": bf16_sel,
+                "survived": fp32_sel == bf16_sel,
+                "withheld": None,
+            }
+    return {
+        "candidates": blocks,
+        "unpaired": unpaired,
+        "flips": flips_all,
+        "totals": totals,
+        "selection": selection,
+        "precision_effect_falsified": falsified,
+    }
+
+
+def _o_precision_valid(value: Any) -> bool:
+    """Oracle precision validator: mirrors diffreports._valid_precision."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "candidates",
+        "detail",
+        "flips",
+        "precision_effect_falsified",
+        "primary_decision",
+        "primary_winner",
+        "protocol",
+        "records",
+        "selection",
+        "totals",
+        "unavailable_candidates",
+        "unpaired",
+    }:
+        return False
+    if value.get("detail") is not None:
+        return False
+    recomputed = _o_precision_recompute(value)
+    if recomputed is None:
+        return False
+    for key in (
+        "candidates",
+        "unpaired",
+        "flips",
+        "totals",
+        "selection",
+        "precision_effect_falsified",
+    ):
+        if value.get(key) != recomputed[key]:
+            return False
+    return True
+
+
+def _o_precision(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle precision section: mirrors diffreports.diff_precision."""
+    old_ok = _o_precision_valid(old)
+    new_ok = _o_precision_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    backend_drift = old["protocol"].get("fp32_fingerprint") != new["protocol"].get(
+        "fp32_fingerprint"
+    ) or old["protocol"].get("bf16_fingerprint") != new["protocol"].get("bf16_fingerprint")
+    comparable = not protocol_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        metrics = [
+            ("n_paired", old_entry["n_paired"], new_entry["n_paired"]),
+            ("n_flips", len(old_entry["flips"]), len(new_entry["flips"])),
+            ("n_diverged", old_entry["n_diverged"], new_entry["n_diverged"]),
+            (
+                "mean_logprob_delta",
+                old_entry["logprob"]["mean_delta"],
+                new_entry["logprob"]["mean_delta"],
+            ),
+            ("fp32_passed", old_entry["fp32_passed"], new_entry["fp32_passed"]),
+            ("bf16_passed", old_entry["bf16_passed"], new_entry["bf16_passed"]),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    selection_drift: list[dict[str, Any]] = []
+    if old["selection"] != new["selection"]:
+        selection_drift.append({"old": old["selection"], "new": new["selection"]})
+    if old["precision_effect_falsified"] != new["precision_effect_falsified"]:
+        selection_drift.append(
+            {
+                "metric": "precision_effect_falsified",
+                "old": old["precision_effect_falsified"],
+                "new": new["precision_effect_falsified"],
+            }
+        )
+    diff["candidate_drift"] = candidate_drift
+    diff["selection_drift"] = selection_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or selection_drift or added or removed or protocol_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
@@ -8321,6 +8798,7 @@ def _oracle_diff(
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
+    o_pr, o_pr_changed, o_pr_asymmetric = _o_precision(old.get("precision"), new.get("precision"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -8458,6 +8936,7 @@ def _oracle_diff(
         "needle": o_nd,
         "placement": o_pl,
         "choice_audit": o_ca,
+        "precision": o_pr,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -8543,6 +9022,8 @@ def _oracle_diff(
             "placement_asymmetric": o_pl_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
+            "precision_changed": o_pr_changed,
+            "precision_asymmetric": o_pr_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -9476,6 +9957,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "placement_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
+                "precision_changed": False,
+                "precision_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -10770,6 +11253,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["needle"] = _fuzz_needle_section(rng)
         report["placement"] = _fuzz_placement_section(rng)
         report["choice_audit"] = _fuzz_choiceaudit_section(rng)
+        report["precision"] = _fuzz_precision_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -12416,6 +12900,164 @@ def _fuzz_choiceaudit_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzPrecisionBackend:
+    """Byte-level scripted backend for the precision fuzz
+    builder. Plays one arm: answers from a fixed map keyed by
+    the question text in the rendered prompt, emitting the
+    answer plus the chr(7) boundary token. ``echo`` forward
+    logits favour the actual next byte so teacher-forced
+    logprobs are real floats through the real scoring path."""
+
+    def __init__(self, answers, *, dtype, fingerprint):
+        self.answers = answers
+        self.dtype = dtype
+        self.fingerprint = fingerprint
+        self.declared_dtype = "float32"
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
+
+    def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
+        from model_protocol_lab.core import Generation
+
+        prompt = self.decode(prompt_ids)
+        answer = ""
+        for question, expected in self.answers.items():
+            if question in prompt:
+                answer = expected
+                break
+        ids = tuple((answer + "\x07").encode("utf-8"))
+        # reason "limit" contractually means the cap was reached:
+        # pad past the boundary token up to the cap.
+        ids = ids + (0,) * max(0, max_new_tokens - len(ids))
+        return Generation(token_ids=ids, reason="limit")
+
+    def forward_logits(self, input_ids):
+        import torch
+
+        seq = list(input_ids)
+        logits = torch.zeros((len(seq), 256))
+        for pos in range(len(seq) - 1):
+            logits[pos][seq[pos + 1]] = 6.0
+        return logits
+
+
+def _fuzz_precision_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage over scripted
+    # backends (a real run_experiment for the native side);
+    # hostile mutations then try to break them, and oracle and
+    # implementation must agree on every rejection. A coherent
+    # foreign bf16 fingerprint exercises backend drift rather
+    # than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    cases = tuple(
+        Fixture(
+            id=f"pf{i}",
+            messages=(Message(role="user", content=f"question {i}?"),),
+            expected=answer,
+            group=group,
+        )
+        for i, (answer, group) in enumerate(
+            [
+                ("42", "numbers"),
+                ("Paris", "geo"),
+                ("blue", "colors"),
+                ("17", "numbers"),
+                ("London", "geo"),
+                ("red", "heldout"),
+            ]
+        )
+    )
+    answers = {f"question {i}?": case.expected for i, case in enumerate(cases)}
+    native = _FuzzPrecisionBackend(
+        answers, dtype="float32", fingerprint="sha256:fuzz-precision-native"
+    )
+    search_cases = cases[:5]
+    # The native result is hand-built (the choice-audit fuzz
+    # pattern): recorded completed observations whose answers
+    # make fz-alpha the unique winner, so the stage harvests
+    # real fp32 cells without a full experiment run per report.
+    search = []
+    for fmt in formats:
+        observations = []
+        for case in search_cases:
+            answer = case.expected
+            if fmt.name == "fz-beta" and case.id == "pf2":
+                answer = "wrong-native"
+            observations.append(
+                {
+                    "fixture": case.id,
+                    "status": "completed",
+                    "answer": answer,
+                    "exact_match": answer == case.expected,
+                    "boundary_found": True,
+                    "input_ids": list(native.encode(f"prompt {case.id} for {fmt.name}")),
+                    "output_ids": list(native.encode(answer + "\x07")),
+                }
+            )
+        search.append(
+            {
+                "format": {"name": fmt.name},
+                "summary": {"aggregate_eligible": True},
+                "observations": observations,
+            }
+        )
+    result = {
+        "decision": "compatible_on_fixture_set",
+        "selected_candidate": "fz-alpha",
+        "search": search,
+    }
+    bf16_answers = dict(answers)
+    if rng.random() < 0.5:
+        bf16_answers["question 1?"] = "wrong-one"
+    if rng.random() < 0.3:
+        bf16_answers["question 4?"] = "wrong-two"
+    bf16 = _FuzzPrecisionBackend(
+        bf16_answers, dtype="bfloat16", fingerprint="sha256:fuzz-precision-bf16"
+    )
+    payload = experiments.precision_stage(
+        native, bf16, formats, search_cases, result, boundary=(7,), max_new_tokens=16, seed=0
+    )
+    blocks = payload.get("candidates", {})
+    available = [b for b in blocks.values() if b.get("cells", {}).get("paired")]
+    if available and rng.random() < 0.12:
+        available[0]["cells"]["paired"] += 1  # hostile: count off records
+    if payload.get("records") and rng.random() < 0.10:
+        record = payload["records"][0]
+        if record["bf16"] is not None:
+            record["bf16"]["verdict"] = not record["bf16"][
+                "verdict"
+            ]  # hostile: verdict off binding
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["selection"]["survived"] = False  # hostile: verdict off recompute
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(
+            precision.protocol_object(
+                seed=0,
+                max_new_tokens=16,
+                fixture_ids=[case.id for case in search_cases],
+                candidates=[fmt.name for fmt in formats],
+                boundaries=payload["protocol"]["boundaries"],
+                fp32_fingerprint=native.fingerprint,
+                bf16_fingerprint="sha256:other-bf16",
+                declared_dtype="float32",
+                native_dtype="float32",
+                arm_dtype="bfloat16",
+            )
+        )
+        protocol["fingerprint"] = precision.protocol_fingerprint(protocol)
+        payload["protocol"] = protocol  # coherent foreign bf16 fingerprint
+    return payload
+
+
 def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # Coherent payloads come from the real stage + analysis over
     # a scripted backend; hostile mutations then try to break
@@ -12947,6 +13589,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not placement_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
+            '        and not precision_diff["changed"]\n'
+            "        and not precision_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -13033,6 +13677,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or placement_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
+            '        or precision_diff["changed"]\n'
+            "        or precision_asymmetric\n"
             "    )\n",
             scenario,
         )

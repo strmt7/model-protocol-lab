@@ -10719,3 +10719,278 @@ def choiceaudit_analysis(
         "n_candidates": len(candidate_names),
         "n_fixtures": len(block),
     }
+
+
+def _precision_completed_obs(entry: Any) -> dict[str, dict[str, Any]]:
+    """fixture -> recorded observation for one native search entry.
+
+    Completed observations only: a fixture the native run never
+    completed has no fp32 cell (it becomes an unpaired or absent
+    fixture in the records, never a fabricated failure).
+    """
+    out: dict[str, dict[str, Any]] = {}
+    if type(entry) is not dict:
+        return out
+    observations = entry.get("observations")
+    if type(observations) is not list:
+        return out
+    for obs in observations:
+        if type(obs) is not dict:
+            continue
+        fixture = obs.get("fixture")
+        status = obs.get("status")
+        status = getattr(status, "value", status)
+        if type(fixture) is not str or status != "completed":
+            continue
+        if type(obs.get("answer")) is not str:
+            continue
+        if type(obs.get("exact_match")) is not bool or type(obs.get("boundary_found")) is not bool:
+            continue
+        output_ids = obs.get("output_ids")
+        input_ids = obs.get("input_ids")
+        if not isinstance(output_ids, (list, tuple)) or not isinstance(input_ids, (list, tuple)):
+            continue
+        if any(type(t) is not int for t in output_ids) or any(
+            type(t) is not int for t in input_ids
+        ):
+            continue
+        out[fixture] = obs
+    return out
+
+
+def _precision_cell(
+    answer: str,
+    boundary_found: bool,
+    output_ids: tuple[int, ...],
+    expected_digest: str,
+    logprob: float | None,
+) -> dict[str, Any]:
+    """One arm's ground cell; the verdict is digest-bound by construction."""
+    from . import precision as _pr
+
+    cell: dict[str, Any] = {
+        "answer_digest": _pr.text_digest(answer),
+        "boundary_found": boundary_found,
+        "output_digest": _pr.ids_digest(output_ids),
+        "logprob": logprob,
+    }
+    cell["verdict"] = _pr.cell_verdict(cell, expected_digest)
+    return cell
+
+
+def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str) -> float | None:
+    """Teacher-forced total logprob of the expected answer, or None.
+
+    One forward per (candidate, fixture) via the scoring engine;
+    any non-ok score (alignment, provider, context) degrades this
+    cell's logprob to None -- never a stage failure, never a guess.
+    """
+    from .scoring import score_target_logprobs
+
+    if not callable(getattr(backend, "forward_logits", None)):
+        return None
+    try:
+        target_ids = backend.encode(expected)
+        score = score_target_logprobs(backend, tuple(prompt_ids), tuple(target_ids))
+    except Exception:  # noqa: BLE001 -- scoring problems degrade the cell only
+        return None
+    if getattr(score, "status", None) != "ok":
+        return None
+    total = getattr(score, "total_logprob", None)
+    if isinstance(total, (int, float)) and not isinstance(total, bool) and total == total:
+        return float(total)
+    return None
+
+
+def precision_stage(
+    native_backend: Any,
+    bf16_backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    result: dict[str, Any],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Load-precision stage (cycle 198): the bf16 arm against the native run.
+
+    The fp32 arm is the recorded native run in ``result`` -- never
+    re-executed. The bf16 arm re-evaluates every search candidate
+    on the search split only, under ``bf16_backend``, with the
+    identical boundary/budget/seed conditions the CLI forwards.
+    Ground records for both arms are assembled per candidate x
+    fixture (digests only), and every derived value -- the paired
+    flip matrix, divergence aggregates, logprob deltas, the
+    paired-population selections, winner survival, and the
+    falsification readout -- comes from precision.compute_derived,
+    which the diff validator mirrors independently. Design:
+    docs/PRECISION_DESIGN.md.
+    """
+    from . import precision as _pr
+    from .determinism import compare_token_ids
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    names = tuple(fmt.name for fmt in formats)
+    fixture_ids = [str(case.id) for case in cases]
+    expected_by_id = {str(case.id): str(case.expected) for case in cases}
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    protocol = _pr.protocol_object(
+        seed=seed,
+        max_new_tokens=max_new_tokens,
+        fixture_ids=fixture_ids,
+        candidates=names,
+        boundaries={name: boundaries[name] for name in names},
+        fp32_fingerprint=str(getattr(native_backend, "fingerprint", "")),
+        bf16_fingerprint=str(getattr(bf16_backend, "fingerprint", "")),
+        declared_dtype=getattr(native_backend, "declared_dtype", None),
+        native_dtype=str(getattr(native_backend, "dtype", "")),
+        arm_dtype=str(getattr(bf16_backend, "dtype", "")),
+    )
+    protocol["fingerprint"] = _pr.protocol_fingerprint(protocol)
+
+    def _unavailable(detail: str) -> dict[str, Any]:
+        return {
+            "available": False,
+            "detail": detail,
+            "protocol": protocol,
+            "primary_decision": result.get("decision"),
+            "primary_winner": result.get("selected_candidate"),
+            "records": [],
+            "unavailable_candidates": list(names),
+        }
+
+    if getattr(native_backend, "dtype", None) != _pr.NATIVE_DTYPE:
+        return _unavailable("native_dtype_not_float32")
+    if getattr(bf16_backend, "dtype", None) != _pr.ARM_DTYPE:
+        return _unavailable("arm_dtype_not_bfloat16")
+    if len(formats) * len(cases) > _pr.MAX_RECORDS:
+        return _unavailable("precision_cell_budget_exceeded")
+    search = result.get("search")
+    if type(search) is not list:
+        return _unavailable("native_search_incomplete")
+    native_entries: dict[str, Any] = {}
+    for entry in search:
+        if type(entry) is not dict:
+            continue
+        fmt_dict = entry.get("format")
+        entry_name = fmt_dict.get("name") if type(fmt_dict) is dict else None
+        if type(entry_name) is str and entry_name:
+            native_entries[entry_name] = entry
+    native_outcomes = native_search_outcomes(search, names)
+    records: list[dict[str, Any]] = []
+    arm_passed: dict[str, dict[str, bool | None]] = {}
+    unavailable_candidates: list[str] = []
+    for fmt in formats:
+        name = fmt.name
+        if cancel is not None and cancel.is_set():
+            return _unavailable("cancelled")
+        native_obs = _precision_completed_obs(native_entries.get(name))
+        try:
+            report = evaluate(
+                bf16_backend,
+                fmt,
+                cases,
+                boundary=boundaries[name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=cancel,
+            )
+        except Exception:  # noqa: BLE001 -- one candidate degrades, not the stage
+            report = None
+        bf16_obs: dict[str, Any] = {}
+        if report is not None:
+            for obs in report.observations:
+                if str(getattr(obs.status, "value", obs.status)) != "completed":
+                    continue
+                bf16_obs[str(obs.fixture)] = obs
+        if report is not None and report.aggregate_eligible:
+            per_fixture = {
+                str(o.fixture): bool(o.exact_match and o.boundary_found)
+                for o in report.observations
+            }
+            bf16_passed: bool | None = sum(per_fixture.values()) == len(per_fixture) and bool(
+                per_fixture
+            )
+        else:
+            bf16_passed = None
+        arm_passed[name] = {
+            "fp32": native_outcomes.get(name, {}).get("passed"),
+            "bf16": bf16_passed,
+        }
+        if not native_obs and not bf16_obs:
+            unavailable_candidates.append(name)
+            continue
+        for case in cases:
+            fid = str(case.id)
+            expected_digest = _pr.text_digest(expected_by_id[fid])
+            fp32_cell: dict[str, Any] | None = None
+            bf16_cell: dict[str, Any] | None = None
+            native_o = native_obs.get(fid)
+            bf16_o = bf16_obs.get(fid)
+            prompt_ids: tuple[int, ...] = ()
+            if native_o is not None:
+                prompt_ids = tuple(native_o["input_ids"])
+            if native_o is not None and bf16_o is not None:
+                fp32_lp = _precision_logprob(native_backend, prompt_ids, expected_by_id[fid])
+                bf16_lp = _precision_logprob(bf16_backend, prompt_ids, expected_by_id[fid])
+            else:
+                fp32_lp = bf16_lp = None
+            if native_o is not None:
+                fp32_cell = _precision_cell(
+                    str(native_o["answer"]),
+                    bool(native_o["boundary_found"]),
+                    tuple(native_o["output_ids"]),
+                    expected_digest,
+                    fp32_lp,
+                )
+            if bf16_o is not None:
+                bf16_cell = _precision_cell(
+                    str(bf16_o.answer),
+                    bool(bf16_o.boundary_found),
+                    tuple(bf16_o.output_ids),
+                    expected_digest,
+                    bf16_lp,
+                )
+            diverged: bool | None = None
+            first_divergence: int | None = None
+            if native_o is not None and bf16_o is not None:
+                comparison = compare_token_ids(
+                    tuple(native_o["output_ids"]), tuple(bf16_o.output_ids)
+                )
+                diverged = not bool(comparison["match"])
+                first_divergence = comparison["first_divergence"]
+            records.append(
+                {
+                    "candidate": name,
+                    "fixture": fid,
+                    "expected_digest": expected_digest,
+                    "fp32": fp32_cell,
+                    "bf16": bf16_cell,
+                    "diverged": diverged,
+                    "first_divergence": first_divergence,
+                }
+            )
+    derived = _pr.compute_derived(
+        records,
+        names,
+        arm_passed,
+        str(result.get("decision")),
+        result.get("selected_candidate"),
+    )
+    payload: dict[str, Any] = {
+        "available": True,
+        "detail": None,
+        "protocol": protocol,
+        "primary_decision": result.get("decision"),
+        "primary_winner": result.get("selected_candidate"),
+        "records": records,
+        "unavailable_candidates": sorted(unavailable_candidates),
+    }
+    payload.update(derived)
+    return payload

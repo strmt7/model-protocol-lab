@@ -134,7 +134,7 @@ The adapter rejects remote-code mappings, quantization configurations, adapter-o
 
 The tokenizer is loaded directly from tokenizer.json. Encoding disables automatic special-token insertion. Verify its behavior against the checkpoint's intended tokenizer before trusting results. Literal special-token markers may not behave as expected for every checkpoint.
 
-The device is `cpu` or `cuda` (CUDA device 0). Weights and computation are requested in float32, with eager attention and no cache. Context limits are checked against model configuration; practical RAM/VRAM limits remain your responsibility. Stock GPT-2 checkpoints declare `n_positions=1024`, below the CLI default `--max-context 2048`: pass `--max-context 1024` (or less) for them, or backend initialization fails fast with the distinct code `local_context_limit_exceeds_declared_window` instead of the generic init failure.
+The device is `cpu` or `cuda` (CUDA device 0). Weights and computation are requested in float32 for the primary measurement (the `run --precision` probe loads a second, bfloat16 copy purely as a comparison arm), with eager attention and no cache. Context limits are checked against model configuration; practical RAM/VRAM limits remain your responsibility. Stock GPT-2 checkpoints declare `n_positions=1024`, below the CLI default `--max-context 2048`: pass `--max-context 1024` (or less) for them, or backend initialization fails fast with the distinct code `local_context_limit_exceeds_declared_window` instead of the generic init failure.
 
 ## 4. Establish the response boundary
 
@@ -2311,6 +2311,61 @@ rule, and the red-team adjudication that reshaped both,
 is in `docs/CHOICE_AUDIT_DESIGN.md`. Informational only:
 the audit never affects selection, and the stage never
 fails the run.
+
+### 8.48 Load precision (`precision`)
+
+Opt-in with `model-protocol-lab run --precision`. A
+practitioner who will serve the checkpoint in bf16 learns,
+before deploying, whether the template winner the lab
+selected under its fp32 measurement is still the winner
+when the same weights are loaded in bf16 — and gets the
+per-fixture flip list if it is not.
+
+The same checkpoint directory is loaded a second time in
+bfloat16 and every search candidate is re-evaluated on
+the search split only, under identical conditions; the
+fp32 arm is the recorded native run, never re-executed.
+Reports per candidate: the verdict-flip matrix over
+fixtures completed in both arms (a fixture an arm never
+reached is unpaired and counted, never an arm failure),
+the output-divergence rate (the sensitive readout —
+generations can diverge where no verdict flips), and the
+teacher-forced expected-answer logprob deltas between
+arms. The headline is winner survival: the selection rule
+is re-applied to both arms over their shared paired
+population and the outcomes compared, withheld when any
+candidate's completed sets mismatch, when the primary run
+produced no winner, or when nothing paired.
+
+Read the numbers at their stated scope. This is dtype
+precision, not quantization: the bf16 arm is a load-time
+cast of the same unquantized weights. Zero flips falsifies
+a precision effect on the search split, at the verdict
+level, in a single bf16 run against the recorded fp32
+run — and where no candidate passes in either arm, zero
+flips is the floor effect, not robustness; the divergence
+and logprob numbers are the informative readouts there.
+Held-out behaviour under bf16 is never measured, and the
+determinism certificate covers the native fp32 search
+observations only. If the winner does not survive, the
+fp32 selection still stands as the run's decision: do not
+serve that winner in bf16 on this evidence. The bf16
+arm's own winner is a search-split readout with no
+held-out evidence, not a selection.
+
+Records carry digests only, never answer text, and
+`diff-reports` recomputes every readout from the ground
+records before comparing (`precision_changed` /
+`precision_asymmetric` feed `identical`); a drifted
+arm fingerprint marks the comparison not comparable while
+still listing it. Cost: a second full search evaluation
+plus a second checkpoint load, with both models resident
+at once; on CPU bf16 measured several times slower than
+fp32 in this lab's sandbox, so the stage can dominate run
+time. The full contract is in
+`docs/PRECISION_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
 
 ## 9. Authoring fixtures (`fixtures build`)
 

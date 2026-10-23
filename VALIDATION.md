@@ -3,15 +3,15 @@
 ## Evidence — continuous development, cycles 10–195 (executed 2026-10-14 → 2026-10-22, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
-(2026-10-14 → 2026-10-22). All commands run from the repository root in
+(2026-10-14 → 2026-10-23). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **7914 tests collected**
-  (cycle 196, 2026-10-22). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **7948 tests collected**
+  (cycle 198, 2026-10-23). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **7914 tests (cycle 196,
-  2026-10-22; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
+- `python -m unittest discover -s tests -t .` — **7948 tests (cycle 198,
+  2026-10-23; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
   now execute the full suite. Includes 29 format families (chatml, llama3, llama4, gemma, gemma3,
@@ -38,16 +38,16 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  96.3939% (cycle 195, 2026-10-22)**. The gate compares the
+  96.0571% (cycle 198, 2026-10-23)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+1.894) is auditable rather than inferred from the display.
+  (+1.557) is auditable rather than inferred from the display.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (270 files in that CI scope; the repo-root scope counts more.
+  (272 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (57 source files).
+- `mypy model_protocol_lab` — clean (58 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

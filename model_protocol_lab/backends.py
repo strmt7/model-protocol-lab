@@ -913,15 +913,23 @@ def _batch_peak_bytes(rows: int, length: int, vocab_size: int, heads: int) -> in
 class LocalHFBackend:
     """Built-in GPT-2/Llama only; self-contained local assets; no download fallback.
 
-    Greedy fp32 decoding recomputes the full prefix and ignores automatic stops.
-    The seed is validated but does not change greedy selection. Constructor
-    loading may affect global RNG state; requests do not seed global generators.
-    Full-content fingerprints read selected assets twice during initialization.
-    Cancellation is cooperative between forwards, not an interruption of kernels.
+    Greedy decoding recomputes the full prefix and ignores automatic stops.
+    The load dtype defaults to fp32 (the primary measurement); bfloat16 is
+    available for the precision probe (cycle 198, docs/PRECISION_DESIGN.md)
+    and is recorded in the backend identity. The seed is validated but does
+    not change greedy selection. Constructor loading may affect global RNG
+    state; requests do not seed global generators. Full-content fingerprints
+    read selected assets twice during initialization. Cancellation is
+    cooperative between forwards, not an interruption of kernels.
     """
 
     def __init__(
-        self, model_path: str | Path, *, device: str = "cpu", max_context: int = 2048
+        self,
+        model_path: str | Path,
+        *,
+        device: str = "cpu",
+        max_context: int = 2048,
+        dtype: str = "float32",
     ) -> None:
         self._lock = RLock()
         self._model = self._tokenizer = None
@@ -930,6 +938,8 @@ class LocalHFBackend:
                 raise ValueError("invalid_context_limit")
             if device not in ("cpu", "cuda"):
                 raise ValueError("invalid_explicit_device")
+            if dtype not in ("float32", "bfloat16"):
+                raise ValueError("invalid_dtype")
             effective_device = "cuda:0" if device == "cuda" else "cpu"
             root = _directory(model_path)
             model_names = _model_assets(root)
@@ -944,6 +954,9 @@ class LocalHFBackend:
                 "tokenizer": tok_records,
             }
             raw_config = _read_json(_member(root, "config.json"))
+            declared_dtype = raw_config.get("dtype", raw_config.get("torch_dtype"))
+            if type(declared_dtype) is not str:
+                declared_dtype = None
             if raw_config.get("model_type") not in {"gpt2", "llama"}:
                 raise ValueError("unsupported_model_type")
             if any(
@@ -1017,7 +1030,7 @@ class LocalHFBackend:
                 token=False,
                 use_safetensors=True,
                 weights_only=True,
-                dtype=torch.float32,
+                dtype=torch.float32 if dtype == "float32" else torch.bfloat16,
                 device_map=None,
                 attn_implementation="eager",
                 output_loading_info=True,
@@ -1030,6 +1043,13 @@ class LocalHFBackend:
                 for key in ("missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs")
             ):
                 raise ValueError("checkpoint_loading_mismatch")
+            # The identity records the verified dtype, never the requested
+            # one and never the config's claim (after a bf16 load the config
+            # object still reports float32). Parameters only: buffers such
+            # as rotary inv_freq stay fp32 by design in HF Llama.
+            wanted_dtype = torch.float32 if dtype == "float32" else torch.bfloat16
+            if {p.dtype for p in model.parameters()} != {wanted_dtype}:
+                raise ValueError("dtype_verification_failed")
             model.eval()
             model.requires_grad_(False)
             model.to(self._device)
@@ -1048,7 +1068,7 @@ class LocalHFBackend:
                     p: version(p) for p in ("torch", "transformers", "tokenizers", "safetensors")
                 },
                 "device": effective_device,
-                "dtype": "float32",
+                "dtype": dtype,
                 "attention": "eager",
                 "context_limit": max_context,
                 "seed_used_for_selection": False,
@@ -1057,6 +1077,8 @@ class LocalHFBackend:
             }
             payload = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
             self.fingerprint = "sha256:" + sha256(payload).hexdigest()
+            self.dtype = dtype
+            self.declared_dtype = declared_dtype
             self.seed_used_for_selection = False
             raw_eos = tokenizer.eos_token_id
             self.eos_token_id: int | None = raw_eos if type(raw_eos) is int else None
