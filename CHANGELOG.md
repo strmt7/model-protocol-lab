@@ -6,6 +6,62 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 201 — release-readiness round, 2026-10-23)
+
+- Release readiness, following the three-lane
+  release-readiness audit (packaging, new-user experience,
+  legal/project health; briefs verified finding by finding
+  against the tree before any edit): this changelog was
+  backfilled for cycles 196, 197 and 198 (below) and is
+  now covered by a mechanical gate — a test enumerates
+  the shipped CLI surface from the argument parser
+  (subcommands and long flags) plus the per-cycle range
+  documented in `docs/RESEARCH_LOG.md` and requires every
+  item to appear here. Recording for completeness, so the
+  gate's coverage is real rather than sampled: the
+  long-standing `run`/`debug` flags `--backend`,
+  `--device`, `--eos-id`, `--family`, `--fixtures`,
+  `--min-tokens`, `--output`, `--output-text`, `--prompt`,
+  `--prompt-text` and `--stops` shipped in earlier cycles
+  and are documented in `docs/USAGE.md`; they are named
+  here once so the changelog covers the full surface.
+- `tools/release_build.py`: the pinned release-build
+  procedure — normalizes every source mtime to
+  `SOURCE_DATE_EPOCH`, builds the sdist, builds the wheel
+  from the sdist, normalizes the sdist's tar metadata,
+  and repeats the whole build from a second copy,
+  requiring identical SHA-256 hashes for both artifacts.
+- `.github/workflows/release.yml`: a tag-triggered
+  release workflow (inert until the owner creates a tag)
+  that builds with the procedure above and publishes via
+  PyPI Trusted Publishing with PEP 740 attestations —
+  no long-lived PyPI token exists in CI.
+- `CODE_OF_CONDUCT.md`; an attribution file for the
+  five vendored upstream chat templates in
+  `docs/evidence/`; `MANIFEST.in` so the sdist carries
+  this changelog and the contributor documents; a
+  `py.typed` marker so downstream type checkers see the
+  package's types.
+
+### Fixed (cycle 201 — release metadata and disclosure, 2026-10-23)
+
+- Package metadata now matches the product's state: the
+  development-status classifier moves from Pre-Alpha to
+  Beta; the `hf` extra caps `torch` below the next major
+  (`torch>=2.6,<3`) so a fresh install cannot silently
+  admit a breaking framework release; project URLs gain
+  Repository, Issues and Changelog links.
+- `docs/SECURITY.md` now names the vulnerability
+  disclosure route it previously left generic: private
+  vulnerability reporting is enabled on GitHub for this
+  repository (verified through the GitHub API).
+- README quickstart: the `hf` install now documents the
+  multi-GB CUDA download the default PyPI torch wheel
+  implies on Linux and the CPU-only index route, and the
+  full-suite step is labeled optional with its expected
+  duration instead of reading as a routine quickstart
+  step.
+
 ### Fixed (cycle 200 — heap-address flake in a cycle-195 test fake, 2026-10-23)
 
 - The choice-audit drift test's fake backends defined
@@ -62,6 +118,53 @@ All notable changes to this project are documented here. The format follows
   extra search evaluation plus the generated pair (3,552
   generations at the legal maximum). Full contract:
   `docs/CONFIDENCE_DESIGN.md`.
+
+### Added (cycle 198 — load-precision comparison, 2026-10-23)
+
+- `run --precision`: paired fp32-vs-bf16 load-precision
+  comparison (research wave-8 rank 7). The same candidate
+  is evaluated under both dtypes through a dtype-verified
+  backend parameter (the backend attests the dtype it
+  actually loaded; a mismatch fails closed), records are
+  digest-bound pairs, the paired population is the
+  intersection that survived both arms, and `diff-reports`
+  re-derives the section in full rather than trusting the
+  stored readouts. Per-candidate verdict flips between
+  dtypes are reported with denominators; no readout
+  pools the two arms. Full contract:
+  `docs/PRECISION_DESIGN.md`.
+
+### Fixed (cycle 197 — citation and claims corrections, 2026-10-23)
+
+- Documentation claims corrected against primary sources
+  after the 2026-10-22 claims audit: the needle section's
+  "Paulsen" attribution was removed — a genuine source
+  hunt found no such source — together with the
+  downstream inference drawn from it, and the passage was
+  rewritten as the lab's own reasoning with the removal
+  recorded in `docs/RESEARCH_LOG.md`; the healthcare
+  citation was corrected to Christophe et al.
+  (arXiv:2601.18334); StrongREJECT to arXiv:2402.10260;
+  the XSTest figure was scoped to the unsafe-prompt half
+  of its table; Tensor Trust wording was softened at six
+  sites to match what the source supports; the
+  PromptRobust naming was corrected; an unverifiable
+  garak figure was removed.
+
+### Fixed (cycle 196 — oversight correction round, 2026-10-22)
+
+- All fourteen findings (S-1 to S-14) of the 2026-10-22
+  security oversight audit fixed: a single-file-descriptor
+  reader for the surface-noise surface, pack exception
+  normalisation with an entry-type seal, MCP framing and
+  notification hardening, display-length caps on
+  model-controlled strings, and C0 control-character
+  stripping in the main report paths. Edge-case findings
+  F2/F3 fixed in the same round (type-strict recompute
+  equality; primary-pair binding). The needle section's
+  HTML escaping was additionally verified end-to-end
+  through the real reporting path rather than at the
+  section boundary alone.
 
 ### Added (cycle 195 — choice-scoring audit, 2026-10-22)
 
@@ -1466,7 +1569,7 @@ All notable changes to this project are documented here. The format follows
   after a dataset update. New `contamination_changed` /
   `contamination_asymmetric` summary flags feed `identical`.
 
-### Verified (cycle 142 — contamination HTML safety audit, 2026-10-18)
+### Security (cycle 142 — contamination HTML safety audit, 2026-10-18)
 
 - Security audit of the contamination detector's HTML integration
   (cycle 132 feature): confirmed the `worst_tier` is escaped at the

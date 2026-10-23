@@ -22,10 +22,11 @@ ruff format --check model_protocol_lab tests examples
 mypy model_protocol_lab
 ```
 
-If you touched `model_protocol_lab/reporting.py`, also run the report validator:
+If you touched `model_protocol_lab/reporting.py`, also run the report
+validator tests:
 
 ```sh
-python /tmp/validate_report.py   # not committed; see tests/test_sample_report.py
+python -m pytest tests/test_sample_report.py
 ```
 
 If you changed the sample report inputs, regenerate it — the golden test
