@@ -19,7 +19,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (7994 tests, 95.7% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8000 tests, 95.7% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made.
 
 ## Quick start
 
@@ -33,10 +33,20 @@ python -m venv .venv
 python -m pip install -e ".[dev,hf]"
 python -m model_protocol_lab catalog
 python -m model_protocol_lab inspect examples/fixtures.json
-python -m unittest discover -s tests -t .
 ```
 
 (A `model-protocol-lab` console script is installed as an equivalent entry point.)
+
+Two install notes. The `hf` extra pulls in PyTorch: on Linux the default
+PyPI wheel is the CUDA build and downloads several GB of NVIDIA libraries
+with it. For a CPU-only machine, install the CPU wheel first
+(`python -m pip install torch --index-url https://download.pytorch.org/whl/cpu`),
+then the command above reuses it. And the full test suite is a separate,
+optional verification step — it is thorough rather than quick:
+
+```sh
+python -m unittest discover -s tests -t .   # optional; expect roughly 20–55 minutes
+```
 
 To run a model you also need the optional dependencies and a trusted,
 already-downloaded checkpoint directory (the adapter never downloads models):

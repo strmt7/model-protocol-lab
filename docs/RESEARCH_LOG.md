@@ -9053,3 +9053,124 @@ backend — the value is the string itself and payloads are
 deterministic. A future hardening cycle can add the shared guard
 across the stage read sites; doing it piecemeal for one stage
 would leave the contract less consistent, not more.
+
+## Cycle 201 — release-readiness round (2026-10-23)
+
+The first cycle run under the seven-skill method package
+(`mpl_development_cycle`, `mpl_verification_gate`,
+`mpl_release_engineering`, `mpl_claims_and_citations`,
+`mpl_bug_hunting`, `mpl_test_integrity`, `mpl_agent_workflows`).
+Scope: the three-lane commercial-release readiness audit
+(packaging, new-user experience, legal/project health). All
+three lanes returned zero blockers. Every finding was
+re-verified by execution against the tree before any edit;
+the full disposition table lives in the 2026-10-23 addendum
+to `docs/RELEASE_READINESS_0.1.0.md`. Evidence highlights:
+
+- CHANGELOG gap confirmed mechanically: the word "precision"
+  appeared 0 times in CHANGELOG.md; enumerating the CLI
+  surface from `build_parser()` found 12 long flags absent
+  (`--precision` plus 11 long-standing ones). Backfilled
+  cycles 196/197/198, and the new gate tests
+  (tests/test_cycle201_readiness.py) were proven to fail on
+  the pre-fix tree fetched from GitHub at ed4df64454e3 —
+  missing surface exactly those 12 flags, missing cycles
+  exactly [196, 197, 198] — and pass on the fixed tree. The
+  cycle gate's window starts at 165, where the per-cycle
+  convention verifiably begins; earlier cycles are covered
+  by the rolled release sections.
+- Reproducible build: the audit showed SOURCE_DATE_EPOCH
+  alone leaves the sdist non-reproducible (raw member
+  mtimes, build user in uname/gname). Building
+  `tools/release_build.py` surfaced two further leaks by
+  execution: a first version copied artifacts out after its
+  temp directory closed (fixed), and the member-level diff
+  then isolated the last variance to a PAX extended header
+  carrying a build-time float mtime (e.g.
+  `mtime=1792776432.3124018`) on files setuptools generates
+  during the build — the normalizer now drops PAX time keys.
+  Final state: two independent builds produce byte-identical
+  sdist and wheel (SHA-256 recorded in the cycle's gate log),
+  the wheel is built from the normalized sdist, twine passes
+  both, and a clean-venv install pulls zero dependencies with
+  `catalog` output byte-identical to the source tree. The
+  wheel also verified to carry `py.typed` (66 entries) and
+  the corrected metadata (Beta classifier, Maintainer,
+  Repository/Issues/Changelog URLs, `torch<3,>=2.6`).
+- One edit defect was caught by the build, not by review:
+  `maintainers` was first inserted after `[project.scripts]`,
+  where TOML scoping made it a scripts key and setuptools
+  rejected the project — the release build failed closed on
+  it. Moved into `[project]`; recorded here because the
+  mechanism (build catches what diff-reading missed) is the
+  point of the clean-room step.
+- Disclosure route: GitHub's private-vulnerability-reporting
+  endpoint for this repository returns `{"enabled": true}`
+  (coordinator's own API read); `docs/SECURITY.md` now names
+  the route instead of advising readers not to assume one
+  exists.
+- Evidence-template licenses resolved against the Hugging
+  Face API (2026-10-23): Hy4-preview Apache-2.0,
+  K2-Horizon Apache-2.0, Ling-3.1-flash MIT,
+  Nanbeige4.2-3B Apache-2.0, MiniMax-M3 `other` (custom
+  terms — the attribution file says so rather than borrowing
+  a permissive label). Local md5s re-measured and recorded
+  in `docs/evidence/README.md`.
+- Release workflow `.github/workflows/release.yml` is
+  tag-triggered and token-free (Trusted Publishing). Every
+  action SHA in it was resolved through the GitHub API at
+  write time (checkout/setup-python/upload-artifact mirror
+  ci.yml's pins; download-artifact v8.0.2, actions/attest
+  v4.2.2, gh-action-pypi-publish release/v1). One SHA in the
+  first draft came from memory rather than a lookup; it was
+  caught on re-read and replaced with the API-resolved value
+  before the file ever ran — noted because identifier
+  grounding is a standing rule, not a style preference.
+- `pylock.toml` (PEP 751) generated for the dev extra with
+  pip 26.2.1 (16 packages, hashed wheels). The `hf` extra is
+  deliberately not locked: producing its hashes requires
+  downloading the multi-GB CUDA stack, the same egress wall
+  the new-user auditor hit mid-install; the residual stays
+  documented in `docs/SECURITY.md`. CI does not install from
+  the lock — CI installs latest ruff/bandit by design.
+- Accepted without change, with reasons in the addendum:
+  the copyright-holder line (owner decision), the
+  error-message nits, and `UPLOAD_TO_GITHUB.md` (the push
+  helper cannot delete files; owner-side removal).
+- Skill-vs-reality note for the method package:
+  `mpl_verification_gate` quotes ~51 minutes for the exact
+  CI command; measured at cycle 199 it was 3,284 s (~55 min)
+  and grows with the suite — a stale constant to refresh,
+  not a behavioural conflict.
+- Gate execution record (kept in full, per the error-keeping
+  rule): the first full pytest run failed 4 tests, all
+  interactions between this cycle's edits and existing pins
+  — the plan status note is a pinned historical snapshot
+  (test_cycle99; refreshed numbers reverted, currency lives
+  in VALIDATION.md), VALIDATION.md's ruff file count is
+  pinned against a live CI-scope run (274 → 275 for the new
+  test file), and the new test file's tools import now
+  follows the in-tree `from tools import ...` pattern the
+  dependency-closure audit accepts. The exact CI command
+  then needed seven attempts across an evening of repeated
+  runtime restarts: every killed attempt was followed by
+  the full blob-hash tree audit (differing files always
+  exactly this cycle's intended set, zero package-source
+  diffs, so no in-place gate mutant was ever orphaned), and
+  the one attempt that completed under a `setsid`-detached
+  launcher failed exactly two tests — the cycle-89 SIGINT
+  tests — because a backgrounded shell hands its children
+  SIGINT as *ignored* (the debug script exited 0 instead of
+  130). Proven environmental, not a tree defect: the tests
+  pass in a foreground run, and pass detached once the
+  launcher resets SIGINT/SIGQUIT to SIG_DFL before exec
+  (smoke-verified on the signal suite alone first). The
+  completing attempt ran with that launcher: 8,000 tests,
+  OK, precise coverage 95.7275% (unchanged from cycle 199 —
+  this cycle changed no package source lines). A background
+  "completed" delivery for the first pytest run also
+  reported a fully-formed green summary while the process
+  was still running and the real verdict was 4 failures;
+  verdicts in this cycle were read only from log files
+  whose own exit lines were present, after `ps` confirmed
+  the process had exited.

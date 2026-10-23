@@ -9,6 +9,66 @@
 > updated through cycle 132). Residual items marked **Retired** below stay
 > retired; the remaining risks are still accepted.
 
+> **Addendum 2026-10-23 (cycle 201):** a three-lane release-readiness
+> audit (packaging, new-user experience, legal/project health) re-checked
+> this report against the tree and found its currency claims stale — the
+> 2026-10-17 addendum above was the last refresh. Current state,
+> measured at cycle 201: 11 CLI subcommands; 59 package source files;
+> test count and coverage as stated in `VALIDATION.md` (the count moved
+> with cycles 199–201 and is maintained there, not here). The audit's
+> verdict was **zero blockers** in all three lanes; every should-fix was
+> re-verified against the tree by the coordinator and dispositioned in
+> cycle 201:
+>
+> - CHANGELOG gaps for cycles 196–198 (including the user-facing
+>   `run --precision` flag) — **fixed**: backfilled, and a mechanical
+>   gate test now enumerates the CLI surface and the per-cycle range
+>   and fails if coverage lapses again.
+> - "Pre-Alpha" classifier in the wheel metadata — **fixed**: Beta.
+> - Builds not byte-reproducible; no release procedure — **fixed**:
+>   `tools/release_build.py` (mtime normalization, sdist tar-metadata
+>   normalization incl. PAX time headers, wheel built from the sdist,
+>   double build with identical SHA-256 required; verified at cycle 201
+>   with both artifacts byte-identical across two builds).
+> - `torch` unbounded above — **fixed**: `torch>=2.6,<3`.
+> - `[hf]` install silently pulls a multi-GB CUDA stack — **fixed**:
+>   README documents the size and the CPU-index route; the quickstart's
+>   full-suite step is labeled optional with its expected duration.
+> - No documented vulnerability-disclosure route — **fixed**:
+>   `docs/SECURITY.md` names GitHub private vulnerability reporting
+>   (enabled for this repository; verified through the GitHub API).
+> - No code of conduct — **fixed**: `CODE_OF_CONDUCT.md`.
+> - Vendored upstream chat templates without local attribution —
+>   **fixed**: `docs/evidence/README.md` (sources and upstream licenses
+>   resolved against the Hugging Face API, 2026-10-23; MiniMax's custom
+>   terms are recorded as custom, not relabeled).
+> - No release workflow — **fixed**: `.github/workflows/release.yml`
+>   (tag-triggered, Trusted Publishing with PEP 740 attestations,
+>   actions pinned to API-verified SHAs). It is inert until the owner
+>   creates a tag **and** registers the Trusted Publisher on PyPI —
+>   both owner steps, deliberately not automated.
+> - No lockfile — **partially fixed**: `pylock.toml` (PEP 751) pins the
+>   dev environment with wheel hashes; the `hf` extra is not locked
+>   (hashing its wheels requires the multi-GB download), and the
+>   residual stands in `docs/SECURITY.md`.
+> - Missing `py.typed`, thin project URLs, sdist missing the changelog —
+>   **fixed** (marker shipped in the wheel; Repository/Issues/Changelog
+>   URLs added; `MANIFEST.in`).
+> - Copyright holder named as a collective — **owner decision**, no
+>   change (`CITATION.cff` names the author).
+> - `UPLOAD_TO_GITHUB.md` at the repo root — **open**: obsolete, but
+>   the push pipeline cannot delete files; removal is a one-click
+>   owner action in the GitHub UI.
+> - Error-message nits (a raw parser message after a fixed prefix;
+>   "audit sidecar" jargon in one refusal) — **accepted**: the fixed
+>   error vocabulary is pinned behavior; the messages are accurate and
+>   traceback-free.
+>
+> The dependency license inventory was refreshed from the PyPI JSON API
+> during the audit (2026-10-23): zero runtime dependencies; the `hf`
+> extra is all-permissive; the only weak-copyleft item anywhere is
+> MPL-2.0 `hypothesis`, dev-only and never shipped.
+
 **Scope:** every item of the release-readiness definition of done, with
 evidence (commands, dates, counts). Prepared by the autonomous
 development coordinator across cycles 84–96. **No git tag has been

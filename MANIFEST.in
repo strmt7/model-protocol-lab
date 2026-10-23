@@ -1,0 +1,9 @@
+# The sdist carries the documents a recipient needs to evaluate the
+# release without the repository: the changelog (what shipped, per
+# cycle) and the contributor/community documents. docs/ and examples/
+# stay out deliberately — the sdist already ships the full test suite
+# via setuptools defaults, and the documentation set is large and
+# versioned with the repository, not the artifact.
+include CHANGELOG.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md

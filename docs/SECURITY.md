@@ -21,7 +21,7 @@ bandit + ruff `S` + manual review covered the same ground.
 
 | ID | Severity | Finding | Resolution |
 |----|----------|---------|------------|
-| F1 | Medium | No lockfile/hashes; `torch>=2.6` unbounded — fresh installs trust PyPI tip-of-range. | Upper-bound discipline documented; `pip-audit` runs as a CI gate (`security` job) on every build; torch CVE posture tracked below. |
+| F1 | Medium | No lockfile/hashes; `torch>=2.6` unbounded — fresh installs trust PyPI tip-of-range. | Upper-bound discipline documented; `pip-audit` runs as a CI gate (`security` job) on every build; torch CVE posture tracked below. `torch` capped `<3` in cycle 201 (2026-10-23); the lockfile gap remains accepted (residual 2). |
 | F2 | Low | `pip-audit` cannot see `torch 2.14.1+cpu` (local version tag). | Manual CVE review 2026-10-12: postdates fixes for CVE-2025-3000 and CVE-2025-32434; CVE-2026-4538 (`torch.export.load`) is not reachable — the codebase never calls `torch.export.load`/`torch.load`; weights load only via `from_pretrained(use_safetensors=True, weights_only=True)`. Re-verify on every torch bump. |
 | F3 | Low | Report files created with default umask (0644) — readable by other local users. | Fixed: `save_report` now creates the directory with `0o700` and files with `0o600`, using `O_EXCL` exclusive creation. Regression test asserts the modes. |
 | F4 | Info | `_read_json` caps JSON at 128 MB but HF re-reads `tokenizer.json` uncapped. | Fixed: `stat()` size check (128 MB) on `tokenizer.json` before `PreTrainedTokenizerFast` loads it; sparse-file regression test. |
@@ -219,7 +219,11 @@ crashes on non-string dict keys fixed fail-closed).
 1. torch's `+cpu` local tag stays invisible to `pip-audit`; its CVE posture
    needs manual re-verification on every bump.
 2. No hash-pinned lockfile: fresh installs trust PyPI within the declared
-   ranges; mitigated by the CI `pip-audit` gate.
+   ranges; mitigated by the CI `pip-audit` gate. Partially tightened
+   2026-10-23 (cycle 201): the `hf` extra now caps `torch` below its next
+   major (`torch>=2.6,<3`, matching the existing `transformers<6` cap), so
+   the largest dependency can no longer cross a major release silently;
+   the lockfile gap itself remains accepted as recorded here.
 3. ~~`_manifest` reads every weight file twice per run (before/after init) —
    hundreds of GB of I/O on very large checkpoints; documented, not a defect.~~
    **Retired 2026-10-17 (cycle 115):** the backend now hashes each weight
@@ -284,4 +288,4 @@ Do not expose the library or CLI directly as a multi-user network service. Authe
 
 ## Reporting defects
 
-For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use a repository's enabled private security-reporting route when available; do not assume one has been configured.
+For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.
