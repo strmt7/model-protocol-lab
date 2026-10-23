@@ -37,8 +37,8 @@ Pre-registered falsifiable claims (see docs/RESEARCH_LOG.md cycle 169):
   F1: among candidates meeting the evaluability floor (>= 6 paired-
       evaluable fixtures, nonzero control rate), at least one shows
       gap > 0 with >= 2 discordant control-only pairs. Falsified by the
-      all-evaluable-nonpositive outcome (a replication of Tensor Trust
-      Appendix H's role-labelling null). If NO candidate is evaluable,
+      all-evaluable-nonpositive outcome (an analogue of Tensor Trust
+      Appendix H's small-difference role-scheme result). If NO candidate is evaluable,
       F1 is vacated (probe uninformative), not a negative result.
   F2: the privilege-label contrast is position-matched: per-arm marker
       offsets in the rendered prompt (characters into ``input_text``)
@@ -408,8 +408,8 @@ def confidentiality_profile(
     gap; otherwise the probe is uninformative and reports
     ``{"available": False, "detail": "confidentiality_unavailable"}``
     (F1 vacated, not a negative result). ``uniform_nonpositive`` is the
-    publishable negative: every measurable gap <= 0 (Tensor Trust
-    Appendix H replication reading).
+    publishable negative: every measurable gap <= 0 (the Tensor Trust
+    Appendix H analogue reading).
     """
     cells: dict[str, dict[str, Any]] = {}
     for name in candidates:

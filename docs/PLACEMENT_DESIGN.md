@@ -6,8 +6,10 @@ NARROWING; the narrowed wording is in docs/RESEARCH_LOG.md,
 cycle 193, with three corrections to the wave-8 brief — the
 arXiv:2605.28188 instrument is few-shot exemplar segments, not a
 value anchor; the healthcare role-relocation result is
-arXiv:2601.03286 in docs/FAQ.md on closed-weights hosted
-models, not a RESEARCH_LOG entry; the framing paper's
+arXiv:2601.18334, recorded in docs/RESEARCH_LOG.md's
+cycle-185 entry, on closed-weights hosted models (an earlier
+printing of this summary named the wrong ID and the wrong
+home; corrected in cycle 197); the framing paper's
 mitigation is order swaps plus majority vote, never a placement
 instrument). Red-team A returned DO NOT BUILD AS SPECIFIED (17
 findings, 3 fatal). Red-team B cross-checked every finding with

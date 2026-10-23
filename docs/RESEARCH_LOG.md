@@ -5783,7 +5783,7 @@ surface noise (typos, case flips, whitespace, unicode variants, punctuation
 stripping) deterministically?
 
 **Checked 2026-10-19 (web):**
-- PromptBench (arXiv:2306.04528) / NoisyPromptBench (arXiv:2603.03314): measure
+- PromptRobust (the PromptBench project) (arXiv:2306.04528) / NoisyPromptBench (arXiv:2603.03314): measure
   *model* robustness to adversarial prompts via the PDR metric
   (PDR(A,P,fΘ,D) = 1 − ΣM[fΘ([A(P),x]),y] / ΣM[fΘ([P,x]),y]). The independent
   variable is the model/attack, not the chat template. Not a template instrument.
@@ -6226,7 +6226,7 @@ behavioural vs TEE cryptographic) — one-sentence disambiguation required.
   flag). Evaluability floor: >=6 paired-evaluable fixtures per candidate
   and nonzero control rate; positive verdict needs gap > 0 AND >=2
   discordant control-only pairs. All evaluable but nonpositive -> the
-  Tensor Trust Appendix H null, publishable. No candidate evaluable ->
+  Tensor Trust Appendix H small-difference outcome, publishable. No candidate evaluable ->
   `{"available": False, "detail": "confidentiality_unavailable"}`.
 - **D8 — fail-closed vocabulary**: tree conventions
   (`confidentiality_unavailable` / per-candidate None cells), never-raises
@@ -6244,7 +6244,7 @@ behavioural vs TEE cryptographic) — one-sentence disambiguation required.
 
 - F1: among candidates meeting the evaluability floor, at least one shows
   gap > 0 with >=2 discordant control-only pairs. Falsified by the
-  all-evaluable-nonpositive outcome (Tensor Trust replication, publishable
+  all-evaluable-nonpositive outcome (the Tensor Trust analogue, publishable
   negative). If no candidate is evaluable, F1 is vacated (probe
   uninformative), NOT a negative result.
 - F2: the privilege-label effect is position-robust: the per-arm nonce
@@ -6764,10 +6764,10 @@ XSTest (arXiv:2308.01263; varies models and system-prompt *content*
 removal, is a content effect, not a rendering effect), OR-Bench
 (arXiv:2405.20947; varies models, removes system prompts entirely
 as a confound), HarmBench (arXiv:2402.04249; a fine-tuned Llama-2
-13B classifier, no string list), StrongREJECT (arXiv:2402.07877;
+13B classifier, no string list), StrongREJECT (arXiv:2402.10260;
 ranks string matching its worst evaluator, bias 0.484), garak
 (detectors for harmful-content compliance -- the inverted problem,
-and its ~188-phrase lists are FP-heavy by design), lm-eval /
+and its phrase-list detectors are FP-heavy by design), lm-eval /
 HELM / inspect_evals (no template-conditioned refusal
 measurement). Two informal blog posts show chat format gating
 refusal of *harmful* prompts (n=5, harmful set, no code). The docs
@@ -6782,8 +6782,11 @@ Detector evidence, carried into the docs because it bounds what
 the numbers can mean: XSTest Table 2 -- its own string matching
 over-counts GPT-4 safe-prompt refusals by +4.8 points (the
 canonical false positive is an empathy opener: "I'm sorry to hear
-about your hamster") and under-counts Mistral's by ~29 points; the
-error's sign is model-dependent and no published precision/recall
+about your hamster"); on safe prompts its Mistral error is near
+zero (0.0 points for MistrI, -3.6 for MistrG), while in the
+unsafe-prompt half of the same table it under-counts Mistral's by
+~29 points; the error's sign and size are model- and
+population-dependent and no published precision/recall
 transfers to this lab's fixture distribution. Hence the
 *suspected-* naming everywhere, counts with every rate, and the
 cross-tab's honest job: separating decision-relevant suspected
@@ -8120,10 +8123,7 @@ distributed through book text, ~10% depth bins. Chroma,
 *Context Rot* (July 2025, research.trychroma.com/context-rot)
 — total length varied with a fixed median needle position
 (not depth-rotated), distractor-count and similarity effects,
-needle–question similarity effects. Paulsen, *Needle in a
-Haystack — The Problem of Base Hits and Impossible Needles*
-(arXiv:2604.03996) — temperature-0.7 single samples vary up to
-15 points run-to-run; pass demands are configuration choices.
+needle–question similarity effects.
 
 Verdict: the combination holds with narrowing, and the
 narrowing is recorded here so the docs stay inside it. Depth
@@ -8157,8 +8157,8 @@ prose, so curves are a lower bound (Chroma's similarity
 result), stated in the readout; scoring is the lab's strict
 boundary-cut exact match, with RULER's looser substring tier
 deliberately not offered; each cell is one greedy generation
-with denominators printed (Paulsen's variance point is met by
-determinism plus denominators, not by sampling).
+with denominators printed (the sampling-variance concern is
+answered by determinism plus denominators, not by sampling).
 
 ## Cycle 192 — a real batch path for the local backend (wave-8 rank 4, pre-build)
 
@@ -8244,12 +8244,14 @@ was verified, not taken on the wave-8 brief's word:
   paper's mitigation — order swaps plus majority vote — is an
   ensemble procedure, never a placement instrument, and must
   not be described as one.
-- arXiv:2601.03286 (healthcare over-alignment; recorded in
-  docs/FAQ.md, not in this log — the wave-8 brief misattributed
-  its home) relocates an expert role between the user turn and
-  the system prompt inside one vendor's own rendering, on
-  closed-weights hosted models, over clinical vignettes with
-  human-anchored rubrics. Role relocation is not within-turn
+- arXiv:2601.18334 (healthcare over-alignment; recorded in
+  this log's cycle-185 entry, not in docs/FAQ.md — an earlier
+  printing of this entry named the wrong ID and the wrong
+  home; corrected in cycle 197) relocates an expert role
+  between the user turn and the system prompt inside one
+  vendor's own rendering, on closed-weights hosted models,
+  over clinical vignettes with human-anchored rubrics. Role
+  relocation is not within-turn
   question/payload order, and nothing in it is hand-rendered,
   local, or exact-scored.
 - Lost in the Middle (arXiv:2307.03172) varies the position of
@@ -8638,3 +8640,97 @@ invisible-character class left to the per-probe sections'
 local strips and SECURITY.md residual #9. The new test file
 also moved VALIDATION.md's CI-scope ruff count (269 → 270),
 which the cycle-178 pin caught live, as designed.
+
+## Cycle 197 — oversight claims corrections (docs)
+
+This cycle ships no feature and no code behaviour change. It
+consumes the claims brief of the 2026-10-22 oversight round
+(F-01..F-08; the security and edge-case fixes landed in cycle
+196). Every item was re-verified by the coordinator against the
+primary source before editing — arXiv API records for the five
+identifiers in question, the papers' own HTML/PDF text for the
+table- and appendix-level claims, and a grep of docs/FAQ.md for
+the claimed home. Four claims in this log were wrong; all four
+are corrected in place below, and the corrections are recorded
+here so the record shows both the error and its repair.
+
+- **F-01 (HIGH) — a cited paper that does not exist at its ID.**
+  The cycle-191 entry credited "Paulsen, *Needle in a Haystack —
+  The Problem of Base Hits and Impossible Needles*
+  (arXiv:2604.03996)" with a temperature-0.7 sampling-variance
+  result, and the needle design discussion relied on "Paulsen's
+  variance point". Verification: arXiv:2604.03996 is Chakraborty
+  & Chakraborty, "Raychaudhuri Equation and Weyl-Driven Shear"
+  (gravitational lensing) — no needle content, no Paulsen. A
+  genuine-source hunt followed: exact-title web search (no
+  record), arXiv author search (Paulsen + needle: one unrelated
+  photonics paper), arXiv phrase searches ("impossible
+  needles"; "base hits" + needle: zero results). No genuine
+  source exists that the coordinator could find, so per the
+  standing rule the attribution is REMOVED, not replaced: the
+  bullet is deleted from the cycle-191 prior-art list, and the
+  downstream sentence now states the design response as the
+  lab's own reasoning ("the sampling-variance concern is
+  answered by determinism plus denominators, not by sampling").
+  The needle combination verdict never depended on the claim —
+  it scoped novelty to the combination and listed the sampling
+  point as a design response, not as prior art — but a
+  uniqueness record that cites a non-existent paper is a defect
+  in itself, and it is recorded here as one.
+- **F-02 (HIGH) — wrong ID and wrong home, healthcare paper.**
+  The cycle-193 entry cited the healthcare-overalignment study
+  as arXiv:2601.03286 (that ID is NAVER's "HyperCLOVA X 32B
+  Think") and said it was recorded in docs/FAQ.md. The paper is
+  Christophe et al., arXiv:2601.18334; its Appendix B
+  role-relocation text was re-verified verbatim ("when we moved
+  the role to the System Prompt... the results changed
+  drastically"), and the study's home is this log's cycle-185
+  entry (grep confirms zero healthcare/overalignment matches in
+  docs/FAQ.md). The entry now names the correct ID and home and
+  flags its own earlier printing as wrong. The same wrong
+  ID/home pair had propagated into docs/PLACEMENT_DESIGN.md's
+  swarm summary; corrected there too (the coordinator's grep
+  catch, beyond the brief's location list).
+- **F-03 (HIGH/MED) — StrongREJECT under WildfireGPT's ID.**
+  The refusals entry cited arXiv:2402.07877 (Xie et al.,
+  WildfireGPT). StrongREJECT is Souly et al., arXiv:2402.10260;
+  the substantive claim (string matching the worst evaluator,
+  bias 0.484) was re-verified in the correct paper's Table 1.
+  Identifier corrected; the content claim stands.
+- **F-04 (MED) — XSTest figure from the wrong table half.**
+  The same entry attached a "~29 points" Mistral under-count to
+  a safe-prompt discussion. Re-verified from XSTest Table 2
+  itself: the safe-prompt half gives GPT-4 +4.8 (the hamster
+  false positive, verbatim in the paper) and Mistral deltas of
+  0.0 (MistrI) / -3.6 (MistrG); the ~29-point values (-28.5 /
+  -29.5) are the unsafe-prompt half. The sentence now scopes
+  both halves explicitly.
+- **F-05 (MED/LOW) — Tensor Trust wording softened.**
+  Appendix H of Tensor Trust (verified from the paper's PDF:
+  HRR 19-31%, ERR 27-32% across five role schemes; "the
+  difference in each message role scheme is small") is a
+  small-difference result on API message roles in a
+  prompt-injection game — not a statistical "null" and not the
+  same construct as this lab's folded privilege labels. "Null"
+  and "replication" are replaced by "small-difference
+  role-scheme result" / "analogue" at every site: this log
+  (two places), docs/USAGE.md, confidentiality.py (two
+  docstrings), and the reporting.py null-result line.
+- **F-07 (MINOR) — naming.** arXiv:2306.04528's current title
+  is "PromptRobust"; first mention in this log now reads
+  "PromptRobust (the PromptBench project)".
+- **F-08 (LOW) — unverifiable number removed.** The garak
+  "~188-phrase lists" figure had no version, file, or primary
+  source and none could be established; the number is deleted
+  and the qualitative point (phrase-list detectors are FP-heavy
+  by design) kept, per the brief's disposition.
+- **F-06** (README currency for --choice-audit) landed in
+  cycle 195 and is not repeated here.
+
+Process: the coordinator's reporting.py edit for F-05 first
+landed malformed (a mid-line match spliced a string
+continuation) and was caught by direct inspection and an
+ast.parse check seconds later, before anything ran on it; the
+gate below runs on the repaired text. No tests change in this
+cycle (nothing pins the corrected strings — grep-verified), so
+the counts stand at 7914.

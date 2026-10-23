@@ -7376,7 +7376,8 @@ def _confidentiality_section(result: dict[str, Any]) -> str:
             "<p><strong>Null result</strong>: every measurable gap is "
             "nonpositive, so on this fixture set the privilege label "
             "conferred no measurable selective protection for any "
-            "candidate -- the Tensor Trust Appendix H reading.</p>"
+            "candidate -- the small-difference outcome Tensor Trust "
+            "Appendix H's role-scheme ablation also reports.</p>"
         )
     positive = audit.get("positive_candidates")
     positive_line = ""
