@@ -5356,6 +5356,233 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_fixtures") == len(block))
 
+    def _or_precision_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_precision: exact top-level
+        # shape, the protocol fingerprint recomputed through the
+        # producer module (precision), the two arm fingerprints
+        # distinct, the primary pair bound to the payload's own
+        # candidates, every record and cell checked structurally
+        # with the digest verdict binding, the stage-attested
+        # arm-passed verdicts consistency-checked against the
+        # record universe, and every derived value recomputed
+        # through the producer's pure aggregation
+        # (precision.compute_derived). A drift in either side's
+        # constants breaks the agreement.
+        import json as _json
+
+        from model_protocol_lab import precision as _pr
+
+        def _dig(v: Any) -> bool:
+            return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "candidates",
+            "detail",
+            "flips",
+            "precision_effect_falsified",
+            "primary_decision",
+            "primary_winner",
+            "protocol",
+            "records",
+            "selection",
+            "totals",
+            "unavailable_candidates",
+            "unpaired",
+        }:
+            return False
+        if value.get("detail") is not None:
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict or set(protocol) != {
+            "arm_dtype",
+            "bf16_fingerprint",
+            "boundaries",
+            "candidates",
+            "declared_dtype",
+            "fingerprint",
+            "fixture_set_sha256",
+            "fp32_fingerprint",
+            "max_new_tokens",
+            "max_records",
+            "max_records_bytes",
+            "native_dtype",
+            "seed",
+            "version",
+        }:
+            return False
+        if protocol["version"] != 1 or type(protocol["version"]) is not int:
+            return False
+        if type(protocol["seed"]) is not int or protocol["seed"] < 0:
+            return False
+        if (
+            type(protocol["max_new_tokens"]) is not int
+            or not 1 <= protocol["max_new_tokens"] <= 4096
+        ):
+            return False
+        if (
+            protocol["max_records"] != _pr.MAX_RECORDS
+            or protocol["max_records_bytes"] != _pr.MAX_RECORDS_BYTES
+        ):
+            return False
+        if not _dig(protocol["fixture_set_sha256"]):
+            return False
+        candidates = protocol["candidates"]
+        if (
+            type(candidates) is not list
+            or not candidates
+            or any(type(n) is not str or not n for n in candidates)
+            or len(set(candidates)) != len(candidates)
+        ):
+            return False
+        boundaries = protocol["boundaries"]
+        if type(boundaries) is not dict or set(boundaries) != set(candidates):
+            return False
+        for name in candidates:
+            ids = boundaries[name]
+            if type(ids) is not list or not ids or any(type(t) is not int or t < 0 for t in ids):
+                return False
+        if protocol["fp32_fingerprint"] == protocol["bf16_fingerprint"]:
+            return False
+        if protocol["native_dtype"] != "float32" or protocol["arm_dtype"] != "bfloat16":
+            return False
+        if protocol["declared_dtype"] is not None and type(protocol["declared_dtype"]) is not str:
+            return False
+        if protocol["fingerprint"] != _pr.protocol_fingerprint(protocol):
+            return False
+        decision = value.get("primary_decision")
+        winner = value.get("primary_winner")
+        if decision not in {
+            "compatible_on_fixture_set",
+            "held_out_failed",
+            "ambiguous",
+            "no_candidate",
+            "cancelled",
+            "failed",
+        }:
+            return False
+        blocks = value.get("candidates")
+        if type(blocks) is not dict or set(blocks) != set(candidates):
+            return False
+        if decision in ("compatible_on_fixture_set", "held_out_failed"):
+            if type(winner) is not str or winner not in blocks:
+                return False
+        elif winner is not None:
+            return False
+        records = value.get("records")
+        if type(records) is not list or len(records) > _pr.MAX_RECORDS:
+            return False
+        blob = _json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        if len(blob.encode("utf-8")) > _pr.MAX_RECORDS_BYTES:
+            return False
+        seen: set = set()
+        universe: set = set()
+        record_candidates: set = set()
+        for record in records:
+            if type(record) is not dict or set(record) != {
+                "bf16",
+                "candidate",
+                "diverged",
+                "expected_digest",
+                "first_divergence",
+                "fixture",
+                "fp32",
+            }:
+                return False
+            name = record["candidate"]
+            fixture = record["fixture"]
+            if type(name) is not str or name not in candidates or type(fixture) is not str:
+                return False
+            if (name, fixture) in seen:
+                return False
+            seen.add((name, fixture))
+            universe.add(fixture)
+            record_candidates.add(name)
+            if not _dig(record["expected_digest"]):
+                return False
+            for arm in ("fp32", "bf16"):
+                cell = record[arm]
+                if cell is None:
+                    continue
+                if type(cell) is not dict or set(cell) != {
+                    "answer_digest",
+                    "boundary_found",
+                    "logprob",
+                    "output_digest",
+                    "verdict",
+                }:
+                    return False
+                if not _dig(cell["answer_digest"]) or not _dig(cell["output_digest"]):
+                    return False
+                if type(cell["boundary_found"]) is not bool or type(cell["verdict"]) is not bool:
+                    return False
+                lp = cell["logprob"]
+                if lp is not None and (
+                    type(lp) not in (int, float) or lp != lp or lp in (float("inf"), float("-inf"))
+                ):
+                    return False
+                if cell["verdict"] != _pr.cell_verdict(cell, record["expected_digest"]):
+                    return False
+            both = type(record["fp32"]) is dict and type(record["bf16"]) is dict
+            if (record["diverged"] is None) == both:
+                return False
+            if record["diverged"] is False and record["first_divergence"] is not None:
+                return False
+            if record["diverged"] is True and (
+                type(record["first_divergence"]) is not int or record["first_divergence"] < 0
+            ):
+                return False
+        unavailable = value.get("unavailable_candidates")
+        if (
+            type(unavailable) is not list
+            or unavailable != sorted(unavailable)
+            or set(unavailable) & record_candidates
+            or set(unavailable) | record_candidates != set(candidates)
+        ):
+            return False
+        arm_passed: dict = {}
+        for name in candidates:
+            block = blocks[name]
+            if type(block) is not dict:
+                return False
+            arm_passed[name] = {}
+            for arm in ("fp32", "bf16"):
+                passed = block.get(f"{arm}_passed")
+                if passed not in (True, False, None):
+                    return False
+                arm_passed[name][arm] = passed
+                arm_fixtures = {
+                    str(r["fixture"])
+                    for r in records
+                    if r["candidate"] == name and type(r[arm]) is dict
+                }
+                complete = arm_fixtures == universe
+                all_pass = complete and all(
+                    r[arm]["verdict"]
+                    for r in records
+                    if r["candidate"] == name and type(r[arm]) is dict
+                )
+                if passed is True and not all_pass:
+                    return False
+                if passed is False and not (complete and not all_pass):
+                    return False
+                if passed is None and complete:
+                    return False
+        derived = _pr.compute_derived(records, candidates, arm_passed, decision, winner)
+        for key in (
+            "candidates",
+            "unpaired",
+            "flips",
+            "totals",
+            "selection",
+            "precision_effect_falsified",
+        ):
+            if value.get(key) != derived[key]:
+                return False
+        return True
+
     def _or_cache_profile_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
@@ -5788,6 +6015,18 @@ def oracle_diff_reports(
         _o_ca_available = "neither"
     _o_ca_asymmetric = _o_ca_available not in ("both", "neither")
 
+    _pr_old_ok = _or_precision_valid(old.get("precision"))
+    _pr_new_ok = _or_precision_valid(new.get("precision"))
+    if _pr_old_ok and _pr_new_ok:
+        _o_pr_available = "both"
+    elif _pr_old_ok:
+        _o_pr_available = "old"
+    elif _pr_new_ok:
+        _o_pr_available = "new"
+    else:
+        _o_pr_available = "neither"
+    _o_pr_asymmetric = _o_pr_available not in ("both", "neither")
+
     _cp_old_ok = _or_cache_profile_valid(old.get("cache_profile"))
     _cp_new_ok = _or_cache_profile_valid(new.get("cache_profile"))
     if _cp_old_ok and _cp_new_ok:
@@ -5863,6 +6102,7 @@ def oracle_diff_reports(
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
         and not _o_ca_asymmetric
+        and not _o_pr_asymmetric
         and not _o_cp_asymmetric
         and not _o_trob_asymmetric
         and not _o_ab_asymmetric
@@ -5944,6 +6184,8 @@ def oracle_diff_reports(
         "placement_asymmetric": _o_pl_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
+        "precision_changed": False,
+        "precision_asymmetric": _o_pr_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -5996,6 +6238,7 @@ def oracle_diff_reports(
         "needle": {"available": _o_nd_available, "changed": False},
         "placement": {"available": _o_pl_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
+        "precision": {"available": _o_pr_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

@@ -7146,6 +7146,200 @@ def _choiceaudit_section(result: dict[str, Any]) -> str:
     )
 
 
+def _precision_section(result: dict[str, Any]) -> str:
+    """Load precision: does the fp32 winner survive a bf16 load?
+
+    Renders the ``precision`` payload (see experiments.precision_stage):
+    per candidate, the verdict-flip matrix over fixtures completed in
+    both arms (the fp32 arm is the recorded native run; the bf16 arm is
+    the same weights loaded in bfloat16), the output-divergence rate,
+    and the teacher-forced expected-answer logprob deltas; then the
+    winner-survival readout over the shared paired population and the
+    scoped falsification line. The scope limits are printed with the
+    numbers: search split only, verdict level, one bf16 run against
+    the recorded fp32 run, dtype precision -- not quantization -- and
+    the determinism certificate covers the native fp32 observations
+    only. Counts, rates, and fixture IDs only; no answer text is
+    rendered. Every interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("precision")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    totals = probe.get("totals")
+    selection = probe.get("selection")
+    if type(candidates) is not dict or type(totals) is not dict or type(selection) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    def _delta(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):+.3f}")
+        return "n/a"
+
+    def _passed(value: Any) -> str:
+        if value is True:
+            return "passes"
+        if value is False:
+            return "fails"
+        return "unavailable"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        cells = entry.get("cells")
+        logprob = entry.get("logprob")
+        if type(cells) is not dict or type(logprob) is not dict:
+            continue
+        bits = [
+            "<div>Paired fixtures "
+            + _count(entry.get("n_paired"))
+            + ": pass/pass "
+            + _count(cells.get("pass_pass"))
+            + ", pass/fail "
+            + _count(cells.get("pass_fail"))
+            + ", fail/pass "
+            + _count(cells.get("fail_pass"))
+            + ", fail/fail "
+            + _count(cells.get("fail_fail"))
+            + "; completed in one arm only: fp32 "
+            + _count(entry.get("n_fp32_only"))
+            + ", bf16 "
+            + _count(entry.get("n_bf16_only"))
+            + ".</div>",
+            "<div>All-pass over the full search set: fp32 "
+            + _passed(entry.get("fp32_passed"))
+            + ", bf16 "
+            + _passed(entry.get("bf16_passed"))
+            + ". Generations diverged on "
+            + _count(entry.get("n_diverged"))
+            + " paired fixtures (rate "
+            + _rate(entry.get("divergence_rate"))
+            + ").</div>",
+            "<div>Expected-answer logprob delta (bf16 - fp32) over "
+            + _count(logprob.get("n"))
+            + " paired fixtures: mean "
+            + _delta(logprob.get("mean_delta"))
+            + ", min "
+            + _delta(logprob.get("min_delta"))
+            + ", max "
+            + _delta(logprob.get("max_delta"))
+            + ".</div>",
+        ]
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    flips = probe.get("flips")
+    flip_line = ""
+    if type(flips) is list and flips:
+        items = []
+        for flip in flips:
+            if type(flip) is not dict:
+                continue
+            direction = (
+                "pass to fail" if flip.get("direction") == "pass_to_fail" else "fail to pass"
+            )
+            items.append(
+                escape(str(flip.get("candidate")))
+                + " / "
+                + escape(str(flip.get("fixture")))
+                + " ("
+                + direction
+                + ")"
+            )
+        if items:
+            flip_line = "<p>Verdict flips: " + "; ".join(items) + ".</p>"
+    unavailable = probe.get("unavailable_candidates")
+    unavailable_line = ""
+    if type(unavailable) is list and unavailable:
+        unavailable_line = (
+            "<p>Candidates with no completed fixture in either arm: "
+            + escape(", ".join(str(n) for n in unavailable))
+            + ".</p>"
+        )
+    survived = selection.get("survived")
+    if survived is True:
+        selection_line = (
+            "<p>Over the shared paired population, re-applying the "
+            "selection rule to both arms gives the same outcome: the "
+            "fp32 winner survives the bf16 load on the search split.</p>"
+        )
+    elif survived is False:
+        selection_line = (
+            "<p>Over the shared paired population, the bf16 selection "
+            "differs from the fp32 selection: the fp32 winner does not "
+            "survive the bf16 load on this evidence. The fp32 selection "
+            "stands as the run's decision; do not serve this winner in "
+            "bf16 on this evidence.</p>"
+        )
+    else:
+        selection_line = (
+            "<p>Winner survival is withheld ("
+            + escape(str(selection.get("withheld")))
+            + "): the counts above still stand; only the survival "
+            "claim is gated.</p>"
+        )
+    falsified = probe.get("precision_effect_falsified")
+    if falsified is True:
+        falsified_line = (
+            "<p>Zero verdict flips over "
+            + _count(totals.get("n_paired"))
+            + " paired fixtures: a precision effect is falsified on "
+            "the search split, at the verdict level, for this "
+            "checkpoint and fixture set in a single bf16 run against "
+            "the recorded fp32 run. Where no candidate passes in "
+            "either arm, zero flips is the floor effect, not evidence "
+            "of robustness -- the divergence and logprob numbers above "
+            "are the informative readouts there.</p>"
+        )
+    elif falsified is False:
+        falsified_line = (
+            "<p>Verdict flips over "
+            + _count(totals.get("n_paired"))
+            + " paired fixtures: load precision changes verdicts on "
+            "the search split for this checkpoint and fixture set.</p>"
+        )
+    else:
+        falsified_line = (
+            "<p>No paired fixtures completed in both arms, so the "
+            "falsification readout is unavailable.</p>"
+        )
+    return (
+        '<section class="card" id="precision">'
+        "<h2>Load precision (fp32 vs bf16)</h2>"
+        "<p>The same checkpoint was loaded a second time in "
+        "bfloat16 and every search candidate was re-evaluated on "
+        "the search split; the fp32 arm is the recorded native run. "
+        "This is dtype precision, not quantization: the bf16 arm is "
+        "a load-time cast of the same unquantized weights. Held-out "
+        "behaviour under bf16 is not measured, and the determinism "
+        "certificate covers the native fp32 search observations "
+        "only.</p>"
+        '<table class="data"><thead><tr><th scope="col">Candidate</th>'
+        '<th scope="col">fp32 vs bf16</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
+        + flip_line
+        + unavailable_line
+        + selection_line
+        + falsified_line
+        + "</section>"
+    )
+
+
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -8476,6 +8670,7 @@ def render_html(result: dict[str, Any]) -> str:
     needle_html = _needle_section(result)
     placement_html = _placement_section(result)
     choiceaudit_html = _choiceaudit_section(result)
+    precision_html = _precision_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -8645,6 +8840,11 @@ def render_html(result: dict[str, Any]) -> str:
                 choiceaudit_html,
             ),
             (
+                "precision",
+                "Load precision (fp32 vs bf16)",
+                precision_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -8739,6 +8939,7 @@ def render_html(result: dict[str, Any]) -> str:
         + needle_html
         + placement_html
         + choiceaudit_html
+        + precision_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

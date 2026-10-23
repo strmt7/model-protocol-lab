@@ -8734,3 +8734,112 @@ ast.parse check seconds later, before anything ran on it; the
 gate below runs on the repaired text. No tests change in this
 cycle (nothing pins the corrected strings — grep-verified), so
 the counts stand at 7914.
+
+## Cycle 198 — load precision: does the fp32 winner survive a bf16 load? (`run --precision`)
+
+Wave-8 rank #7. The primary measurement has always loaded the
+checkpoint in float32; this cycle adds the lab's first
+weights-representation condition. `--precision` constructs a
+second `LocalHFBackend` over the same checkpoint directory with
+`dtype="bfloat16"` (a load-time cast of the same unquantized
+weights — dtype precision, not quantization) and re-evaluates
+every search candidate on the search split through the
+unchanged pipeline. Ground records are digest-bound per
+candidate × fixture (answer/output digests only, never answer
+text): verdict flips in both directions, output divergence with
+first-divergence index, teacher-forced expected-answer logprob
+deltas, and a paired-population re-selection of both arms whose
+(decision, winner) tuples decide whether the fp32 selection
+survives. The payload never touches the run's decision,
+selection, or exit code; the HTML section prints the operator
+consequence with the numbers ("do not serve this winner in bf16
+on this evidence") and the scope limits (search split, verdict
+level, one bf16 run against the recorded fp32 run; the
+determinism certificate covers the native fp32 observations
+only). Design: docs/PRECISION_DESIGN.md.
+
+Uniqueness pass (researcher, primary sources; framing is the
+combination, as always):
+
+- The combination — a load-precision arm inside a
+  selection-survival diff framework, with a full-recompute
+  validator — survives, with two named neighbours the first
+  draft omitted: Yuan et al. (arXiv:2506.09501) on
+  precision-dependent generation differences, and Du et al.
+  (arXiv:2609.26621). Both are now cited wherever the design
+  doc claims novelty of combination.
+- The aicassindra blog post the draft leaned on is dropped as
+  evidence: its log-softmax compute-precision claim is a folk
+  claim, and the lab's scoring path already upcasts logits to
+  float32 before the log-softmax.
+- The MDPI HumanEvalFix precision study is cited WITH its own
+  conclusion: precision is a minor factor for aggregate scores
+  (SD 1.49; bf16→fp32 −2.19%/+1.01%). Qwen3 PTQ
+  (arXiv:2505.02214) is confirmed out of scope (post-training
+  quantization is a different intervention than a load-time
+  cast). Pre-registered reading, recorded before the build: a
+  null result (zero flips, selection survives) is the EXPECTED
+  outcome on easy fixture sets at verdict granularity; the
+  falsification line is written to say exactly what zero flips
+  does and does not show, including the floor-effect caveat
+  when no candidate passes in either arm.
+
+Adversarial pass: red-team A returned DO NOT BUILD AS
+SPECIFIED with nine amendments; red-team B tried to disprove A
+and returned BUILD WITH AMENDMENTS 1–9; the coordinator
+adopted all eighteen points (they converged): the wrapper
+carries the choice-audit native gate verbatim; the dispatch
+forwards the full condition set (device, max_context, boundary
+and boundary_map, budget, seed) so the arms differ in load
+dtype only; the dtype is a keyword-only backend parameter in
+{float32, bfloat16} whose identity literal comes from the
+parameter, never from the model config; the cast is
+unconditional at load and the quantization_config rejection is
+untouched; survival is withheld (never guessed) on a
+non-winner-bearing primary, on mismatched arm sets, and over
+zero paired fixtures. The verifier confirmed 10/10 load-bearing
+claims in the design against the tree before the build.
+
+Execution findings that changed the build (reality over the
+design draft):
+
+- A bf16-loaded model's config still reports float32:
+  `config.dtype`/`torch_dtype` describe the checkpoint on disk,
+  not the loaded parameters. The backend therefore verifies the
+  POST-LOAD parameter dtypes and fails closed
+  (`dtype_verification_failed`) on any mismatch; the declared
+  config dtype is recorded in the protocol as information, and
+  the probe gates on the backend's verified dtype attribute.
+- bf16-only non-finite logits are real but the tiny test
+  checkpoints do not produce them unaided (LayerNorm shields
+  the toy models); with a forced-inf forward, the existing
+  generation path returns an error Generation, which evaluate
+  records as a non-completed observation — a numerical failure
+  surfaces as missing arm cells and a withheld/mismatched
+  readout, never as a pass. Pinned by a mocked-forward test.
+- The measured cost is printed in the CLI help and USAGE: a
+  second full load plus a second search evaluation (bf16 was
+  up to ~6× slower than fp32 per token on CPU with the toy
+  checkpoints; ~1.5× resident weights for the pair).
+
+Diff support: `precision` joins diff_reports with a
+full-recompute validator (protocol fingerprint recomputed, arm
+fingerprints required distinct, every derived value recomputed
+from the digest-bound records, the stage-attested per-arm
+all-pass verdicts consistency-checked against the record
+universe) and the standard drift/asymmetry accounting. The
+cycle-67 differential fuzz and the cycle-27 oracle both carry
+independent mirrors; the fuzz builder produces coherent
+payloads through the real stage over scripted backends plus
+hostile mutations, and oracle and implementation agree on
+every seed swept. One recorded residue, shared with the other
+sections' ground records: a record's `diverged` /
+`first_divergence` pair is ground data attested by the stage
+(the validator checks its internal consistency — pairing and
+index shape — but token ids are not carried in the payload, so
+the index itself is not re-derivable; the output digests that
+bound the comparison are).
+
+Counts and cost: the cycle-67 differential fuzz now runs
+~9.5 minutes locally (the precision builder runs the real
+stage per fuzz report); noted for the CI-duration watch.

@@ -112,6 +112,7 @@ STAGE_FLAGS = [
     ("--needle", "needle", None),
     ("--placement", "placement", None),
     ("--choice-audit", "choice_audit", None),
+    ("--precision", "precision", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -162,6 +163,7 @@ def _call_helper(helper, result):  # noqa: ANN001, ANN202
         "search_fixtures": (_FIXTURE,),
         "boundary": (198,),
         "boundary_map": None,
+        "bf16_backend": _FakeBackend(),
         "eos_id": 2,
         "token_bytes": None,
         "max_new_tokens": 8,
@@ -295,6 +297,12 @@ HELPER_DISPATCH = [
         ["choiceaudit_stage", "choiceaudit_analysis"],
     ),
     (
+        "_run_precision_probe",
+        "precision",
+        "precision_unavailable",
+        ["precision_stage"],
+    ),
+    (
         "_run_cache_profile_probe",
         "cache_profile",
         "cache_profile_unavailable",
@@ -389,10 +397,11 @@ class TestHelperDispatch(unittest.TestCase):
 class _FakeHFBackend:
     """Stand-in for LocalHFBackend in the run flow: no weights."""
 
-    def __init__(self, model, device=None, max_context=None):
+    def __init__(self, model, device=None, max_context=None, dtype=None):
         self.model = model
         self.device = device
         self.max_context = max_context
+        self.dtype = dtype
 
     eos_token_id = None
 

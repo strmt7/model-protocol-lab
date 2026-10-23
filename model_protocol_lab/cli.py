@@ -658,6 +658,29 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--precision",
+        action="store_true",
+        help="Load-precision probe (cycle 198, research wave-8 "
+        "rank 7): loads the same checkpoint a second time in "
+        "bfloat16 and re-evaluates every search candidate on the "
+        "search split, against the recorded fp32 native run. "
+        "Reports the per-candidate verdict-flip matrix over "
+        "paired fixtures, the output-divergence rate, the "
+        "teacher-forced expected-answer logprob deltas, and "
+        "whether the fp32 winner survives as the selection under "
+        "bf16 (withheld on mismatched completed sets). This is "
+        "dtype precision, not quantization: the bf16 arm is a "
+        "load-time cast of the same unquantized weights. Monday "
+        "morning: 'I will serve this checkpoint in bf16 -- is "
+        "the template winner I picked under fp32 still the "
+        "winner there?' Costs a second full search evaluation "
+        "plus a second checkpoint load, with both models "
+        "resident at once; on CPU bf16 measured several times "
+        "slower than fp32 in this lab's sandbox, so the stage "
+        "can dominate run time. Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1822,6 +1845,70 @@ def _run_choiceaudit_probe(
         result["choice_audit"] = {
             "available": False,
             "detail": "choiceaudit_unavailable",
+        }
+
+
+def _run_precision_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    bf16_backend: Any,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the load-precision probe; never raises.
+
+    The probe's fp32 arm is the recorded native search, so a
+    failed, cancelled, or truncated search gates it to zero
+    forwards (the choice-audit wrapper gate, verbatim). The
+    bf16 arm is a second LocalHFBackend over the same checkpoint
+    directory, constructed by the dispatch site in the stage
+    phase (None here when that construction failed) with the
+    full forwarding set (device, max_context, boundary and
+    boundary_map, budget, seed), so the two arms differ in load
+    dtype only. Informational only; never touches selection.
+    """
+    try:
+        from .experiments import precision_stage
+
+        search = result.get("search")
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["precision"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        if bf16_backend is None:
+            result["precision"] = {
+                "available": False,
+                "detail": "precision_unavailable",
+            }
+            return
+        result["precision"] = precision_stage(
+            backend,
+            bf16_backend,
+            formats,
+            cases,
+            result,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
+    except Exception:  # noqa: BLE001 -- precision probe must not fail the run
+        result["precision"] = {
+            "available": False,
+            "detail": "precision_unavailable",
         }
 
 
@@ -3502,6 +3589,36 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         tuple(split.search),
+                        cancel=cancel,
+                    )
+                # Load-precision probe (cycle 198, research
+                # wave-8 rank 7): the same weights loaded in
+                # bf16, every search candidate re-evaluated, the
+                # selection re-applied over the paired
+                # population. Informational only -- never
+                # changes selection. Never fails the run.
+                if args.precision:
+                    try:
+                        from .backends import LocalHFBackend as _PrecisionBackend
+
+                        _bf16_backend: Any = _PrecisionBackend(
+                            args.model,
+                            device=args.device,
+                            max_context=args.max_context,
+                            dtype="bfloat16",
+                        )
+                    except Exception:  # noqa: BLE001 -- probe degrades, run stands
+                        _bf16_backend = None
+                    _run_precision_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
+                        bf16_backend=_bf16_backend,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
                         cancel=cancel,
                     )
                 # Prefix-cache sharability profile (cycle 168, research
