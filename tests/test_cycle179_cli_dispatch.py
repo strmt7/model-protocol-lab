@@ -113,6 +113,7 @@ STAGE_FLAGS = [
     ("--placement", "placement", None),
     ("--choice-audit", "choice_audit", None),
     ("--precision", "precision", None),
+    ("--confidence", "confidence", None),
     ("--cache-profile", "cache_profile", None),
     ("--confidentiality", "confidentiality", None),
     ("--answer-collision", "answer_collision", None),
@@ -301,6 +302,12 @@ HELPER_DISPATCH = [
         "precision",
         "precision_unavailable",
         ["precision_stage"],
+    ),
+    (
+        "_run_confidence_probe",
+        "confidence",
+        "confidence_unavailable",
+        ["confidence_stage"],
     ),
     (
         "_run_cache_profile_probe",

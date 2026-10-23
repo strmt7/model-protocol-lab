@@ -690,6 +690,7 @@ def diff_reports(
     placement_diff = diff_placement(old.get("placement"), new.get("placement"))
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
+    confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -766,6 +767,10 @@ def diff_reports(
         "neither",
     )
     precision_asymmetric = precision_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    confidence_asymmetric = confidence_diff["available"] not in (
         "both",
         "neither",
     )
@@ -864,6 +869,8 @@ def diff_reports(
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
         and not precision_asymmetric
+        and not confidence_diff["changed"]
+        and not confidence_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -952,6 +959,8 @@ def diff_reports(
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
         "precision_asymmetric": precision_asymmetric,
+        "confidence_changed": confidence_diff["changed"],
+        "confidence_asymmetric": confidence_asymmetric,
         "identical": identical,
     }
     return {
@@ -995,6 +1004,7 @@ def diff_reports(
         "placement": placement_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
+        "confidence": confidence_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -11784,6 +11794,614 @@ def diff_precision(old: Any, new: Any) -> dict[str, Any]:
         or precision_candidates_removed
         or precision_protocol_drift
         or precision_backend_drift
+    )
+    return result
+
+
+_CONFIDENCE_CELL_FIELDS = {
+    "answer_digest",
+    "boundary_found",
+    "code",
+    "confidence",
+    "final_line",
+    "final_line_length",
+    "input_tokens",
+    "span_digest",
+    "verdict",
+}
+_CONFIDENCE_RECORD_FIELDS = {
+    "candidate",
+    "elicited",
+    "expected_digest",
+    "fixture",
+    "native_verdict",
+    "screen",
+}
+_CONFIDENCE_CONTROL_RECORD_FIELDS = {
+    "candidate",
+    "case",
+    "control",
+    "expected_digest",
+    "knowable",
+}
+_CONFIDENCE_PROTOCOL_FIELDS = {
+    "backend_fingerprint",
+    "bin_edges",
+    "boundaries",
+    "candidates",
+    "case_count",
+    "control_cases",
+    "fingerprint",
+    "fixture_set_sha256",
+    "max_control_records",
+    "max_new_tokens",
+    "max_records",
+    "max_records_bytes",
+    "min_paired_compliant",
+    "screens",
+    "seed",
+    "suffix_sha256",
+    "version",
+}
+_CONFIDENCE_CASE_FIELDS = {
+    "control_payload_digest",
+    "expected_digest",
+    "id",
+    "key_digest",
+    "knowable_payload_digest",
+}
+_CONFIDENCE_CODES = {
+    "ok",
+    "missing_line",
+    "malformed_line",
+    "multiple_lines",
+    "confidence_not_final",
+}
+_CONFIDENCE_SCREEN_CLASSES = {
+    "expected_blank",
+    "expected_confidence_shaped",
+    "vacuous_last_user",
+    "no_user_turn",
+}
+_CONFIDENCE_GRAMMAR_RE = re.compile(r"^Confidence: (0|[1-9][0-9]?|100)$")
+_CONFIDENCE_BIN_EDGES = [[0, 24], [25, 49], [50, 74], [75, 100]]
+
+
+def _confidence_digest_ok(value: Any) -> bool:
+    return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _confidence_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One elicited cell's shape, carried-line binding, and verdict binding.
+
+    The carried line is what moves the confidence scalar from
+    stage-attested to validator-derived: an ok cell's line must be
+    a grammar line whose value *is* the recorded scalar; a
+    malformed cell's 32-character prefix plus full length must
+    re-verify the class (prefix-shaped, and -- when the whole line
+    is carried -- not itself a grammar line). Span/answer digest
+    relations are code-dependent and unconditional: equal for
+    every non-ok code, different for every ok cell, with no
+    single-line exception (sha256("") != sha256("Confidence: 50")).
+    """
+    if type(cell) is not dict or set(cell) != _CONFIDENCE_CELL_FIELDS:
+        return False
+    if not _confidence_digest_ok(cell["answer_digest"]):
+        return False
+    if not _confidence_digest_ok(cell["span_digest"]):
+        return False
+    if type(cell["boundary_found"]) is not bool or type(cell["verdict"]) is not bool:
+        return False
+    if cell["verdict"] != (cell["span_digest"] == expected_digest and cell["boundary_found"]):
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 1:
+        return False
+    code = cell["code"]
+    if code not in _CONFIDENCE_CODES:
+        return False
+    confidence = cell["confidence"]
+    line = cell["final_line"]
+    line_length = cell["final_line_length"]
+    if code == "ok":
+        if cell["span_digest"] == cell["answer_digest"]:
+            return False
+        if type(confidence) is not int or not 0 <= confidence <= 100:
+            return False
+        if type(line) is not str or _CONFIDENCE_GRAMMAR_RE.match(line) is None:
+            return False
+        match = _CONFIDENCE_GRAMMAR_RE.match(line)
+        if match is None or int(match.group(1)) != confidence:
+            return False
+        return bool(line_length == len(line))
+    if cell["span_digest"] != cell["answer_digest"]:
+        return False
+    if code == "malformed_line":
+        if confidence is not None:
+            return False
+        if type(line) is not str or not 1 <= len(line) <= 32:
+            return False
+        if type(line_length) is not int or line_length < len(line) or line_length < 11:
+            return False
+        if line_length > len(line) and len(line) != 32:
+            return False
+        if not (line.startswith("Confidence:") or line.lower().startswith("confidence:")):
+            return False
+        return not (line_length == len(line) and _CONFIDENCE_GRAMMAR_RE.match(line) is not None)
+    return confidence is None and line is None and line_length is None
+
+
+def _confidence_case_mirror(seed: int) -> list[dict[str, Any]]:
+    """Regenerate the generated case set's protocol data from the seed.
+
+    Independent mirror of confidence.case_protocol: the same seed
+    derivation, distinctness repair, message template, and donor
+    pairing, re-implemented here so a payload whose control cases
+    do not regenerate from its own protocol seed is invalid.
+    """
+
+    def _derive(tag: str, index: int, attempt: int = 0) -> str:
+        material = f"{seed}\0confidence-{tag}\0{index}\0{attempt}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    def _text_digest(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+    pairs: list[tuple[str, str]] = []
+    used_keys: set[str] = set()
+    used_values: set[str] = set()
+    for index in range(24):
+        attempt = 0
+        key = "key-" + _derive("key", index)[:8]
+        while key in used_keys:
+            attempt += 1
+            key = "key-" + _derive("key", index, attempt)[:8]
+        used_keys.add(key)
+        attempt = 0
+        value = _derive("value", index)[:6]
+        while value in used_values:
+            attempt += 1
+            value = _derive("value", index, attempt)[:6]
+        used_values.add(value)
+        pairs.append((key, value))
+    out: list[dict[str, Any]] = []
+    for index, (key, value) in enumerate(pairs):
+        donor_key, donor_value = pairs[(index + 1) % 24]
+        knowable_text = (
+            f"Reference record: the code for {key} is {value}."
+            f"\n\nWhat is the code for {key}? Answer with the code only."
+        )
+        control_text = (
+            f"Reference record: the code for {donor_key} is {donor_value}."
+            f"\n\nWhat is the code for {key}? Answer with the code only."
+        )
+        out.append(
+            {
+                "id": f"confidence-case-{index:02d}",
+                "key_digest": _text_digest(key),
+                "expected_digest": _text_digest(value),
+                "knowable_payload_digest": _text_digest(knowable_text),
+                "control_payload_digest": _text_digest(control_text),
+            }
+        )
+    return out
+
+
+def _confidence_block_mirror(cells: list[dict[str, Any]], n_population: int) -> dict[str, Any]:
+    """Independent mirror of confidence._population_block."""
+    compliant = [cell for cell in cells if cell["code"] == "ok"]
+    correct = [cell for cell in compliant if cell["verdict"]]
+    incorrect = [cell for cell in compliant if not cell["verdict"]]
+
+    def _mean(values: list[int]) -> float | None:
+        return (sum(values) / len(values)) if values else None
+
+    mean_correct = _mean([int(cell["confidence"]) for cell in correct])
+    mean_incorrect = _mean([int(cell["confidence"]) for cell in incorrect])
+    if not compliant:
+        gap: float | None = None
+        gap_detail = "no_compliant_cells"
+    elif mean_correct is None:
+        gap = None
+        gap_detail = "no_correct_compliant"
+    elif mean_incorrect is None:
+        gap = None
+        gap_detail = "no_incorrect_compliant"
+    else:
+        gap = mean_correct - mean_incorrect
+        gap_detail = ""
+    bins: list[dict[str, Any]] = []
+    for lo, hi in ((0, 24), (25, 49), (50, 74), (75, 100)):
+        members = [cell for cell in compliant if lo <= int(cell["confidence"]) <= hi]
+        n_correct = sum(1 for cell in members if cell["verdict"])
+        bins.append(
+            {
+                "lo": lo,
+                "hi": hi,
+                "n": len(members),
+                "n_correct": n_correct,
+                "accuracy": (n_correct / len(members)) if members else None,
+            }
+        )
+    return {
+        "n_population": n_population,
+        "n_completed": len(cells),
+        "n_compliant": len(compliant),
+        "compliance_rate": (len(compliant) / len(cells)) if cells else None,
+        "mean_confidence": _mean([int(cell["confidence"]) for cell in compliant]),
+        "mean_correct": mean_correct,
+        "mean_incorrect": mean_incorrect,
+        "gap": gap,
+        "gap_detail": gap_detail,
+        "joint": {
+            "compliant_correct": len(correct),
+            "compliant_incorrect": len(incorrect),
+            "noncompliant": len(cells) - len(compliant),
+        },
+        "bins": bins,
+    }
+
+
+def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute every derived confidence field from the ground records.
+
+    Independent mirror of confidence.compute_derived. Returns None
+    on any structural violation. The protocol's generated case set
+    is regenerated from the seed and must match exactly (ids, key
+    digests, expected digests, both payload digests), so the
+    control arm's construction is bound, not attested. Screens are
+    fixture properties the validator cannot recompute from digests
+    (the fixture texts are not in the payload); they are checked
+    for consistency -- protocol screen map against every record,
+    screened fixtures carrying no cell -- the attestation residue
+    the design doc names. Per-cell parse/finality/multiplicity is
+    stage-attested the same way; the confidence *scalar* is not:
+    it is derived here from the carried line.
+    """
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict or set(protocol) != _CONFIDENCE_PROTOCOL_FIELDS:
+        return None
+    if protocol["version"] != 1 or type(protocol["version"]) is not int:
+        return None
+    if type(protocol["seed"]) is not int or protocol["seed"] < 0:
+        return None
+    if type(protocol["max_new_tokens"]) is not int or not 1 <= protocol["max_new_tokens"] <= 4096:
+        return None
+    if protocol["max_records"] != 2400 or protocol["max_control_records"] != 576:
+        return None
+    if protocol["max_records_bytes"] != 12 * 1024 * 1024:
+        return None
+    if protocol["case_count"] != 24 or protocol["min_paired_compliant"] != 6:
+        return None
+    if protocol["bin_edges"] != _CONFIDENCE_BIN_EDGES:
+        return None
+    if not _confidence_digest_ok(protocol["suffix_sha256"]):
+        return None
+    if not _confidence_digest_ok(protocol["fixture_set_sha256"]):
+        return None
+    candidates = protocol["candidates"]
+    if (
+        type(candidates) is not list
+        or not candidates
+        or any(type(n) is not str or not n for n in candidates)
+        or len(set(candidates)) != len(candidates)
+    ):
+        return None
+    boundaries = protocol["boundaries"]
+    if type(boundaries) is not dict or set(boundaries) != set(candidates):
+        return None
+    for name in candidates:
+        ids = boundaries[name]
+        if (
+            type(ids) is not list
+            or not ids
+            or any(type(t) is not int or isinstance(t, bool) or t < 0 for t in ids)
+        ):
+            return None
+    if type(protocol["backend_fingerprint"]) is not str or not protocol["backend_fingerprint"]:
+        return None
+    screens = protocol["screens"]
+    if type(screens) is not dict:
+        return None
+    for fixture_id, screen in screens.items():
+        if type(fixture_id) is not str or screen not in _CONFIDENCE_SCREEN_CLASSES:
+            return None
+    cases_in = protocol["control_cases"]
+    if type(cases_in) is not list or len(cases_in) != 24:
+        return None
+    for entry in cases_in:
+        if type(entry) is not dict or set(entry) != _CONFIDENCE_CASE_FIELDS:
+            return None
+        for key in (
+            "key_digest",
+            "expected_digest",
+            "knowable_payload_digest",
+            "control_payload_digest",
+        ):
+            if not _confidence_digest_ok(entry[key]):
+                return None
+    if not _recomputed_equal(cases_in, _confidence_case_mirror(int(protocol["seed"]))):
+        return None
+    body = {k: v for k, v in protocol.items() if k != "fingerprint"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    if protocol["fingerprint"] != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        return None
+    if not _valid_primary_pair(payload):
+        return None
+    records = payload.get("records")
+    control_records = payload.get("control_records")
+    if type(records) is not list or len(records) > protocol["max_records"]:
+        return None
+    if type(control_records) is not list or len(control_records) > protocol["max_control_records"]:
+        return None
+    blob = json.dumps(
+        {"records": records, "control_records": control_records},
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    if len(blob.encode("utf-8")) > protocol["max_records_bytes"]:
+        return None
+    case_expected = {entry["id"]: entry["expected_digest"] for entry in cases_in}
+    seen: set[tuple[str, str]] = set()
+    universe: set[str] = set()
+    fixtures_by_candidate: dict[str, set[str]] = {name: set() for name in candidates}
+    zero_cell: dict[str, bool] = dict.fromkeys(candidates, True)
+    for record in records:
+        if type(record) is not dict or set(record) != _CONFIDENCE_RECORD_FIELDS:
+            return None
+        name = record["candidate"]
+        fixture = record["fixture"]
+        if type(name) is not str or name not in candidates or type(fixture) is not str:
+            return None
+        if (name, fixture) in seen:
+            return None
+        seen.add((name, fixture))
+        universe.add(fixture)
+        fixtures_by_candidate[name].add(fixture)
+        if record["screen"] != screens.get(fixture, ""):
+            return None
+        if not _confidence_digest_ok(record["expected_digest"]):
+            return None
+        if record["native_verdict"] not in (True, False, None):
+            return None
+        cell = record["elicited"]
+        if record["screen"] != "" and cell is not None:
+            return None
+        if cell is not None:
+            if not _confidence_cell_ok(cell, str(record["expected_digest"])):
+                return None
+            zero_cell[name] = False
+    for name in candidates:
+        if fixtures_by_candidate[name] != universe:
+            return None
+    seen_control: set[tuple[str, str]] = set()
+    cases_by_candidate: dict[str, set[str]] = {name: set() for name in candidates}
+    for record in control_records:
+        if type(record) is not dict or set(record) != _CONFIDENCE_CONTROL_RECORD_FIELDS:
+            return None
+        name = record["candidate"]
+        case_id = record["case"]
+        if type(name) is not str or name not in candidates or case_id not in case_expected:
+            return None
+        if (name, case_id) in seen_control:
+            return None
+        seen_control.add((name, case_id))
+        cases_by_candidate[name].add(case_id)
+        if record["expected_digest"] != case_expected[case_id]:
+            return None
+        for arm in ("knowable", "control"):
+            cell = record[arm]
+            if cell is not None:
+                if not _confidence_cell_ok(cell, str(record["expected_digest"])):
+                    return None
+                zero_cell[name] = False
+    for name in candidates:
+        if cases_by_candidate[name] != set(case_expected):
+            return None
+    unavailable = payload.get("unavailable_candidates")
+    expected_unavailable = sorted(name for name in candidates if zero_cell[name])
+    if unavailable != expected_unavailable:
+        return None
+    n_population = sum(1 for fixture in universe if screens.get(fixture, "") == "")
+    blocks_in = payload.get("candidates")
+    if type(blocks_in) is not dict or set(blocks_in) != set(candidates):
+        return None
+    ordered = sorted(records, key=lambda r: (str(r["candidate"]), str(r["fixture"])))
+    ordered_control = sorted(control_records, key=lambda r: (str(r["candidate"]), str(r["case"])))
+    blocks: dict[str, Any] = {}
+    for name in candidates:
+        own = [r for r in ordered if r["candidate"] == name]
+        elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
+        operator = _confidence_block_mirror(elicited, n_population)
+        flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
+        for record in own:
+            cell = record["elicited"]
+            native = record["native_verdict"]
+            if type(cell) is not dict or type(native) is not bool:
+                continue
+            flips["n_compared"] += 1
+            if native and not cell["verdict"]:
+                flips["pass_to_fail"] += 1
+            elif not native and cell["verdict"]:
+                flips["fail_to_pass"] += 1
+        operator["flips"] = flips
+        own_control = [r for r in ordered_control if r["candidate"] == name]
+        knowable_cells = [r["knowable"] for r in own_control if type(r["knowable"]) is dict]
+        control_cells = [r["control"] for r in own_control if type(r["control"]) is dict]
+        knowable = _confidence_block_mirror(knowable_cells, 24)
+        control_block = _confidence_block_mirror(control_cells, 24)
+        paired = [
+            r
+            for r in own_control
+            if type(r["knowable"]) is dict
+            and type(r["control"]) is dict
+            and r["knowable"]["code"] == "ok"
+            and r["control"]["code"] == "ok"
+        ]
+        if len(paired) >= 6:
+            knowable_values = [int(r["knowable"]["confidence"]) for r in paired]
+            control_values = [int(r["control"]["confidence"]) for r in paired]
+            knowable_mean = sum(knowable_values) / len(knowable_values)
+            control_mean = sum(control_values) / len(control_values)
+            knowability: dict[str, Any] = {
+                "n_paired_compliant": len(paired),
+                "knowable_mean": knowable_mean,
+                "control_mean": control_mean,
+                "difference": knowable_mean - control_mean,
+                "falsified": control_mean >= knowable_mean,
+                "detail": "",
+            }
+        else:
+            knowability = {
+                "n_paired_compliant": len(paired),
+                "knowable_mean": None,
+                "control_mean": None,
+                "difference": None,
+                "falsified": None,
+                "detail": "insufficient_paired_compliant",
+            }
+        blocks[name] = {
+            "operator": operator,
+            "generated": {
+                "knowable": knowable,
+                "control": control_block,
+                "knowability": knowability,
+            },
+        }
+    return {
+        "candidates": blocks,
+        "totals": {
+            "n_records": len(records),
+            "n_control_records": len(control_records),
+        },
+    }
+
+
+def _valid_confidence(payload: Any) -> bool:
+    """Full-recompute check for a ``confidence`` payload.
+
+    Every derived value -- compliance, joint tables, means, the
+    gap, the bins, flips, the knowability readout -- is recomputed
+    from the ground records and compared type-strictly. The
+    confidence scalar itself is derived from each ok cell's
+    carried line, not trusted; the generated case set is
+    regenerated from the protocol seed; the primary pair is bound
+    by _valid_primary_pair.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "candidates",
+        "control_records",
+        "detail",
+        "primary_decision",
+        "primary_winner",
+        "protocol",
+        "records",
+        "totals",
+        "unavailable_candidates",
+    }:
+        return False
+    if payload.get("detail") is not None:
+        return False
+    recomputed = _confidence_recompute(payload)
+    if recomputed is None:
+        return False
+    for key in ("candidates", "totals"):
+        if not _recomputed_equal(payload.get(key), recomputed[key]):
+            return False
+    return True
+
+
+def diff_confidence(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``confidence`` payloads; deterministic.
+
+    Answers "did the stated-confidence story change between
+    runs?": per-candidate compliance/gap/flip drift, knowable and
+    control mean drift, knowability falsification drift, candidates
+    added/removed, and protocol or backend-fingerprint drift (a
+    drifted protocol or backend makes the comparison not
+    comparable, with the drift still listed, the placement
+    pattern). A side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_confidence(old)
+    new_ok = _valid_confidence(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    confidence_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    confidence_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    confidence_comparable = not confidence_protocol_drift and not confidence_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    confidence_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    confidence_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    confidence_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        confidence_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "operator_compliance_rate",
+                old_entry["operator"]["compliance_rate"],
+                new_entry["operator"]["compliance_rate"],
+            ),
+            ("operator_gap", old_entry["operator"]["gap"], new_entry["operator"]["gap"]),
+            (
+                "operator_flips",
+                old_entry["operator"]["flips"]["pass_to_fail"]
+                + old_entry["operator"]["flips"]["fail_to_pass"],
+                new_entry["operator"]["flips"]["pass_to_fail"]
+                + new_entry["operator"]["flips"]["fail_to_pass"],
+            ),
+            (
+                "knowable_mean_confidence",
+                old_entry["generated"]["knowable"]["mean_confidence"],
+                new_entry["generated"]["knowable"]["mean_confidence"],
+            ),
+            (
+                "control_mean_confidence",
+                old_entry["generated"]["control"]["mean_confidence"],
+                new_entry["generated"]["control"]["mean_confidence"],
+            ),
+            (
+                "knowability_falsified",
+                old_entry["generated"]["knowability"]["falsified"],
+                new_entry["generated"]["knowability"]["falsified"],
+            ),
+        ]
+        for metric, old_value, new_value in confidence_metrics:
+            if old_value != new_value:
+                confidence_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = confidence_candidate_drift
+    result["candidates_added"] = confidence_candidates_added
+    result["candidates_removed"] = confidence_candidates_removed
+    result["protocol_drift"] = confidence_protocol_drift
+    result["backend_drift"] = confidence_backend_drift
+    result["comparable"] = confidence_comparable
+    # NOTE: confidence-specific names keep this line textually distinct
+    # from every other section's changed anchor (mutation-gate
+    # uniqueness).
+    result["changed"] = bool(
+        confidence_candidate_drift
+        or confidence_candidates_added
+        or confidence_candidates_removed
+        or confidence_protocol_drift
+        or confidence_backend_drift
     )
     return result
 

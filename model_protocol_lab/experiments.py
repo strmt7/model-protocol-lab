@@ -10994,3 +10994,236 @@ def precision_stage(
     }
     payload.update(derived)
     return payload
+
+
+def _confidence_cell(
+    answer: str,
+    boundary_found: bool,
+    input_tokens: int,
+    expected_digest: str,
+) -> dict[str, Any]:
+    """One elicited generation's ground cell (digests + the carried line)."""
+    from . import confidence as _cf
+
+    code, value, span = _cf.parse_verbalized_confidence(answer)
+    line, line_length = _cf.carried_line(answer, code)
+    cell: dict[str, Any] = {
+        "answer_digest": _cf.text_digest(answer),
+        "span_digest": _cf.text_digest(span),
+        "boundary_found": boundary_found,
+        "code": code,
+        "confidence": value,
+        "final_line": line,
+        "final_line_length": line_length,
+        "input_tokens": input_tokens,
+    }
+    cell["verdict"] = _cf.cell_verdict(cell, expected_digest)
+    return cell
+
+
+def _confidence_completed_obs(report: Any) -> dict[str, Any]:
+    """fixture -> observation for one evaluate() report, completed only."""
+    out: dict[str, Any] = {}
+    if report is None:
+        return out
+    for obs in report.observations:
+        if str(getattr(obs.status, "value", obs.status)) != "completed":
+            continue
+        out[str(obs.fixture)] = obs
+    return out
+
+
+def confidence_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    cases: tuple[Any, ...],
+    result: dict[str, Any],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Verbalized-confidence stage (cycle 199): elicitation x template.
+
+    Every unscreened search fixture is re-evaluated once per
+    candidate with the frozen confidence suffix appended to its
+    last user message; the recorded native run is never re-executed
+    (its per-fixture verdicts come from ``result`` and anchor the
+    elicitation-cost flips). Two generated arms -- planted-fact
+    knowable cases and their donor-key controls -- run alongside
+    under the same suffix. Ground records for all three populations
+    are assembled per candidate (digests plus the carried final
+    line), and every derived value comes from
+    confidence.compute_derived, which the diff validator mirrors
+    independently. A candidate whose evaluations produce no
+    completed cell degrades alone; the stage itself fails closed
+    only on a blown budget, a special-token collision in the frozen
+    suffix, or cancellation. Design: docs/CONFIDENCE_DESIGN.md.
+    """
+    from . import confidence as _cf
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    if type(cases) is not tuple or not cases:
+        raise ValueError("cases must be a nonempty tuple")
+    names = tuple(fmt.name for fmt in formats)
+    fixture_ids = [str(case.id) for case in cases]
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    screens: dict[str, str] = {}
+    for case in cases:
+        screen = _cf.screen_fixture(case)
+        if screen:
+            screens[str(case.id)] = screen
+    protocol = _cf.protocol_object(
+        seed=seed,
+        max_new_tokens=max_new_tokens,
+        fixture_ids=fixture_ids,
+        candidates=names,
+        boundaries={name: boundaries[name] for name in names},
+        backend_fingerprint=str(getattr(backend, "fingerprint", "")),
+        screens=screens,
+        cases=_cf.case_protocol(seed),
+    )
+    protocol["fingerprint"] = _cf.protocol_fingerprint(protocol)
+
+    def _unavailable(detail: str) -> dict[str, Any]:
+        return {
+            "available": False,
+            "detail": detail,
+            "protocol": protocol,
+            "primary_decision": result.get("decision"),
+            "primary_winner": result.get("selected_candidate"),
+            "records": [],
+            "control_records": [],
+            "unavailable_candidates": list(names),
+        }
+
+    if audit_special_token_literals(_cf.SUFFIX, formats):
+        # The suffix ships clean against the shipped catalog; a
+        # candidate whose framing inventory contains the suffix text
+        # as a special-token literal would forge the elicitation, so
+        # the stage fails closed (the repetition precedent).
+        return _unavailable("confidence_screen_failed")
+    if len(formats) * len(cases) > _cf.MAX_RECORDS:
+        return _unavailable("confidence_cell_budget_exceeded")
+    search = result.get("search")
+    if type(search) is not list:
+        return _unavailable("native_search_incomplete")
+    native_outcomes = native_search_outcomes(search, names)
+    live_cases = tuple(case for case in cases if str(case.id) not in screens)
+    treated = tuple(_cf.treated_fixture(case) for case in live_cases)
+    knowable_raw = _cf.build_cases(seed, control=False)
+    control_raw = _cf.build_cases(seed, control=True)
+    knowable = tuple(_cf.treated_fixture(case) for case in knowable_raw)
+    control = tuple(_cf.treated_fixture(case) for case in control_raw)
+    records: list[dict[str, Any]] = []
+    control_records: list[dict[str, Any]] = []
+    unavailable_candidates: list[str] = []
+
+    def _eval(fmt: Any, name: str, treated_cases: tuple[Any, ...]) -> dict[str, Any]:
+        if not treated_cases:
+            return {}
+        try:
+            report = evaluate(
+                backend,
+                fmt,
+                treated_cases,
+                boundary=boundaries[name],
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+                cancel=cancel,
+            )
+        except Exception:  # noqa: BLE001 -- one arm degrades, not the stage
+            return {}
+        return _confidence_completed_obs(report)
+
+    for fmt in formats:
+        name = fmt.name
+        if cancel is not None and cancel.is_set():
+            return _unavailable("cancelled")
+        op_obs = _eval(fmt, name, treated)
+        kn_obs = _eval(fmt, name, knowable)
+        ct_obs = _eval(fmt, name, control)
+        native_fixtures = native_outcomes.get(name, {}).get("per_fixture", {})
+        n_cells = 0
+        for case in cases:
+            fid = str(case.id)
+            expected_digest = _cf.text_digest(str(case.expected))
+            cell: dict[str, Any] | None = None
+            obs = op_obs.get(fid)
+            if obs is not None:
+                cell = _confidence_cell(
+                    str(obs.answer),
+                    bool(obs.boundary_found),
+                    len(obs.input_ids),
+                    expected_digest,
+                )
+                n_cells += 1
+            native_verdict = native_fixtures.get(fid)
+            records.append(
+                {
+                    "candidate": name,
+                    "fixture": fid,
+                    "screen": screens.get(fid, ""),
+                    "expected_digest": expected_digest,
+                    "native_verdict": native_verdict if type(native_verdict) is bool else None,
+                    "elicited": cell,
+                }
+            )
+        for raw in knowable_raw:
+            cid = str(raw.id)
+            expected_digest = _cf.text_digest(str(raw.expected))
+            kn_cell: dict[str, Any] | None = None
+            ct_cell: dict[str, Any] | None = None
+            kn_o = kn_obs.get(cid)
+            ct_o = ct_obs.get(cid)
+            if kn_o is not None:
+                kn_cell = _confidence_cell(
+                    str(kn_o.answer),
+                    bool(kn_o.boundary_found),
+                    len(kn_o.input_ids),
+                    expected_digest,
+                )
+                n_cells += 1
+            if ct_o is not None:
+                ct_cell = _confidence_cell(
+                    str(ct_o.answer),
+                    bool(ct_o.boundary_found),
+                    len(ct_o.input_ids),
+                    expected_digest,
+                )
+                n_cells += 1
+            control_records.append(
+                {
+                    "candidate": name,
+                    "case": cid,
+                    "expected_digest": expected_digest,
+                    "knowable": kn_cell,
+                    "control": ct_cell,
+                }
+            )
+        if n_cells == 0:
+            unavailable_candidates.append(name)
+    blob = json.dumps(
+        {"records": records, "control_records": control_records},
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(blob) > _cf.MAX_RECORDS_BYTES:
+        return _unavailable("confidence_records_budget_exceeded")
+    derived = _cf.compute_derived(records, control_records, names, len(live_cases))
+    payload: dict[str, Any] = {
+        "available": True,
+        "detail": None,
+        "protocol": protocol,
+        "primary_decision": result.get("decision"),
+        "primary_winner": result.get("selected_candidate"),
+        "records": records,
+        "control_records": control_records,
+        "unavailable_candidates": sorted(unavailable_candidates),
+    }
+    payload.update(derived)
+    return payload

@@ -681,6 +681,34 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--confidence",
+        action="store_true",
+        help="Verbalized-confidence probe (cycle 199, research wave-8 "
+        "rank 8): appends one frozen suffix to each search fixture's "
+        "last user message asking the model to end its reply with "
+        "'Confidence: <integer 0-100>', and re-evaluates every "
+        "candidate. Reports per candidate: the compliance rate "
+        "under the frozen line grammar, mean stated confidence on "
+        "correct vs incorrect compliant answers (a descriptive gap, "
+        "never a calibration verdict -- a stated number is model "
+        "output text, not a probability), a frozen four-bin table, "
+        "and the verdict flips the suffix itself caused against "
+        "the recorded native run. A generated paired control "
+        "(24 planted-fact cases whose value the prompt states, vs "
+        "the same cases with the payload binding a different key) "
+        "tests whether the stated number drops when the answer is "
+        "not knowable from the prompt. Monday morning: 'when this "
+        "checkpoint states a confidence under each template, does "
+        "the number track whether it was right -- and does it drop "
+        "when the answer is not in the prompt?' Costs one full "
+        "extra search evaluation (2,400 generations at the legal "
+        "maximum: 24 candidates x 100 fixtures) plus a generated "
+        "paired control (2 arms x 24 cases x 24 candidates = "
+        "1,152) -- 3,552 extra generations in total, each on a "
+        "suffix-lengthened prompt. Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--cache-profile",
         action="store_true",
         help="Prefix-cache sharability profile (cycle 168, research wave-6 "
@@ -1909,6 +1937,59 @@ def _run_precision_probe(
         result["precision"] = {
             "available": False,
             "detail": "precision_unavailable",
+        }
+
+
+def _run_confidence_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    cases: Any,
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the verbalized-confidence probe; never raises.
+
+    The flips' native arm is the recorded native search, so a
+    failed, cancelled, or truncated search gates the probe to zero
+    forwards (the choice-audit wrapper gate, verbatim). The stage
+    re-evaluates the treated fixtures and the generated pair under
+    the run's own backend, boundaries, budget, and seed.
+    Informational only; never touches selection.
+    """
+    try:
+        from .experiments import confidence_stage
+
+        search = result.get("search")
+        if (
+            result.get("decision") in ("failed", "cancelled")
+            or type(search) is not list
+            or len(search) != len(formats)
+        ):
+            result["confidence"] = {
+                "available": False,
+                "detail": "native_search_incomplete",
+            }
+            return
+        result["confidence"] = confidence_stage(
+            backend,
+            formats,
+            cases,
+            result,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
+    except Exception:  # noqa: BLE001 -- confidence probe must not fail the run
+        result["confidence"] = {
+            "available": False,
+            "detail": "confidence_unavailable",
         }
 
 
@@ -3615,6 +3696,25 @@ def main(argv: list[str] | None = None) -> int:
                         result,
                         tuple(split.search),
                         bf16_backend=_bf16_backend,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Verbalized-confidence probe (cycle 199, research
+                # wave-8 rank 8): a frozen suffix elicits a stated
+                # confidence line on every search fixture, parsed
+                # under a frozen grammar and scored against the
+                # exact-match verdicts, with a generated donor-key
+                # control for knowability. Informational only --
+                # never changes selection. Never fails the run.
+                if args.confidence:
+                    _run_confidence_probe(
+                        backend,
+                        formats,
+                        result,
+                        tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,

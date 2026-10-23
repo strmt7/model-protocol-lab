@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 199 — verbalized confidence, 2026-10-23)
+
+- `run --confidence`: verbalized-confidence elicitation
+  crossed with the candidate templates (research wave-8
+  rank 8, the last wave-8 item). One frozen suffix appended
+  to each search fixture's last user message asks the model
+  to end its reply with `Confidence: <integer 0-100>`; the
+  elicited text is parsed under a frozen grammar (ASCII
+  digits only, no sign, no leading zeros; five outcome
+  codes; final-line-first precedence) and the answer span
+  without the compliant line is scored by the ordinary
+  exact-match verdict. Reports per candidate: compliance
+  rate, mean stated confidence on correct vs incorrect
+  compliant answers with the descriptive separation gap
+  (withheld with a named reason when a class is empty —
+  a stated number is model output text, not a probability,
+  and no readout is a calibration score), a frozen
+  four-bin table, and elicitation-cost verdict flips
+  against the recorded native run. A generated paired
+  control (24 planted-fact cases whose value the prompt
+  states, vs the same cases with the payload binding a
+  different key — the donor-key construction) tests
+  whether the stated number drops when the answer is not
+  knowable from the prompt, falsified when the control
+  mean is at or above the knowable mean over at least 6
+  paired compliant cases. Design went through the full
+  wave protocol: red-team A's value-replacement control
+  and bare-integer records were both refuted by red-team
+  B's executions (a payload-faithful backend convicted of
+  theatre; the gap forgeable ±100 by editing attested
+  integers), and the shipped contract carries B's repairs
+  — an `ok` cell carries its final line verbatim, a
+  bijection with the scalar, so `diff-reports` derives the
+  number instead of trusting it. New pure module
+  `confidence.py` (59th source file); cost is one full
+  extra search evaluation plus the generated pair (3,552
+  generations at the legal maximum). Full contract:
+  `docs/CONFIDENCE_DESIGN.md`.
+
 ### Added (cycle 195 — choice-scoring audit, 2026-10-22)
 
 - `run --choice-audit`: a post-hoc second opinion on the
