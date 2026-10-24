@@ -25,11 +25,13 @@ import contextlib
 import hashlib
 import io
 import json
+import lzma
 import os
 import re
 import stat
 import sys
 import zipfile
+import zlib
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -321,12 +323,15 @@ def load_bundle_bytes(path: Path) -> bytes:
 
     Raises ``ValueError`` with a fixed ``bundle_*`` code; a FIFO cannot
     block the read, and the size cap is enforced from ``fstat`` before
-    any bytes are read.
+    any bytes are read. The open refuses symlinks (``O_NOFOLLOW``),
+    matching :func:`_read_regular_file` in this module: before cycle
+    202 the two readers disagreed, and a symlinked bundle was followed
+    here while a symlinked pack entry was refused there.
     """
     if not path.exists():
         raise ValueError("bundle_path_missing")
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         raise ValueError("bundle_unreadable") from None
     try:
@@ -464,7 +469,21 @@ def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[bytes,
                     # directory declared: abort now instead of buffering
                     # an unbounded lie.
                     raise ValueError("bundle_entry_read_failed")
-    except (zipfile.BadZipFile, RuntimeError, NotImplementedError):
+    except (
+        zipfile.BadZipFile,
+        RuntimeError,
+        NotImplementedError,
+        zlib.error,
+        lzma.LZMAError,
+        EOFError,
+        OSError,
+    ):
+        # Codec corruption escapes zipfile as the codec's own exception
+        # type (zlib.error for DEFLATE, lzma.LZMAError, OSError for
+        # BZip2), not as BadZipFile: the shipped writer only emits
+        # STORED entries, so before cycle 202 a hostile compressed
+        # entry reached verify --bundle as a raw traceback. Every read
+        # failure at this boundary is the same fixed code.
         raise ValueError("bundle_entry_read_failed") from None
     if total != info.file_size:
         raise ValueError("bundle_entry_read_failed")

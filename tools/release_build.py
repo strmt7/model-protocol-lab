@@ -23,6 +23,12 @@ Usage: python tools/release_build.py --source . --output dist \
 The epoch for a real release is the tagged commit's timestamp
 (`SOURCE_DATE_EPOCH` convention); any fixed value demonstrates the
 reproducibility property.
+
+Two refusals guard the build before anything is produced: a source
+tree containing symlinks is rejected by name (links are never
+dereferenced into artifacts), and `--expect-version X` fails unless
+the tree's package version is exactly X — the release workflow passes
+the tag's version, binding the tag to the artifacts it publishes.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -65,6 +72,42 @@ def _ignore(directory: str, names: list[str]) -> list[str]:
 
 def _copy_tree(source: Path, dest: Path) -> None:
     shutil.copytree(source, dest, ignore=_ignore)
+
+
+def _find_symlinks(source: Path) -> list[Path]:
+    """Symlinks in the buildable tree (excluded directories pruned).
+
+    copytree follows links by default, so before cycle 202 a symlink
+    in the source silently copied its target's *contents* into the
+    release artifacts — and a dangling link aborted the build with a
+    raw shutil.Error. A git tree can carry committed symlinks, so the
+    build rejects them by name instead of dereferencing them.
+    """
+    found: list[Path] = []
+    for root, dirs, files in os.walk(source):
+        dirs[:] = [d for d in dirs if d not in _EXCLUDED_NAMES and not d.endswith(".egg-info")]
+        for name in dirs + files:
+            path = Path(root) / name
+            if path.is_symlink():
+                found.append(path)
+    return sorted(found)
+
+
+def _package_version(source: Path) -> str:
+    with (source / "pyproject.toml").open("rb") as handle:
+        data = tomllib.load(handle)
+    version = data["project"]["version"]
+    if type(version) is not str or not version:
+        raise SystemExit("release build failed: pyproject.toml has no project.version")
+    return version
+
+
+def _first(paths: object, label: str) -> Path:
+    """First glob match, or a named failure instead of StopIteration."""
+    matches = sorted(paths)  # type: ignore[arg-type]
+    if not matches:
+        raise SystemExit(f"release build failed: no {label} artifact was produced")
+    return matches[0]
 
 
 def _normalize_mtimes(root: Path, epoch: int) -> None:
@@ -158,19 +201,19 @@ def _build_once(source: Path, work: Path, epoch: int) -> tuple[Path, Path]:
         check=True,
         env=env,
     )
-    sdist = next(dist.glob("*.tar.gz"))
+    sdist = _first(dist.glob("*.tar.gz"), "sdist")
     sdist.write_bytes(normalize_sdist_bytes(sdist.read_bytes(), epoch))
     unpacked = work / "unpacked"
     unpacked.mkdir()
     with tarfile.open(sdist, "r:gz") as archive:
         archive.extractall(unpacked, filter="data")
-    package_dir = next(unpacked.iterdir())
+    package_dir = _first(unpacked.iterdir(), "unpacked package directory")
     subprocess.run(
         [sys.executable, "-m", "build", "--wheel", "--outdir", str(dist), str(package_dir)],
         check=True,
         env=env,
     )
-    wheel = next(dist.glob("*.whl"))
+    wheel = _first(dist.glob("*.whl"), "wheel")
     return sdist, wheel
 
 
@@ -179,9 +222,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--epoch", type=int, required=True)
+    parser.add_argument(
+        "--expect-version",
+        default=None,
+        help="Fail before building unless the tree's package version "
+        "equals this value (the release workflow passes the tag's "
+        "version, so a mistagged release cannot publish artifacts "
+        "whose internal version disagrees with the tag name)",
+    )
     args = parser.parse_args(argv)
-
+    if not 0 <= args.epoch <= 253402300799:
+        # os.utime raises a raw OverflowError for absurd epochs; the
+        # CLI contract is a clean usage failure instead (cycle 202).
+        parser.error("--epoch must be between 0 and 253402300799")
     source = args.source.resolve()
+    symlinks = _find_symlinks(source)
+    if symlinks:
+        for link in symlinks:
+            print(f"release build refused: symlink in source tree: {link}", file=sys.stderr)
+        return 2
+    if args.expect_version is not None:
+        version = _package_version(source)
+        if version != args.expect_version:
+            print(
+                f"release build refused: expected version {args.expect_version}, "
+                f"tree carries {version}",
+                file=sys.stderr,
+            )
+            return 2
     results: list[tuple[Path, Path]] = []
     with tempfile.TemporaryDirectory(prefix="mpl_release_") as tmp:
         for run in (1, 2):

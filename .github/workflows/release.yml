@@ -36,8 +36,14 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: |
+          # Bind the tag to the package version before anything is
+          # built or uploaded: a tag vX.Y.Z whose tree carries a
+          # different version fails here, not after publishing
+          # (cycle 202 — before this, any v* tag published the tree's
+          # version under the tag's name).
           python tools/release_build.py --source . --output dist \
-            --epoch "$SOURCE_DATE_EPOCH"
+            --epoch "$SOURCE_DATE_EPOCH" \
+            --expect-version "${GITHUB_REF_NAME#v}"
           python -m twine check dist/*
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

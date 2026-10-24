@@ -21,6 +21,7 @@ plainly instead of guessing.
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -161,6 +162,22 @@ def _reject_constant(_value: Any) -> Any:
     raise ValueError("results_nonfinite_number")
 
 
+def _reject_nonfinite_float(text: str) -> float:
+    """Reject float literals that overflow to infinity (``1e999``).
+
+    ``parse_constant`` only fires for the ``NaN``/``Infinity``
+    literals; ``float()`` conversion of a huge exponent reaches
+    ``inf`` without ever calling it. Before cycle 202 the results
+    loader had no ``parse_float`` hook (``toolcall`` had one since its
+    own audit), so ``1e999`` entered a payload as ``inf`` and
+    re-serialised as ``Infinity`` — output this same loader rejects.
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("results_nonfinite_number")
+    return value
+
+
 def parse_results_bytes(content: bytes) -> dict[str, Any]:
     """Parse ``results.json`` bytes under the bounded reader's rules.
 
@@ -181,11 +198,24 @@ def parse_results_bytes(content: bytes) -> dict[str, Any]:
             text,
             object_pairs_hook=_unique_object,
             parse_constant=_reject_constant,
+            parse_float=_reject_nonfinite_float,
         )
     except RecursionError:
         # Deeply nested input within the byte cap exhausts the parser stack.
         raise ValueError("results_nesting_too_deep") from None
     except json.JSONDecodeError:
+        raise ValueError("results_invalid_json") from None
+    except ValueError as exc:
+        # The hooks above raise this module's own fixed codes
+        # (results_duplicate_field, results_nonfinite_number); those
+        # pass through untouched. The one remaining ValueError the
+        # parser raises is the interpreter's integer-length limit on
+        # >4300-digit literals, which is a plain ValueError rather
+        # than a JSONDecodeError — it is a syntax-class rejection and
+        # maps to the same code (cycle 202; the pack manifest boundary
+        # already converted this class).
+        if str(exc) in ("results_duplicate_field", "results_nonfinite_number"):
+            raise
         raise ValueError("results_invalid_json") from None
     if type(value) is not dict:
         raise ValueError("results_not_an_object")

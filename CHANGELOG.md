@@ -6,6 +6,50 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 202 — wave-9 correction round, 2026-10-24)
+
+- Eleven defects found by the wave-9 adversarial round
+  (every finding reproduced by two independent executions
+  before fixing; regression tests in
+  `tests/test_cycle202_wave9_fixes.py`): a bundle whose
+  manifest entry uses DEFLATE, LZMA or BZip2 with a
+  corrupted stream made `verify --bundle` print a raw
+  traceback instead of failing the seal with
+  `bundle_entry_read_failed`; eleven probe stages
+  stringified a non-string backend fingerprint into
+  their protocol blocks (a method-valued fingerprint
+  embedded a heap address and broke cross-run
+  comparability) — all stages now enforce the
+  `run_experiment` type check through one shared guard;
+  integer literals past the interpreter's 4300-digit
+  limit escaped the fixed error vocabulary in the
+  results loader, the checkpoint-asset JSON reader and
+  `doctor`'s safetensors header check (which crashed
+  `doctor` on a hostile checkpoint); the results loader
+  accepted overflow floats (`1e999`) as infinity; the
+  changelog gate's substring matching let `--include`
+  pass inside `--include-evidence` (the gate now
+  requires whole-token mentions, and the cycle-171
+  entry below names the flag it shipped); the MCP
+  server accepted `NaN`/`Infinity` frame constants and
+  echoed them as invalid JSON, and reported a
+  non-object `backend` argument as an internal error
+  (-32603) instead of invalid params (-32602); the
+  release build dereferenced symlinks into the
+  artifacts and the release workflow never checked the
+  tag against the package version (the build now
+  refuses symlinks by name and takes an
+  `--expect-version` the workflow fills from the tag);
+  the report's template-conformance section let C0
+  control bytes from payload strings reach the HTML
+  verbatim; and the bundle reader followed symlinks
+  the pack entry reader refuses. The same round's
+  first gate run caught the strengthened changelog
+  gate demanding entries for cycles the research log
+  only mentions (a forward reference and a quoted
+  example); the gate now counts only cycles the log
+  documents with an entry heading.
+
 ### Added (cycle 201 — release-readiness round, 2026-10-23)
 
 - Release readiness, following the three-lane
@@ -851,6 +895,8 @@ All notable changes to this project are documented here. The format follows
   and package version); verification re-hashes everything offline,
   fails closed on any mismatch, and then re-runs the `verify` decision
   replay on the sealed `results.json` as an independent second layer.
+  Extra files are sealed alongside the report with the repeatable
+  `--include` option (stored under `inputs/<name>`).
   The seal is unsigned and the docs say so in the first paragraph: it
   proves bit-integrity since packing only against a digest obtained
   through an independent channel (`pack` prints it for exactly that

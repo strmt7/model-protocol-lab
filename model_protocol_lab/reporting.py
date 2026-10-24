@@ -431,6 +431,11 @@ def _taxonomy_note(result: dict[str, Any]) -> str:
 
 
 def _conformance_section(result: dict[str, Any]) -> str:
+    # Every payload-derived value below goes through _escape_text
+    # (C0/C1 strip before escaping), like the other main paths: before
+    # cycle 202 this section used bare escape() and let ESC/NUL/BEL
+    # bytes from payload strings reach report.html verbatim — the
+    # exact class oversight S-14 removed elsewhere.
     conformance = result.get("template_conformance")
     if type(conformance) is not dict:
         return ""
@@ -444,7 +449,7 @@ def _conformance_section(result: dict[str, Any]) -> str:
     elif status != "ok":
         body = (
             "<p>Template-conformance check unavailable: "
-            + escape(str(conformance.get("detail", "")))
+            + _escape_text(conformance.get("detail", ""))
             + ".</p>"
         )
     else:
@@ -470,9 +475,9 @@ def _conformance_section(result: dict[str, Any]) -> str:
                         # embedded in this HTML view (see docs/USAGE.md).
                         detail_items.append(
                             "hand "
-                            + escape(str(segment.get("hand_span")))
+                            + _escape_text(segment.get("hand_span"))
                             + " \u2194 template "
-                            + escape(str(segment.get("template_span")))
+                            + _escape_text(segment.get("template_span"))
                         )
                     cell = (
                         '<span class="badge fail">'
@@ -485,21 +490,21 @@ def _conformance_section(result: dict[str, Any]) -> str:
                     diff_key = "divergent"
             rows.append(
                 '<tr><th scope="row" data-sort="'
-                + escape(str(entry.get("format", "?")))
+                + _escape_text(entry.get("format", "?"))
                 + '">'
-                + escape(str(entry.get("format", "?")))
+                + _escape_text(entry.get("format", "?"))
                 + '</th><td data-sort="'
-                + escape(str(entry.get("fixture", "?")))
+                + _escape_text(entry.get("fixture", "?"))
                 + '">'
-                + escape(str(entry.get("fixture", "?")))
+                + _escape_text(entry.get("fixture", "?"))
                 + '</td><td data-sort="'
-                + escape(_sort_key(entry.get("hand_tokens")))
+                + _escape_text(_sort_key(entry.get("hand_tokens")))
                 + '">'
-                + escape(str(entry.get("hand_tokens", "?")))
+                + _escape_text(entry.get("hand_tokens", "?"))
                 + '</td><td data-sort="'
-                + escape(_sort_key(entry.get("template_tokens")))
+                + _escape_text(_sort_key(entry.get("template_tokens")))
                 + '">'
-                + escape(str(entry.get("template_tokens", "?")))
+                + _escape_text(entry.get("template_tokens", "?"))
                 + '</td><td data-sort="'
                 + diff_key
                 + '">'
@@ -3312,10 +3317,10 @@ def _transfer_section(result: dict[str, Any]) -> str:
         fingerprint = ckpt.get("fingerprint")
         header_cells.append(
             '<th scope="col"><span class="mono">'
-            + escape(cid)
+            + _escape_text(cid)
             + "</span>"
             + (
-                '<br><span class="mono">' + escape(str(fingerprint)[:16]) + "…</span>"
+                '<br><span class="mono">' + _escape_text(str(fingerprint)[:16]) + "…</span>"
                 if type(fingerprint) is str and fingerprint
                 else ""
             )

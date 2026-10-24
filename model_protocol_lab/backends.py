@@ -85,11 +85,14 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise ValueError("oversized_asset_json")
     try:
         value = json.loads(content.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError):
         # Keep the fixed error vocabulary: raw codec/parser text (which
         # reflects the inspected file's bytes) must not reach doctor check
         # details. Mirrors datasets.parse_dataset, which maps the same
-        # failure modes to its own vocabulary.
+        # failure modes to its own vocabulary. The plain ValueError is
+        # the interpreter's integer-length limit on >4300-digit literals
+        # (not a JSONDecodeError subclass case — JSONDecodeError is one,
+        # named for the record): before cycle 202 it escaped raw.
         raise ValueError("invalid_asset_json") from None
     if type(value) is not dict:
         raise ValueError("invalid_asset_json")
