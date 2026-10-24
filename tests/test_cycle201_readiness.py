@@ -44,13 +44,45 @@ def _cli_surface() -> tuple[set[str], set[str]]:
     return subcommands, flags
 
 
+def _mentioned(name: str, text: str) -> bool:
+    """Whole-token mention: the name must appear as its own token.
+
+    Plain substring matching (the cycle-201 original) is satisfiable
+    by accident: ``--include`` "appeared" only inside
+    ``--include-evidence``, ``--seed`` inside ``--seeded-output``,
+    and ``cycle 202`` inside ``cycle 2025`` (wave-9 red-team F5,
+    confirmed by the cross-check). A mention counts only when the
+    characters around the name cannot extend it into a longer token.
+    """
+    return re.search(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])", text) is not None
+
+
+def _documented_cycles(log_text: str) -> set[int]:
+    """Cycles the research log *documents*: those with a cycle entry.
+
+    A cycle entry is a level-2/3 heading naming the cycle ("## Cycle
+    188 — ...", "### Build record (cycle 169)"). Body mentions do not
+    count: the log forward-references future cycles in slate prose
+    ("rank 1 (cycle 203)") and quotes example strings when dissecting
+    other defects ("`cycle 202` inside `cycle 2025`"), and neither is a
+    shipped cycle a changelog can entry. Extracting every mention
+    (the cycle-201 original) made the gate demand changelog entries
+    for cycles that have not happened — it failed on exactly
+    [203, 2025] in cycle 202's first gate run.
+    """
+    return {
+        int(n)
+        for n in re.findall(r"^#{2,3}\s[^\n]*?[Cc]ycle (\d+)\b", log_text, flags=re.MULTILINE)
+    }
+
+
 class TestChangelogGate(unittest.TestCase):
     """The changelog covers the shipped surface — measured, not sampled."""
 
     def test_every_subcommand_and_flag_appears_in_changelog(self) -> None:
         changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         subcommands, flags = _cli_surface()
-        missing = [name for name in sorted(subcommands | flags) if name not in changelog]
+        missing = [name for name in sorted(subcommands | flags) if not _mentioned(name, changelog)]
         self.assertEqual(missing, [], f"CLI surface missing from CHANGELOG.md: {missing}")
 
     def test_every_recent_cycle_appears_in_changelog(self) -> None:
@@ -61,10 +93,21 @@ class TestChangelogGate(unittest.TestCase):
         # (cycles 196, 197, 198 absent).
         log = (REPO_ROOT / "docs" / "RESEARCH_LOG.md").read_text(encoding="utf-8")
         changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").lower()
-        cycles = {int(n) for n in re.findall(r"[Cc]ycle (\d+)", log)}
-        recent = sorted(c for c in cycles if c >= 165)
-        missing = [c for c in recent if f"cycle {c}" not in changelog]
+        recent = sorted(c for c in _documented_cycles(log) if c >= 165)
+        missing = [c for c in recent if not _mentioned(f"cycle {c}", changelog)]
         self.assertEqual(missing, [], f"cycles missing from CHANGELOG.md: {missing}")
+
+    def test_documented_cycles_ignores_mentions_without_an_entry(self) -> None:
+        # Pins the extraction semantics above: a forward reference in
+        # prose and a quoted example string are not documented cycles;
+        # a cycle-entry heading is.
+        synthetic = (
+            "## Cycle 170 (2026-10-20) -- answer-collision audit\n"
+            "Body text: rank 1 is cycle 203, not yet built.\n"
+            "The gate dissects `cycle 202` inside `cycle 2025`.\n"
+            "### Build record (cycle 170)\n"
+        )
+        self.assertEqual(_documented_cycles(synthetic), {170})
 
 
 class TestSdistNormalization(unittest.TestCase):

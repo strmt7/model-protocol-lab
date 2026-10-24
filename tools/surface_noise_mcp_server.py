@@ -196,8 +196,10 @@ def tool_probe(params: dict) -> dict:
     backend_spec = params.get("backend")
     if backend_spec is None:
         backend_spec = {"kind": "selftest"}
-    if type(backend_spec) is not dict:
-        raise ValueError("backend must be a dict or omitted")
+    # _build_backend owns the type check and raises MCPError(-32602)
+    # for a non-object spec; a bare ValueError here was mapped to
+    # -32603 (internal error) by the generic handler, reporting a
+    # client-caused invalid-params error as a server fault (cycle 202).
     backend = _build_backend(backend_spec)
     max_new_tokens = _parse_optional_int(
         params.get("max_new_tokens"), "max_new_tokens", 1, 4096, 64
@@ -554,6 +556,25 @@ def _unique_frame_object(pairs):
     return obj
 
 
+def _reject_frame_constant(value):
+    """Non-finite constants are a parse error, as in every other JSON
+    loader in the repo: before cycle 202 the frame parser had no
+    parse_constant hook, so ``{"id": NaN}`` was accepted and the NaN
+    was echoed back in the response — invalid JSON on the wire."""
+    raise ValueError(f"non-finite constant {value!r}")
+
+
+def _reject_frame_float(text):
+    """Overflow float literals (``1e999``) are a parse error too:
+    float() conversion reaches inf without ever calling
+    parse_constant, so the constant hook alone leaves the hole open
+    (the same pair of hooks toolcall.py carries)."""
+    value = float(text)
+    if value != value or value in (float("inf"), float("-inf")):
+        raise ValueError(f"non-finite float literal {text!r}")
+    return value
+
+
 def _write_response(response: dict) -> None:
     sys.stdout.write(json.dumps(response, default=str) + "\n")
     sys.stdout.flush()
@@ -593,7 +614,12 @@ def serve() -> int:
             # pathological nesting depth (RecursionError). Only
             # JSONDecodeError was caught before, and deeply-nested
             # JSON killed the process.
-            request = json.loads(line, object_pairs_hook=_unique_frame_object)
+            request = json.loads(
+                line,
+                object_pairs_hook=_unique_frame_object,
+                parse_constant=_reject_frame_constant,
+                parse_float=_reject_frame_float,
+            )
         except (json.JSONDecodeError, RecursionError, ValueError):
             _write_response(_parse_error_response())
             continue

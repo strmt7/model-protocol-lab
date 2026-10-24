@@ -131,9 +131,10 @@ class DocsCurrencyTests(unittest.TestCase):
         # The first "## " section (index 1; index 0 is the title).
         # Bump the pinned range whenever a cycle updates the top
         # evidence section (179 -> 180 in cycle 180; 192 -> 195 in
-        # cycle 195; 195 -> 199 in cycle 199; 199 -> 200 in cycle 200).
+        # cycle 195; 195 -> 199 in cycle 199; 199 -> 200 in cycle 200;
+        # 201 -> 202 in cycle 202).
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–201", top)
+        self.assertIn("cycles 10–202", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):

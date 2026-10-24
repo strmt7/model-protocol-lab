@@ -3626,6 +3626,26 @@ def _select_winner(winners: list[Format], cancelled: bool) -> tuple[str, Format 
     return ("ambiguous" if winners else "no_candidate"), None
 
 
+def _backend_fingerprint(backend: Backend) -> str:
+    """Return ``backend.fingerprint`` after the protocol type check.
+
+    The probe stages build their protocol blocks from the fingerprint
+    without calling :func:`run_experiment`, whose identical check
+    (below) therefore never protected them: before cycle 202 they
+    wrapped the attribute in ``str()``, which stringifies a protocol
+    violation instead of rejecting it — a method-valued fingerprint
+    (the cycle-195 fake shape) embedded a heap address in the payload
+    and made two runs of the same backend produce different protocol
+    fingerprints, silently. Every stage read site goes through here so
+    the contract is the one ``run_experiment`` enforces: a non-string
+    fingerprint is a ``ValueError``, never a stringified repr.
+    """
+    fingerprint = getattr(backend, "fingerprint", None)
+    if type(fingerprint) is not str:
+        raise ValueError("Backend fingerprint must be a string")
+    return fingerprint
+
+
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -6321,7 +6341,7 @@ def repetition_stage(
         raise ValueError("formats must be a nonempty tuple")
     if type(cases) is not tuple or not cases:
         raise ValueError("cases must be a nonempty tuple")
-    protocol = _rep.protocol_block([case.id for case in cases], str(backend.fingerprint))
+    protocol = _rep.protocol_block([case.id for case in cases], _backend_fingerprint(backend))
     if len(formats) * len(cases) > _rep.MAX_GROUND_RECORDS:
         return {
             "available": False,
@@ -6744,8 +6764,10 @@ def distraction_stage(
     if type(cases) is not tuple or not cases:
         raise ValueError("cases must be a nonempty tuple")
     fixture_ids = [case.id for case in cases]
-    protocol: dict[str, Any] = dict(_dis.protocol_object(fixture_ids, str(backend.fingerprint)))
-    protocol["fingerprint"] = _dis.protocol_fingerprint(fixture_ids, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(
+        _dis.protocol_object(fixture_ids, _backend_fingerprint(backend))
+    )
+    protocol["fingerprint"] = _dis.protocol_fingerprint(fixture_ids, _backend_fingerprint(backend))
     if len(formats) * len(cases) > _dis.MAX_GROUND_RECORDS:
         return {
             "available": False,
@@ -7123,10 +7145,10 @@ def leading_stage(
     fixture_ids = [case.id for case in cases]
     donor_map = _lead.build_donor_map(cases)
     protocol: dict[str, Any] = dict(
-        _lead.protocol_object(fixture_ids, donor_map, str(backend.fingerprint))
+        _lead.protocol_object(fixture_ids, donor_map, _backend_fingerprint(backend))
     )
     protocol["fingerprint"] = _lead.protocol_fingerprint(
-        fixture_ids, donor_map, str(backend.fingerprint)
+        fixture_ids, donor_map, _backend_fingerprint(backend)
     )
     if len(formats) * len(cases) > _lead.MAX_GROUND_RECORDS:
         return {
@@ -7467,8 +7489,8 @@ def dateline_stage(
     if type(cases) is not tuple or not cases:
         raise ValueError("cases must be a nonempty tuple")
     fixture_ids = [case.id for case in cases]
-    protocol: dict[str, Any] = dict(_dl.protocol_object(fixture_ids, str(backend.fingerprint)))
-    protocol["fingerprint"] = _dl.protocol_fingerprint(fixture_ids, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(_dl.protocol_object(fixture_ids, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _dl.protocol_fingerprint(fixture_ids, _backend_fingerprint(backend))
     if len(formats) * len(cases) > _dl.MAX_GROUND_RECORDS:
         return {
             "available": False,
@@ -7986,8 +8008,8 @@ def multiturn_stage(
 
     if type(formats) is not tuple or not formats:
         raise ValueError("formats must be a nonempty tuple")
-    protocol: dict[str, Any] = dict(_mt.protocol_object(seed, str(backend.fingerprint)))
-    protocol["fingerprint"] = _mt.protocol_fingerprint(seed, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(_mt.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _mt.protocol_fingerprint(seed, _backend_fingerprint(backend))
     generated = _mt.generate_fixtures(seed)
     if len(formats) * len(generated) > _mt.MAX_GROUND_RECORDS:
         return {
@@ -8410,8 +8432,8 @@ def needle_stage(
 
     if type(formats) is not tuple or not formats:
         raise ValueError("formats must be a nonempty tuple")
-    protocol: dict[str, Any] = dict(_nd.protocol_object(seed, str(backend.fingerprint)))
-    protocol["fingerprint"] = _nd.protocol_fingerprint(seed, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(_nd.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _nd.protocol_fingerprint(seed, _backend_fingerprint(backend))
     cases = _nd.generate_cases(seed)
     if len(formats) * len(cases) > _nd.MAX_GROUND_RECORDS:
         return {
@@ -8931,8 +8953,8 @@ def placement_stage(
         # candidate's records (red-team F7, cycle 193). The
         # precondition is stated at this stage's own boundary.
         raise ValueError("formats must have unique names")
-    protocol: dict[str, Any] = dict(_pl.protocol_object(seed, str(backend.fingerprint)))
-    protocol["fingerprint"] = _pl.protocol_fingerprint(seed, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(_pl.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _pl.protocol_fingerprint(seed, _backend_fingerprint(backend))
     cases = _pl.generate_cases(seed)
     if len(formats) * len(cases) > _pl.MAX_GROUND_RECORDS:
         return {
@@ -9119,8 +9141,8 @@ def numform_stage(
 
     if type(formats) is not tuple or not formats:
         raise ValueError("formats must be a nonempty tuple")
-    protocol: dict[str, Any] = dict(_nf.protocol_object(seed, str(backend.fingerprint)))
-    protocol["fingerprint"] = _nf.protocol_fingerprint(seed, str(backend.fingerprint))
+    protocol: dict[str, Any] = dict(_nf.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _nf.protocol_fingerprint(seed, _backend_fingerprint(backend))
     if (
         len(formats) * _nf.VALUES_PER_TASK * len(_nf.TASKS) * len(_nf.FORMS)
         > _nf.MAX_GROUND_RECORDS
@@ -9658,7 +9680,7 @@ def template_robustness_stage(
     if type(fixtures) is not tuple or not fixtures:
         raise ValueError("fixtures must be a nonempty tuple")
     boundaries = _resolve_boundaries(formats, boundary, boundary_map)
-    protocol = _sn.freeze_template_robustness_protocol(backend.fingerprint, fixtures)
+    protocol = _sn.freeze_template_robustness_protocol(_backend_fingerprint(backend), fixtures)
     candidates: dict[str, Any] = {}
     for fmt in formats:
         name = fmt.name
@@ -10503,9 +10525,11 @@ def choiceaudit_stage(
     fixture_ids = [case.id for case in cases]
     block = _ca.build_choice_sets(cases)
     protocol: dict[str, Any] = dict(
-        _ca.protocol_object(fixture_ids, block, str(backend.fingerprint))
+        _ca.protocol_object(fixture_ids, block, _backend_fingerprint(backend))
     )
-    protocol["fingerprint"] = _ca.protocol_fingerprint(fixture_ids, block, str(backend.fingerprint))
+    protocol["fingerprint"] = _ca.protocol_fingerprint(
+        fixture_ids, block, _backend_fingerprint(backend)
+    )
     if len(formats) * len(cases) > _ca.MAX_RECORDS:
         return {
             "available": False,
@@ -10846,8 +10870,8 @@ def precision_stage(
         fixture_ids=fixture_ids,
         candidates=names,
         boundaries={name: boundaries[name] for name in names},
-        fp32_fingerprint=str(getattr(native_backend, "fingerprint", "")),
-        bf16_fingerprint=str(getattr(bf16_backend, "fingerprint", "")),
+        fp32_fingerprint=_backend_fingerprint(native_backend),
+        bf16_fingerprint=_backend_fingerprint(bf16_backend),
         declared_dtype=getattr(native_backend, "declared_dtype", None),
         native_dtype=str(getattr(native_backend, "dtype", "")),
         arm_dtype=str(getattr(bf16_backend, "dtype", "")),
@@ -11083,7 +11107,7 @@ def confidence_stage(
         fixture_ids=fixture_ids,
         candidates=names,
         boundaries={name: boundaries[name] for name in names},
-        backend_fingerprint=str(getattr(backend, "fingerprint", "")),
+        backend_fingerprint=_backend_fingerprint(backend),
         screens=screens,
         cases=_cf.case_protocol(seed),
     )

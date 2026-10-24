@@ -155,10 +155,13 @@ def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
                 os.close(fd)
         try:
             header = json.loads(header_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError):
             # RecursionError: a deeply-nested header ([[[...]]]) exhausts the
             # parser stack -- a hostile but small file; fail closed like
-            # _read_json does, never propagate.
+            # _read_json does, never propagate. The plain ValueError is the
+            # interpreter's integer-length limit on >4300-digit literals:
+            # before cycle 202 it escaped examine_model as a raw exception
+            # instead of failing this check.
             return _check("failed", f"invalid_safetensors_header: {name}")
         if type(header) is not dict:
             return _check("failed", f"invalid_safetensors_header: {name}")

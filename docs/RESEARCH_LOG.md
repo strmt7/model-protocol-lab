@@ -9174,3 +9174,148 @@ to `docs/RELEASE_READINESS_0.1.0.md`. Evidence highlights:
   verdicts in this cycle were read only from log files
   whose own exit lines were present, after `ps` confirmed
   the process had exited.
+## Cycle 202 — wave-9 correction round: eleven confirmed findings fixed (2026-10-24)
+
+The wave-9 specialist round (briefs in the coordinator's evidence pack:
+research, red-team A, red-team B, verifier — all read-only, all
+execution-verified) produced eleven findings against the shipped tree;
+red-team B, tasked with disproving them, confirmed all eleven by
+independent execution, and the verifier re-ran the four headline items
+fresh. This cycle fixes all eleven, each with a named regression test
+in tests/test_cycle202_wave9_fixes.py. The slate consequences are
+recorded at the end.
+
+**F1 (High) — corrupt compressed bundle entries escaped
+`verify --bundle` as tracebacks.** `pack._read_entry` normalised only
+BadZipFile/RuntimeError/NotImplementedError; a structurally valid
+bundle whose manifest entry is DEFLATE/LZMA/BZip2 with a corrupted
+stream escaped as zlib.error / lzma.LZMAError / OSError — the shipped
+writer only emits STORED, so the hostile-codec path had never been
+exercised. The catch is widened to the codec classes; such bundles now
+fail the seal with `bundle_entry_read_failed`.
+
+**F2 (Medium) — the cycle-200 fingerprint residual, closed in full.**
+Eleven probe stages read `str(backend.fingerprint)` (20 sites,
+including precision's and confidence's `str(getattr(..., ""))` forms),
+stringifying a protocol violation into a payload — a method-valued
+fingerprint embedded a heap address and made two runs of the same
+backend produce different protocol fingerprints, silently. All sites
+(plus template-robustness's raw pass) now go through one helper,
+`experiments._backend_fingerprint`, replicating `run_experiment`'s
+check and message. The enumeration was counted three times (research
+AST walk, red-team B AST recount, verifier AST recount) with identical
+results before the fix was written.
+
+**F3 (Medium) — the >4300-digit integer class escaped the fixed
+vocabulary at three parse sites** that caught JSONDecodeError but not
+the plain ValueError the interpreter raises for over-limit integer
+literals: `diffreports.parse_results_bytes` (now maps it to
+results_invalid_json while letting the module's own hook codes —
+results_duplicate_field, results_nonfinite_number — pass through),
+`backends._read_json` (invalid_asset_json), and
+`doctor._check_weight_headers` (the check now fails instead of
+`examine_model` raising on a hostile checkpoint).
+
+**F4 (Medium) — `parse_results_bytes` accepted `1e999` as `inf`.**
+It had `parse_constant` but no `parse_float` hook (toolcall had one
+since its own audit; the fix was never propagated). Overflow floats
+now raise results_nonfinite_number, and the round-trip asymmetry
+(dumps emitting Infinity the same loader rejects) is closed.
+
+**F5 (Medium) — the cycle-201 changelog gate was substring-satisfiable.**
+`--include` passed only inside `--include-evidence` (a live instance:
+the cycle-171 entry never named the flag), `cycle 202` inside
+`cycle 2025`, `--seed` inside `--seeded-output`. The gate now requires
+whole-token mentions, and the cycle-171 changelog entry names
+`--include` explicitly. The strengthened gate failed on exactly the
+one live instance before the text fix and passes after.
+
+**F6 (Low) — the MCP frame parser accepted non-finite numbers** and
+echoed `{"id": NaN}` — invalid JSON on its own wire. It now carries
+the same parse_constant + parse_float hook pair as the other loaders
+(red-team B's extension: `{"id":1e999}` echoed Infinity, which a
+constant-only fix would have left open).
+
+**F7 (Low) — a non-object MCP `backend` argument returned -32603**
+(internal error) via a bare ValueError in `tool_probe`, instead of
+-32602 from `_build_backend`'s own check. The bare-ValueError branch
+is deleted; `_build_backend` owns the check.
+
+**F8 (Low) — `release_build._copy_tree` dereferenced symlinks:**
+outside file contents were silently copied into release artifacts,
+and a dangling link aborted with a raw shutil.Error. The build now
+scans the source tree (excluded directories pruned) and refuses by
+name before building. Folded in from the leads: absurd `--epoch`
+values are a clean usage error instead of an OverflowError traceback
+(L2, as corrected by red-team B), and a build producing no artifact
+fails with a named message instead of StopIteration (L5, sites as
+corrected by B).
+
+**F9 (Low) — `release.yml` never bound the tag to the package
+version:** any `v*` tag would have published the tree's 0.1.0
+artifacts under the tag's name. `release_build.py` gained
+`--expect-version` (refuses before building on mismatch), and the
+workflow passes the tag's version. Still inert until the owner tags.
+
+**F10 (Low) — reporting's template-conformance section rendered
+payload strings with bare `escape()` and no C0 strip** — the class
+oversight S-14 removed from the main paths. All its interpolations
+(and the transfer section's checkpoint id/fingerprint cells, a second
+instance of the pattern) now go through `_escape_text`.
+
+**F11 (Low) — pack's two readers disagreed on symlinks:**
+`load_bundle_bytes` followed them while `_read_regular_file` refuses
+them. The bundle reader now opens with O_NOFOLLOW too, matching the
+module's documented discipline.
+
+**Leads disposition.** L1 (EOFError via _read_entry) disputed by B —
+two truncation constructions surfaced as handled ValueErrors; closed.
+L3 (non-time PAX headers in a hostile pre-built sdist) is outside the
+tool's stated input; no change. L4 (surfacenoise's probe-JSON loader
+interpolating parser wording) confirmed as behaviour but matches
+datasets' documented, deliberate wording choice; no bytes leak (the
+int-limit message carries a digit count only). No change.
+
+**Slate adjudication (from the research brief, all citations
+re-verified against primary sources by the verifier).** Context
+rotation is wave-9 rank 1 (cycle 203): the rotation design rests on
+Liu et al. (arXiv:2307.03172), Peysakhovich & Lerer (2310.01427),
+Guan et al. (2502.04134), the Chroma Context Rot report, and Du et
+al. (2510.05381) — NOT on Lialin (2404.02054, a corruption study) or
+Richardson (2310.20081, a personalization study), neither of which
+supports a rotation claim; the prior brief's citation error is
+settled by striking both names from that role. One citation-drift
+catch by the verifier: arXiv:2511.20836 is cited in its v3 form
+(retitled "Structured Prompts Improve Evaluation of Language
+Models"; rankings shift on 5/7 benchmarks), the version the
+unversioned URL now resolves to. The boundary-truncation ladder is
+DROPPED, on evidence: response-boundary truncation is already
+`budget_frontier` + `held_out_budget_floor` (exact per-budget
+recompute from recorded observations), termination is stop-cause,
+and prompt-tail truncation is the sensitivity sweep — a graded
+generation probe would be strictly worse science. Red-team B's
+qualification is recorded: the sensitivity sweep is byte-capped
+(8 bytes, trailing), so a token-depth extension of the existing sweep
+is a backlog item, not a new probe. Rotation's "pass by absolute
+slot" headline will be presented as a cross-check against needle's
+depth curve, not as a novelty claim (B's concession, accepted).
+Ranks 3 (instruction-density ladder — design must use
+digest-decidable constraints) and 4 (schema field-order) follow in
+order.
+
+**Gate-run addendum (same cycle).** The first full gate run of this
+cycle's change set failed exactly one test — the strengthened
+changelog gate itself. Its cycle extraction still swept every
+`cycle N` *mention* in this log, and this very entry supplied two
+numbers no changelog can cover: the forward reference "cycle 203"
+above (a slate item, not a shipped cycle) and the quoted example
+"`cycle 2025`" in the F5 paragraph. The gate's requirement set is
+now the cycles the log *documents* — those with a cycle-entry
+heading — extracted by `_documented_cycles` in
+tests/test_cycle201_readiness.py and pinned by a semantics test
+(mentions without an entry are ignored; a removed documented cycle
+is still caught, proven against a doctored changelog copy). The
+flag/subcommand half of F5's fix was unaffected. Process note: the
+strengthened gate had never been run scoped against the tree it
+gates before the full run; a ten-second scoped run would have
+caught this before the twenty-minute one did.
