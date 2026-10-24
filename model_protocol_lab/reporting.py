@@ -7413,6 +7413,243 @@ def _density_section(result: dict[str, Any]) -> str:
     )
 
 
+def _field_order_section(result: dict[str, Any]) -> str:
+    """Schema field order: does the answer field's position change its value?
+
+    Renders the ``field_order`` payload (see
+    experiments.fieldorder_analysis): per candidate, adherence
+    by arm in the shipped parse/schema decomposition, the
+    answer field's accuracy by arm, whole-document accuracy,
+    the pairing attrition with the ungated sensitivity counts,
+    and the pre-registered endpoint decision with its printed
+    operating characteristics. The scope limits are printed
+    with the numbers: flat schemas of 1-4 fields, the endpoint
+    contrast only, canonical coinciding with an endpoint arm
+    on 6 of the 10 paired specs (its numbers there are
+    replicates), two shipped specs excluded from pairing
+    because their frozen answer labels are not entailed by
+    their contexts, adherence gating selecting against
+    discordance, and duplicate-key documents scored by their
+    last occurrence outside the pairing. Counts and rates
+    only; no spec, schema, or answer text is rendered. Every
+    interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("field_order")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _pvalue(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3g}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        bits.append(
+            "<div>Records: "
+            + _count(entry.get("n_generated"))
+            + " generated ("
+            + _count(entry.get("n_distinct_prompts"))
+            + " distinct prompts; coincident orders are generated "
+            "twice under a uniform code path), "
+            + _count(entry.get("n_boundary_screened"))
+            + " boundary-screened, "
+            + _count(entry.get("n_detail_screened"))
+            + " detail-screened, "
+            + _count(entry.get("n_no_boundary"))
+            + " without a boundary, "
+            + _count(entry.get("n_live"))
+            + " live, "
+            + _count(entry.get("n_duplicate_keys"))
+            + " live with duplicate keys.</div>"
+        )
+        decision = entry.get("decision")
+        pairing = entry.get("pairing")
+        if type(decision) is dict:
+            verdict = str(decision.get("verdict", ""))
+            if verdict == "insufficient":
+                decision_text = "withheld (insufficient: fewer than six discordant paired specs)"
+            elif verdict == "falsified":
+                decision_text = (
+                    "field-order invariance falsified (direction: "
+                    + escape(str(decision.get("direction", "")))
+                    + ")"
+                )
+            else:
+                decision_text = "not falsified"
+            bits.append(
+                "<div>Endpoint decision (answer field first vs last, paired specs): "
+                + escape(decision_text)
+                + " -- first-only "
+                + _count(decision.get("n_first_only"))
+                + ", last-only "
+                + _count(decision.get("n_last_only"))
+                + ", over "
+                + _count(decision.get("n_paired"))
+                + " paired specs; exact sign test p "
+                + _pvalue(decision.get("sign_p"))
+                + ".</div>"
+            )
+        if type(pairing) is dict:
+            ungated = pairing.get("ungated")
+            if type(ungated) is not dict:
+                ungated = {}
+            bits.append(
+                "<div>Pairing: "
+                + _count(pairing.get("n_flagged"))
+                + " specs carry the paired flag; "
+                + _count(pairing.get("n_order_same"))
+                + " lost to identical endpoint orders, "
+                + _count(pairing.get("n_duplicate_excluded"))
+                + " to duplicate keys, "
+                + _count(pairing.get("n_not_adherent"))
+                + " to non-adherence in an endpoint arm, leaving "
+                + _count(pairing.get("n_paired"))
+                + " paired. Answer-field accuracy on the paired "
+                "population: first "
+                + _rate(pairing.get("first_rate"))
+                + ", last "
+                + _rate(pairing.get("last_rate"))
+                + ", delta "
+                + _rate(pairing.get("delta"))
+                + ". Ungated sensitivity (non-adherent records "
+                "scored by their values): "
+                + _count(ungated.get("n_first_only"))
+                + " first-only, "
+                + _count(ungated.get("n_last_only"))
+                + " last-only over "
+                + _count(ungated.get("n_specs"))
+                + " specs.</div>"
+            )
+        by_arm = entry.get("by_arm")
+        answer_by_arm = entry.get("answer_by_arm")
+        whole_doc_by_arm = entry.get("whole_doc_by_arm")
+        if type(by_arm) is dict and type(answer_by_arm) is dict:
+            points: list[str] = []
+            for arm in ("canonical", "answer_first", "answer_last", "reversed"):
+                row = by_arm.get(arm)
+                ans = answer_by_arm.get(arm)
+                if type(row) is not dict or type(ans) is not dict:
+                    continue
+                whole = whole_doc_by_arm.get(arm) if type(whole_doc_by_arm) is dict else None
+                points.append(
+                    escape(arm)
+                    + ": adherent "
+                    + _rate(row.get("adherent_rate"))
+                    + " (parse "
+                    + _rate(row.get("parse_rate"))
+                    + ", schema "
+                    + _rate(row.get("schema_rate"))
+                    + "), answer-field accuracy "
+                    + _rate(ans.get("rate"))
+                    + ", whole-document "
+                    + _rate(whole.get("rate") if type(whole) is dict else None)
+                    + " over "
+                    + _count(row.get("n"))
+                    + " live"
+                )
+            if points:
+                bits.append(
+                    "<div>By arm (canonical is a replicate of an "
+                    "endpoint arm on specs whose answer field sits "
+                    "at a canonical endpoint): " + "; ".join(points) + ".</div>"
+                )
+        extraction = entry.get("extraction_decision")
+        split = entry.get("field_count_split")
+        if type(extraction) is dict and type(split) is dict:
+            two = split.get("two")
+            if type(two) is not dict:
+                two = {}
+            three = split.get("three_plus")
+            if type(three) is not dict:
+                three = {}
+            bits.append(
+                "<div>Sensitivities: extraction-only decision "
+                + escape(str(extraction.get("verdict", "")))
+                + " over "
+                + _count(extraction.get("n_paired"))
+                + " paired extraction specs; paired counts by "
+                "field count -- 2-field: "
+                + _count(two.get("n_first_only"))
+                + " first-only / "
+                + _count(two.get("n_last_only"))
+                + " last-only over "
+                + _count(two.get("n_paired"))
+                + "; 3+-field: "
+                + _count(three.get("n_first_only"))
+                + " first-only / "
+                + _count(three.get("n_last_only"))
+                + " last-only over "
+                + _count(three.get("n_paired"))
+                + ". On 2-field specs the answer field's "
+                "promotion is the companion field's demotion.</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="field_order">'
+        "<h2>Schema field order</h2>"
+        "<p>Fifteen frozen flat-JSON specs -- the shipped "
+        "structured-output set plus six 3-4-field specs -- are "
+        "rendered in four field orders: canonical (alphabetical, "
+        "the shipped presentation), the designated answer field "
+        "first, the answer field last, and fully reversed. "
+        "Answers are committed as per-field canonical values and "
+        "every verdict -- per-field correctness, schema "
+        "adherence, the pairing -- is derived from the "
+        "commitment, never stored. The claim under test is "
+        "scoped to the endpoint contrast: the answer field's "
+        "value accuracy is invariant between the first and last "
+        "arms, decided per candidate by an exact sign test over "
+        "specs adherent in both endpoint arms (gating that "
+        "itself selects against discordance; ungated counts are "
+        "printed beside it). Below six discordant paired specs "
+        "the verdict is withheld as insufficient: at 6-8 "
+        "discordant specs only a unanimous split falsifies, and "
+        "a true 30-point accuracy gap falsifies only about 15% "
+        "of the time, so the instrument detects only very large "
+        "effects. Two shipped specs (route-alert, route-order) "
+        "are excluded from pairing because their frozen answer "
+        "labels are not entailed by their contexts. The level is "
+        "per candidate: across 24 candidates at alpha 0.05, "
+        "about 1.2 false falsifications are expected at the "
+        "nominal rate (the probability of at least one is about "
+        "0.71). Minimum discordant specs: 6. Field values per "
+        "record are capped at 4096 characters in total; the "
+        "payload is capped at 8388608 bytes over at most 1440 "
+        "records. Each record is one greedy generation.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>" + "</section>"
+    )
+
+
 def _choiceaudit_section(result: dict[str, Any]) -> str:
     """Choice-scoring audit: does likelihood scoring pick what generation picks?
 
@@ -9342,6 +9579,7 @@ def render_html(result: dict[str, Any]) -> str:
     confidence_html = _confidence_section(result)
     rotation_html = _rotation_section(result)
     density_html = _density_section(result)
+    field_order_html = _field_order_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -9531,6 +9769,11 @@ def render_html(result: dict[str, Any]) -> str:
                 density_html,
             ),
             (
+                "field_order",
+                "Schema field order",
+                field_order_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -9629,6 +9872,7 @@ def render_html(result: dict[str, Any]) -> str:
         + confidence_html
         + rotation_html
         + density_html
+        + field_order_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

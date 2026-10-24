@@ -113,6 +113,7 @@ STAGE_FLAGS = [
     ("--placement", "placement", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
+    ("--field-order", "field_order", None),
     ("--choice-audit", "choice_audit", None),
     ("--precision", "precision", None),
     ("--confidence", "confidence", None),
@@ -571,6 +572,14 @@ class TestInlineDispatch(unittest.TestCase):
         )
         self.assertEqual((kind, code), ("return", 0))
         self.assertIs(result_doc["density"], sentinel)
+
+    def test_field_order_dispatches(self):
+        (kind, code, _out, _err), result_doc, sentinel = self._run_with(
+            ["--field-order"],
+            ["fieldorder_stage", "fieldorder_analysis"],
+        )
+        self.assertEqual((kind, code), ("return", 0))
+        self.assertIs(result_doc["field_order"], sentinel)
 
     def test_sensitivity_sweep_dispatches(self):
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(

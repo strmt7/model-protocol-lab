@@ -2550,6 +2550,69 @@ is in `docs/DENSITY_DESIGN.md`. Informational only: the
 probe never affects selection, and the stage never fails
 the run.
 
+### 8.52 Schema field order (`field_order`)
+
+Opt-in with `model-protocol-lab run --field-order`. Does
+the order in which my schema lists its fields change the
+values the model returns — in particular for the one field
+the answer is read from?
+
+Fifteen frozen flat-JSON specs — the nine shipped
+structured-output specs plus six new three- and four-field
+specs — are each rendered in four field orders: canonical
+(alphabetical, byte-identical to the shipped presentation),
+the designated answer field first, the answer field last,
+and fully reversed. Coincident orders are generated anyway,
+under a uniform code path: of the 60 prompts per candidate
+37 are distinct. The answer field is designated per spec
+and printed in the design document; the pairing population
+is the ten specs whose answer is entailed by the question
+and context — a reader given those two, but not the answer
+table, can derive the designated field's value. Two shipped
+specs whose frozen labels are not so entailed are measured
+descriptively and never paired.
+
+Answers are committed as per-field canonical values — each
+produced key mapped to its canonical JSON string, or to no
+value where the value has no canonical form (a non-finite
+number, an integer beyond the digit limit) — under the
+document's digest, and every verdict is derived from the
+commitment, never stored: per-field correctness,
+whole-document accuracy, and schema adherence in the shipped
+parse/schema decomposition (a document with duplicate keys
+is never adherent; its fields are still scored by the
+last-wins parse, outside the pairing). The claim under test
+is scoped to the endpoint contrast: the answer field's
+accuracy with the field presented first equals its accuracy
+presented last, over the specs adherent in both endpoint
+arms. The decision is an exact two-sided sign test over the
+discordant paired specs; below six discordant specs the
+verdict is withheld as `insufficient` — at six to eight
+discordant only a unanimous split falsifies, and a true
+30-point accuracy gap falsifies only about 15% of the time,
+so the instrument detects only very large effects, and the
+report prints exactly that beside the numbers, together with
+the pairing attrition in its stated order (identical orders,
+then duplicate keys, then non-adherence), the ungated
+discordant counts, an extraction-only decision, and a
+field-count split. Prior evidence that key order matters is
+about the order of keys in emitted responses under JSON mode
+(Tam et al., arXiv:2408.02442, section 4.1); whether
+presentation order changes values is this probe's own
+hypothesis, and the report frames it that way.
+
+Records carry digests and the canonical field values only,
+and `diff-reports` recomputes the whole section from its own
+literal tables (`field_order_changed` /
+`field_order_asymmetric` feed `identical`); a drifted
+protocol, inventory, or backend fingerprint marks the
+comparison not comparable while still listing the drift.
+Cost: 60 generations per candidate (1,440 at the legal
+maximum: 24 candidates x 15 specs x 4 arms). The full
+contract is in `docs/FIELDORDER_DESIGN.md`. Informational
+only: the probe never affects selection, and the stage
+never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

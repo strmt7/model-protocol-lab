@@ -134,6 +134,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import random
 import re
@@ -151,6 +152,7 @@ from model_protocol_lab import (
     diffreports,
     distraction,
     experiments,
+    fieldorder,
     leading,
     multiturn,
     needle,
@@ -294,6 +296,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "confidence": {"available": "neither", "changed": False},
         "rotation": {"available": "neither", "changed": False},
         "density": {"available": "neither", "changed": False},
+        "field_order": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -391,6 +394,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "rotation_asymmetric": False,
             "density_changed": False,
             "density_asymmetric": False,
+            "field_order_changed": False,
+            "field_order_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -6411,6 +6416,339 @@ def _o_density(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_field_order_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle field-order recompute: mirrors
+    diffreports._fo_recompute. The oracle rebuilds the
+    protocol through the producer module (fieldorder) where
+    the implementation rebuilds it from literal tables, checks
+    every record in canonical (spec-table, arm) order against
+    the re-rendered arm prompt, verifies every stored field
+    value is the canonical form of its parse and the document
+    digest consistent, and recomputes the aggregates through
+    the producer's aggregation."""
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(fieldorder.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = fieldorder.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    record_keys = {
+        "candidate",
+        "spec_id",
+        "arm",
+        "detail",
+        "case_screened",
+        "boundary_found",
+        "duplicate_keys",
+        "answer_digest",
+        "document_kind",
+        "document_digest",
+        "field_values",
+        "input_tokens",
+        "content_digest",
+    }
+
+    def _digest_ok(item: Any) -> bool:
+        return (
+            type(item) is str and len(item) == 64 and all(ch in "0123456789abcdef" for ch in item)
+        )
+
+    total = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    expected_order = [
+        (spec["id"], arm) for spec in fieldorder.FIELD_ORDER_SPECS for arm in fieldorder.ARM_KEYS
+    ]
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available":
+            return None
+        if set(entry) != {
+            "n_generated",
+            "n_distinct_prompts",
+            "n_boundary_screened",
+            "n_detail_screened",
+            "n_no_boundary",
+            "n_live",
+            "n_duplicate_keys",
+            "by_arm",
+            "per_field",
+            "answer_by_arm",
+            "whole_doc_by_arm",
+            "pairing",
+            "decision",
+            "extraction_decision",
+            "field_count_split",
+            "status",
+            "records",
+        }:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) != len(expected_order):
+            return None
+        total += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > fieldorder.MAX_FIELD_ORDER_PAYLOAD_BYTES:
+            return None
+        for record, (spec_id, arm) in zip(records, expected_order, strict=True):
+            if type(record) is not dict or set(record) != record_keys:
+                return None
+            if record["candidate"] != name:
+                return None
+            if record["spec_id"] != spec_id or record["arm"] != arm:
+                return None
+            if record["detail"] not in ("", "arm_evaluation_failed", "arm_context_exceeded"):
+                return None
+            if type(record["case_screened"]) is not bool:
+                return None
+            if type(record["boundary_found"]) is not bool:
+                return None
+            if type(record["duplicate_keys"]) is not bool:
+                return None
+            if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                return None
+            if record["answer_digest"] is not None and not _digest_ok(record["answer_digest"]):
+                return None
+            if not _digest_ok(record["content_digest"]):
+                return None
+            spec = fieldorder.spec_by_id(spec_id)
+            if record["content_digest"] != fieldorder.digest_text(fieldorder.arm_prompt(spec, arm)):
+                return None
+            kind = record["document_kind"]
+            if kind not in ("", "object", "non_object", "unparseable"):
+                return None
+            field_values = record["field_values"]
+            if type(field_values) is not dict:
+                return None
+            if record["detail"] != "" or record["case_screened"]:
+                if (
+                    kind != ""
+                    or field_values
+                    or record["document_digest"] is not None
+                    or record["answer_digest"] is not None
+                    or record["boundary_found"]
+                    or record["duplicate_keys"]
+                ):
+                    return None
+                continue
+            if record["answer_digest"] is None:
+                return None
+            if (
+                sum(len(item) for item in field_values.values() if type(item) is str)
+                > fieldorder.FIELD_VALUES_CAP
+            ):
+                return None
+            for item in field_values.values():
+                if item is None:
+                    continue
+                if type(item) is not str:
+                    return None
+                try:
+                    parsed = json.loads(item)
+                except (ValueError, TypeError, RecursionError):
+                    return None
+                if type(parsed) is float and not math.isfinite(parsed):
+                    return None
+                try:
+                    if fieldorder._canonical_json(parsed) != item:
+                        return None
+                except (ValueError, TypeError, RecursionError):
+                    return None
+            if kind != "object":
+                if field_values or record["document_digest"] is not None:
+                    return None
+            elif any(item is None for item in field_values.values()):
+                if record["document_digest"] is not None:
+                    return None
+            else:
+                document = {key: json.loads(item) for key, item in field_values.items()}
+                try:
+                    expected_digest = fieldorder.digest_text(fieldorder._canonical_json(document))
+                except (ValueError, TypeError, RecursionError):
+                    return None
+                if record["document_digest"] != expected_digest:
+                    return None
+        aggregates[name] = fieldorder.aggregate_candidate(records)
+    if total > fieldorder.MAX_FIELD_ORDER_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_specs": len(fieldorder.FIELD_ORDER_SPECS),
+    }
+
+
+def _o_field_order_valid(value: Any) -> bool:
+    """Oracle field-order validator: mirrors
+    diffreports._valid_field_order."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "n_candidates",
+        "n_specs",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_field_order_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_specs") == recomputed["n_specs"])
+
+
+def _o_field_order(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle field-order section: mirrors
+    diffreports.diff_field_order."""
+    old_ok = _o_field_order_valid(old)
+    new_ok = _o_field_order_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("inventory_digest") != new["protocol"].get(
+        "inventory_digest"
+    )
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            ("verdict", old_entry["decision"]["verdict"], new_entry["decision"]["verdict"]),
+            (
+                "direction",
+                old_entry["decision"]["direction"],
+                new_entry["decision"]["direction"],
+            ),
+            (
+                "n_first_only",
+                old_entry["decision"]["n_first_only"],
+                new_entry["decision"]["n_first_only"],
+            ),
+            (
+                "n_last_only",
+                old_entry["decision"]["n_last_only"],
+                new_entry["decision"]["n_last_only"],
+            ),
+            (
+                "n_discordant",
+                old_entry["decision"]["n_discordant"],
+                new_entry["decision"]["n_discordant"],
+            ),
+            ("sign_p", old_entry["decision"]["sign_p"], new_entry["decision"]["sign_p"]),
+            ("n_paired", old_entry["pairing"]["n_paired"], new_entry["pairing"]["n_paired"]),
+            (
+                "first_rate",
+                old_entry["pairing"]["first_rate"],
+                new_entry["pairing"]["first_rate"],
+            ),
+            (
+                "last_rate",
+                old_entry["pairing"]["last_rate"],
+                new_entry["pairing"]["last_rate"],
+            ),
+            ("delta", old_entry["pairing"]["delta"], new_entry["pairing"]["delta"]),
+            ("n_live", old_entry["n_live"], new_entry["n_live"]),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+            (
+                "n_detail_screened",
+                old_entry["n_detail_screened"],
+                new_entry["n_detail_screened"],
+            ),
+            (
+                "n_duplicate_keys",
+                old_entry["n_duplicate_keys"],
+                new_entry["n_duplicate_keys"],
+            ),
+        ]
+        for arm in fieldorder.ARM_KEYS:
+            metrics.append(
+                (
+                    f"answer_rate_{arm}",
+                    old_entry["answer_by_arm"][arm]["rate"],
+                    new_entry["answer_by_arm"][arm]["rate"],
+                )
+            )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     """Oracle choice-audit recompute: mirrors
     diffreports._choiceaudit_recompute. The oracle rebuilds the
@@ -9829,6 +10167,9 @@ def _oracle_diff(
     )
     o_rt, o_rt_changed, o_rt_asymmetric = _o_rotation(old.get("rotation"), new.get("rotation"))
     o_de, o_de_changed, o_de_asymmetric = _o_density(old.get("density"), new.get("density"))
+    o_fo, o_fo_changed, o_fo_asymmetric = _o_field_order(
+        old.get("field_order"), new.get("field_order")
+    )
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -9925,6 +10266,8 @@ def _oracle_diff(
         and not o_rt_asymmetric
         and not o_de_changed
         and not o_de_asymmetric
+        and not o_fo_changed
+        and not o_fo_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -9980,6 +10323,7 @@ def _oracle_diff(
         "confidence": o_cfd,
         "rotation": o_rt,
         "density": o_de,
+        "field_order": o_fo,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -10073,6 +10417,8 @@ def _oracle_diff(
             "rotation_asymmetric": o_rt_asymmetric,
             "density_changed": o_de_changed,
             "density_asymmetric": o_de_asymmetric,
+            "field_order_changed": o_fo_changed,
+            "field_order_asymmetric": o_fo_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -11014,6 +11360,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "rotation_asymmetric": False,
                 "density_changed": False,
                 "density_asymmetric": False,
+                "field_order_changed": False,
+                "field_order_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -14916,6 +15264,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not rotation_asymmetric\n"
             '        and not density_diff["changed"]\n'
             "        and not density_asymmetric\n"
+            '        and not field_order_diff["changed"]\n'
+            "        and not field_order_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -15010,6 +15360,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or rotation_asymmetric\n"
             '        or density_diff["changed"]\n'
             "        or density_asymmetric\n"
+            '        or field_order_diff["changed"]\n'
+            "        or field_order_asymmetric\n"
             "    )\n",
             scenario,
         )
