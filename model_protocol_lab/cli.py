@@ -692,6 +692,32 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--field-order",
+        action="store_true",
+        help="Schema field-order probe (cycle 205, research "
+        "wave-9 rank 4): 15 frozen flat-JSON specs (the shipped "
+        "structured set plus six 3-4-field specs), each rendered "
+        "in four field orders per candidate -- canonical "
+        "(alphabetical), the designated answer field first, the "
+        "answer field last, and fully reversed. Answers are "
+        "committed as per-field canonical values; correctness, "
+        "schema adherence, and the pairing are derived from the "
+        "commitment, never stored. Headline: the answer field's "
+        "first-vs-last accuracy over specs adherent in both "
+        "endpoint arms, decided by an exact sign test with the "
+        "evidence withheld below six discordant specs "
+        "(insufficient); the decision's printed characteristics "
+        "state that only very large effects can falsify. Monday "
+        "morning: 'I am defining a JSON schema for extraction -- "
+        "does putting the main answer field first change what "
+        "this template produces for it?' Costs 60 generations "
+        "per candidate (1,440 at the legal maximum: 24 "
+        "candidates x 15 specs x 4 arms); each generation is one "
+        "greedy decode over the arm's rendered prompt. "
+        "Informational only; never touches selection. The stage "
+        "never fails the run.",
+    )
+    run.add_argument(
         "--choice-audit",
         action="store_true",
         help="Choice-scoring audit (cycle 195, research wave-8 "
@@ -1973,6 +1999,50 @@ def _run_density_probe(
         result["density"] = {
             "available": False,
             "detail": "density_unavailable",
+        }
+
+
+def _run_fieldorder_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the schema field-order probe; never raises.
+
+    The probe is self-contained: its specs are frozen in the
+    fieldorder module, so it consults neither the recorded
+    search nor the primary decision. The generation budget is
+    the protocol's fixed 64 new tokens (the record caps are
+    derived from it), not the run's --max-new-tokens. The run's
+    cancel event is threaded dispatch -> wrapper -> stage ->
+    evaluate, so SIGINT/SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from . import fieldorder as _fo
+        from .experiments import fieldorder_analysis, fieldorder_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = fieldorder_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=_fo.MAX_NEW_TOKENS,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["field_order"] = fieldorder_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- field-order must not fail the run
+        result["field_order"] = {
+            "available": False,
+            "detail": "field_order_unavailable",
         }
 
 
@@ -3836,6 +3906,23 @@ def main(argv: list[str] | None = None) -> int:
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Schema field-order probe (cycle 205, research
+                # wave-9 rank 4): frozen flat-JSON specs in four
+                # field orders, the answer field's endpoint
+                # accuracy decided by an exact sign test over
+                # adherent paired specs. Informational only --
+                # never changes selection. Never fails the run.
+                if args.field_order:
+                    _run_fieldorder_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
                         max_context=args.max_context,
                         seed=args.seed,
                         cancel=cancel,

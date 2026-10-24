@@ -723,6 +723,7 @@ def diff_reports(
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
     rotation_diff = diff_rotation(old.get("rotation"), new.get("rotation"))
     density_diff = diff_density(old.get("density"), new.get("density"))
+    field_order_diff = diff_field_order(old.get("field_order"), new.get("field_order"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -811,6 +812,10 @@ def diff_reports(
         "neither",
     )
     density_asymmetric = density_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    field_order_asymmetric = field_order_diff["available"] not in (
         "both",
         "neither",
     )
@@ -915,6 +920,8 @@ def diff_reports(
         and not rotation_asymmetric
         and not density_diff["changed"]
         and not density_asymmetric
+        and not field_order_diff["changed"]
+        and not field_order_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1009,6 +1016,8 @@ def diff_reports(
         "rotation_asymmetric": rotation_asymmetric,
         "density_changed": density_diff["changed"],
         "density_asymmetric": density_asymmetric,
+        "field_order_changed": field_order_diff["changed"],
+        "field_order_asymmetric": field_order_asymmetric,
         "identical": identical,
     }
     return {
@@ -1055,6 +1064,7 @@ def diff_reports(
         "confidence": confidence_diff,
         "rotation": rotation_diff,
         "density": density_diff,
+        "field_order": field_order_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -12691,6 +12701,1180 @@ def diff_density(old: Any, new: Any) -> dict[str, Any]:
         or density_protocol_drift
         or density_generator_drift
         or density_backend_drift
+    )
+    return result
+
+
+_FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "extract-person",
+        "shape": "extraction",
+        "question": "Extract the person's name and age.",
+        "context": "Ada Lovelace was 36 when she wrote the first algorithm.",
+        "schema": {
+            "type": "object",
+            "required": ["name", "age"],
+            "properties": {"name": {"type": "string"}, "age": {"type": "integer", "minimum": 0}},
+            "additionalProperties": False,
+        },
+        "answer": {"name": "Ada Lovelace", "age": 36},
+        "answer_field": "name",
+        "paired": True,
+        "source": "structured",
+    },
+    {
+        "id": "extract-city",
+        "shape": "extraction",
+        "question": "Extract the city and its population.",
+        "context": "Lisbon has about 500000 residents.",
+        "schema": {
+            "type": "object",
+            "required": ["city", "population"],
+            "properties": {
+                "city": {"type": "string"},
+                "population": {"type": "integer", "minimum": 0},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"city": "Lisbon", "population": 500000},
+        "answer_field": "city",
+        "paired": True,
+        "source": "structured",
+    },
+    {
+        "id": "extract-book",
+        "shape": "extraction",
+        "question": "Extract the book title and its publication year.",
+        "context": "The novel 'Dune' was first published in 1965.",
+        "schema": {
+            "type": "object",
+            "required": ["title", "year"],
+            "properties": {
+                "title": {"type": "string"},
+                "year": {"type": "integer", "minimum": 0, "maximum": 2100},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"title": "Dune", "year": 1965},
+        "answer_field": "title",
+        "paired": True,
+        "source": "structured",
+    },
+    {
+        "id": "classify-sentiment",
+        "shape": "classification",
+        "question": "Classify the sentiment of the review.",
+        "context": "Review: 'The service was dreadful and painfully slow.'",
+        "schema": {
+            "type": "object",
+            "required": ["label"],
+            "properties": {"label": {"type": "string", "enum": ["positive", "negative"]}},
+            "additionalProperties": False,
+        },
+        "answer": {"label": "negative"},
+        "answer_field": "label",
+        "paired": False,
+        "source": "structured",
+    },
+    {
+        "id": "classify-urgency",
+        "shape": "classification",
+        "question": "Classify the urgency of the ticket.",
+        "context": "Ticket: 'The server room is on fire.'",
+        "schema": {
+            "type": "object",
+            "required": ["level"],
+            "properties": {"level": {"type": "string", "enum": ["low", "high"]}},
+            "additionalProperties": False,
+        },
+        "answer": {"level": "high"},
+        "answer_field": "level",
+        "paired": False,
+        "source": "structured",
+    },
+    {
+        "id": "classify-language",
+        "shape": "classification",
+        "question": "Classify the language of the sentence.",
+        "context": "Sentence: 'Guten Morgen, wie geht es dir?'",
+        "schema": {
+            "type": "object",
+            "required": ["language"],
+            "properties": {"language": {"type": "string", "enum": ["english", "german", "french"]}},
+            "additionalProperties": False,
+        },
+        "answer": {"language": "german"},
+        "answer_field": "language",
+        "paired": False,
+        "source": "structured",
+    },
+    {
+        "id": "route-ticket",
+        "shape": "routing",
+        "question": "Route the support ticket and set its priority.",
+        "context": "Ticket: 'My invoice shows a charge I do not recognize.'",
+        "schema": {
+            "type": "object",
+            "required": ["department", "priority"],
+            "properties": {
+                "department": {"type": "string", "enum": ["sales", "support", "billing"]},
+                "priority": {"type": "integer", "minimum": 1, "maximum": 5},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"department": "billing", "priority": 3},
+        "answer_field": "department",
+        "paired": True,
+        "source": "structured",
+    },
+    {
+        "id": "route-alert",
+        "shape": "routing",
+        "question": "Route the alert and say whether it needs acknowledgement.",
+        "context": "Alert: 'Disk usage on db-1 reached 97%.'",
+        "schema": {
+            "type": "object",
+            "required": ["channel", "ack_required"],
+            "properties": {
+                "channel": {"type": "string", "enum": ["email", "sms", "pager"]},
+                "ack_required": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"channel": "pager", "ack_required": True},
+        "answer_field": "channel",
+        "paired": False,
+        "source": "structured",
+    },
+    {
+        "id": "route-order",
+        "shape": "routing",
+        "question": "Route the order to a warehouse and flag express shipping.",
+        "context": "Order: 'Customer in Porto needs the parcel by Friday.'",
+        "schema": {
+            "type": "object",
+            "required": ["warehouse", "express"],
+            "properties": {
+                "warehouse": {"type": "string", "enum": ["north", "south"]},
+                "express": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"warehouse": "south", "express": True},
+        "answer_field": "warehouse",
+        "paired": False,
+        "source": "structured",
+    },
+    {
+        "id": "extract-product",
+        "shape": "extraction",
+        "question": "Extract the product's brand, model, price and stock status.",
+        "context": "The catalogue lists it as: brand Acme, model Rotor X2. "
+        "It costs 349 dollars and is currently in stock.",
+        "schema": {
+            "type": "object",
+            "required": ["brand", "model", "price", "in_stock"],
+            "properties": {
+                "brand": {"type": "string"},
+                "model": {"type": "string"},
+                "price": {"type": "integer", "minimum": 0},
+                "in_stock": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"brand": "Acme", "model": "Rotor X2", "price": 349, "in_stock": True},
+        "answer_field": "model",
+        "paired": True,
+        "source": "fieldorder",
+    },
+    {
+        "id": "extract-event",
+        "shape": "extraction",
+        "question": "Extract the event venue, day and attendance.",
+        "context": "The workshop meets at Harbor Hall on Friday with 40 attendees.",
+        "schema": {
+            "type": "object",
+            "required": ["venue", "day", "attendance"],
+            "properties": {
+                "venue": {"type": "string"},
+                "day": {
+                    "type": "string",
+                    "enum": [
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                    ],
+                },
+                "attendance": {"type": "integer", "minimum": 0},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"venue": "Harbor Hall", "day": "friday", "attendance": 40},
+        "answer_field": "venue",
+        "paired": True,
+        "source": "fieldorder",
+    },
+    {
+        "id": "route-complaint",
+        "shape": "routing",
+        "question": "Route the complaint and record whether a defect was "
+        "confirmed and whether data was lost.",
+        "context": "Complaint: 'The update deleted my saved files.' "
+        "Front-line support confirmed the update itself is defective.",
+        "schema": {
+            "type": "object",
+            "required": ["team", "defect_confirmed", "data_lost"],
+            "properties": {
+                "team": {"type": "string", "enum": ["sales", "support", "technical"]},
+                "defect_confirmed": {"type": "boolean"},
+                "data_lost": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"team": "technical", "defect_confirmed": True, "data_lost": True},
+        "answer_field": "team",
+        "paired": True,
+        "source": "fieldorder",
+    },
+    {
+        "id": "classify-document",
+        "shape": "classification",
+        "question": "Classify the document's type, language and confidentiality.",
+        "context": "Document: a German-language internal memo marked confidential.",
+        "schema": {
+            "type": "object",
+            "required": ["doc_type", "language", "confidential"],
+            "properties": {
+                "doc_type": {"type": "string", "enum": ["memo", "report", "invoice"]},
+                "language": {"type": "string", "enum": ["english", "german", "french"]},
+                "confidential": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"doc_type": "memo", "language": "german", "confidential": True},
+        "answer_field": "doc_type",
+        "paired": True,
+        "source": "fieldorder",
+    },
+    {
+        "id": "extract-vehicle",
+        "shape": "extraction",
+        "question": "Extract the vehicle make, year, fuel and seat count.",
+        "context": "The 2019 Volvo wagon runs on diesel and seats five.",
+        "schema": {
+            "type": "object",
+            "required": ["make", "year", "fuel", "seats"],
+            "properties": {
+                "make": {"type": "string"},
+                "year": {"type": "integer", "minimum": 1900, "maximum": 2100},
+                "fuel": {"type": "string", "enum": ["petrol", "diesel", "electric"]},
+                "seats": {"type": "integer", "minimum": 1},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {"make": "Volvo", "year": 2019, "fuel": "diesel", "seats": 5},
+        "answer_field": "make",
+        "paired": True,
+        "source": "fieldorder",
+    },
+    {
+        "id": "route-delivery",
+        "shape": "routing",
+        "question": "Route the delivery and flag its requirements.",
+        "context": "Delivery: vaccines to a clinic in the south, sent by "
+        "express courier for tomorrow morning; a signature is required "
+        "and the box must stay refrigerated.",
+        "schema": {
+            "type": "object",
+            "required": ["region", "speed", "signature_required", "refrigerated"],
+            "properties": {
+                "region": {"type": "string", "enum": ["north", "south", "east", "west"]},
+                "speed": {"type": "string", "enum": ["standard", "express"]},
+                "signature_required": {"type": "boolean"},
+                "refrigerated": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+        "answer": {
+            "region": "south",
+            "speed": "express",
+            "signature_required": True,
+            "refrigerated": True,
+        },
+        "answer_field": "region",
+        "paired": True,
+        "source": "fieldorder",
+    },
+)
+
+
+_FO_GENERATION_RULE_TEXT = (
+    "The spec set is the frozen FIELD_ORDER_SPECS table: the nine "
+    "structured specs (source 'structured', reused unchanged) plus "
+    "six fieldorder specs. Each spec designates one answer field "
+    "and a paired flag; a spec may be paired only if a reader "
+    "given question, context and schema (not the answer table) "
+    "can derive the answer field's value uniquely. Canonical "
+    "order is alphabetical by field name. Arms: canonical; "
+    "answer_first (answer field first, the rest in canonical "
+    "relative order); answer_last (answer field last, the rest "
+    "in canonical relative order); reversed (canonical order "
+    "reversed). Generation is greedy via core.evaluate at a "
+    "fixed 64 new tokens; exactly 60 records per candidate in "
+    "(spec, arm) canonical order. Record budget 1440 (24 "
+    "candidates); payload budget 8388608 bytes."
+)
+
+_FO_RENDERING_RULE_TEXT = (
+    "The user content is the structured prompt template with the "
+    "schema description rendered in the arm's order: question, "
+    "then 'Context: ', then 'Respond with ONLY a JSON object "
+    "matching this schema: ' plus the ordered description, then "
+    "'Do not include any other text.' and the ref marker "
+    "(structured/<id> for shipped specs, fieldorder/<id> for new "
+    "specs). The ordered description lists each property in the "
+    'arm order as "name": type with enum and bound annotations '
+    "in the structured format, then the required list in the arm "
+    "order and the additional-properties clause. The canonical "
+    "arm's prompt is byte-identical to structured.render_prompt."
+)
+
+_FO_CHECKING_RULE_TEXT = (
+    "Canonical JSON is structured._canonical_json: json.dumps "
+    "with sort_keys=True, separators=(', ', ': '), "
+    "ensure_ascii=True, allow_nan=False; the document "
+    "{'name': 'Ada Lovelace', 'age': 36} canonicalises to "
+    '\'{"age": 36, "name": "Ada Lovelace"}\'. The answer is '
+    "parsed once with a duplicate-detecting object_pairs_hook "
+    "(last occurrence wins). document_kind is 'object', "
+    "'non_object', or 'unparseable' (JSON parse failure only). "
+    "field_values maps each produced key to its canonical JSON "
+    "string, or to None when the value has no canonical form (a "
+    "non-finite number, or a value beyond the int/str digit "
+    "limit); a produced JSON null is the string 'null', never "
+    "None. document_digest is non-None iff kind is 'object' and "
+    "no field value is None, and then equals the SHA-256 of the "
+    "document's canonical form. A field is correct iff its key "
+    "is present with a string whose digest equals the expected "
+    "value's canonical digest. The schema verdict is recomputed "
+    "from the reconstructed document with the flat schema check; "
+    "a None value fails its key's check before reconstruction. "
+    "Any exception while parsing or canonicalising a stored "
+    "string makes the payload section invalid. parse_ok iff kind "
+    "is 'object' or 'non_object'; adherent iff parse_ok, the "
+    "schema verdict is ok, and duplicate_keys is false. Pairing: "
+    "paired flag set, endpoint orders differ, both endpoint "
+    "records adherent, neither with duplicate keys. Decision: "
+    "exact two-sided sign test over discordant paired specs; "
+    "falsified iff discordant >= 6 and p <= 0.05; insufficient "
+    "iff discordant < 6; else not_falsified. Per-record field "
+    "values are capped at 4096 summed chars; a live record over "
+    "the cap is stored with detail 'arm_evaluation_failed' and "
+    "empty field values."
+)
+
+_FO_ARM_KEYS: tuple[str, ...] = ("canonical", "answer_first", "answer_last", "reversed")
+_FO_MAX_RECORDS = 60 * 24
+_FO_MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
+_FO_FIELD_VALUES_CAP = 4096
+_FO_MIN_DISCORDANT_SPECS = 6
+_FO_SIGN_ALPHA = 0.05
+_FO_RECORD_KEYS = {
+    "candidate",
+    "spec_id",
+    "arm",
+    "detail",
+    "case_screened",
+    "boundary_found",
+    "duplicate_keys",
+    "answer_digest",
+    "document_kind",
+    "document_digest",
+    "field_values",
+    "input_tokens",
+    "content_digest",
+}
+_FO_RECORD_DETAILS = {"", "arm_evaluation_failed", "arm_context_exceeded"}
+_FO_AGGREGATE_KEYS = {
+    "n_generated",
+    "n_distinct_prompts",
+    "n_boundary_screened",
+    "n_detail_screened",
+    "n_no_boundary",
+    "n_live",
+    "n_duplicate_keys",
+    "by_arm",
+    "per_field",
+    "answer_by_arm",
+    "whole_doc_by_arm",
+    "pairing",
+    "decision",
+    "extraction_decision",
+    "field_count_split",
+}
+
+
+def _fo_digest(text: str) -> str:
+    """Mirror of fieldorder.digest_text (SHA-256 hex)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _fo_canonical_json(document: Any) -> str:
+    """Mirror of structured._canonical_json (the pinned form)."""
+    import json as _json
+
+    return _json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
+
+
+def _fo_digest_ok(value: Any) -> bool:
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(char in "0123456789abcdef" for char in value)
+
+
+def _fo_canonical_order(spec: dict[str, Any]) -> list[str]:
+    return sorted(spec["schema"]["properties"])
+
+
+def _fo_arm_order(spec: dict[str, Any], arm: str) -> list[str]:
+    order = _fo_canonical_order(spec)
+    if arm == "canonical":
+        return order
+    if arm == "reversed":
+        return order[::-1]
+    field = spec["answer_field"]
+    rest = [name for name in order if name != field]
+    if arm == "answer_first":
+        return [field, *rest]
+    if arm == "answer_last":
+        return [*rest, field]
+    raise ValueError(f"unknown field-order arm: {arm!r}")
+
+
+def _fo_describe_ordered(schema: dict[str, Any], order: list[str]) -> str:
+    properties = schema["properties"]
+    parts: list[str] = []
+    for name in order:
+        field = properties[name]
+        piece = f'"{name}": {field["type"]}'
+        enum = field.get("enum")
+        if enum is not None:
+            piece += " one of " + _fo_canonical_json(enum)
+        minimum = field.get("minimum")
+        maximum = field.get("maximum")
+        if minimum is not None or maximum is not None:
+            lo = f">= {minimum}" if minimum is not None else ""
+            hi = f"<= {maximum}" if maximum is not None else ""
+            piece += f" ({' and '.join(part for part in (lo, hi) if part)})"
+        parts.append(piece)
+    required_names = set(schema["required"])
+    required = [name for name in order if name in required_names]
+    extras = (
+        "no other keys allowed" if schema["additionalProperties"] is False else "other keys allowed"
+    )
+    return "{" + "; ".join(parts) + "} (required: " + ", ".join(required) + "; " + extras + ")"
+
+
+def _fo_arm_prompt(spec: dict[str, Any], arm: str) -> str:
+    return (
+        f"{spec['question']}\n"
+        f"Context: {spec['context']}\n"
+        "Respond with ONLY a JSON object matching this schema: "
+        f"{_fo_describe_ordered(spec['schema'], _fo_arm_order(spec, arm))}.\n"
+        "Do not include any other text.\n"
+        f"(ref: {spec['source']}/{spec['id']})"
+    )
+
+
+def _fo_spec_by_id(spec_id: str) -> dict[str, Any]:
+    for spec in _FIELD_ORDER_SPECS:
+        if spec["id"] == spec_id:
+            return spec
+    raise ValueError(f"unknown field-order spec: {spec_id!r}")
+
+
+def _fo_expected_value_digest(spec: dict[str, Any], field: str) -> str:
+    return _fo_digest(_fo_canonical_json(spec["answer"][field]))
+
+
+def _fo_field_correct(spec: dict[str, Any], field: str, field_values: dict[str, Any]) -> bool:
+    value = field_values.get(field)
+    if type(value) is not str:
+        return False
+    return _fo_digest(value) == _fo_expected_value_digest(spec, field)
+
+
+def _fo_is_finite_number(value: object) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return value == value and abs(value) != float("inf")
+
+
+def _fo_field_value_ok(value: object, field: dict[str, Any]) -> bool:
+    """Mirror of structured._field_value_ok."""
+    field_type = field["type"]
+    if field_type == "string":
+        ok = type(value) is str
+    elif field_type == "integer":
+        ok = type(value) is int and not isinstance(value, bool)
+    elif field_type == "number":
+        ok = (
+            type(value) in (int, float)
+            and not isinstance(value, bool)
+            and _fo_is_finite_number(value)
+        )
+    elif field_type == "boolean":
+        ok = type(value) is bool
+    elif field_type == "null":
+        ok = value is None
+    else:
+        return False
+    if not ok:
+        return False
+    enum = field.get("enum")
+    if enum is not None and value not in enum:
+        return False
+    minimum = field.get("minimum")
+    if minimum is not None and isinstance(minimum, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        if value < minimum:
+            return False
+    maximum = field.get("maximum")
+    if maximum is not None and isinstance(maximum, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        return value <= maximum
+    return True
+
+
+def _fo_check_schema(document: object, schema: dict[str, Any]) -> str:
+    """Mirror of structured.check_schema over a normalized schema."""
+    if type(document) is not dict:
+        return "schema_failed"
+    required = schema["required"]
+    properties = schema["properties"]
+    for name in required:
+        if name not in document:
+            return "schema_failed"
+    for name, value in document.items():
+        field = properties.get(name)
+        if field is None:
+            if schema["additionalProperties"] is False:
+                return "schema_failed"
+            continue
+        if not _fo_field_value_ok(value, field):
+            return "schema_failed"
+    return "schema_ok"
+
+
+def _fo_parse_stored(value: Any) -> tuple[bool, Any]:
+    """Parse a stored canonical string; (False, None) on any failure.
+
+    Total (design F10): ValueError (including the int/str digit
+    limit), TypeError, and RecursionError all yield False.
+    """
+    import json as _json
+
+    if type(value) is not str:
+        return False, None
+    try:
+        return True, _json.loads(value)
+    except (ValueError, TypeError, RecursionError):
+        return False, None
+
+
+def _fo_schema_ok(spec: dict[str, Any], kind: str, field_values: dict[str, Any]) -> bool:
+    if kind != "object":
+        return False
+    if any(value is None for value in field_values.values()):
+        return False
+    document: dict[str, Any] = {}
+    for key, value in field_values.items():
+        ok, parsed = _fo_parse_stored(value)
+        if not ok:
+            return False
+        document[key] = parsed
+    return _fo_check_schema(document, spec["schema"]) == "schema_ok"
+
+
+def _fo_record_derived(spec: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    kind = record["document_kind"]
+    field_values = record["field_values"]
+    parse_ok = kind in ("object", "non_object")
+    ok = _fo_schema_ok(spec, kind, field_values)
+    return {
+        "parse_ok": parse_ok,
+        "schema_ok": ok,
+        "adherent": parse_ok and ok and not record["duplicate_keys"],
+        "fields": {
+            name: _fo_field_correct(spec, name, field_values)
+            for name in spec["schema"]["properties"]
+        },
+        "answer_correct": _fo_field_correct(spec, spec["answer_field"], field_values),
+        "whole_doc_correct": ok
+        and all(
+            _fo_field_correct(spec, name, field_values) for name in spec["schema"]["properties"]
+        )
+        and not any(key not in spec["schema"]["properties"] for key in field_values),
+    }
+
+
+def _fo_sign_test_p(n_pos: int, n_neg: int) -> float:
+    import math as _math
+
+    n = n_pos + n_neg
+    if n == 0:
+        return 1.0
+    k = min(n_pos, n_neg)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    return float(min(1.0, 2.0 * tail))
+
+
+def _fo_rate(correct: int, n: int) -> float | None:
+    return float(correct / n) if n else None
+
+
+def _fo_decision(n_first_only: int, n_last_only: int) -> dict[str, Any]:
+    discordant = n_first_only + n_last_only
+    p_value = _fo_sign_test_p(n_first_only, n_last_only)
+    if discordant < _FO_MIN_DISCORDANT_SPECS:
+        verdict = "insufficient"
+    elif p_value <= _FO_SIGN_ALPHA:
+        verdict = "falsified"
+    else:
+        verdict = "not_falsified"
+    if n_first_only > n_last_only:
+        direction = "first"
+    elif n_last_only > n_first_only:
+        direction = "last"
+    else:
+        direction = "none"
+    return {
+        "verdict": verdict,
+        "n_discordant": discordant,
+        "n_first_only": n_first_only,
+        "n_last_only": n_last_only,
+        "sign_p": p_value,
+        "direction": direction,
+    }
+
+
+def _fo_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of fieldorder.aggregate_candidate."""
+    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for record in records:
+        by_key[(record["spec_id"], record["arm"])] = record
+    n_generated = len(records)
+    n_distinct_prompts = sum(
+        len({tuple(_fo_arm_order(spec, arm)) for arm in _FO_ARM_KEYS})
+        for spec in _FIELD_ORDER_SPECS
+    )
+    n_boundary_screened = sum(1 for r in records if r["case_screened"])
+    n_detail_screened = sum(1 for r in records if not r["case_screened"] and r["detail"] != "")
+    n_no_boundary = sum(
+        1
+        for r in records
+        if not r["case_screened"] and r["detail"] == "" and not r["boundary_found"]
+    )
+    live = [
+        r for r in records if not r["case_screened"] and r["detail"] == "" and r["boundary_found"]
+    ]
+    specs = {spec["id"]: spec for spec in _FIELD_ORDER_SPECS}
+    derived = {(r["spec_id"], r["arm"]): _fo_record_derived(specs[r["spec_id"]], r) for r in live}
+
+    by_arm: dict[str, Any] = {}
+    for arm in _FO_ARM_KEYS:
+        rows = [r for r in live if r["arm"] == arm]
+        n = len(rows)
+        parse_ok = sum(1 for r in rows if derived[(r["spec_id"], arm)]["parse_ok"])
+        schema_ok_n = sum(1 for r in rows if derived[(r["spec_id"], arm)]["schema_ok"])
+        adherent = sum(1 for r in rows if derived[(r["spec_id"], arm)]["adherent"])
+        by_arm[arm] = {
+            "n": n,
+            "parse_ok": parse_ok,
+            "schema_ok": schema_ok_n,
+            "adherent": adherent,
+            "parse_rate": _fo_rate(parse_ok, n),
+            "schema_rate": _fo_rate(schema_ok_n, n),
+            "adherent_rate": _fo_rate(adherent, n),
+        }
+
+    per_field: dict[str, Any] = {}
+    for spec in _FIELD_ORDER_SPECS:
+        fields: dict[str, Any] = {}
+        for name in spec["schema"]["properties"]:
+            per_arm: dict[str, Any] = {}
+            for arm in _FO_ARM_KEYS:
+                rows = [r for r in live if r["spec_id"] == spec["id"] and r["arm"] == arm]
+                n = len(rows)
+                correct = sum(1 for r in rows if derived[(spec["id"], arm)]["fields"][name])
+                per_arm[arm] = {"correct": correct, "n": n, "rate": _fo_rate(correct, n)}
+            fields[name] = per_arm
+        per_field[spec["id"]] = fields
+
+    answer_by_arm: dict[str, Any] = {}
+    whole_doc_by_arm: dict[str, Any] = {}
+    for arm in _FO_ARM_KEYS:
+        rows = [r for r in live if r["arm"] == arm]
+        n = len(rows)
+        correct = sum(1 for r in rows if derived[(r["spec_id"], arm)]["answer_correct"])
+        whole = sum(1 for r in rows if derived[(r["spec_id"], arm)]["whole_doc_correct"])
+        answer_by_arm[arm] = {"correct": correct, "n": n, "rate": _fo_rate(correct, n)}
+        whole_doc_by_arm[arm] = {"correct": whole, "n": n, "rate": _fo_rate(whole, n)}
+
+    n_duplicates = sum(1 for r in live if r["duplicate_keys"])
+
+    paired_first: dict[str, bool] = {}
+    paired_last: dict[str, bool] = {}
+    n_flagged = 0
+    n_order_same = 0
+    n_dup_excluded = 0
+    n_not_adherent = 0
+    ungated_first_only = 0
+    ungated_last_only = 0
+    ungated_specs = 0
+    for spec in _FIELD_ORDER_SPECS:
+        if not spec["paired"]:
+            continue
+        n_flagged += 1
+        if _fo_arm_order(spec, "answer_first") == _fo_arm_order(spec, "answer_last"):
+            n_order_same += 1
+            continue
+        first = by_key.get((spec["id"], "answer_first"))
+        last = by_key.get((spec["id"], "answer_last"))
+        if first is None or last is None:
+            continue
+        first_live = (spec["id"], "answer_first") in derived
+        last_live = (spec["id"], "answer_last") in derived
+        if first_live and last_live:
+            ungated_specs += 1
+            f_ok = derived[(spec["id"], "answer_first")]["answer_correct"]
+            l_ok = derived[(spec["id"], "answer_last")]["answer_correct"]
+            if f_ok and not l_ok:
+                ungated_first_only += 1
+            elif l_ok and not f_ok:
+                ungated_last_only += 1
+        if first["duplicate_keys"] or last["duplicate_keys"]:
+            n_dup_excluded += 1
+            continue
+        if not (
+            first_live
+            and last_live
+            and derived[(spec["id"], "answer_first")]["adherent"]
+            and derived[(spec["id"], "answer_last")]["adherent"]
+        ):
+            n_not_adherent += 1
+            continue
+        paired_first[spec["id"]] = derived[(spec["id"], "answer_first")]["answer_correct"]
+        paired_last[spec["id"]] = derived[(spec["id"], "answer_last")]["answer_correct"]
+
+    n_paired = len(paired_first)
+    n_first_only = sum(1 for s in paired_first if paired_first[s] and not paired_last[s])
+    n_last_only = sum(1 for s in paired_first if paired_last[s] and not paired_first[s])
+    first_correct = sum(1 for s in paired_first if paired_first[s])
+    last_correct = sum(1 for s in paired_first if paired_last[s])
+    decision = _fo_decision(n_first_only, n_last_only)
+    decision["n_paired"] = n_paired
+
+    extraction_ids = [
+        s["id"] for s in _FIELD_ORDER_SPECS if s["paired"] and s["shape"] == "extraction"
+    ]
+    ex_first_only = sum(
+        1 for s in extraction_ids if s in paired_first and paired_first[s] and not paired_last[s]
+    )
+    ex_last_only = sum(
+        1 for s in extraction_ids if s in paired_first and paired_last[s] and not paired_first[s]
+    )
+    extraction_decision = _fo_decision(ex_first_only, ex_last_only)
+    extraction_decision["n_paired"] = sum(1 for s in extraction_ids if s in paired_first)
+
+    def _field_count_split(min_fields: int, max_fields: int | None) -> dict[str, Any]:
+        ids = [
+            s["id"]
+            for s in _FIELD_ORDER_SPECS
+            if s["id"] in paired_first
+            and len(s["schema"]["properties"]) >= min_fields
+            and (max_fields is None or len(s["schema"]["properties"]) <= max_fields)
+        ]
+        return {
+            "n_paired": len(ids),
+            "n_first_only": sum(1 for s in ids if paired_first[s] and not paired_last[s]),
+            "n_last_only": sum(1 for s in ids if paired_last[s] and not paired_first[s]),
+        }
+
+    return {
+        "n_generated": n_generated,
+        "n_distinct_prompts": n_distinct_prompts,
+        "n_boundary_screened": n_boundary_screened,
+        "n_detail_screened": n_detail_screened,
+        "n_no_boundary": n_no_boundary,
+        "n_live": len(live),
+        "n_duplicate_keys": n_duplicates,
+        "by_arm": by_arm,
+        "per_field": per_field,
+        "answer_by_arm": answer_by_arm,
+        "whole_doc_by_arm": whole_doc_by_arm,
+        "pairing": {
+            "n_flagged": n_flagged,
+            "n_order_same": n_order_same,
+            "n_duplicate_excluded": n_dup_excluded,
+            "n_not_adherent": n_not_adherent,
+            "n_paired": n_paired,
+            "first_correct": first_correct,
+            "last_correct": last_correct,
+            "first_rate": _fo_rate(first_correct, n_paired),
+            "last_rate": _fo_rate(last_correct, n_paired),
+            "delta": (first_correct / n_paired - last_correct / n_paired if n_paired else None),
+            "ungated": {
+                "n_specs": ungated_specs,
+                "n_first_only": ungated_first_only,
+                "n_last_only": ungated_last_only,
+                "n_discordant": ungated_first_only + ungated_last_only,
+            },
+        },
+        "decision": decision,
+        "extraction_decision": extraction_decision,
+        "field_count_split": {
+            "two": _field_count_split(2, 2),
+            "three_plus": _field_count_split(3, None),
+        },
+    }
+
+
+def _fo_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """Mirror of fieldorder.protocol_object plus its fingerprint."""
+    protocol: dict[str, Any] = {
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+        "spec_count": 15,
+        "arm_keys": list(_FO_ARM_KEYS),
+        "inventory_digest": _fo_digest(_fo_canonical_json(list(_FIELD_ORDER_SPECS))),
+        "generation_rule_digest": _fo_digest(_FO_GENERATION_RULE_TEXT),
+        "rendering_rule_digest": _fo_digest(_FO_RENDERING_RULE_TEXT),
+        "checking_rule_digest": _fo_digest(_FO_CHECKING_RULE_TEXT),
+        "max_records": _FO_MAX_RECORDS,
+        "max_payload_bytes": _FO_MAX_PAYLOAD_BYTES,
+        "max_new_tokens": 64,
+        "field_values_cap": _FO_FIELD_VALUES_CAP,
+        "min_discordant_specs": _FO_MIN_DISCORDANT_SPECS,
+    }
+    protocol["fingerprint"] = _fo_digest(_fo_canonical_json(protocol))
+    return protocol
+
+
+def _fo_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a field-order payload from its ground records.
+
+    The validator carries its own spec table, rendering, schema
+    check, and aggregator (no imports from fieldorder.py): the
+    protocol is rebuilt from the payload's seed and backend
+    fingerprint and compared whole; every record's content
+    digest is compared against the re-rendered arm prompt;
+    every stored field value must be exactly the canonical
+    form of its parse, the document digest must be consistent,
+    and every readout and the endpoint decision is re-derived
+    from the commitments and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _fo_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    expected_order = [(spec["id"], arm) for spec in _FIELD_ORDER_SPECS for arm in _FO_ARM_KEYS]
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available":
+            return None
+        if set(entry) != _FO_AGGREGATE_KEYS | {"status", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(expected_order):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _FO_MAX_PAYLOAD_BYTES:
+            return None
+        for record, (spec_id, arm) in zip(records, expected_order, strict=True):
+            if type(record) is not dict or set(record) != _FO_RECORD_KEYS:
+                return None
+            if record["candidate"] != name:
+                return None
+            if record["spec_id"] != spec_id or record["arm"] != arm:
+                return None
+            if record["detail"] not in _FO_RECORD_DETAILS:
+                return None
+            if type(record["case_screened"]) is not bool:
+                return None
+            if type(record["boundary_found"]) is not bool:
+                return None
+            if type(record["duplicate_keys"]) is not bool:
+                return None
+            if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                return None
+            if record["answer_digest"] is not None and not _fo_digest_ok(record["answer_digest"]):
+                return None
+            if not _fo_digest_ok(record["content_digest"]):
+                return None
+            spec = _fo_spec_by_id(spec_id)
+            if record["content_digest"] != _fo_digest(_fo_arm_prompt(spec, arm)):
+                return None
+            kind = record["document_kind"]
+            if kind not in ("", "object", "non_object", "unparseable"):
+                return None
+            field_values = record["field_values"]
+            if type(field_values) is not dict:
+                return None
+            if record["detail"] != "" or record["case_screened"]:
+                # A screened or degraded record carries no
+                # generation: no document, no answer digest, no
+                # boundary, no duplicates.
+                if (
+                    kind != ""
+                    or field_values
+                    or record["document_digest"] is not None
+                    or record["answer_digest"] is not None
+                    or record["boundary_found"]
+                    or record["duplicate_keys"]
+                ):
+                    return None
+                continue
+            # A completed record carries the generation's answer
+            # digest (its boundary may or may not have been
+            # found; that is a measurement).
+            if record["answer_digest"] is None:
+                return None
+            if (
+                sum(len(value) for value in field_values.values() if type(value) is str)
+                > _FO_FIELD_VALUES_CAP
+            ):
+                return None
+            for value in field_values.values():
+                if value is None:
+                    continue
+                ok, parsed = _fo_parse_stored(value)
+                if not ok:
+                    return None
+                try:
+                    if _fo_canonical_json(parsed) != value:
+                        return None
+                except (ValueError, TypeError, RecursionError):
+                    return None
+            if kind != "object":
+                if field_values or record["document_digest"] is not None:
+                    return None
+            elif any(value is None for value in field_values.values()):
+                if record["document_digest"] is not None:
+                    return None
+            else:
+                document: dict[str, Any] = {}
+                for key, value in field_values.items():
+                    ok, parsed = _fo_parse_stored(value)
+                    if not ok:
+                        return None
+                    document[key] = parsed
+                try:
+                    expected_digest = _fo_digest(_fo_canonical_json(document))
+                except (ValueError, TypeError, RecursionError):
+                    return None
+                if record["document_digest"] != expected_digest:
+                    return None
+        aggregates[name] = _fo_aggregate(records)
+    if total_records > _FO_MAX_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_specs": len(_FIELD_ORDER_SPECS),
+    }
+
+
+def _valid_field_order(payload: Any) -> bool:
+    """Structural check for a ``field_order`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "n_candidates",
+        "n_specs",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _fo_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_specs"), recomputed["n_specs"])
+
+
+def diff_field_order(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``field_order`` probe payloads; deterministic.
+
+    Answers "did the field-order story change between runs?":
+    per-candidate endpoint verdict and direction drift, the
+    discordance counts and paired rates, answer-field accuracy
+    by arm, the screening and duplicate accounting, candidates
+    added/removed, and protocol / inventory / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the spec set is the treatment, so
+    a changed inventory is protocol drift). A side without a
+    valid payload is reported plainly.
+    """
+    old_ok = _valid_field_order(old)
+    new_ok = _valid_field_order(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    fo_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    fo_generator_drift = old["protocol"].get("inventory_digest") != new["protocol"].get(
+        "inventory_digest"
+    )
+    fo_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    fo_comparable = not fo_protocol_drift and not fo_generator_drift and not fo_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    fo_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    fo_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    fo_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                fo_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        fo_metrics: list[tuple[str, Any, Any]] = [
+            ("verdict", old_entry["decision"]["verdict"], new_entry["decision"]["verdict"]),
+            ("direction", old_entry["decision"]["direction"], new_entry["decision"]["direction"]),
+            (
+                "n_first_only",
+                old_entry["decision"]["n_first_only"],
+                new_entry["decision"]["n_first_only"],
+            ),
+            (
+                "n_last_only",
+                old_entry["decision"]["n_last_only"],
+                new_entry["decision"]["n_last_only"],
+            ),
+            (
+                "n_discordant",
+                old_entry["decision"]["n_discordant"],
+                new_entry["decision"]["n_discordant"],
+            ),
+            ("sign_p", old_entry["decision"]["sign_p"], new_entry["decision"]["sign_p"]),
+            ("n_paired", old_entry["pairing"]["n_paired"], new_entry["pairing"]["n_paired"]),
+            (
+                "first_rate",
+                old_entry["pairing"]["first_rate"],
+                new_entry["pairing"]["first_rate"],
+            ),
+            ("last_rate", old_entry["pairing"]["last_rate"], new_entry["pairing"]["last_rate"]),
+            ("delta", old_entry["pairing"]["delta"], new_entry["pairing"]["delta"]),
+            ("n_live", old_entry["n_live"], new_entry["n_live"]),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+            (
+                "n_detail_screened",
+                old_entry["n_detail_screened"],
+                new_entry["n_detail_screened"],
+            ),
+            (
+                "n_duplicate_keys",
+                old_entry["n_duplicate_keys"],
+                new_entry["n_duplicate_keys"],
+            ),
+        ]
+        for arm in _FO_ARM_KEYS:
+            fo_metrics.append(
+                (
+                    f"answer_rate_{arm}",
+                    old_entry["answer_by_arm"][arm]["rate"],
+                    new_entry["answer_by_arm"][arm]["rate"],
+                )
+            )
+        for metric, old_value, new_value in fo_metrics:
+            if old_value != new_value:
+                fo_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    result["candidate_drift"] = fo_candidate_drift
+    result["candidates_added"] = fo_candidates_added
+    result["candidates_removed"] = fo_candidates_removed
+    result["protocol_drift"] = fo_protocol_drift
+    result["generator_drift"] = fo_generator_drift
+    result["backend_drift"] = fo_backend_drift
+    result["comparable"] = fo_comparable
+    result["changed"] = bool(
+        fo_candidate_drift
+        or fo_candidates_added
+        or fo_candidates_removed
+        or fo_protocol_drift
+        or fo_generator_drift
+        or fo_backend_drift
     )
     return result
 

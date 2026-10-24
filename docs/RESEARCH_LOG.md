@@ -9531,3 +9531,87 @@ module at zero missing lines. One runtime restart killed the
 first coverage attempt of the final tree mid-run; the
 post-interruption audits (blob tree vs the cycle-203 commit,
 129-pair mutant audit) were clean and the re-run completed.
+
+## Cycle 205 — schema field order: does the answer field's position in the schema change its value? (`run --field-order`)
+
+**Uniqueness pass (coordinator, primary sources).** Tam et
+al., "Let Me Speak Freely? A Study on the Impact of Format
+Restrictions on Performance of Large Language Models"
+(arXiv:2408.02442, v3) — abstract re-read this cycle: format
+restrictions (structured generation vs free-form) degrade
+reasoning, stricter constraints degrade more. The abstract
+makes NO key-order claim, and none is attributed to the paper
+anywhere in this cycle's docs; secondary commentary attributes
+a key-order result to this line of work, unverified against
+the paper's text, so it is not used. JSONSchemaBench
+(arXiv:2501.10868, already cited in-tree by `structured.py`)
+varies constrained-decoding frameworks and models, not
+prompt-only field order crossed with chat templates. In-tree:
+`structured` holds field order fixed (its describe function
+sorts properties alphabetically); `position` permutes
+multiple-choice options, not schema fields; `deliforge` varies
+delimiter authority, not field sequence. The key-order
+hypothesis is motivated by Tam et al.'s verified
+format-sensitivity result plus an autoregressive argument that
+is the lab's own reasoning — a field emitted earlier is
+generated with less of the object's content in context — and
+is labelled as the lab's own wherever it appears.
+Uniqueness = the combination: prompt-only field-order arms
+(canonical / answer-first / answer-last / reversed) × template
+family × per-field exact value scoring with a fully
+recomputable record commitment. Framing is "the combination",
+never "first".
+
+**Monday-morning utility.** A practitioner defining a JSON
+schema for extraction learns, per template family, whether
+putting the main answer field first vs last in the schema
+changes the values the model produces for it — before a
+cosmetic schema reorder in a code review silently changes
+extraction accuracy in production.
+
+**Design.** docs/FIELDORDER_DESIGN.md. The shipped
+`structured` spec set (9 specs, ≤ 2 fields each, canonical
+order = alphabetical) is reused unchanged and extended with
+six 3–4-field specs in the new module (the shipped schemas
+alone collapse the four arms to ≤ 2 distinct orders and never
+make the reversed arm a distinct treatment — the extension is
+the design's answer, stated in the doc). One designated
+answer field per spec, balanced across canonical positions.
+Records commit to per-field canonical value strings (None =
+non-finite sentinel); per-field correctness, the schema
+verdict, and adherence are all DERIVED from the commitment by
+producer and validator mirror alike. The stated residue
+(design §Records, F9) is the origin link only: the validator
+recomputes every consequence, but `answer_digest`,
+`duplicate_keys`, and `boundary_found` are stage-observed
+facts whose link to the commitment is stage-attested.
+Decision: per-spec paired discordance between the endpoint
+arms over specs adherent in both, exact sign test,
+`insufficient` below 6 discordant specs, claim scoped to the
+endpoint contrast on the adherent population.
+
+**Correction (adversarial round, F14).** The paragraph above
+scopes the no-key-order claim to Tam et al.'s abstract, which
+is accurate, but omits that the paper's §4.1 reports direct
+key-order evidence of a different kind: 100% of GPT-3.5
+JSON-mode Last-Letter responses placed the "answer" key before
+the "reason" key, "resulting in zero-shot direct answering",
+and the authors conclude that "the order of keys in
+structured outputs … emerge as important factors"
+(coordinator-verified against the arXiv HTML, v1 and v3).
+That is EMITTED key order under constrained JSON mode, not
+schema-presentation order; the design's motivation now cites
+it precisely as prior key-order evidence, and the
+presentation-order hypothesis remains the lab's own reasoning.
+The round (red-team A: 2 FATAL — unentailed answer labels on
+route-alert/route-order/route-complaint, and a
+self-contradictory non-finite sentinel with an undefined
+canonical form; verifier: every load-bearing number
+reproduced; red-team B: both FATALs stand with corrections,
+plus NB1–NB6) is adjudicated in
+`agents_out/cycle205/coordinator_adjudication.md`; the design
+was rewritten as v2 (paired pool of 10 entailed specs,
+sentinel reading consistent with `classify_response`,
+canonical JSON pinned to `structured._canonical_json`, caps
+derived from enforced premises, decision operating
+characteristics printed).

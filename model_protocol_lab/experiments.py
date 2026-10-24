@@ -9649,6 +9649,268 @@ def density_analysis(
     }
 
 
+class _FieldOrderCancelled(Exception):
+    """Internal: unwinds a cancelled field-order stage."""
+
+
+def _fieldorder_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    input_tokens: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One field-order generation: (detail, record fields).
+
+    The record's document commitment is computed here from the
+    evaluation's own answer text via fieldorder.parse_document;
+    correctness and adherence are never computed at generation
+    time -- they are derived from the commitment downstream.
+    The cancel event is checked before and after ``evaluate``
+    (the multiturn rule: a cancel observed during a generation
+    is never mislabelled an evaluation failure).
+    """
+    from . import fieldorder as _fo
+
+    if input_tokens + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _FieldOrderCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _FieldOrderCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        parsed = _fo.parse_document(obs.answer)
+        return None, {
+            "boundary_found": bool(obs.boundary_found),
+            "answer_digest": _answer_digest(obs.answer),
+            "document_kind": parsed["kind"],
+            "document_digest": parsed["document_digest"],
+            "field_values": parsed["field_values"],
+            "duplicate_keys": parsed["duplicate_keys"],
+            "input_tokens": len(obs.input_ids),
+        }
+    return "arm_evaluation_failed", None
+
+
+def fieldorder_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Schema field-order stage (cycle 205): the frozen spec set
+    rendered in four field orders per candidate.
+
+    The specs are frozen in fieldorder.FIELD_ORDER_SPECS; there
+    is no dependence on the user's fixtures or the primary run.
+    Each (spec, arm) contributes one flat record carrying the
+    parsed document's per-field canonical values -- never a
+    stored correctness verdict, which is derived downstream.
+    Records degrade individually in the fixed detail vocabulary;
+    a spec whose arm prompts contain the candidate's decoded
+    boundary text is screened as a unit; cancellation unwinds
+    the whole stage to its fail-closed payload. Design:
+    docs/FIELDORDER_DESIGN.md.
+    """
+    from . import fieldorder as _fo
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+    from .structured import _canonical_json
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_fo.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _fo.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    if len(formats) * len(_fo.FIELD_ORDER_SPECS) * len(_fo.ARM_KEYS) > _fo.MAX_FIELD_ORDER_RECORDS:
+        return {
+            "available": False,
+            "detail": "field_order_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    prompts = {
+        (spec["id"], arm): _fo.arm_prompt(spec, arm)
+        for spec in _fo.FIELD_ORDER_SPECS
+        for arm in _fo.ARM_KEYS
+    }
+    generated_text = "".join(prompts.values())
+    if audit_special_token_literals(generated_text, formats):
+        return {
+            "available": False,
+            "detail": "field_order_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for spec in _fo.FIELD_ORDER_SPECS:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                spec_id = str(spec["id"])
+                spec_prompts = {arm: prompts[(spec_id, arm)] for arm in _fo.ARM_KEYS}
+                case_screened = bool(boundary_text[name]) and any(
+                    boundary_text[name] in content for content in spec_prompts.values()
+                )
+                for arm in _fo.ARM_KEYS:
+                    if _cancelled():
+                        raise _FieldOrderCancelled
+                    content = spec_prompts[arm]
+                    fixture = Fixture(
+                        id=f"fieldorder/{spec_id}/{arm}",
+                        messages=(Message("user", content),),
+                        expected=_canonical_json(spec["answer"]),
+                        group=_fo.GROUP,
+                    )
+                    arm_ids = tuple(backend.encode(fmt.render(fixture.messages)))
+                    record: dict[str, Any] = {
+                        "candidate": name,
+                        "spec_id": spec_id,
+                        "arm": arm,
+                        "detail": "",
+                        "case_screened": case_screened,
+                        "boundary_found": False,
+                        "duplicate_keys": False,
+                        "answer_digest": None,
+                        "document_kind": "",
+                        "document_digest": None,
+                        "field_values": {},
+                        "input_tokens": len(arm_ids),
+                        "content_digest": _fo.digest_text(content),
+                    }
+                    records.append(record)
+                    if case_screened:
+                        continue
+                    detail, fields = _fieldorder_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        input_tokens=len(arm_ids),
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["detail"] = detail
+                    elif fields is not None:
+                        record.update(fields)
+                        if (
+                            sum(
+                                len(value)
+                                for value in record["field_values"].values()
+                                if type(value) is str
+                            )
+                            > _fo.FIELD_VALUES_CAP
+                        ):
+                            # A live record over the commitment
+                            # cap degrades individually (design
+                            # F8); the payload never carries it.
+                            record["detail"] = "arm_evaluation_failed"
+                            record["document_kind"] = ""
+                            record["document_digest"] = None
+                            record["field_values"] = {}
+                            record["answer_digest"] = None
+                            record["boundary_found"] = False
+                            record["duplicate_keys"] = False
+        except _FieldOrderCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def fieldorder_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a field-order stage into the stored payload
+    (cycle 205).
+
+    Per-candidate readouts come from
+    fieldorder.aggregate_candidate over the stage's flat
+    records; correctness is derived there from the records'
+    per-field canonical values, never stored on a record.
+    Design: docs/FIELDORDER_DESIGN.md.
+    """
+    from . import fieldorder as _fo
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "field_order_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _fo.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_specs": len(_fo.FIELD_ORDER_SPECS),
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

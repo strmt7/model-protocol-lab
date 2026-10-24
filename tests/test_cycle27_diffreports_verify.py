@@ -5450,6 +5450,191 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_field_order_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_field_order: exact
+        # top-level shape, the protocol rebuilt through the
+        # producer module (fieldorder), every record checked in
+        # canonical (spec-table, arm) order against the
+        # re-rendered arm prompt, every stored field value
+        # exactly the canonical form of its parse, the document
+        # digest consistent with the reconstructed document,
+        # and the aggregates recomputed through the producer's
+        # pure aggregation. A drift in either side's constants
+        # breaks the agreement.
+        import json as _json
+        import math as _math
+
+        from model_protocol_lab import fieldorder as _fo
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "n_candidates",
+            "n_specs",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_fo.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _fo.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        record_keys = {
+            "candidate",
+            "spec_id",
+            "arm",
+            "detail",
+            "case_screened",
+            "boundary_found",
+            "duplicate_keys",
+            "answer_digest",
+            "document_kind",
+            "document_digest",
+            "field_values",
+            "input_tokens",
+            "content_digest",
+        }
+        expected_order = [
+            (spec["id"], arm) for spec in _fo.FIELD_ORDER_SPECS for arm in _fo.ARM_KEYS
+        ]
+        total = 0
+        records_bytes = 0
+        aggregates: dict[str, Any] = {}
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            status = entry.get("status")
+            if status == "unavailable":
+                if set(entry) != {"status", "detail", "records"}:
+                    return False
+                if entry.get("records") != []:
+                    return False
+                continue
+            if status != "available":
+                return False
+            records = entry.get("records")
+            if type(records) is not list or len(records) != len(expected_order):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _fo.MAX_FIELD_ORDER_PAYLOAD_BYTES:
+                return False
+            for record, (spec_id, arm) in zip(records, expected_order, strict=True):
+                if type(record) is not dict or set(record) != record_keys:
+                    return False
+                if record["candidate"] != name:
+                    return False
+                if record["spec_id"] != spec_id or record["arm"] != arm:
+                    return False
+                if record["detail"] not in ("", "arm_evaluation_failed"):
+                    return False
+                if type(record["case_screened"]) is not bool:
+                    return False
+                if type(record["boundary_found"]) is not bool:
+                    return False
+                if type(record["duplicate_keys"]) is not bool:
+                    return False
+                if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                    return False
+                if type(record["content_digest"]) is not str or len(record["content_digest"]) != 64:
+                    return False
+                if any(ch not in "0123456789abcdef" for ch in record["content_digest"]):
+                    return False
+                answer_digest = record["answer_digest"]
+                if answer_digest is not None and (
+                    type(answer_digest) is not str
+                    or len(answer_digest) != 64
+                    or any(ch not in "0123456789abcdef" for ch in answer_digest)
+                ):
+                    return False
+                if record["content_digest"] != _fo.digest_text(
+                    _fo.arm_prompt(_fo.spec_by_id(spec_id), arm)
+                ):
+                    return False
+                kind = record["document_kind"]
+                if kind not in ("", "object", "non_object", "unparseable"):
+                    return False
+                field_values = record["field_values"]
+                if type(field_values) is not dict:
+                    return False
+                if record["detail"] != "" or record["case_screened"]:
+                    if (
+                        kind != ""
+                        or field_values
+                        or record["document_digest"] is not None
+                        or record["answer_digest"] is not None
+                        or record["boundary_found"]
+                        or record["duplicate_keys"]
+                    ):
+                        return False
+                    continue
+                if record["answer_digest"] is None:
+                    return False
+                if (
+                    sum(len(item) for item in field_values.values() if type(item) is str)
+                    > _fo.FIELD_VALUES_CAP
+                ):
+                    return False
+                for item in field_values.values():
+                    if item is None:
+                        continue
+                    if type(item) is not str:
+                        return False
+                    try:
+                        parsed = _json.loads(item)
+                    except (ValueError, TypeError, RecursionError):
+                        return False
+                    if type(parsed) is float and not _math.isfinite(parsed):
+                        return False
+                    try:
+                        if _fo._canonical_json(parsed) != item:
+                            return False
+                    except (ValueError, TypeError, RecursionError):
+                        return False
+                if kind != "object":
+                    if field_values or record["document_digest"] is not None:
+                        return False
+                elif any(item is None for item in field_values.values()):
+                    if record["document_digest"] is not None:
+                        return False
+                else:
+                    document = {key: _json.loads(item) for key, item in field_values.items()}
+                    try:
+                        expected_digest = _fo.digest_text(_fo._canonical_json(document))
+                    except (ValueError, TypeError, RecursionError):
+                        return False
+                    if record["document_digest"] != expected_digest:
+                        return False
+            aggregates[name] = _fo.aggregate_candidate(records)
+        if total > _fo.MAX_FIELD_ORDER_RECORDS:
+            return False
+        if not aggregates:
+            return False
+        for name, expected in aggregates.items():
+            entry = candidates[name]
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_specs") == len(_fo.FIELD_ORDER_SPECS))
+
     def _or_choiceaudit_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_choiceaudit: exact top-level
         # shape, the protocol rebuilt through the producer module
@@ -6627,6 +6812,18 @@ def oracle_diff_reports(
         _o_de_available = "neither"
     _o_de_asymmetric = _o_de_available not in ("both", "neither")
 
+    _fo_old_ok = _or_field_order_valid(old.get("field_order"))
+    _fo_new_ok = _or_field_order_valid(new.get("field_order"))
+    if _fo_old_ok and _fo_new_ok:
+        _o_fo_available = "both"
+    elif _fo_old_ok:
+        _o_fo_available = "old"
+    elif _fo_new_ok:
+        _o_fo_available = "new"
+    else:
+        _o_fo_available = "neither"
+    _o_fo_asymmetric = _o_fo_available not in ("both", "neither")
+
     _ca_old_ok = _or_choiceaudit_valid(old.get("choice_audit"))
     _ca_new_ok = _or_choiceaudit_valid(new.get("choice_audit"))
     if _ca_old_ok and _ca_new_ok:
@@ -6739,6 +6936,7 @@ def oracle_diff_reports(
         and not _o_pl_asymmetric
         and not _o_rt_asymmetric
         and not _o_de_asymmetric
+        and not _o_fo_asymmetric
         and not _o_ca_asymmetric
         and not _o_pr_asymmetric
         and not _o_cn_asymmetric
@@ -6831,6 +7029,8 @@ def oracle_diff_reports(
         "rotation_asymmetric": _o_rt_asymmetric,
         "density_changed": False,
         "density_asymmetric": _o_de_asymmetric,
+        "field_order_changed": False,
+        "field_order_asymmetric": _o_fo_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -6887,6 +7087,7 @@ def oracle_diff_reports(
         "confidence": {"available": _o_cn_available, "changed": False},
         "rotation": {"available": _o_rt_available, "changed": False},
         "density": {"available": _o_de_available, "changed": False},
+        "field_order": {"available": _o_fo_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

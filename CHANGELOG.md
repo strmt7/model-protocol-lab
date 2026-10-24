@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 205 — schema field-order probe, 2026-10-24)
+
+- `run --field-order`: a schema field-order probe (wave-9
+  rank 4) over 15 frozen flat-JSON specs — the nine shipped
+  structured-output specs plus six new 3–4-field specs —
+  each rendered in four field orders: canonical
+  (alphabetical, byte-identical to the shipped
+  presentation), the designated answer field first, the
+  answer field last, and fully reversed. Answers are
+  committed as per-field canonical values under the
+  document digest; every verdict (per-field correctness,
+  whole-document accuracy, schema adherence) is derived
+  from the commitment, never stored. The headline decision
+  is the endpoint contrast on the answer field's accuracy
+  over the ten specs whose answer is entailed by question
+  and context (two shipped specs with non-entailed frozen
+  labels are measured descriptively, never paired):
+  discordance per paired spec, an exact sign test, and an
+  `insufficient` verdict withheld below six discordant
+  specs. The design went through the full adversarial round
+  before any code: red-team A's two FATAL findings (a
+  decision powered at ~15% for a 30-point gap, and a
+  frozen spec pool whose answer designations were not all
+  entailed — one answer named a city in the wrong region)
+  and red-team B's corrections (the clustered-null figure
+  is a worst-case bound, not a calibration; the adherence
+  gate's power cost) reshaped the design; the verifier
+  re-executed every load-bearing number, including the
+  canonical-JSON pinning example. Prior evidence that key
+  order matters (Tam et al., arXiv:2408.02442, section
+  4.1) covers emitted key order under JSON mode; the
+  presentation-order claim is the lab's own hypothesis and
+  is framed as such. `diff-reports` gains the `field_order`
+  section (full recompute against a literal-table mirror),
+  the HTML report gains the Schema field order section,
+  and the design contract is `docs/FIELDORDER_DESIGN.md`.
+  Tests in `tests/test_cycle205_fieldorder.py`.
+
 ### Added (cycle 204 — instruction-density ladder, 2026-10-24)
 
 - `run --density`: an instruction-density ladder (wave-9
