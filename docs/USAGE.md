@@ -2428,6 +2428,69 @@ suffix-lengthened prompt. The full contract is in
 probe never affects selection, and the stage never fails
 the run.
 
+### 8.50 Context rotation (`rotation`)
+
+Opt-in with `model-protocol-lab run --rotate`. If my
+retriever re-ranks the same five chunks into a different
+cyclic order, does this template keep the same verdict —
+and the same winner?
+
+Twenty cases are generated from the run seed. Each case
+assembles five fact-bearing blocks — one asked fact and
+four distractors built from the same sentence shape, so
+every block looks worth attending to — into a span with
+the question pinned after it, and runs eleven arms per
+candidate: the five cyclic rotations of the block order
+(same content, same total text length, same cyclic
+relative order; only the seam and the absolute slots
+move); four mirror arms, the cyclic rotations of the
+reversed order, which form a generic-reordering control
+set placing the asked fact at the same slots as the
+rotations do; a fact-absent arm that prices false recall;
+and a closed-book screen (the question alone — a pass
+excludes the case from that candidate's rotation
+populations, with the exclusion counted). A span arm
+counts as construction-exact only when its rendered token
+inventory digest equals the unrotated arm's, so the
+headline populations run over token-exact rotations only;
+that is an inventory claim, and segmentation at the block
+seams is not verified.
+
+The headline is verdict invariance across the five
+rotations, classified by a frozen rule whose last step
+compares the rotations' any-flip count against the same
+statistic over the control set on the same cases — a pure
+slot effect moves both equally and is acquitted, which is
+exactly what the control is for. Invariance is falsified
+under a pre-registered rule (at least 6 headline cases and
+at least one flip), and the classification and the
+falsification boolean are printed together, because the
+pairing is part of the contract: a falsified run can still
+classify as within-control. The pass-by-absolute-slot
+curve is a cross-check against the needle probe's depth
+curve, not a second measurement of it — the needle moves
+one fact through inert filler, while here every position
+in the span carries a fact-shaped block. Per-arm
+selections re-run the lab's selection rule on each arm's
+verdicts over the shared live population, gated per arm on
+token-exactness for every candidate; a run whose gated
+populations disagree is withheld with a named detail, not
+averaged over.
+
+Records carry digests, token counts, and inventory
+digests only — no block, question, or answer text — and
+`diff-reports` recomputes the whole section from its own
+literal tables and a regenerated case set
+(`rotation_changed` / `rotation_asymmetric` feed
+`identical`); a drifted protocol, generator, or backend
+fingerprint marks the comparison not comparable while
+still listing the drift. Cost: 11 generations per
+candidate per case (5,280 at the legal maximum: 24
+candidates x 20 cases x 11). The full contract is in
+`docs/ROTATION_DESIGN.md`. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

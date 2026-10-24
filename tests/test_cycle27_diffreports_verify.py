@@ -5119,6 +5119,184 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_rotation_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_rotation: exact top-level
+        # shape, the protocol rebuilt through the producer
+        # module (rotation) where the implementation rebuilds
+        # it from literal tables, every record checked against
+        # the producer-regenerated case set in canonical order,
+        # every cell's verdict re-derived from its digest
+        # identity, completed cells bound to the record's
+        # arm_tokens, the per-arm inventory digests shape-
+        # checked, aggregates and per-arm selections
+        # recomputed. A drift in either side's constants breaks
+        # the agreement.
+        import hashlib as _hashlib
+        import json as _json
+
+        from model_protocol_lab import rotation as _rt
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "conditions",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_rt.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _rt.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _rt.generate_cases(seed)
+        total = 0
+        records_bytes = 0
+        raw: dict[str, Any] = {}
+        aggregate_keys = {
+            "arms",
+            "closed_book",
+            "absent",
+            "headline",
+            "slot_curve",
+            "mirror",
+            "reversal",
+            "classification",
+            "invariance_falsified",
+            "n_fixtures",
+            "n_screened",
+            "n_boundary_screened",
+            "n_closed_book_incomplete",
+            "n_live",
+        }
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            if set(entry) != aggregate_keys | {"status", "detail", "records"}:
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _rt.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, generated, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "topic",
+                    "expected_digest",
+                    "arm_tokens",
+                    "arm_inventory_digests",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                    return False
+                expected_digest = _hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
+                if record["expected_digest"] != expected_digest:
+                    return False
+                arm_tokens = record["arm_tokens"]
+                if type(arm_tokens) is not dict or set(arm_tokens) != set(_rt.ARM_KEYS):
+                    return False
+                if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                    return False
+                digests = record["arm_inventory_digests"]
+                if type(digests) is not dict or set(digests) != set(_rt.SPAN_ARMS):
+                    return False
+                for digest in digests.values():
+                    if not (
+                        type(digest) is str
+                        and len(digest) == 64
+                        and all(c in "0123456789abcdef" for c in digest)
+                    ):
+                        return False
+                cells = record["cells"]
+                details = record["cell_details"]
+                if type(cells) is not dict or set(cells) != set(_rt.ARM_KEYS):
+                    return False
+                if type(details) is not dict or set(details) != set(_rt.ARM_KEYS):
+                    return False
+                for arm in _rt.ARM_KEYS:
+                    cell = cells[arm]
+                    detail = details[arm]
+                    if cell is None:
+                        if detail not in _rt.CELL_DETAILS:
+                            return False
+                    else:
+                        if detail != "":
+                            return False
+                        if type(cell) is not dict or set(cell) != {
+                            "verdict",
+                            "boundary_found",
+                            "boundary_text_match",
+                            "input_tokens",
+                            "answer_digest",
+                        }:
+                            return False
+                        if type(cell["verdict"]) is not bool:
+                            return False
+                        if type(cell["boundary_found"]) is not bool:
+                            return False
+                        if (
+                            cell["boundary_text_match"] is not None
+                            and type(cell["boundary_text_match"]) is not bool
+                        ):
+                            return False
+                        if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+                            return False
+                        digest = cell["answer_digest"]
+                        if digest is not None and not (
+                            type(digest) is str
+                            and len(digest) == 64
+                            and all(c in "0123456789abcdef" for c in digest)
+                        ):
+                            return False
+                        verdict = (digest == expected_digest) and cell["boundary_found"]
+                        if cell["verdict"] != verdict:
+                            return False
+                        if cell["input_tokens"] != arm_tokens[arm]:
+                            return False
+            raw[name] = records
+            expected = _rt.aggregate_candidate(records)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total > _rt.MAX_GROUND_RECORDS:
+            return False
+        if not raw:
+            return False
+        conditions = {arm: _rt.arm_selection(raw, arm) for arm in _rt.CONDITION_ARMS}
+        if value.get("conditions") != conditions:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(generated))
+
     def _or_choiceaudit_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_choiceaudit: exact top-level
         # shape, the protocol rebuilt through the producer module
@@ -6272,6 +6450,18 @@ def oracle_diff_reports(
         _o_pl_available = "neither"
     _o_pl_asymmetric = _o_pl_available not in ("both", "neither")
 
+    _rt_old_ok = _or_rotation_valid(old.get("rotation"))
+    _rt_new_ok = _or_rotation_valid(new.get("rotation"))
+    if _rt_old_ok and _rt_new_ok:
+        _o_rt_available = "both"
+    elif _rt_old_ok:
+        _o_rt_available = "old"
+    elif _rt_new_ok:
+        _o_rt_available = "new"
+    else:
+        _o_rt_available = "neither"
+    _o_rt_asymmetric = _o_rt_available not in ("both", "neither")
+
     _ca_old_ok = _or_choiceaudit_valid(old.get("choice_audit"))
     _ca_new_ok = _or_choiceaudit_valid(new.get("choice_audit"))
     if _ca_old_ok and _ca_new_ok:
@@ -6382,6 +6572,7 @@ def oracle_diff_reports(
         and not _o_mt_asymmetric
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
+        and not _o_rt_asymmetric
         and not _o_ca_asymmetric
         and not _o_pr_asymmetric
         and not _o_cn_asymmetric
@@ -6470,6 +6661,8 @@ def oracle_diff_reports(
         "precision_asymmetric": _o_pr_asymmetric,
         "confidence_changed": False,
         "confidence_asymmetric": _o_cn_asymmetric,
+        "rotation_changed": False,
+        "rotation_asymmetric": _o_rt_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -6524,6 +6717,7 @@ def oracle_diff_reports(
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},
+        "rotation": {"available": _o_rt_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},

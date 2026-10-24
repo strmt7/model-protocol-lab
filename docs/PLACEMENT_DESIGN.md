@@ -348,11 +348,16 @@ failure). `MAX_GROUND_RECORDS = 576`,
 
 - New pure module `placement.py` → the test_cycle44 mypy
   source-file pin moves 55 → 56 in the same push, and
-  test_cycle44's §6 enumeration (the VALIDATION §6 probe list
-  it pins verbatim) gains the placement entry — VALIDATION §6's
-  own text moves with it (red-team F16: this pin was missing
-  from the v1 list; the `n_positions` name nearby in
-  experiments.py is an unrelated local, a red herring).
+  test_cycle44's enumeration of the VALIDATION Evidence section's
+  first-paragraph probe list (pinned verbatim) gains the
+  placement entry — VALIDATION's own text moves with it
+  (red-team F16: this pin was missing from the v1 list; the
+  `n_positions` name nearby in experiments.py is an unrelated
+  local, a red herring). Correction (cycle 203): the original
+  text of this bullet called that list "VALIDATION §6" — no §6
+  exists in VALIDATION.md; the cycle-203 red-team traced the
+  phantom to this bullet and it is corrected here, at its
+  source.
 - New `--placement` flag → the cycle-179 parametrized dispatch
   table (27 stage rows → 28, plus its probe-wrapper audit list,
   19 → 20), the cycle-31/64/84 subcommand/flag audits, and the

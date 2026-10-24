@@ -633,6 +633,37 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--rotate",
+        action="store_true",
+        help="Context rotation probe (cycle 203, research wave-9 "
+        "rank 1): 20 generated cases from the run seed, each a "
+        "span of five fact-bearing blocks (one asked fact, four "
+        "fact-shaped distractors) with the question pinned after "
+        "the span, run in eleven arms per candidate -- the five "
+        "cyclic rotations of the block order; four mirror arms "
+        "(rotations of the reversed order, the matched generic-"
+        "reordering control whose asked-slot multiset equals the "
+        "rotations'); a fact-absent arm (the false-recall floor); "
+        "and a closed-book screen (question alone; a pass "
+        "excludes the case from that candidate's rotation "
+        "populations). A span arm counts as construction-exact "
+        "only when its rendered token inventory digest equals "
+        "the unrotated arm's, so paired readouts run over "
+        "token-exact rotations only. Headline: verdict "
+        "invariance across the five rotations, with a "
+        "pre-registered falsification rule and a pass-by-"
+        "absolute-slot curve presented as a cross-check against "
+        "the needle probe's depth curve. Monday morning: 'if my "
+        "retriever re-ranks the same five chunks into a "
+        "different cyclic order, does this template keep the "
+        "same verdict -- and the same winner?' Costs 11 "
+        "generations per candidate per case (5,280 at the legal "
+        "maximum: 24 candidates x 20 cases x 11); each "
+        "generation is one greedy decode over the arm's rendered "
+        "prompt. Informational only; never touches selection. "
+        "The stage never fails the run.",
+    )
+    run.add_argument(
         "--choice-audit",
         action="store_true",
         help="Choice-scoring audit (cycle 195, research wave-8 "
@@ -1828,6 +1859,49 @@ def _run_placement_probe(
         result["placement"] = {
             "available": False,
             "detail": "placement_unavailable",
+        }
+
+
+def _run_rotation_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the context rotation probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import rotation_analysis, rotation_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = rotation_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["rotation"] = rotation_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- rotation must not fail the run
+        result["rotation"] = {
+            "available": False,
+            "detail": "rotation_unavailable",
         }
 
 
@@ -3648,6 +3722,25 @@ def main(argv: list[str] | None = None) -> int:
                 # selection. Never fails the run.
                 if args.placement:
                     _run_placement_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Context rotation probe (cycle 203, research
+                # wave-9 rank 1): generated five-block cases whose
+                # block span is cyclically rotated against a
+                # matched mirror control, the run's cancel event
+                # threaded into the stage loop. Informational
+                # only -- never changes selection. Never fails
+                # the run.
+                if args.rotate:
+                    _run_rotation_probe(
                         backend,
                         formats,
                         result,

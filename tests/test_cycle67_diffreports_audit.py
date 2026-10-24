@@ -158,6 +158,7 @@ from model_protocol_lab import (
     precision,
     refusals,
     repetition,
+    rotation,
     scorerlens,
 )
 from model_protocol_lab.core import Fixture, Format, Generation, Message
@@ -290,6 +291,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
+        "rotation": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -383,6 +385,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "precision_asymmetric": False,
             "confidence_changed": False,
             "confidence_asymmetric": False,
+            "rotation_changed": False,
+            "rotation_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -5853,6 +5857,303 @@ def _o_placement(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_rotation_digest_ok(item: Any) -> bool:
+    if item is None:
+        return True
+    if type(item) is not str or len(item) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in item)
+
+
+def _o_rotation_cell_ok(cell: Any, expected_digest: str) -> bool:
+    if type(cell) is not dict or set(cell) != {
+        "verdict",
+        "boundary_found",
+        "boundary_text_match",
+        "input_tokens",
+        "answer_digest",
+    }:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _o_rotation_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle rotation recompute: mirrors
+    diffreports._rotation_recompute. The oracle rebuilds the
+    protocol and the case set through the producer module
+    (rotation) where the implementation rebuilds them from
+    literal tables -- a drift in either side's constants breaks
+    the agreement the fuzz harness asserts."""
+    import hashlib as _hashlib
+    import json as _json
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(rotation.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = rotation.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = rotation.generate_cases(seed)
+    total = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != {
+            "arms",
+            "closed_book",
+            "absent",
+            "headline",
+            "slot_curve",
+            "mirror",
+            "reversal",
+            "classification",
+            "invariance_falsified",
+            "n_fixtures",
+            "n_screened",
+            "n_boundary_screened",
+            "n_closed_book_incomplete",
+            "n_live",
+            "status",
+            "detail",
+            "records",
+        }:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > rotation.MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "arm_inventory_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            if type(arm_tokens) is not dict or set(arm_tokens) != set(rotation.ARM_KEYS):
+                return None
+            if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                return None
+            digests = record["arm_inventory_digests"]
+            if type(digests) is not dict or set(digests) != set(rotation.SPAN_ARMS):
+                return None
+            if any(
+                type(v) is not str or not _o_rotation_digest_ok(v) or v is None
+                for v in digests.values()
+            ):
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(rotation.ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(rotation.ARM_KEYS):
+                return None
+            for arm in rotation.ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in rotation.CELL_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_rotation_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != arm_tokens[arm]:
+                        return None
+        raw[name] = records
+        aggregates[name] = rotation.aggregate_candidate(records)
+    if total > rotation.MAX_GROUND_RECORDS:
+        return None
+    if not raw:
+        return None
+    return {
+        "aggregates": aggregates,
+        "conditions": {arm: rotation.arm_selection(raw, arm) for arm in rotation.CONDITION_ARMS},
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_rotation_valid(value: Any) -> bool:
+    """Oracle rotation validator: mirrors diffreports._valid_rotation."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_rotation_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("conditions") != recomputed["conditions"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_rotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle rotation section: mirrors diffreports.diff_rotation."""
+    old_ok = _o_rotation_valid(old)
+    new_ok = _o_rotation_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            ("classification", old_entry["classification"], new_entry["classification"]),
+            (
+                "invariance_falsified",
+                old_entry["invariance_falsified"],
+                new_entry["invariance_falsified"],
+            ),
+            (
+                "n_flip_any",
+                old_entry["headline"]["n_flip_any"],
+                new_entry["headline"]["n_flip_any"],
+            ),
+            (
+                "n_headline",
+                old_entry["headline"]["n_headline"],
+                new_entry["headline"]["n_headline"],
+            ),
+            (
+                "n_flips_mirror",
+                old_entry["mirror"]["n_flips_mirror"],
+                new_entry["mirror"]["n_flips_mirror"],
+            ),
+            (
+                "n_discordant",
+                old_entry["reversal"]["n_discordant"],
+                new_entry["reversal"]["n_discordant"],
+            ),
+            ("n_screened", old_entry["n_screened"], new_entry["n_screened"]),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    condition_drift: list[dict[str, Any]] = []
+    for arm in rotation.CONDITION_ARMS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            condition_drift.append(
+                {"condition": arm, "old": old["conditions"][arm], "new": new["conditions"][arm]}
+            )
+    diff["candidate_drift"] = candidate_drift
+    diff["condition_drift"] = condition_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or condition_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     """Oracle choice-audit recompute: mirrors
     diffreports._choiceaudit_recompute. The oracle rebuilds the
@@ -9269,6 +9570,7 @@ def _oracle_diff(
     o_cfd, o_cfd_changed, o_cfd_asymmetric = _o_confidence(
         old.get("confidence"), new.get("confidence")
     )
+    o_rt, o_rt_changed, o_rt_asymmetric = _o_rotation(old.get("rotation"), new.get("rotation"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -9361,6 +9663,8 @@ def _oracle_diff(
         and not o_pr_asymmetric
         and not o_cfd_changed
         and not o_cfd_asymmetric
+        and not o_rt_changed
+        and not o_rt_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -9414,6 +9718,7 @@ def _oracle_diff(
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
+        "rotation": o_rt,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -9503,6 +9808,8 @@ def _oracle_diff(
             "precision_asymmetric": o_pr_asymmetric,
             "confidence_changed": o_cfd_changed,
             "confidence_asymmetric": o_cfd_asymmetric,
+            "rotation_changed": o_rt_changed,
+            "rotation_asymmetric": o_rt_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -10440,6 +10747,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "precision_asymmetric": False,
                 "confidence_changed": False,
                 "confidence_asymmetric": False,
+                "rotation_changed": False,
+                "rotation_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -11736,6 +12045,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["choice_audit"] = _fuzz_choiceaudit_section(rng)
         report["precision"] = _fuzz_precision_section(rng)
         report["confidence"] = _fuzz_confidence_section(rng)
+        report["rotation"] = _fuzz_rotation_section(rng)
     if rng.random() < 0.45:
         report["cache_profile"] = _fuzz_cache_profile_section(rng)
     if rng.random() < 0.45:
@@ -13264,6 +13574,99 @@ def _fuzz_placement_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+class _FuzzRotationBackend:
+    """Byte-level scripted backend for the rotation fuzz builder.
+    The answer is the asked topic's planted access code parsed
+    out of the decoded prompt; ``slot_fail`` mode answers
+    wrongly whenever the asked fact is not the first block of
+    the span, which produces genuine rotation flips. The
+    absent arm carries no asked fact and the closed-book arm
+    carries no fact at all, so both answer "unknown" and never
+    trip the screen in either mode."""
+
+    fingerprint = "sha256:fuzz-rotation"
+
+    def __init__(self, mode: str):
+        self.mode = mode
+
+    def encode(self, text):
+        return tuple(text.encode("utf-8"))
+
+    def decode(self, ids):
+        return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
+
+    def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        import re as _re
+
+        text = self.decode(list(input_ids))
+        asked = _re.search(r"What is the (.+?) access code\?", text)
+        answer = "unknown"
+        if asked is not None:
+            topic = asked.group(1)
+            facts = _re.findall(r"The (.+?) access code is ([a-z]+-\d+)\.", text)
+            for fact_topic, value in facts:
+                if fact_topic == topic:
+                    answer = value
+                    if self.mode == "slot_fail" and facts[0][0] != topic:
+                        answer = "wrong-0000"
+                    break
+        boundary = list(self.encode("endmark"))
+        out = list(self.encode(answer)) + boundary
+        return Generation(
+            token_ids=tuple((out + boundary * max_new_tokens)[:max_new_tokens]),
+            reason="limit",
+        )
+
+
+def _fuzz_rotation_section(rng: random.Random) -> dict[str, Any]:
+    # Coherent payloads come from the real stage + analysis over
+    # a scripted backend; hostile mutations then try to break
+    # them, and oracle and implementation must agree on every
+    # rejection. A coherent foreign backend fingerprint exercises
+    # backend drift rather than corruption.
+    formats = (
+        Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
+        Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
+    )
+    backend = _FuzzRotationBackend(rng.choice(["perfect", "slot_fail"]))
+    seed = rng.choice([0, 1, 2])
+    stage = experiments.rotation_stage(
+        backend,
+        formats,
+        boundary=tuple(backend.encode("endmark")),
+        max_context=65536,
+        seed=seed,
+    )
+    payload = experiments.rotation_analysis(stage, tuple(fmt.name for fmt in formats))
+    available = [
+        entry
+        for entry in payload.get("candidates", {}).values()
+        if entry.get("status") == "available"
+    ]
+    if available and rng.random() < 0.12:
+        record = available[0]["records"][0]
+        cell = record["cells"].get("rot_1")
+        if cell is not None:
+            cell["verdict"] = not cell["verdict"]  # hostile
+    if available and rng.random() < 0.10:
+        record = available[0]["records"][1]
+        cell = record["cells"].get("mir_4")
+        if cell is not None:
+            cell["input_tokens"] = cell["input_tokens"] + 1  # hostile: token binding breaks
+    if available and rng.random() < 0.10:
+        record = available[0]["records"][2]
+        record["arm_inventory_digests"]["rot_2"] = "0" * 64  # hostile: construction forged
+    if available and rng.random() < 0.10:
+        available[0]["classification"] = "bogus"  # hostile
+    if payload.get("available") is True and rng.random() < 0.08:
+        payload["protocol"]["fingerprint"] = "0" * 64  # hostile: digest off components
+    if payload.get("available") is True and rng.random() < 0.10:
+        protocol = dict(rotation.protocol_object(seed, "sha256:other-backend"))
+        protocol["fingerprint"] = rotation.protocol_fingerprint(seed, "sha256:other-backend")
+        payload["protocol"] = protocol  # coherent foreign backend
+    return payload
+
+
 class _FuzzChoiceAuditBackend:
     """Byte-level scripted backend for the choice-audit fuzz
     builder. ``echo`` mode favours the actual next byte at every
@@ -14244,6 +14647,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not precision_asymmetric\n"
             '        and not confidence_diff["changed"]\n'
             "        and not confidence_asymmetric\n"
+            '        and not rotation_diff["changed"]\n'
+            "        and not rotation_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -14334,6 +14739,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or precision_asymmetric\n"
             '        or confidence_diff["changed"]\n'
             "        or confidence_asymmetric\n"
+            '        or rotation_diff["changed"]\n'
+            "        or rotation_asymmetric\n"
             "    )\n",
             scenario,
         )

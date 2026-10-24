@@ -721,6 +721,7 @@ def diff_reports(
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
+    rotation_diff = diff_rotation(old.get("rotation"), new.get("rotation"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -801,6 +802,10 @@ def diff_reports(
         "neither",
     )
     confidence_asymmetric = confidence_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    rotation_asymmetric = rotation_diff["available"] not in (
         "both",
         "neither",
     )
@@ -901,6 +906,8 @@ def diff_reports(
         and not precision_asymmetric
         and not confidence_diff["changed"]
         and not confidence_asymmetric
+        and not rotation_diff["changed"]
+        and not rotation_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -991,6 +998,8 @@ def diff_reports(
         "precision_asymmetric": precision_asymmetric,
         "confidence_changed": confidence_diff["changed"],
         "confidence_asymmetric": confidence_asymmetric,
+        "rotation_changed": rotation_diff["changed"],
+        "rotation_asymmetric": rotation_asymmetric,
         "identical": identical,
     }
     return {
@@ -1035,6 +1044,7 @@ def diff_reports(
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
+        "rotation": rotation_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -10624,6 +10634,936 @@ def diff_placement(old: Any, new: Any) -> dict[str, Any]:
         or placement_protocol_drift
         or placement_generator_drift
         or placement_backend_drift
+    )
+    return result
+
+
+_ROTATION_FACT_TEMPLATE = "The {topic} access code is {value}."
+_ROTATION_QUESTION_TEMPLATE = "What is the {topic} access code?"
+_ROTATION_TOPICS = (
+    "archive vault",
+    "boiler room",
+    "loading dock",
+    "records office",
+    "north gate",
+    "pump house",
+    "storage annex",
+    "mail room",
+    "server closet",
+    "roof access",
+    "east stairwell",
+    "water tower",
+    "fuel depot",
+    "tool library",
+    "greenhouse wing",
+    "ferry terminal",
+    "signal cabin",
+    "customs shed",
+    "observatory dome",
+    "print workshop",
+    "harbor station",
+    "tunnel control",
+    "solar array",
+    "wind turbine",
+    "clock tower",
+    "grain silo",
+    "kiln workshop",
+    "sorting office",
+    "parcel depot",
+    "marble quarry",
+)
+_ROTATION_WORDS = (
+    "ochre",
+    "velvet",
+    "cobalt",
+    "saffron",
+    "tundra",
+    "zephyr",
+    "onyx",
+    "pepper",
+    "riddle",
+    "saddle",
+    "temple",
+    "umbrella",
+    "violet",
+    "walnut",
+    "yonder",
+    "zipper",
+    "anchor",
+    "beacon",
+    "cinder",
+    "dagger",
+    "ember",
+    "falcon",
+    "garnet",
+    "helmet",
+    "inkwell",
+    "jubilee",
+    "kestrel",
+    "basalt",
+    "magnet",
+    "nectar",
+    "obelisk",
+    "pumice",
+    "quiver",
+    "rampart",
+    "scepter",
+    "sienna",
+    "utensil",
+    "vortex",
+    "willow",
+    "zenith",
+    "almond",
+    "birch",
+    "copper",
+    "drizzle",
+    "glacier",
+    "mauve",
+    "ivory",
+    "juniper",
+    "linden",
+    "meteor",
+    "nickel",
+    "opal",
+    "pyrite",
+    "quill",
+    "russet",
+    "sorrel",
+    "topaz",
+    "flint",
+    "jasper",
+    "nutmeg",
+    "rowan",
+    "timber",
+    "umber",
+    "dune",
+)
+_ROTATION_ROTATION_ARMS = tuple(f"rot_{r}" for r in range(5))
+_ROTATION_MIRROR_ARMS = ("mir_1", "mir_2", "mir_3", "mir_4")
+_ROTATION_SPAN_ARMS = _ROTATION_ROTATION_ARMS + _ROTATION_MIRROR_ARMS
+_ROTATION_ARM_KEYS = _ROTATION_SPAN_ARMS + ("absent", "closed_book")
+_ROTATION_CONDITION_ARMS = _ROTATION_ROTATION_ARMS + ("mir_4",)
+_ROTATION_BASELINE_ARM = "rot_0"
+_ROTATION_CONTROL_ARMS = ("rot_0",) + _ROTATION_MIRROR_ARMS
+_ROTATION_CASE_COUNT = 20
+_ROTATION_MIN_HEADLINE_POPULATION = 6
+_ROTATION_MIN_CONTROL_POPULATION = 6
+_ROTATION_MAX_GROUND_RECORDS = 24 * _ROTATION_CASE_COUNT
+_ROTATION_GENERATION_BUDGET = len(_ROTATION_ARM_KEYS) * _ROTATION_MAX_GROUND_RECORDS
+_ROTATION_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_ROTATION_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_ROTATION_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed", "arm_screened")
+_ROTATION_AGGREGATE_KEYS = {
+    "arms",
+    "closed_book",
+    "absent",
+    "headline",
+    "slot_curve",
+    "mirror",
+    "reversal",
+    "classification",
+    "invariance_falsified",
+    "n_fixtures",
+    "n_screened",
+    "n_boundary_screened",
+    "n_closed_book_incomplete",
+    "n_live",
+}
+_ROTATION_CONSTRUCTION_RULE_TEXT = (
+    "rotation-construction-v1: a span arm's inventory digest is the "
+    "SHA-256 of the comma-joined decimal token ids of the arm's full "
+    "render, sorted ascending; an arm is id_exact iff its inventory "
+    "digest and its token count both equal rot_0's, and rot_0 is "
+    "id_exact by definition. The classification is a claim about the "
+    "token inventory only; segmentation at the seams is not verified."
+)
+_ROTATION_SCREENING_RULE_TEXT = (
+    "rotation-screen-v1: stage-level, the frozen texts (templates "
+    "with slots emptied, topics, words) are audited for special-token "
+    "literals against every candidate format, and every candidate's "
+    "decoded boundary text is checked for containment in the frozen "
+    "texts; a hit fails the whole stage closed before any generation. "
+    "Per case and candidate, if any block text of the case contains "
+    "the candidate's decoded boundary text, every cell of the case is "
+    "arm_screened (the record is boundary-screened and enters no "
+    "population). The closed-book screen is derived, never stored: a "
+    "record whose closed-book cell passed is excluded from its "
+    "candidate's rotation populations."
+)
+
+
+def _rotation_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    rotation.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _rotation_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is None or a well-formed SHA-256
+    hex digest (fails closed on lone surrogates, the cycle-190
+    discipline)."""
+    if value is None:
+        return True
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _rotation_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of rotation._derive (frozen material string)."""
+    import hashlib as _hashlib
+
+    material = f"{seed}|rotation|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _rotation_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of rotation.generate_cases: the frozen case set
+    for a seed, regenerated from the protocol's own seed so a
+    fabricated set is rejected (the numform F2 lesson)."""
+    cases: list[dict[str, Any]] = []
+    used_asked: set[int] = set()
+    seen_asked_values: set[str] = set()
+    for index in range(_ROTATION_CASE_COUNT):
+        counter = 0
+        while True:
+            asked_index = _rotation_derive(seed, index, 20, counter) % len(_ROTATION_TOPICS)
+            if asked_index not in used_asked:
+                break
+            counter += 1
+        used_asked.add(asked_index)
+        topics = [_ROTATION_TOPICS[asked_index]]
+        chosen = {_ROTATION_TOPICS[asked_index]}
+        for slot in (21, 22, 23, 24, 25):
+            counter = 0
+            while True:
+                topic = _ROTATION_TOPICS[
+                    _rotation_derive(seed, index, slot, counter) % len(_ROTATION_TOPICS)
+                ]
+                if topic not in chosen:
+                    break
+                counter += 1
+            chosen.add(topic)
+            topics.append(topic)
+        counters = [0] * 6
+        while True:
+            values = []
+            for block in range(6):
+                word = _ROTATION_WORDS[
+                    _rotation_derive(seed, index, 2 * block, counters[block]) % len(_ROTATION_WORDS)
+                ]
+                number = 1000 + _rotation_derive(seed, index, 2 * block + 1, counters[block]) % 9000
+                values.append(f"{word}-{number}")
+            if len(set(values)) == 6 and values[0] not in seen_asked_values:
+                break
+            counters = [c + 1 for c in counters]
+        seen_asked_values.add(values[0])
+        cases.append(
+            {
+                "fixture_id": f"rotation-{index:02d}",
+                "topic": topics[0],
+                "topics": topics,
+                "values": values,
+            }
+        )
+    return cases
+
+
+def _rotation_case_material_sha256() -> str:
+    """Mirror of rotation.case_material_sha256."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _ROTATION_FACT_TEMPLATE,
+            _ROTATION_QUESTION_TEMPLATE,
+            list(_ROTATION_TOPICS),
+            list(_ROTATION_WORDS),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _rotation_digest(canonical)
+
+
+def _rotation_ground_sha256(seed: int) -> str:
+    """Mirror of rotation.ground_sha256."""
+    import json as _json
+
+    rows = [
+        [case["fixture_id"], list(case["topics"]), list(case["values"])]
+        for case in _rotation_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _rotation_digest(canonical)
+
+
+def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The rotation protocol rebuilt from this module's own
+    literals plus the payload's seed and backend fingerprint,
+    fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_ROTATION_ARM_KEYS),
+        "span_arms": list(_ROTATION_SPAN_ARMS),
+        "condition_arms": list(_ROTATION_CONDITION_ARMS),
+        "baseline_arm": _ROTATION_BASELINE_ARM,
+        "case_count": _ROTATION_CASE_COUNT,
+        "case_material_sha256": _rotation_case_material_sha256(),
+        "ground_sha256": _rotation_ground_sha256(seed),
+        "construction_rule_sha256": _rotation_digest(_ROTATION_CONSTRUCTION_RULE_TEXT),
+        "screening_rule_sha256": _rotation_digest(_ROTATION_SCREENING_RULE_TEXT),
+        "min_headline_population": _ROTATION_MIN_HEADLINE_POPULATION,
+        "min_control_population": _ROTATION_MIN_CONTROL_POPULATION,
+        "generation_budget": _ROTATION_GENERATION_BUDGET,
+        "max_ground_records": _ROTATION_MAX_GROUND_RECORDS,
+        "max_records_bytes": _ROTATION_MAX_RECORDS_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _rotation_digest(canonical)
+    return protocol
+
+
+def _rotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _rotation_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _rotation_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _rotation_id_exact(record: dict[str, Any], arm: str) -> bool:
+    """Mirror of rotation.arm_id_exact (derived, never stored)."""
+    if arm == "rot_0":
+        return True
+    digests = record.get("arm_inventory_digests")
+    tokens = record.get("arm_tokens")
+    if not isinstance(digests, dict) or not isinstance(tokens, dict):
+        return False
+    return digests.get(arm) == digests.get("rot_0") and tokens.get(arm) == tokens.get("rot_0")
+
+
+def _rotation_screened(record: dict[str, Any]) -> bool:
+    cell = _rotation_cell_get(record, "closed_book")
+    return cell is not None and bool(cell["verdict"])
+
+
+def _rotation_boundary_screened(record: dict[str, Any]) -> bool:
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return False
+    return all(details.get(arm) == "arm_screened" for arm in _ROTATION_ARM_KEYS)
+
+
+def _rotation_classify(
+    n_headline: int,
+    n_flip_any: int,
+    n_all_pass: int,
+    n_all_fail: int,
+    n_mirror_paired: int,
+    n_flips_paired: int,
+    n_flips_mirror: int,
+) -> str:
+    """Mirror of rotation.classify_rotation."""
+    if n_headline < _ROTATION_MIN_HEADLINE_POPULATION:
+        return "insufficient"
+    if n_flip_any == 0 and n_all_fail > n_all_pass:
+        return "joint_collapse_dominant"
+    if n_flip_any == 0:
+        return "invariant_observed"
+    if n_mirror_paired < _ROTATION_MIN_CONTROL_POPULATION:
+        return "control_set_too_small"
+    if n_flips_paired <= n_flips_mirror:
+        return "within_mirror_control"
+    return "rotation_sensitive"
+
+
+def _rotation_falsified(n_headline: int, n_flip_any: int) -> bool:
+    """Mirror of rotation.invariance_falsified."""
+    return n_headline >= _ROTATION_MIN_HEADLINE_POPULATION and n_flip_any >= 1
+
+
+def _rotation_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of rotation.aggregate_candidate."""
+
+    def rate(n_pass: int, n: int) -> float | None:
+        return (n_pass / n) if n else None
+
+    live = [r for r in records if not _rotation_screened(r) and not _rotation_boundary_screened(r)]
+    arms: dict[str, Any] = {}
+    for key in _ROTATION_SPAN_ARMS:
+        n_completed = 0
+        n_pass = 0
+        for record in live:
+            cell = _rotation_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": rate(n_pass, n_completed),
+        }
+    cb_completed = 0
+    cb_pass = 0
+    for record in records:
+        cell = _rotation_cell_get(record, "closed_book")
+        if cell is None:
+            continue
+        cb_completed += 1
+        if cell["verdict"]:
+            cb_pass += 1
+    absent_evaluable = 0
+    absent_false = 0
+    for record in live:
+        cell = _rotation_cell_get(record, "absent")
+        if cell is None:
+            continue
+        absent_evaluable += 1
+        if cell["verdict"]:
+            absent_false += 1
+    headline_records = [
+        record
+        for record in live
+        if all(_rotation_cell_get(record, arm) is not None for arm in _ROTATION_ROTATION_ARMS)
+        and all(_rotation_id_exact(record, arm) for arm in _ROTATION_ROTATION_ARMS)
+    ]
+    n_headline = len(headline_records)
+    n_all_pass = 0
+    n_all_fail = 0
+    n_r0_pass = 0
+    n_flip_from_pass = 0
+    slot_pass: dict[str, int] = {str(s): 0 for s in range(5)}
+    for record in headline_records:
+        verdicts = [_rotation_verdict(record, arm) for arm in _ROTATION_ROTATION_ARMS]
+        if all(verdicts):
+            n_all_pass += 1
+        elif not any(verdicts):
+            n_all_fail += 1
+        if verdicts[0]:
+            n_r0_pass += 1
+            if not all(verdicts):
+                n_flip_from_pass += 1
+        for r, verdict in enumerate(verdicts):
+            if verdict:
+                slot_pass[str((5 - r) % 5)] += 1
+    n_invariant = n_all_pass + n_all_fail
+    n_flip_any = n_headline - n_invariant
+    rotation_present = 0
+    rotation_exact = 0
+    mirror_present = 0
+    mirror_exact = 0
+    for record in live:
+        for arm in _ROTATION_ROTATION_ARMS:
+            if _rotation_cell_get(record, arm) is not None:
+                rotation_present += 1
+                if _rotation_id_exact(record, arm):
+                    rotation_exact += 1
+        for arm in _ROTATION_MIRROR_ARMS:
+            if _rotation_cell_get(record, arm) is not None:
+                mirror_present += 1
+                if _rotation_id_exact(record, arm):
+                    mirror_exact += 1
+    mirror_records = [
+        record
+        for record in headline_records
+        if all(_rotation_cell_get(record, arm) is not None for arm in _ROTATION_MIRROR_ARMS)
+        and all(_rotation_id_exact(record, arm) for arm in _ROTATION_MIRROR_ARMS)
+    ]
+    n_mirror_paired = len(mirror_records)
+    n_flips_paired = 0
+    n_flips_mirror = 0
+    for record in mirror_records:
+        rotation_verdicts = [_rotation_verdict(record, arm) for arm in _ROTATION_ROTATION_ARMS]
+        if len(set(rotation_verdicts)) > 1:
+            n_flips_paired += 1
+        control_verdicts = [_rotation_verdict(record, arm) for arm in _ROTATION_CONTROL_ARMS]
+        if len(set(control_verdicts)) > 1:
+            n_flips_mirror += 1
+    reversal_records = [
+        record
+        for record in headline_records
+        if _rotation_cell_get(record, "mir_4") is not None and _rotation_id_exact(record, "mir_4")
+    ]
+    n_reversal_paired = len(reversal_records)
+    n_discordant = sum(
+        1
+        for record in reversal_records
+        if _rotation_verdict(record, "mir_4") != _rotation_verdict(record, "rot_0")
+    )
+    n_live = len(live)
+    return {
+        "arms": arms,
+        "closed_book": {
+            "n_completed": cb_completed,
+            "n_pass": cb_pass,
+            "pass_rate": rate(cb_pass, cb_completed),
+        },
+        "absent": {
+            "n_evaluable": absent_evaluable,
+            "n_false_pass": absent_false,
+            "rate": rate(absent_false, absent_evaluable),
+        },
+        "headline": {
+            "n_headline": n_headline,
+            "n_all_pass": n_all_pass,
+            "n_all_fail": n_all_fail,
+            "n_invariant": n_invariant,
+            "invariance_rate": rate(n_invariant, n_headline),
+            "n_flip_any": n_flip_any,
+            "n_r0_pass": n_r0_pass,
+            "n_flip_from_pass": n_flip_from_pass,
+            "flip_rate_from_pass": rate(n_flip_from_pass, n_r0_pass),
+            "evaluable_share": rate(n_headline, n_live),
+            "id_exact_share": rate(rotation_exact, rotation_present),
+        },
+        "slot_curve": {
+            "slots": slot_pass,
+            "n_headline": n_headline,
+        },
+        "mirror": {
+            "n_paired": n_mirror_paired,
+            "n_flips_paired": n_flips_paired,
+            "n_flips_mirror": n_flips_mirror,
+            "id_exact_share": rate(mirror_exact, mirror_present),
+        },
+        "reversal": {
+            "n_paired": n_reversal_paired,
+            "n_discordant": n_discordant,
+            "discordance_rate": rate(n_discordant, n_reversal_paired),
+        },
+        "classification": _rotation_classify(
+            n_headline,
+            n_flip_any,
+            n_all_pass,
+            n_all_fail,
+            n_mirror_paired,
+            n_flips_paired,
+            n_flips_mirror,
+        ),
+        "invariance_falsified": _rotation_falsified(n_headline, n_flip_any),
+        "n_fixtures": len(records),
+        "n_screened": sum(1 for record in records if _rotation_screened(record)),
+        "n_boundary_screened": sum(1 for record in records if _rotation_boundary_screened(record)),
+        "n_closed_book_incomplete": sum(
+            1
+            for record in records
+            if not _rotation_boundary_screened(record)
+            and _rotation_cell_get(record, "closed_book") is None
+        ),
+        "n_live": n_live,
+    }
+
+
+def _rotation_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    """Mirror of rotation._selection_over."""
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _rotation_cell_get(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _rotation_verdict(record, key) for record in records if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _rotation_arm_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    arm: str,
+) -> dict[str, Any]:
+    """Mirror of rotation.arm_selection."""
+    populations: list[frozenset[str]] = []
+    for records in records_by_candidate.values():
+        populations.append(
+            frozenset(
+                str(r.get("fixture"))
+                for r in records
+                if not _rotation_screened(r) and not _rotation_boundary_screened(r)
+            )
+        )
+    shared: frozenset[str] = frozenset.intersection(*populations) if populations else frozenset()
+    by_fixture: dict[str, dict[str, dict[str, Any]]] = {
+        name: {str(record.get("fixture")): record for record in records}
+        for name, records in records_by_candidate.items()
+    }
+    gated = frozenset(
+        fixture
+        for fixture in shared
+        if all(_rotation_id_exact(by_fixture[name][fixture], arm) for name in by_fixture)
+    )
+    own = _rotation_selection_over(records_by_candidate, arm, gated)
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+            "flip": None,
+        }
+    if arm == _ROTATION_BASELINE_ARM:
+        flip: bool | None = False
+    else:
+        completed = frozenset(
+            str(record["fixture"])
+            for records in records_by_candidate.values()
+            for record in records
+            if record["fixture"] in gated and _rotation_cell_get(record, arm) is not None
+        )
+        baseline = _rotation_selection_over(records_by_candidate, _ROTATION_BASELINE_ARM, completed)
+        flip = None if baseline is None else own != baseline
+    return {
+        "decision": own["decision"],
+        "detail": "",
+        "winner": own["winner"],
+        "withheld": False,
+        "flip": flip,
+    }
+
+
+def _rotation_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and the verdict binding
+    ``verdict == (answer_digest == expected_digest) and
+    boundary_found``. The expected digest is the record's,
+    itself checked against the mirror-regenerated case."""
+    if type(cell) is not dict or set(cell) != _ROTATION_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _rotation_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _rotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a rotation payload from its ground records.
+
+    The validator carries its own generator mirror, templates,
+    pools, and aggregators (no imports from rotation.py): the
+    protocol is rebuilt from frozen scalars plus the payload's
+    seed and backend fingerprint and compared whole; the case
+    set is regenerated from the seed and every record's
+    construction is compared against it in canonical order;
+    every cell's verdict is re-derived from its digest
+    identity; every completed cell's ``input_tokens`` must
+    equal the record's ``arm_tokens`` for that arm; the
+    construction classification is derived from the recorded
+    inventory digests, never read from the payload; the
+    aggregates and the per-arm selections are recomputed and
+    compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _rotation_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _rotation_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _ROTATION_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _ROTATION_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "arm_inventory_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _rotation_digest(str(case["values"][0]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            if type(arm_tokens) is not dict or set(arm_tokens) != set(_ROTATION_ARM_KEYS):
+                return None
+            if any(type(v) is not int or v < 0 for v in arm_tokens.values()):
+                return None
+            digests = record["arm_inventory_digests"]
+            if type(digests) is not dict or set(digests) != set(_ROTATION_SPAN_ARMS):
+                return None
+            if any(
+                type(v) is not str or not _rotation_digest_ok(v) or v is None
+                for v in digests.values()
+            ):
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_ROTATION_ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(_ROTATION_ARM_KEYS):
+                return None
+            for arm in _ROTATION_ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _ROTATION_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _rotation_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != arm_tokens[arm]:
+                        return None
+        raw_records[name] = records
+        aggregates[name] = _rotation_aggregate(records)
+    if total_records > _ROTATION_MAX_GROUND_RECORDS:
+        return None
+    if not raw_records:
+        return None
+    return {
+        "aggregates": aggregates,
+        "conditions": {
+            arm: _rotation_arm_selection(raw_records, arm) for arm in _ROTATION_CONDITION_ARMS
+        },
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_rotation(payload: Any) -> bool:
+    """Structural check for a ``rotation`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _rotation_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
+        return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_rotation(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``rotation`` probe payloads; deterministic.
+
+    Answers "did the rotation story change between runs?":
+    per-candidate classification and falsification drift, the
+    flip and mirror-control counts, the reversal discordance,
+    screening drift, per-arm selection drift, candidates
+    added/removed, and protocol / generator / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the generated set is the
+    treatment, so a changed generator is protocol drift). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_rotation(old)
+    new_ok = _valid_rotation(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    rotation_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    rotation_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    rotation_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    rotation_comparable = (
+        not rotation_protocol_drift and not rotation_generator_drift and not rotation_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    rotation_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    rotation_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    rotation_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                rotation_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        rotation_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "classification",
+                old_entry["classification"],
+                new_entry["classification"],
+            ),
+            (
+                "invariance_falsified",
+                old_entry["invariance_falsified"],
+                new_entry["invariance_falsified"],
+            ),
+            (
+                "n_flip_any",
+                old_entry["headline"]["n_flip_any"],
+                new_entry["headline"]["n_flip_any"],
+            ),
+            (
+                "n_headline",
+                old_entry["headline"]["n_headline"],
+                new_entry["headline"]["n_headline"],
+            ),
+            (
+                "n_flips_mirror",
+                old_entry["mirror"]["n_flips_mirror"],
+                new_entry["mirror"]["n_flips_mirror"],
+            ),
+            (
+                "n_discordant",
+                old_entry["reversal"]["n_discordant"],
+                new_entry["reversal"]["n_discordant"],
+            ),
+            (
+                "n_screened",
+                old_entry["n_screened"],
+                new_entry["n_screened"],
+            ),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+        ]
+        for metric, old_value, new_value in rotation_metrics:
+            if old_value != new_value:
+                rotation_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    rotation_condition_drift: list[dict[str, Any]] = []
+    for arm in _ROTATION_CONDITION_ARMS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            rotation_condition_drift.append(
+                {
+                    "condition": arm,
+                    "old": old["conditions"][arm],
+                    "new": new["conditions"][arm],
+                }
+            )
+    result["candidate_drift"] = rotation_candidate_drift
+    result["condition_drift"] = rotation_condition_drift
+    result["candidates_added"] = rotation_candidates_added
+    result["candidates_removed"] = rotation_candidates_removed
+    result["protocol_drift"] = rotation_protocol_drift
+    result["generator_drift"] = rotation_generator_drift
+    result["backend_drift"] = rotation_backend_drift
+    result["comparable"] = rotation_comparable
+    result["changed"] = bool(
+        rotation_candidate_drift
+        or rotation_condition_drift
+        or rotation_candidates_added
+        or rotation_candidates_removed
+        or rotation_protocol_drift
+        or rotation_generator_drift
+        or rotation_backend_drift
     )
     return result
 
