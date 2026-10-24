@@ -9378,6 +9378,277 @@ def rotation_analysis(
     }
 
 
+class _DensityCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    density stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _density_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    input_tokens: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One density generation: (detail, record fields).
+
+    Exactly one of the pair is set. The record's commitment is
+    computed here from the evaluation's own answer text: the
+    ordered per-word hash list, its digest, and the count.
+    Satisfaction is never computed at generation time; it is
+    derived from the commitment by density.aggregate_candidate
+    (and re-derived by the diff validator's mirror). The
+    cancel event is checked before and after ``evaluate`` (the
+    multiturn rule: a cancel observed during a generation is
+    never mislabelled an evaluation failure).
+    """
+    from . import density as _den
+
+    if input_tokens + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _DensityCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _DensityCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        hashes = _den.word_hashes(obs.answer)
+        return None, {
+            "boundary_found": bool(obs.boundary_found),
+            "answer_digest": _answer_digest(obs.answer),
+            "word_hashes": hashes,
+            "word_list_digest": _den.commitment_digest(hashes),
+            "word_count": len(hashes),
+            "input_tokens": len(obs.input_ids),
+        }
+    return "arm_evaluation_failed", None
+
+
+def density_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Instruction-density stage (cycle 204): generated cases
+    whose constraint prefix grows across arms (solo per
+    constraint, then the first 2/4/8/16 constraints, plus a
+    length-matched sham), per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no dependence on the user's fixtures or the primary
+    run. Each (case, arm) contributes one flat record carrying
+    the answer's word-hash commitment -- never a stored
+    satisfaction verdict, which is derived downstream. Records
+    degrade individually in the fixed detail vocabulary; a case
+    whose arm contents contain the candidate's decoded boundary
+    text is screened as a unit; cancellation unwinds the whole
+    stage to its fail-closed payload. Design:
+    docs/DENSITY_DESIGN.md.
+    """
+    from . import density as _den
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_den.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _den.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    cases = _den.generate_cases(seed)
+    if len(formats) * len(cases) * len(_den.ARM_KEYS) > _den.MAX_DENSITY_RECORDS:
+        return {
+            "available": False,
+            "detail": "density_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    generated_text = (
+        _den.TASK_FACT_TEMPLATE.replace("{topic}", "").replace("{value}", "")
+        + _den.TASK_QUESTION_TEMPLATE.replace("{topic}", "")
+        + "".join(
+            template.replace("{target}", "").replace("{limit}", "")
+            for template in _den.CONSTRAINT_TEMPLATES.values()
+        )
+        + _den.INSTRUCTION_LINE_TEMPLATE.replace("{position}", "").replace("{text}", "")
+        + "".join(_den.TOPICS)
+        + "".join(_den.WORDS)
+        + "".join(_den.TARGET_WORDS)
+        + "".join(_den.NEUTRAL_STATEMENTS)
+    )
+    if audit_special_token_literals(generated_text, formats):
+        # A special-token literal in the frozen texts would
+        # forge turn structure in every record of every run;
+        # the stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "density_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in generated_text:
+            return {
+                "available": False,
+                "detail": "density_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case_index, case in enumerate(cases):
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                contents = {arm: _den.arm_content(case, arm) for arm in _den.ARM_KEYS}
+                case_screened = bool(boundary_text[name]) and any(
+                    boundary_text[name] in content for content in contents.values()
+                )
+                for arm in _den.ARM_KEYS:
+                    if _cancelled():
+                        raise _DensityCancelled
+                    content = contents[arm]
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", content),),
+                        expected=str(case["value"]),
+                        group=_den.GROUP,
+                    )
+                    arm_ids = tuple(backend.encode(fmt.render(fixture.messages)))
+                    record: dict[str, Any] = {
+                        "candidate": name,
+                        "case_index": case_index,
+                        "arm": arm,
+                        "detail": "",
+                        "case_screened": case_screened,
+                        "boundary_found": False,
+                        "answer_digest": None,
+                        "word_hashes": [],
+                        "word_list_digest": _den.commitment_digest([]),
+                        "word_count": 0,
+                        "input_tokens": len(arm_ids),
+                        "content_digest": _den.digest_text(content),
+                    }
+                    records.append(record)
+                    if case_screened:
+                        continue
+                    detail, fields = _density_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        input_tokens=len(arm_ids),
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["detail"] = detail
+                    elif fields is not None:
+                        record.update(fields)
+        except _DensityCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def density_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a density stage into the stored payload
+    (cycle 204).
+
+    Per-candidate readouts come from
+    density.aggregate_candidate over the stage's flat records;
+    satisfaction is derived there from the records' word-hash
+    commitments, never stored on a record. Design:
+    docs/DENSITY_DESIGN.md.
+    """
+    from . import density as _den
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "density_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    cases = _den.generate_cases(int(stage["protocol"]["seed"]))
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _den.aggregate_candidate(entry["records"], cases)
+        aggregates.update({"status": "available", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_cases": len(cases),
+    }
+
+
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],

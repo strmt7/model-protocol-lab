@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 204 — instruction-density ladder, 2026-10-24)
+
+- `run --density`: an instruction-density ladder (wave-9
+  rank 3) over 20 seed-generated cases, each carrying 16
+  simultaneously-satisfiable constraints — four each of
+  include-a-word, start-with, end-with, and a word limit,
+  with the start and end targets shared per case and the
+  count limits drawn from {8, 12, 16, 24}, above the largest
+  possible distinct-target count, so a perfect follower
+  passes every arm by construction. Per candidate, 21 arms:
+  each constraint solo, the first 2/4/8/16 stacked, and a
+  length-matched sham (first constraint plus neutral text).
+  Answers are committed as ordered per-word hash lists;
+  every satisfaction verdict is derived from the commitment,
+  never stored. The headline decision is scoped to the
+  solo-vs-full endpoint contrast: discordance aggregated per
+  case, an exact sign test over discordant cases, and an
+  `insufficient` verdict withheld below six discordant cases
+  rather than a defaulted acquittal. The design went through
+  the full adversarial round before any code: red-team A's
+  two FATAL findings (constraint sets not guaranteed jointly
+  satisfiable, and a bare sign test that falsified on
+  41–48% of pure-noise runs) and red-team B's six further
+  findings (including a normalization rule that manufactured
+  template-correlated false failures) reshaped the design;
+  the verifier re-executed every load-bearing number.
+  `diff-reports` gains the `density` section (full recompute
+  against a literal-table mirror and a regenerated case
+  set), the HTML report gains the Instruction density
+  section, and the design contract is
+  `docs/DENSITY_DESIGN.md`. Tests in
+  `tests/test_cycle204_density.py`.
+
 ### Added (cycle 203 — context rotation probe, 2026-10-24)
 
 - `run --rotate`: a context-rotation probe (wave-9 rank 1)

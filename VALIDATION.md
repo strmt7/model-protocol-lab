@@ -1,16 +1,16 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–203 (executed 2026-10-14 → 2026-10-24, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–204 (executed 2026-10-14 → 2026-10-24, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-24). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **8110 tests collected**
-  (cycle 203, 2026-10-24). Subtests numbered in the 70k+
+- `python -m pytest -q -p no:cacheprovider` — **8175 tests collected**
+  (cycle 204, 2026-10-24). Subtests numbered in the 70k+
   range in recent cycles.
-- `python -m unittest discover -s tests -t .` — **8110 tests (cycle 203,
+- `python -m unittest discover -s tests -t .` — **8175 tests (cycle 204,
   2026-10-24; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
   unittest silently skipped (2533 pytest-style test executions) were
   converted to `unittest.TestCase`, which pytest also runs. Both runners
@@ -35,22 +35,23 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   the load-precision probe (`run --precision`),
   the verbalized-confidence probe (`run --confidence`),
   the context rotation probe (`run --rotate`),
+  the instruction-density ladder (`run --density`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.8533% (cycle 203, 2026-10-24)**. The gate compares the
+  95.9418% (cycle 204, 2026-10-24)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+1.353) is auditable rather than inferred from the display.
+  (+1.442) is auditable rather than inferred from the display.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (278 files in that CI scope; the repo-root scope counts more.
+  (280 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (60 source files).
+- `mypy model_protocol_lab` — clean (61 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

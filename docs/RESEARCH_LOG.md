@@ -9410,3 +9410,124 @@ brief's cross-candidate falsification clause is dropped with
 its reason recorded (its criterion defines no decidable
 test). Full adjudication:
 `agents_out/cycle203/coordinator_adjudication.md`.
+
+## Cycle 204 — instruction density: at what simultaneous-instruction density does adherence drop, and which positions drop first? (`run --density`)
+
+**Uniqueness pass (wave-9 research brief §3.3; the load-bearing
+citation re-resolved live by the coordinator against the primary
+source).** Jaroslawicz, Whiting, Shah & Maamari, *How Many
+Instructions Can LLMs Follow at Once?*, arXiv:2507.11538
+(15 Jul 2025, Distyl AI): IFScale — 500 keyword-inclusion
+instructions on a business-report task, 20 frontier API models,
+best model 68% at max density, three degradation patterns, bias
+towards earlier instructions. Verified against the arXiv
+abstract in this cycle: title, authors, the 500-instruction
+design, the 68% figure, and the earlier-instruction bias all
+resolve exactly. IFScale does not vary the chat template, does
+not run on a local checkpoint under exact-token discipline, and
+its long free-form output imports a verbosity/length confound.
+Adjacent in-tree axes are distinct: `hierarchy` varies two
+conflicting privileged instructions, `distraction` varies
+demand-free text, `multiturn` spreads instructions over turns,
+`structured` holds one schema. The surviving claim is the
+combination: simultaneous-instruction density × serial position
+× template family, on a local checkpoint, with digest-decidable
+constraints and a recomputing diff validator. Never "first".
+
+**Design constraint inherited from the slate adjudication:**
+the diff validator cannot recompute per-constraint satisfaction
+from a plain answer digest, so the v1 constraint vocabulary is
+restricted to kinds decidable from a stored word-level digest
+commitment (membership, first/last word, word count); the cap
+and the excluded kinds (case/sentence/paragraph structure) are
+printed in the design doc itself. Satisfaction is DERIVED from
+the commitment everywhere (the cycle-203 F4 pattern); the
+commitment's fidelity to the generated answer is the probe's
+named residue, recorded in the design with its reasoning.
+
+**Design:** docs/DENSITY_DESIGN.md — 20 generated cases, a
+frozen 16-constraint ladder per case, densities {1, 2, 4, 8, 16}
+with serial positions fixed across densities, a solo arm per
+constraint as the paired baseline, a sham arm (one real
+constraint + 15 screened neutral statements) separating density
+from text mass, and a pre-registered falsification rule on
+pooled solo-vs-k16 discordance. Five open points are named in
+the design for the red teams (solo-arm cost, sham position
+confound, fidelity residue, vacuous count satisfaction,
+pooled-only boolean totality). Adversarial round and build
+follow in this entry.
+
+**Adversarial round (complete).** Red-team A: DO NOT BUILD v1 —
+F1 FATAL (constraint sets not guaranteed jointly satisfiable: two
+`start_word` constraints with distinct targets are mutually
+unsatisfiable, and the design's redraw rule forces distinct
+targets; a perfect follower is falsified deterministically,
+f = 120, joint = 0/20) and F2 FATAL (the falsification rule is a
+bare sign test: P(falsified | claim true) ≈ 0.41–0.48, and one
+discordant pair in 320 falsifies). Eight MAJOR (pooled position
+curve manufactures a position effect from a pure density effect,
+deterministically; headline curve not composition-controlled;
+first/last-word digests do not determine start/end verdicts —
+a forged first word passes every stated check; base task
+unmeasured and its 1–3-word demand conflicts with the counted
+constraints at high K; treatment never committed — no prompt-
+side record; `density_screen_failed` named with no screen
+behind it; no per-record detail or completeness clause; paired
+population undefined and the boolean fails open below its
+floor). The verifier re-executed every load-bearing number
+with independent seeds plus exact analytics: all VERIFIED
+(exact forced failures 6.02/case; exact F2 range
+0.4250–0.4842). Red-team B confirmed both FATALs in substance,
+corrected F1's strength (the defect is a missing invariant +
+missing allocation, jointly), REFUTED three of A's amendments
+as shaped (McNemar gating is not house precedent — no shipped
+boolean gates on it — and runs FP 0.144–0.227 under the
+design's case-clustered pairs; the ordered word list is not
+"costless" — up to 58.8× on repetitive records, sequence
+disclosure strictly greater; whole-answer `expected_digest`
+is mutually exclusive with constraint compliance at high K),
+refuted F16(c) by the tree (this entry exists), and found six
+more: k1 ≡ solo_1 generated twice (B-F1); position-readout
+denominators collapse 100 → 20 along the measured axis (B-F2);
+the frozen normalization manufactures template-correlated
+false failures (markdown/brackets/slashes survive the strip
+set; "---" counts as a word while "..." vanishes) (B-F3);
+screened records' stored word lists are unbounded, so F15's
+worst case is not the worst case (B-F4); the boolean tests
+only the density endpoints (B-F5); the draw-rule slot order
+contradicts the collision rule's information needs (B-F6).
+
+**Adjudicated design (v2).** docs/DENSITY_DESIGN.md rewritten.
+Satisfiability by construction: balanced 4/4/4/4 kind slots
+rotating across cases, start constraints share one target and
+end constraints another, all groups distinct after
+normalization (D ≤ 7), count set {8, 12, 16, 24} — with the
+repetition limit for positional kinds stated in the design.
+Decision: discordance aggregated per case, exact sign test
+over discordant cases, `insufficient` state below 6 (never a
+defaulted acquittal); claim scoped to the endpoint contrast.
+Commitment: one ordered word-hash list determines every
+verdict; normalization redefined (a word is a maximal
+alphanumeric run). Treatment committed: renderings frozen,
+content digests mirror-recomputed. Screens, per-record
+detail, completeness (21 × 20 per candidate, canonical
+order), solo-normalized curve, within-k16 + band-pooled
+position readouts, task-value presence via
+`expected_word_digest`, sham length as a frozen selection
+rule over intersected populations, payload cap re-derived
+(52 MiB, printed derivation). Full adjudication:
+`agents_out/cycle204/coordinator_adjudication.md`.
+
+**Closure (cycle 204).** Shipped as adjudicated: `run
+--density` with the pure module `density.py`, producer/
+validator mirror verified byte-exact over five seeds, the
+pinned perfect-model test passing (joint satisfaction 20/20,
+zero forced failures), and the sham length rule amended at
+build time to wrap (the no-wrap rule left the sham shorter
+than its k16 block in 3,992 of 4,000 measured cases; after
+the amendment, 0 of 4,000). Gate: 8,175 tests, exact CI
+command OK (skipped=7), precise coverage 95.9418%, the new
+module at zero missing lines. One runtime restart killed the
+first coverage attempt of the final tree mid-run; the
+post-interruption audits (blob tree vs the cycle-203 commit,
+129-pair mutant audit) were clean and the re-run completed.

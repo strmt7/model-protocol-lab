@@ -2491,6 +2491,65 @@ candidates x 20 cases x 11). The full contract is in
 never affects selection, and the stage never fails the
 run.
 
+### 8.51 Instruction density (`density`)
+
+Opt-in with `model-protocol-lab run --density`. My system
+prompt keeps growing — which of its instructions does this
+template silently drop first, and at what stack depth?
+
+Twenty cases are generated from the run seed. Each case
+pairs one small fact-recall task (a signal word to report)
+with sixteen constraints: include a given word, start with
+a given word, end with a given word, stay within a word
+limit — four of each. The sets are satisfiable by
+construction: the start constraints of a case share one
+target, the end constraints share another, every target
+group is distinct, and the smallest word limit (8) exceeds
+the largest possible distinct-target count, so a perfect
+instruction-follower passes every arm and any failure is
+the model's, not the instrument's. Each candidate runs
+twenty-one arms per case: every constraint alone (solo),
+the first 2, 4, 8, and all 16 constraints stacked, and a
+sham arm carrying only the first constraint plus neutral
+text length-matched to the full stack's block, which
+separates "many instructions" from "much text".
+
+Answers are committed as ordered per-word hash lists — a
+word is a maximal run of alphanumeric characters,
+case-folded — and every satisfaction verdict is derived
+from the commitment, never stored on the record, so the
+diff validator re-derives each one. Readouts print
+satisfaction by stack depth beside the same constraints'
+pooled solo rate (the composition control), task-value
+presence per arm, position bands at full density, per-kind
+solo-vs-full rates (positional kinds repeat their target
+at full density — a stated limit of the instrument), joint
+satisfaction at sixteen, and the sham readout. The claim
+under test is scoped to the endpoint contrast:
+per-constraint satisfaction at full density equals its
+solo satisfaction. The decision aggregates solo-vs-full
+discordance per case and applies an exact two-sided sign
+test over the discordant cases; below six discordant cases
+the verdict is withheld as `insufficient` — never a
+defaulted acquittal — and intermediate depths are
+descriptive only. The level is per candidate: across 24
+candidates at alpha 0.05, at least one false falsification
+is expected with probability about 0.71, and the report
+says so next to the numbers.
+
+Records carry digests and the word-hash commitments only —
+no case, constraint, or answer text — and `diff-reports`
+recomputes the whole section from its own literal tables
+and a regenerated case set (`density_changed` /
+`density_asymmetric` feed `identical`); a drifted protocol,
+generator, or backend fingerprint marks the comparison not
+comparable while still listing the drift. Cost: 21
+generations per candidate per case (10,080 at the legal
+maximum: 24 candidates x 20 cases x 21). The full contract
+is in `docs/DENSITY_DESIGN.md`. Informational only: the
+probe never affects selection, and the stage never fails
+the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

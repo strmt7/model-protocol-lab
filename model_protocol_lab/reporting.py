@@ -7148,6 +7148,271 @@ def _rotation_section(result: dict[str, Any]) -> str:
     )
 
 
+def _density_section(result: dict[str, Any]) -> str:
+    """Instruction-density ladder: which instructions does a growing stack drop?
+
+    Renders the ``density`` payload (see
+    experiments.density_analysis): per candidate, satisfaction
+    by stack depth with the solo composition control beside
+    each point, task-value presence, position bands at full
+    density, per-kind solo-vs-full rates, joint satisfaction,
+    the length-matched sham readout, the screen accounting,
+    and the pre-registered endpoint decision. The scope limits
+    are printed with the numbers, not under them: the
+    constraint sets are jointly satisfiable by construction
+    (a perfect follower passes every arm), satisfaction is
+    derived from the answers' word-hash commitments and never
+    stored, the decision is scoped to the solo-vs-full
+    endpoint contrast (intermediate depths are descriptive),
+    positional-kind demands repeat their target at full
+    density, and each record is one greedy generation on
+    generated cases. Counts and rates only; no case,
+    constraint, or answer text is rendered. Every
+    interpolation is escaped at this boundary.
+    """
+    probe: Any = result.get("density")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _pvalue(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3g}")
+        return "n/a"
+
+    def _mean(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.1f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        bits.append(
+            "<div>Records: "
+            + _count(entry.get("n_generated"))
+            + " generated, "
+            + _count(entry.get("n_boundary_screened"))
+            + " boundary-screened, "
+            + _count(entry.get("n_detail_screened"))
+            + " detail-screened, "
+            + _count(entry.get("n_no_boundary"))
+            + " without a boundary, "
+            + _count(entry.get("n_zero_word"))
+            + " live with no words, "
+            + _count(entry.get("n_live"))
+            + " live.</div>"
+        )
+        decision = entry.get("decision")
+        if type(decision) is dict:
+            verdict = str(decision.get("verdict", ""))
+            if verdict == "insufficient":
+                decision_text = "withheld (insufficient: fewer than six discordant cases)"
+            elif decision.get("falsified") is True:
+                decision_text = "density falsified"
+            else:
+                decision_text = "not falsified"
+            bits.append(
+                "<div>Endpoint decision (solo vs full density): "
+                + escape(decision_text)
+                + " -- discordant pairs f "
+                + _count(decision.get("f"))
+                + " (solo passes, full fails), p "
+                + _count(decision.get("p"))
+                + " (reverse), over "
+                + _count(decision.get("discordant_cases"))
+                + " discordant cases; exact sign test p "
+                + _pvalue(decision.get("sign_p"))
+                + ".</div>"
+            )
+        by_density = entry.get("by_density")
+        if type(by_density) is list:
+            points: list[str] = []
+            for row in by_density:
+                if type(row) is not dict:
+                    continue
+                points.append(
+                    "K="
+                    + _count(row.get("density"))
+                    + ": "
+                    + _rate(row.get("rate"))
+                    + " ("
+                    + _count(row.get("satisfied"))
+                    + "/"
+                    + _count(row.get("checked"))
+                    + "; solo control "
+                    + _rate(row.get("solo_rate"))
+                    + ", "
+                    + _count(row.get("solo_satisfied"))
+                    + "/"
+                    + _count(row.get("solo_checked"))
+                    + ")"
+                )
+            if points:
+                bits.append(
+                    "<div>Satisfaction by stack depth (the raw "
+                    "curve is not composition-controlled; the "
+                    "solo control beside each point is): " + "; ".join(points) + ".</div>"
+                )
+        joint = entry.get("joint_k16")
+        if type(joint) is dict:
+            bits.append(
+                "<div>Joint satisfaction at full density (all "
+                "16 constraints at once): "
+                + _count(joint.get("satisfied"))
+                + " of "
+                + _count(joint.get("live"))
+                + " ("
+                + _rate(joint.get("rate"))
+                + ").</div>"
+            )
+        bands = entry.get("position_bands")
+        if type(bands) is list:
+            band_bits: list[str] = []
+            for band in bands:
+                if type(band) is not dict:
+                    continue
+                band_bits.append(
+                    escape(str(band.get("band", "")))
+                    + " "
+                    + _rate(band.get("rate"))
+                    + " ("
+                    + _count(band.get("satisfied"))
+                    + "/"
+                    + _count(band.get("checked"))
+                    + ")"
+                )
+            if band_bits:
+                bits.append(
+                    "<div>Position bands at full density "
+                    "(positions 1-5 early, 6-11 mid, 12-16 late): "
+                    + ", ".join(band_bits)
+                    + ".</div>"
+                )
+        by_kind = entry.get("by_kind")
+        if type(by_kind) is list:
+            kind_bits: list[str] = []
+            for row in by_kind:
+                if type(row) is not dict:
+                    continue
+                kind_bits.append(
+                    escape(str(row.get("kind", "")))
+                    + " solo "
+                    + _rate(row.get("solo_rate"))
+                    + " ("
+                    + _count(row.get("solo_satisfied"))
+                    + "/"
+                    + _count(row.get("solo_checked"))
+                    + "), full "
+                    + _rate(row.get("k16_rate"))
+                    + " ("
+                    + _count(row.get("k16_satisfied"))
+                    + "/"
+                    + _count(row.get("k16_checked"))
+                    + ")"
+                )
+            if kind_bits:
+                bits.append(
+                    "<div>Per kind (positional kinds repeat "
+                    "their target at full density): " + "; ".join(kind_bits) + ".</div>"
+                )
+        presence = entry.get("task_presence")
+        if type(presence) is list:
+            by_arm = {str(row.get("arm")): row for row in presence if type(row) is dict}
+            presence_bits: list[str] = []
+            for arm in ("solo_1", "sham", "k16"):
+                row = by_arm.get(arm)
+                if row is None:
+                    continue
+                presence_bits.append(
+                    escape(arm)
+                    + " "
+                    + _rate(row.get("rate"))
+                    + " ("
+                    + _count(row.get("present"))
+                    + "/"
+                    + _count(row.get("live"))
+                    + ")"
+                )
+            if presence_bits:
+                bits.append(
+                    "<div>Task value present in the answer: " + ", ".join(presence_bits) + ".</div>"
+                )
+        sham = entry.get("sham")
+        if type(sham) is dict:
+            bits.append(
+                "<div>Sham (first constraint plus length-matched "
+                "neutral text), over "
+                + _count(sham.get("cases"))
+                + " cases live in all three arms: position-1 "
+                "satisfaction solo "
+                + _rate(sham.get("solo_1_rate"))
+                + ", sham "
+                + _rate(sham.get("sham_rate"))
+                + ", full "
+                + _rate(sham.get("k16_rate"))
+                + "; mean block words sham "
+                + _mean(sham.get("sham_block_words_mean"))
+                + " vs full "
+                + _mean(sham.get("k16_block_words_mean"))
+                + ".</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="density">'
+        "<h2>Instruction density</h2>"
+        "<p>Twenty generated cases each carry sixteen "
+        "simultaneously satisfiable constraints -- include a "
+        "word, start with a word, end with a word, stay within "
+        "a word limit, four of each, with the start and end "
+        "targets shared across the case -- over one small "
+        "fact-recall task. Each candidate answers every "
+        "constraint alone, then the first 2, 4, 8, and all 16 "
+        "stacked, plus a sham arm whose text is length-matched "
+        "to the full stack but carries only the first "
+        "constraint. Answers are committed as ordered per-word "
+        "hash lists and every verdict is derived from the "
+        "commitment. The claim under test is scoped to the "
+        "endpoint contrast: per-constraint satisfaction at full "
+        "density equals its solo satisfaction. The decision "
+        "aggregates solo-vs-full discordance per case and "
+        "applies an exact sign test; below six discordant "
+        "cases the verdict is withheld as insufficient. The "
+        "level is per candidate -- across 24 candidates at "
+        "alpha 0.05, at least one false falsification is "
+        "expected with probability about 0.71. Each record is "
+        "one greedy generation.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>" + "</section>"
+    )
+
+
 def _choiceaudit_section(result: dict[str, Any]) -> str:
     """Choice-scoring audit: does likelihood scoring pick what generation picks?
 
@@ -9076,6 +9341,7 @@ def render_html(result: dict[str, Any]) -> str:
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
     rotation_html = _rotation_section(result)
+    density_html = _density_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -9260,6 +9526,11 @@ def render_html(result: dict[str, Any]) -> str:
                 rotation_html,
             ),
             (
+                "density",
+                "Instruction density",
+                density_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -9357,6 +9628,7 @@ def render_html(result: dict[str, Any]) -> str:
         + precision_html
         + confidence_html
         + rotation_html
+        + density_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html
