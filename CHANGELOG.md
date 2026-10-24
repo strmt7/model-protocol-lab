@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 203 — context rotation probe, 2026-10-24)
+
+- `run --rotate`: a context-rotation probe (wave-9 rank 1)
+  over 20 seed-generated cases, each a span of five
+  fact-bearing blocks with the question pinned after it,
+  run in eleven arms per candidate — five cyclic rotations
+  of the block order, four mirror arms (rotations of the
+  reversed order, a matched generic-reordering control
+  set), a fact-absent false-recall arm, and a closed-book
+  screen. Paired readouts run over token-exact rotations
+  only (per-arm rendered-token inventory digests, derived
+  never stored); the headline is verdict invariance under a
+  pre-registered falsification rule, classified against the
+  mirror control set's own any-flip count so a pure slot
+  effect is acquitted; per-arm selections are gated per arm
+  on token-exactness. The design went through the full
+  adversarial round before any code: red-team A's two FATAL
+  findings (a cardinality mismatch that would have fired
+  `rotation_sensitive` on ~99.8% of null runs, and an
+  all-fail/all-pass label conflation) and red-team B's
+  slot-displacement confound reshaped the classification
+  and the control set; the slot curve is framed as a needle
+  cross-check, not novelty. `diff-reports` gains the
+  `rotation` section (full recompute against a literal-table
+  mirror and a regenerated case set), the HTML report gains
+  the Context rotation section, and the design contract is
+  `docs/ROTATION_DESIGN.md`. Also corrects a phantom
+  "VALIDATION §6" reference in `docs/PLACEMENT_DESIGN.md`
+  at its source. Tests in `tests/test_cycle203_rotation.py`.
+
 ### Fixed (cycle 202 — wave-9 correction round, 2026-10-24)
 
 - Eleven defects found by the wave-9 adversarial round

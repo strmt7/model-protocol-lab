@@ -9319,3 +9319,94 @@ flag/subcommand half of F5's fix was unaffected. Process note: the
 strengthened gate had never been run scoped against the tree it
 gates before the full run; a ten-second scoped run would have
 caught this before the twenty-minute one did.
+
+## Cycle 203 — context rotation: does cyclically rotating a five-block span change the verdict? (`run --rotate`)
+
+**Uniqueness pass (wave-9 research brief §3.1, verified live
+against primary sources by the researcher; sources resolved
+again by this cycle's verifier).** The probe rests on Liu et
+al., *Lost in the Middle* (arXiv:2307.03172 — one relevant
+document moved through a fixed list; rotation moves every
+block and tests a symmetry of the whole prompt, which Liu's
+design cannot distinguish from a single fact's slot effect);
+Peysakhovich & Lerer, *Attention Sorting* (arXiv:2310.01427 —
+document order is a causal lever on vendor renderings; no
+template variable, no invariance readout); Guan et al., *The
+Order Effect* (arXiv:2502.04134, v2 — shuffling input order
+drops accuracy; shuffling destroys relative order, rotation is
+the controlled sub-case that preserves it); the Chroma
+*Context Rot* report (cited corporately — the page carries no
+byline; input growth degrades 18 models non-uniformly,
+including haystack-structure effects); and Du et al.
+(arXiv:2510.05381 — length alone hurts despite perfect
+retrieval, the confound rotation's constant-text-length
+construction eliminates by design). Neighbour harnesses (LM
+Evaluation Harness, HELM, PromptBench/PromptRobust, OpenAI
+Evals, DSPy, garak) apply no cyclic-shift treatment to a
+multi-block prompt crossed with hand-rendered template
+families on a local checkpoint with an abstaining selection
+rule re-applied per shift. Uniqueness is the combination, as
+always. Lialin (arXiv:2404.02054) and Richardson
+(arXiv:2310.20081) are struck as rotation sources (cycle-202
+entry carries the autopsy). arXiv:2511.20836 is premise
+evidence only, cited as v3 ("Structured Prompts Improve
+Evaluation of Language Models") if at all; its v3 abstract's
+ranking-shift figure is 5 of 7 benchmarks (the research
+brief's 3/7 was v2 drift — this cycle's verifier caught it).
+
+**Design round (docs/ROTATION_DESIGN.md v2).** Red-team A
+(design v1): DO NOT BUILD AS SPECIFIED — F1 FATAL (the
+classification's step 4 compared an any-of-5 flip count to a
+single-pair discordance; under the exchangeability null the
+`rotation_sensitive` label fires ≈99.8% of the time, executed
+three ways) and F2 FATAL (all-fail and all-pass populations
+both classified `invariant_observed`), plus 8 MAJOR (the
+falsification/classification joint table unpublished; the
+construction classification had no recomputable primitive
+beneath it — the numform F3 class; seam offsets stored but
+consumed by nothing; the generator under-frozen in six
+places; screen accounting conflating the boundary and
+closed-book screens; denominator discipline stated for one
+readout only; conditions citing a needle precedent that runs
+the opposite way; a blast radius with a phantom pin) and 5
+MINOR. Red-team B, mandated to disprove A, confirmed A's core
+by independent execution (alternative nulls — per-case
+propensity, correlated arms — still ≥93% spurious
+`rotation_sensitive`), corrected two of A's amendments (the
+pairwise fix's "sum" reading reproduces the bug at 4× scale;
+A's F4 witness pair was a permutation), downgraded F2 to a
+labelling defect with a dominance-shaped remedy, and filed
+two findings of its own: B-F1 (the reversal control is
+confounded by asked-slot displacement) and B-F2 (the arms
+table duplicated the absent block and mixed populations
+unlabelled). The verifier re-executed the design's own claims
+(slot bijection, totality, budgets, amendment compliance,
+citation resolution — all confirmed except the encode ledger,
+7 + 6×4 = 31 ≠ 32, and the §6 phantom, both already in A's
+list). The coordinator's own spot-checks reproduced F1's
+Monte Carlo and F3's 95,634-tuple enumeration exactly.
+
+**Adjudicated design (v2).** The classification's control is
+a matched statistic: four mirror arms (cyclic rotations of
+the reversed block order, named by asked slot) form with
+`rot_0` a control set whose asked-slot multiset {0,1,2,3,4}
+equals the rotations', so under a pure absolute-slot effect
+the two flip indicators are equal for every case
+deterministically — B-F1 answered by construction, at 11
+arms per case (5,280 generations worst case, priced). Joint
+collapse enters as a dominance step before
+`invariant_observed`. The construction classification is
+derived from a carried primitive — a per-arm token-inventory
+digest — and the unused seam offsets are dropped, which also
+collapses construction cost to one render per arm. The
+generator is frozen completely (slots, counters, redraw
+scope, asked topics without replacement across cases), the
+screens' populations are defined once, every rate carries
+the global None-iff-zero-denominator rule, conditions are
+gated per arm on derived construction exactness, and the
+falsification/classification joint table is published in the
+design as a theorem and pinned by an enumeration test. The
+brief's cross-candidate falsification clause is dropped with
+its reason recorded (its criterion defines no decidable
+test). Full adjudication:
+`agents_out/cycle203/coordinator_adjudication.md`.

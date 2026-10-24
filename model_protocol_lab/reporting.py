@@ -6950,6 +6950,204 @@ def _placement_section(result: dict[str, Any]) -> str:
     )
 
 
+def _rotation_section(result: dict[str, Any]) -> str:
+    """Context rotation probe: does cyclically rotating the block span move the verdict?
+
+    Renders the ``rotation`` payload (see
+    experiments.rotation_analysis): per candidate, the
+    headline invariance block over token-exact rotations, the
+    pass-by-absolute-slot curve, the mirror control block, the
+    reversal discordance, the fact-absent false-recall floor,
+    the screening accounting, and the per-arm selection
+    winners. The scope limits are printed with the numbers,
+    not under them: the construction classification is a token
+    inventory claim (segmentation at the seams is not
+    verified), the slot curve is a cross-check against the
+    needle probe's depth curve rather than a second
+    measurement of it, the mirror control compares the same
+    any-flip statistic on matched slot multisets, and each
+    cell is one greedy generation on generated fixtures.
+    Counts and rates only; no block, question, or answer text
+    is rendered. Every interpolation is escaped at this
+    boundary.
+    """
+    probe: Any = result.get("rotation")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    conditions = probe.get("conditions")
+    if type(candidates) is not dict or type(conditions) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return escape(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return escape(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + escape(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            bits.append(
+                "<div>Headline cases "
+                + _count(headline.get("n_headline"))
+                + " (evaluable share "
+                + _rate(headline.get("evaluable_share"))
+                + "): invariant "
+                + _count(headline.get("n_invariant"))
+                + " (all-pass "
+                + _count(headline.get("n_all_pass"))
+                + ", all-fail "
+                + _count(headline.get("n_all_fail"))
+                + "), flips "
+                + _count(headline.get("n_flip_any"))
+                + ", invariance rate "
+                + _rate(headline.get("invariance_rate"))
+                + " ("
+                + escape(str(entry.get("classification", "")))
+                + "); invariance falsified: "
+                + ("yes" if entry.get("invariance_falsified") is True else "no")
+                + ". Token-exact share of completed rotation cells "
+                + _rate(headline.get("id_exact_share"))
+                + ".</div>"
+            )
+            bits.append(
+                "<div>Flips from an r=0 pass: "
+                + _count(headline.get("n_flip_from_pass"))
+                + " of "
+                + _count(headline.get("n_r0_pass"))
+                + " ("
+                + _rate(headline.get("flip_rate_from_pass"))
+                + ").</div>"
+            )
+        curve = entry.get("slot_curve")
+        if type(curve) is dict and type(curve.get("slots")) is dict:
+            slots = curve["slots"]
+            bits.append(
+                "<div>Passes by the asked fact's absolute slot: "
+                + ", ".join("slot " + str(s) + " " + _count(slots.get(str(s))) for s in range(5))
+                + " of "
+                + _count(curve.get("n_headline"))
+                + " headline cases each.</div>"
+            )
+        mirror = entry.get("mirror")
+        if type(mirror) is dict:
+            bits.append(
+                "<div>Mirror control over "
+                + _count(mirror.get("n_paired"))
+                + " paired cases: rotation flips "
+                + _count(mirror.get("n_flips_paired"))
+                + ", mirror flips "
+                + _count(mirror.get("n_flips_mirror"))
+                + " (the same any-flip statistic over the "
+                "non-cyclic control set, on the same cases).</div>"
+            )
+        reversal = entry.get("reversal")
+        if type(reversal) is dict:
+            bits.append(
+                "<div>Reversal discordance: "
+                + _count(reversal.get("n_discordant"))
+                + " of "
+                + _count(reversal.get("n_paired"))
+                + " ("
+                + _rate(reversal.get("discordance_rate"))
+                + ").</div>"
+            )
+        absent = entry.get("absent")
+        if type(absent) is dict:
+            bits.append(
+                "<div>Fact-absent false recall: "
+                + _count(absent.get("n_false_pass"))
+                + " of "
+                + _count(absent.get("n_evaluable"))
+                + " ("
+                + _rate(absent.get("rate"))
+                + ").</div>"
+            )
+        closed = entry.get("closed_book")
+        if type(closed) is dict:
+            bits.append(
+                "<div>Screens: "
+                + _count(entry.get("n_screened"))
+                + " cases excluded by the closed-book screen "
+                "(closed-book pass rate "
+                + _rate(closed.get("pass_rate"))
+                + "), "
+                + _count(entry.get("n_boundary_screened"))
+                + " cases boundary-screened, "
+                + _count(entry.get("n_closed_book_incomplete"))
+                + " cases with no closed-book verdict.</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + escape(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    winners: list[str] = []
+    for arm in ("rot_0", "rot_1", "rot_2", "rot_3", "rot_4", "mir_4"):
+        cond = conditions.get(arm)
+        if type(cond) is not dict:
+            continue
+        label = "reversal" if arm == "mir_4" else arm.replace("_", " ")
+        if cond.get("withheld"):
+            winners.append(escape(label) + ": selection withheld")
+        else:
+            winner = cond.get("winner")
+            winners.append(
+                escape(label)
+                + ": "
+                + (escape(str(winner)) if winner else "no unique winner")
+                + (" (flip vs rot 0)" if cond.get("flip") is True else "")
+            )
+    return (
+        '<section class="card" id="rotation">'
+        "<h2>Context rotation</h2>"
+        "<p>Twenty generated cases each assemble five "
+        "fact-bearing blocks (one asked fact, four fact-shaped "
+        "distractors) into a span with the question pinned "
+        "after it. The span is cyclically rotated through all "
+        "five orders -- same content, same total text length, "
+        "same cyclic relative order -- and four mirror arms "
+        "rotate the reversed order the same way, forming a "
+        "generic-reordering control set that places the asked "
+        "fact at the same slots. A span arm counts as "
+        "construction-exact only when its rendered token "
+        "inventory matches the unrotated arm's exactly; that is "
+        "an inventory claim, and segmentation at the block "
+        "seams is not verified. The headline is verdict "
+        "invariance over the token-exact rotations; the "
+        "pass-by-slot curve is a cross-check against the needle "
+        "probe's depth curve, not a second measurement of it. "
+        "A fact-absent arm prices false recall, and a "
+        "closed-book screen (question alone; a pass excludes "
+        "the case for that candidate) keeps ungrounded answers "
+        "out of the populations. Each cell is one greedy "
+        "generation.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + ("<p>Per-arm selection: " + "; ".join(winners) + ".</p>" if winners else "")
+        + "</section>"
+    )
+
+
 def _choiceaudit_section(result: dict[str, Any]) -> str:
     """Choice-scoring audit: does likelihood scoring pick what generation picks?
 
@@ -8877,6 +9075,7 @@ def render_html(result: dict[str, Any]) -> str:
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
+    rotation_html = _rotation_section(result)
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
@@ -9056,6 +9255,11 @@ def render_html(result: dict[str, Any]) -> str:
                 confidence_html,
             ),
             (
+                "rotation",
+                "Context rotation",
+                rotation_html,
+            ),
+            (
                 "cache-profile",
                 "Prefix-cache sharability profile",
                 cache_profile_html,
@@ -9152,6 +9356,7 @@ def render_html(result: dict[str, Any]) -> str:
         + choiceaudit_html
         + precision_html
         + confidence_html
+        + rotation_html
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html

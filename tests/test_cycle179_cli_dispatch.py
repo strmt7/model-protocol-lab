@@ -111,6 +111,7 @@ STAGE_FLAGS = [
     ("--multiturn", "multiturn", None),
     ("--needle", "needle", None),
     ("--placement", "placement", None),
+    ("--rotate", "rotate", None),
     ("--choice-audit", "choice_audit", None),
     ("--precision", "precision", None),
     ("--confidence", "confidence", None),
@@ -290,6 +291,12 @@ HELPER_DISPATCH = [
         "placement",
         "placement_unavailable",
         ["placement_stage", "placement_analysis"],
+    ),
+    (
+        "_run_rotation_probe",
+        "rotation",
+        "rotation_unavailable",
+        ["rotation_stage", "rotation_analysis"],
     ),
     (
         "_run_choiceaudit_probe",
