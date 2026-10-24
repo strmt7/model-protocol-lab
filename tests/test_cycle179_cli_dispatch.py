@@ -112,6 +112,7 @@ STAGE_FLAGS = [
     ("--needle", "needle", None),
     ("--placement", "placement", None),
     ("--rotate", "rotate", None),
+    ("--density", "density", None),
     ("--choice-audit", "choice_audit", None),
     ("--precision", "precision", None),
     ("--confidence", "confidence", None),
@@ -562,6 +563,14 @@ class TestInlineDispatch(unittest.TestCase):
         )
         self.assertEqual((kind, code), ("return", 0))
         self.assertIs(result_doc["logprob_diagnostic"], sentinel)
+
+    def test_density_dispatches(self):
+        (kind, code, _out, _err), result_doc, sentinel = self._run_with(
+            ["--density"],
+            ["density_stage", "density_analysis"],
+        )
+        self.assertEqual((kind, code), ("return", 0))
+        self.assertIs(result_doc["density"], sentinel)
 
     def test_sensitivity_sweep_dispatches(self):
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(

@@ -664,6 +664,34 @@ def build_parser() -> argparse.ArgumentParser:
         "The stage never fails the run.",
     )
     run.add_argument(
+        "--density",
+        action="store_true",
+        help="Instruction-density ladder (cycle 204, research "
+        "wave-9 rank 3): 20 generated cases from the run seed, "
+        "each carrying 16 simultaneously-satisfiable constraints "
+        "(four each of: include a word, start with a word, end "
+        "with a word, stay within a word limit; start and end "
+        "targets are shared per case, so a perfect follower "
+        "passes every arm by construction). Per candidate, 21 "
+        "arms: each constraint alone (solo), the first 2/4/8/16 "
+        "constraints together, and a length-matched sham (the "
+        "first constraint plus neutral text matched to the "
+        "16-constraint block's length). Answers are committed "
+        "as ordered per-word hash lists; every satisfaction "
+        "verdict is derived from the commitment, never stored. "
+        "Headline: the solo-vs-full-density contrast, decided "
+        "per case by an exact sign test with the evidence "
+        "withheld below six discordant cases (insufficient). "
+        "Monday morning: 'my system prompt keeps growing -- "
+        "which of its instructions does this template silently "
+        "drop first, and at what stack depth?' Costs 21 "
+        "generations per candidate per case (10,080 at the "
+        "legal maximum: 24 candidates x 20 cases x 21); each "
+        "generation is one greedy decode over the arm's "
+        "rendered prompt. Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--choice-audit",
         action="store_true",
         help="Choice-scoring audit (cycle 195, research wave-8 "
@@ -1902,6 +1930,49 @@ def _run_rotation_probe(
         result["rotation"] = {
             "available": False,
             "detail": "rotation_unavailable",
+        }
+
+
+def _run_density_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the instruction-density probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import density_analysis, density_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = density_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["density"] = density_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- density must not fail the run
+        result["density"] = {
+            "available": False,
+            "detail": "density_unavailable",
         }
 
 
@@ -3741,6 +3812,24 @@ def main(argv: list[str] | None = None) -> int:
                 # the run.
                 if args.rotate:
                     _run_rotation_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Instruction-density ladder (cycle 204, research
+                # wave-9 rank 3): generated cases whose constraint
+                # prefix grows solo -> 2/4/8/16 against a length-
+                # matched sham, the run's cancel event threaded
+                # into the stage loop. Informational only -- never
+                # changes selection. Never fails the run.
+                if args.density:
+                    _run_density_probe(
                         backend,
                         formats,
                         result,

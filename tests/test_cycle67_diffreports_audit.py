@@ -147,6 +147,7 @@ from model_protocol_lab import (
     choiceaudit,
     confidence,
     dateline,
+    density,
     diffreports,
     distraction,
     experiments,
@@ -292,6 +293,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
         "rotation": {"available": "neither", "changed": False},
+        "density": {"available": "neither", "changed": False},
         "cache_profile": {"available": "neither", "changed": False},
         "template_robustness": {"available": "neither", "changed": False},
         "ablation": {"available": "neither", "changed": False},
@@ -387,6 +389,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "confidence_asymmetric": False,
             "rotation_changed": False,
             "rotation_asymmetric": False,
+            "density_changed": False,
+            "density_asymmetric": False,
             "cache_profile_changed": False,
             "cache_profile_asymmetric": False,
             "template_robustness_changed": False,
@@ -6154,6 +6158,259 @@ def _o_rotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_density_recompute(value: Any) -> dict[str, Any] | None:
+    """Oracle density recompute: mirrors
+    diffreports._density_recompute. The oracle rebuilds the
+    protocol and the case set through the producer module
+    (density) where the implementation rebuilds them from
+    literal tables -- a drift in either side's constants breaks
+    the agreement the fuzz harness asserts."""
+    import json as _json
+
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+        return None
+    expected_protocol = dict(density.protocol_object(seed, backend_fp))
+    expected_protocol["fingerprint"] = density.protocol_fingerprint(seed, backend_fp)
+    if protocol != expected_protocol:
+        return None
+    candidates = value.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = density.generate_cases(seed)
+    total = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if entry.get("status") != "available":
+            return None
+        if set(entry) != {
+            "available",
+            "detail",
+            "n_generated",
+            "n_boundary_screened",
+            "n_detail_screened",
+            "n_no_boundary",
+            "n_zero_word",
+            "n_live",
+            "by_density",
+            "task_presence",
+            "position_k16",
+            "position_bands",
+            "by_kind",
+            "joint_k16",
+            "sham",
+            "discordance_by_position",
+            "decision",
+            "status",
+            "records",
+        }:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(density.ARM_KEYS) * len(generated):
+            return None
+        total += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > density.MAX_DENSITY_PAYLOAD_BYTES:
+            return None
+        expected_order = [
+            (case_index, arm) for case_index in range(len(generated)) for arm in density.ARM_KEYS
+        ]
+        for record, (case_index, arm) in zip(records, expected_order, strict=True):
+            if type(record) is not dict or set(record) != {
+                "candidate",
+                "case_index",
+                "arm",
+                "detail",
+                "case_screened",
+                "boundary_found",
+                "answer_digest",
+                "word_hashes",
+                "word_list_digest",
+                "word_count",
+                "input_tokens",
+                "content_digest",
+            }:
+                return None
+            if record["candidate"] != name:
+                return None
+            if record["case_index"] != case_index or record["arm"] != arm:
+                return None
+            if record["detail"] not in density.RECORD_DETAILS:
+                return None
+            if type(record["case_screened"]) is not bool:
+                return None
+            if type(record["boundary_found"]) is not bool:
+                return None
+            hashes = record["word_hashes"]
+            if type(hashes) is not list or any(
+                not (type(h) is str and len(h) == 64 and all(c in "0123456789abcdef" for c in h))
+                for h in hashes
+            ):
+                return None
+            if record["word_count"] != len(hashes):
+                return None
+            if record["word_list_digest"] != density.commitment_digest(list(hashes)):
+                return None
+            if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                return None
+            if record["answer_digest"] is not None and not (
+                type(record["answer_digest"]) is str
+                and len(record["answer_digest"]) == 64
+                and all(c in "0123456789abcdef" for c in record["answer_digest"])
+            ):
+                return None
+            case = generated[case_index]
+            if record["content_digest"] != density.digest_text(density.arm_content(case, arm)):
+                return None
+            if record["detail"] != "" or record["case_screened"]:
+                if hashes or record["answer_digest"] is not None or record["boundary_found"]:
+                    return None
+            elif record["answer_digest"] is None:
+                return None
+        aggregates[name] = density.aggregate_candidate(records, generated)
+    if total > density.MAX_DENSITY_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_density_valid(value: Any) -> bool:
+    """Oracle density validator: mirrors diffreports._valid_density."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_density_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_density(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle density section: mirrors diffreports.diff_density."""
+    old_ok = _o_density_valid(old)
+    new_ok = _o_density_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            ("verdict", old_entry["decision"]["verdict"], new_entry["decision"]["verdict"]),
+            ("falsified", old_entry["decision"]["falsified"], new_entry["decision"]["falsified"]),
+            ("f", old_entry["decision"]["f"], new_entry["decision"]["f"]),
+            ("p", old_entry["decision"]["p"], new_entry["decision"]["p"]),
+            (
+                "discordant_cases",
+                old_entry["decision"]["discordant_cases"],
+                new_entry["decision"]["discordant_cases"],
+            ),
+            ("sign_p", old_entry["decision"]["sign_p"], new_entry["decision"]["sign_p"]),
+            (
+                "joint_satisfied",
+                old_entry["joint_k16"]["satisfied"],
+                new_entry["joint_k16"]["satisfied"],
+            ),
+            ("joint_live", old_entry["joint_k16"]["live"], new_entry["joint_k16"]["live"]),
+            ("n_live", old_entry["n_live"], new_entry["n_live"]),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+            (
+                "n_detail_screened",
+                old_entry["n_detail_screened"],
+                new_entry["n_detail_screened"],
+            ),
+            ("n_zero_word", old_entry["n_zero_word"], new_entry["n_zero_word"]),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     """Oracle choice-audit recompute: mirrors
     diffreports._choiceaudit_recompute. The oracle rebuilds the
@@ -9571,6 +9828,7 @@ def _oracle_diff(
         old.get("confidence"), new.get("confidence")
     )
     o_rt, o_rt_changed, o_rt_asymmetric = _o_rotation(old.get("rotation"), new.get("rotation"))
+    o_de, o_de_changed, o_de_asymmetric = _o_density(old.get("density"), new.get("density"))
     o_cp, o_cp_changed, o_cp_asymmetric = _o_cache_profile(
         old.get("cache_profile"), new.get("cache_profile")
     )
@@ -9665,6 +9923,8 @@ def _oracle_diff(
         and not o_cfd_asymmetric
         and not o_rt_changed
         and not o_rt_asymmetric
+        and not o_de_changed
+        and not o_de_asymmetric
         and not o_cp_changed
         and not o_cp_asymmetric
         and not o_trob_changed
@@ -9719,6 +9979,7 @@ def _oracle_diff(
         "precision": o_pr,
         "confidence": o_cfd,
         "rotation": o_rt,
+        "density": o_de,
         "cache_profile": o_cp,
         "template_robustness": o_trob,
         "ablation": o_ab,
@@ -9810,6 +10071,8 @@ def _oracle_diff(
             "confidence_asymmetric": o_cfd_asymmetric,
             "rotation_changed": o_rt_changed,
             "rotation_asymmetric": o_rt_asymmetric,
+            "density_changed": o_de_changed,
+            "density_asymmetric": o_de_asymmetric,
             "cache_profile_changed": o_cp_changed,
             "cache_profile_asymmetric": o_cp_asymmetric,
             "template_robustness_changed": o_trob_changed,
@@ -10749,6 +11012,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "confidence_asymmetric": False,
                 "rotation_changed": False,
                 "rotation_asymmetric": False,
+                "density_changed": False,
+                "density_asymmetric": False,
                 "cache_profile_changed": False,
                 "cache_profile_asymmetric": False,
                 "template_robustness_changed": False,
@@ -14649,6 +14914,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not confidence_asymmetric\n"
             '        and not rotation_diff["changed"]\n'
             "        and not rotation_asymmetric\n"
+            '        and not density_diff["changed"]\n'
+            "        and not density_asymmetric\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -14741,6 +15008,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or confidence_asymmetric\n"
             '        or rotation_diff["changed"]\n'
             "        or rotation_asymmetric\n"
+            '        or density_diff["changed"]\n'
+            "        or density_asymmetric\n"
             "    )\n",
             scenario,
         )

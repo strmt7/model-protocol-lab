@@ -722,6 +722,7 @@ def diff_reports(
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
     rotation_diff = diff_rotation(old.get("rotation"), new.get("rotation"))
+    density_diff = diff_density(old.get("density"), new.get("density"))
     cache_profile_diff = diff_cache_profile(old.get("cache_profile"), new.get("cache_profile"))
     template_robustness_diff = diff_template_robustness(
         old.get("template_robustness"), new.get("template_robustness")
@@ -806,6 +807,10 @@ def diff_reports(
         "neither",
     )
     rotation_asymmetric = rotation_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    density_asymmetric = density_diff["available"] not in (
         "both",
         "neither",
     )
@@ -908,6 +913,8 @@ def diff_reports(
         and not confidence_asymmetric
         and not rotation_diff["changed"]
         and not rotation_asymmetric
+        and not density_diff["changed"]
+        and not density_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1000,6 +1007,8 @@ def diff_reports(
         "confidence_asymmetric": confidence_asymmetric,
         "rotation_changed": rotation_diff["changed"],
         "rotation_asymmetric": rotation_asymmetric,
+        "density_changed": density_diff["changed"],
+        "density_asymmetric": density_asymmetric,
         "identical": identical,
     }
     return {
@@ -1045,6 +1054,7 @@ def diff_reports(
         "precision": precision_diff,
         "confidence": confidence_diff,
         "rotation": rotation_diff,
+        "density": density_diff,
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
@@ -11564,6 +11574,1123 @@ def diff_rotation(old: Any, new: Any) -> dict[str, Any]:
         or rotation_protocol_drift
         or rotation_generator_drift
         or rotation_backend_drift
+    )
+    return result
+
+
+_DENSITY_FACT_TEMPLATE = "The {topic} signal word is {value}."
+_DENSITY_QUESTION_TEMPLATE = "What is the {topic} signal word?"
+_DENSITY_CONSTRAINT_TEMPLATES = {
+    "include": "Include the word {target} in your answer.",
+    "start": "Start your answer with the word {target}.",
+    "end": "End your answer with the word {target}.",
+    "count": "Use at most {limit} words in your answer.",
+}
+_DENSITY_LINE_TEMPLATE = "Instruction {position}: {text}"
+_DENSITY_TOPICS = (
+    "archive vault",
+    "boiler room",
+    "loading dock",
+    "records office",
+    "north gate",
+    "pump house",
+    "storage annex",
+    "mail room",
+    "server closet",
+    "roof access",
+    "east stairwell",
+    "water tower",
+    "fuel depot",
+    "tool library",
+    "greenhouse wing",
+    "ferry terminal",
+    "signal cabin",
+    "customs shed",
+    "observatory dome",
+    "print workshop",
+    "harbor station",
+    "tunnel control",
+    "solar array",
+    "wind turbine",
+    "clock tower",
+    "grain silo",
+    "kiln workshop",
+    "sorting office",
+    "parcel depot",
+    "marble quarry",
+)
+_DENSITY_WORDS = (
+    "ochre",
+    "velvet",
+    "cobalt",
+    "saffron",
+    "tundra",
+    "zephyr",
+    "onyx",
+    "pepper",
+    "riddle",
+    "saddle",
+    "temple",
+    "umbrella",
+    "violet",
+    "walnut",
+    "yonder",
+    "zipper",
+    "anchor",
+    "beacon",
+    "cinder",
+    "dagger",
+    "ember",
+    "falcon",
+    "garnet",
+    "helmet",
+    "inkwell",
+    "jubilee",
+    "kestrel",
+    "basalt",
+    "magnet",
+    "nectar",
+    "obelisk",
+    "pumice",
+    "quiver",
+    "rampart",
+    "scepter",
+    "sienna",
+    "utensil",
+    "vortex",
+    "willow",
+    "zenith",
+)
+_DENSITY_TARGET_WORDS = (
+    "basket",
+    "breeze",
+    "candle",
+    "carpet",
+    "delta",
+    "emerald",
+    "feather",
+    "garden",
+    "compass",
+    "island",
+    "jacket",
+    "kettle",
+    "ladder",
+    "meadow",
+    "needle",
+    "orchard",
+    "pencil",
+    "quilt",
+    "ribbon",
+    "bronze",
+    "shadow",
+    "timber",
+    "copper",
+    "window",
+    "yellow",
+    "drizzle",
+    "bridge",
+    "cloud",
+    "drum",
+    "eagle",
+    "flame",
+    "glove",
+    "hammer",
+    "ivory",
+    "jungle",
+    "lemon",
+    "mirror",
+    "night",
+    "ocean",
+    "palace",
+    "quest",
+    "river",
+    "stone",
+    "tiger",
+    "urban",
+    "valley",
+    "winter",
+    "xenon",
+    "glacier",
+    "lantern",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+)
+_DENSITY_NEUTRALS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_DENSITY_CASE_COUNT = 20
+_DENSITY_CONSTRAINT_COUNT = 16
+_DENSITY_DENSITIES = (1, 2, 4, 8, 16)
+_DENSITY_KINDS = ("include", "start", "end", "count")
+_DENSITY_COUNT_PARAMS = (8, 12, 16, 24)
+_DENSITY_SOLO_ARMS = tuple(f"solo_{j}" for j in range(1, _DENSITY_CONSTRAINT_COUNT + 1))
+_DENSITY_ARM_KEYS = _DENSITY_SOLO_ARMS + ("k2", "k4", "k8", "k16") + ("sham",)
+_DENSITY_MAX_NEW_TOKENS = 64
+_DENSITY_MAX_RECORDS = 21 * _DENSITY_CASE_COUNT * 24
+_DENSITY_MAX_PAYLOAD_BYTES = 52 * 1024 * 1024
+_DENSITY_MIN_DISCORDANT_CASES = 6
+_DENSITY_ALPHA = 0.05
+_DENSITY_NEUTRALS_PER_CASE = 15
+_DENSITY_RECORD_DETAILS = ("", "arm_evaluation_failed", "arm_context_exceeded")
+_DENSITY_RECORD_KEYS = {
+    "candidate",
+    "case_index",
+    "arm",
+    "detail",
+    "case_screened",
+    "boundary_found",
+    "answer_digest",
+    "word_hashes",
+    "word_list_digest",
+    "word_count",
+    "input_tokens",
+    "content_digest",
+}
+_DENSITY_AGGREGATE_KEYS = {
+    "available",
+    "detail",
+    "n_generated",
+    "n_boundary_screened",
+    "n_detail_screened",
+    "n_no_boundary",
+    "n_zero_word",
+    "n_live",
+    "by_density",
+    "task_presence",
+    "position_k16",
+    "position_bands",
+    "by_kind",
+    "joint_k16",
+    "sham",
+    "discordance_by_position",
+    "decision",
+}
+_DENSITY_GENERATION_RULE_TEXT = (
+    "Cases are derived from the run seed by SHA-256 draws "
+    "material=f'{seed}|density|{index}|{slot}|{counter}'. Per case, "
+    "slots are drawn in this order: 0 task topic, 1 task value, "
+    "10..24 the case's fifteen neutral statements (distinct, in "
+    "drawn order), then constraint parameters -- include targets "
+    "at slots 30..33 in position order, the shared start target "
+    "at slot 34, the shared end target at slot 35, count limits "
+    "at slots 40..43 in position order, drawn without "
+    "replacement from {8, 12, 16, 24}. A "
+    "case's sixteen constraint kinds are fixed by the kind cycle "
+    "(include, start, end, count) rotated by the case index. A "
+    "word target redraws at its own slot's next counter while it "
+    "equals the task value, equals another target group of the "
+    "case, or -- for position 1's target only -- occurs in a "
+    "neutral statement of the case; occurrence means normalized-"
+    "word equality. All start constraints of a case share the "
+    "start target and all end constraints share the end target, "
+    "so a case has at most seven distinct word targets (four "
+    "include, one start, one end, the task value), below the "
+    "smallest count limit."
+)
+_DENSITY_RENDERING_RULE_TEXT = (
+    "A case's user turn is the task fact, the task question, "
+    "and the arm's instruction block, joined by a blank line. "
+    "A constraint renders through its kind template and is "
+    "always labelled with its own position: 'Instruction "
+    "{position}: {text}' -- in solo arms too, so a constraint's "
+    "position label is identical in every arm that carries it. "
+    "A density arm's block is the first K rendered constraints "
+    "in position order. A solo arm's block is the single "
+    "rendered constraint. The sham arm's block is constraint "
+    "1's rendered line followed by bare neutral statements (no "
+    "label), appended in drawn order, wrapping to the start of "
+    "the drawn list, until the block's word count first reaches "
+    "or exceeds the k16 block's word count; block word count is "
+    "the normalized-word count of the block text."
+)
+_DENSITY_CHECKING_RULE_TEXT = (
+    "A word is a maximal run of alphanumeric characters, "
+    "case-folded. The commitment of an answer is the ordered "
+    "list of SHA-256 hashes of its words; the list digest is "
+    "SHA-256 of the compact-JSON list. Satisfaction is derived "
+    "from the list: include = the target's hash occurs in the "
+    "list; start = the list's first hash is the target's; end "
+    "= the list's last hash is the target's; count = the "
+    "list's length is at most the limit. The task value is "
+    "present iff its hash occurs in the list. Aggregation "
+    "excludes zero-word live records from count-kind checked "
+    "denominators. The falsification decision aggregates "
+    "solo-vs-k16 discordance per case and applies the exact "
+    "two-sided sign test over discordant cases."
+)
+
+
+def _density_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    density.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _density_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest (fails closed on lone surrogates, the cycle-190
+    discipline)."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _density_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of density._derive (frozen material string)."""
+    import hashlib as _hashlib
+
+    material = f"{seed}|density|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _density_normalize_words(text: str) -> list[str]:
+    """Mirror of density.normalize_words."""
+    words: list[str] = []
+    current: list[str] = []
+    for char in text:
+        if char.isalnum():
+            current.append(char)
+        elif current:
+            words.append("".join(current).casefold())
+            current = []
+    if current:
+        words.append("".join(current).casefold())
+    return words
+
+
+def _density_kind_at(case_index: int, position: int) -> str:
+    """Mirror of density.kind_at."""
+    return _DENSITY_KINDS[(position - 1 + case_index) % len(_DENSITY_KINDS)]
+
+
+def _density_draw_word(seed: int, index: int, slot: int, forbidden: set[str]) -> str:
+    """Mirror of density._draw_word."""
+    counter = 0
+    while True:
+        word = _DENSITY_TARGET_WORDS[
+            _density_derive(seed, index, slot, counter) % len(_DENSITY_TARGET_WORDS)
+        ]
+        if word not in forbidden:
+            return word
+        counter += 1
+
+
+def _density_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of density.generate_cases: the frozen case set
+    for a seed, regenerated from the protocol's own seed so a
+    payload cannot present a different instrument under the
+    same protocol."""
+    cases: list[dict[str, Any]] = []
+    for index in range(_DENSITY_CASE_COUNT):
+        topic = _DENSITY_TOPICS[_density_derive(seed, index, 0, 0) % len(_DENSITY_TOPICS)]
+        value = _DENSITY_WORDS[_density_derive(seed, index, 1, 0) % len(_DENSITY_WORDS)]
+        neutrals: list[str] = []
+        chosen: set[int] = set()
+        for k in range(_DENSITY_NEUTRALS_PER_CASE):
+            counter = 0
+            while True:
+                pick = _density_derive(seed, index, 10 + k, counter) % len(_DENSITY_NEUTRALS)
+                if pick not in chosen:
+                    break
+                counter += 1
+            chosen.add(pick)
+            neutrals.append(_DENSITY_NEUTRALS[pick])
+        neutral_words: set[str] = set()
+        for statement in neutrals:
+            neutral_words.update(_density_normalize_words(statement))
+        include_targets: list[str] = []
+        forbidden: set[str] = {value}
+        for slot in (30, 31, 32, 33):
+            word = _density_draw_word(seed, index, slot, forbidden)
+            include_targets.append(word)
+            forbidden.add(word)
+        start_target = _density_draw_word(seed, index, 34, forbidden)
+        forbidden.add(start_target)
+        end_target = _density_draw_word(seed, index, 35, forbidden)
+        forbidden.add(end_target)
+        first_kind = _density_kind_at(index, 1)
+        if first_kind in ("include", "start", "end"):
+            current = (
+                include_targets[0]
+                if first_kind == "include"
+                else start_target
+                if first_kind == "start"
+                else end_target
+            )
+            if current in neutral_words:
+                slot = 30 if first_kind == "include" else 34 if first_kind == "start" else 35
+                fresh = _density_draw_word(seed, index, slot, forbidden | neutral_words)
+                if first_kind == "include":
+                    include_targets[0] = fresh
+                elif first_kind == "start":
+                    start_target = fresh
+                else:
+                    end_target = fresh
+                forbidden.discard(current)
+                forbidden.add(fresh)
+        limit_pool = list(_DENSITY_COUNT_PARAMS)
+        count_limits: list[int] = []
+        for slot in (40, 41, 42, 43):
+            pick = _density_derive(seed, index, slot, 0) % len(limit_pool)
+            count_limits.append(limit_pool.pop(pick))
+        constraints: list[dict[str, Any]] = []
+        pools = {
+            "include": iter(include_targets),
+            "start": iter([start_target] * 4),
+            "end": iter([end_target] * 4),
+            "count": iter(count_limits),
+        }
+        for position in range(1, _DENSITY_CONSTRAINT_COUNT + 1):
+            kind = _density_kind_at(index, position)
+            if kind == "count":
+                constraints.append(
+                    {"position": position, "kind": kind, "limit": next(pools["count"])}
+                )
+            elif kind == "include":
+                constraints.append(
+                    {"position": position, "kind": kind, "target": next(pools["include"])}
+                )
+            else:
+                constraints.append(
+                    {"position": position, "kind": kind, "target": next(pools[kind])}
+                )
+        cases.append(
+            {
+                "fixture_id": f"density-{index:02d}",
+                "topic": topic,
+                "value": value,
+                "fact": _DENSITY_FACT_TEMPLATE.format(topic=topic, value=value),
+                "question": _DENSITY_QUESTION_TEMPLATE.format(topic=topic),
+                "constraints": constraints,
+                "neutrals": neutrals,
+                "expected_word_digest": _density_digest(value),
+            }
+        )
+    return cases
+
+
+def _density_render_constraint(constraint: dict[str, Any]) -> str:
+    """Mirror of density._render_constraint."""
+    kind = str(constraint["kind"])
+    if kind == "count":
+        text = _DENSITY_CONSTRAINT_TEMPLATES["count"].format(limit=constraint["limit"])
+    else:
+        text = _DENSITY_CONSTRAINT_TEMPLATES[kind].format(target=constraint["target"])
+    return _DENSITY_LINE_TEMPLATE.format(position=constraint["position"], text=text)
+
+
+def _density_arm_block(case: dict[str, Any], arm: str) -> str:
+    """Mirror of density._arm_block."""
+    constraints = case["constraints"]
+    if arm.startswith("solo_"):
+        j = int(arm.split("_")[1])
+        return "\n".join([_density_render_constraint(constraints[j - 1])])
+    if arm.startswith("k"):
+        k = int(arm[1:])
+        return "\n".join(_density_render_constraint(c) for c in constraints[:k])
+    if arm == "sham":
+        first = _density_render_constraint(constraints[0])
+        target = len(_density_normalize_words(_density_arm_block(case, "k16")))
+        lines = [first]
+        words = len(_density_normalize_words(first))
+        pool = list(case["neutrals"])
+        index = 0
+        while words < target:
+            statement = pool[index % len(pool)]
+            lines.append(statement)
+            words += len(_density_normalize_words(statement))
+            index += 1
+        return "\n".join(lines)
+    raise ValueError(f"unknown density arm: {arm!r}")
+
+
+def _density_arm_block_words(case: dict[str, Any], arm: str) -> int:
+    """Mirror of density.arm_block_words."""
+    return len(_density_normalize_words(_density_arm_block(case, arm)))
+
+
+def _density_arm_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of density.arm_content."""
+    return "\n\n".join([str(case["fact"]), str(case["question"]), _density_arm_block(case, arm)])
+
+
+def _density_case_material_sha256() -> str:
+    """Mirror of density.case_material_sha256."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _DENSITY_FACT_TEMPLATE,
+            _DENSITY_QUESTION_TEMPLATE,
+            _DENSITY_CONSTRAINT_TEMPLATES,
+            _DENSITY_LINE_TEMPLATE,
+            list(_DENSITY_TOPICS),
+            list(_DENSITY_WORDS),
+            list(_DENSITY_TARGET_WORDS),
+            list(_DENSITY_NEUTRALS),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _density_digest(canonical)
+
+
+def _density_ground_sha256(seed: int) -> str:
+    """Mirror of density.ground_sha256."""
+    import json as _json
+
+    rows: list[list[Any]] = []
+    for case in _density_generate(seed):
+        rows.append(
+            [
+                case["fixture_id"],
+                case["topic"],
+                case["value"],
+                [
+                    [c["position"], c["kind"], c.get("target"), c.get("limit")]
+                    for c in case["constraints"]
+                ],
+                list(case["neutrals"]),
+            ]
+        )
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _density_digest(canonical)
+
+
+def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The density protocol rebuilt from this module's own
+    literals plus the payload's seed and backend fingerprint,
+    fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_DENSITY_ARM_KEYS),
+        "case_count": _DENSITY_CASE_COUNT,
+        "constraint_count": _DENSITY_CONSTRAINT_COUNT,
+        "densities": list(_DENSITY_DENSITIES),
+        "count_params": list(_DENSITY_COUNT_PARAMS),
+        "case_material_sha256": _density_case_material_sha256(),
+        "ground_sha256": _density_ground_sha256(seed),
+        "generation_rule_sha256": _density_digest(_DENSITY_GENERATION_RULE_TEXT),
+        "rendering_rule_sha256": _density_digest(_DENSITY_RENDERING_RULE_TEXT),
+        "checking_rule_sha256": _density_digest(_DENSITY_CHECKING_RULE_TEXT),
+        "min_discordant_cases": _DENSITY_MIN_DISCORDANT_CASES,
+        "alpha": _DENSITY_ALPHA,
+        "max_new_tokens": _DENSITY_MAX_NEW_TOKENS,
+        "max_density_records": _DENSITY_MAX_RECORDS,
+        "max_density_payload_bytes": _DENSITY_MAX_PAYLOAD_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _density_digest(canonical)
+    return protocol
+
+
+def _density_commitment_digest(hashes: list[str]) -> str:
+    """Mirror of density.commitment_digest."""
+    import json as _json
+
+    canonical = _json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
+    return _density_digest(canonical)
+
+
+def _density_satisfied(constraint: dict[str, Any], hashes: list[str]) -> bool:
+    """Mirror of density.satisfied."""
+    kind = str(constraint["kind"])
+    if kind == "count":
+        return len(hashes) <= int(constraint["limit"])
+    target = _density_digest(str(constraint["target"]))
+    if kind == "include":
+        return target in hashes
+    if kind == "start":
+        return bool(hashes) and hashes[0] == target
+    if kind == "end":
+        return bool(hashes) and hashes[-1] == target
+    raise ValueError(f"unknown constraint kind: {kind!r}")
+
+
+def _density_task_present(case: dict[str, Any], hashes: list[str]) -> bool:
+    """Mirror of density.task_present."""
+    return str(case["expected_word_digest"]) in hashes
+
+
+def _density_sign_test_p(n_pos: int, n_neg: int) -> float:
+    """Mirror of density.sign_test_p."""
+    import math as _math
+
+    n = n_pos + n_neg
+    if n == 0:
+        return 1.0
+    k = min(n_pos, n_neg)
+    tail: float = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    return min(1.0, 2.0 * tail)
+
+
+def _density_live(record: dict[str, Any]) -> bool:
+    """Mirror of density._live."""
+    return (
+        record.get("detail") == ""
+        and not record.get("case_screened")
+        and bool(record.get("boundary_found"))
+    )
+
+
+def _density_rate(numerator: int, denominator: int) -> float | None:
+    """Mirror of density._rate."""
+    return numerator / denominator if denominator else None
+
+
+def _density_eligible(constraint: dict[str, Any], hashes: list[str]) -> bool:
+    """Mirror of density._eligible."""
+    return not (constraint["kind"] == "count" and not hashes)
+
+
+def _density_aggregate(
+    records: list[dict[str, Any]], cases: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Mirror of density.aggregate_candidate."""
+    by_key: dict[tuple[int, str], dict[str, Any]] = {}
+    for record in records:
+        by_key[(int(record["case_index"]), str(record["arm"]))] = record
+    n_generated = len(records)
+    n_boundary_screened = sum(1 for r in records if r.get("case_screened"))
+    rest = [r for r in records if not r.get("case_screened")]
+    n_detail_screened = sum(1 for r in rest if r.get("detail") != "")
+    rest = [r for r in rest if r.get("detail") == ""]
+    n_no_boundary = sum(1 for r in rest if not r.get("boundary_found"))
+    live = [r for r in rest if r.get("boundary_found")]
+    n_zero_word = sum(1 for r in live if len(r.get("word_hashes") or []) == 0)
+    block: dict[str, Any] = {
+        "available": bool(live),
+        "detail": "" if live else "density_unavailable",
+        "n_generated": n_generated,
+        "n_boundary_screened": n_boundary_screened,
+        "n_detail_screened": n_detail_screened,
+        "n_no_boundary": n_no_boundary,
+        "n_zero_word": n_zero_word,
+        "n_live": len(live),
+    }
+
+    def hashes_of(record: dict[str, Any]) -> list[str]:
+        return list(record.get("word_hashes") or [])
+
+    def case_of(record: dict[str, Any]) -> dict[str, Any]:
+        return cases[int(record["case_index"])]
+
+    density_rows: list[dict[str, Any]] = []
+    for k in _DENSITY_DENSITIES:
+        arm = "solo_1" if k == 1 else f"k{k}"
+        sat = checked = 0
+        solo_sat = solo_checked = 0
+        for record in live:
+            if record["arm"] != arm:
+                continue
+            case = case_of(record)
+            hashes = hashes_of(record)
+            for constraint in case["constraints"][:k]:
+                if not _density_eligible(constraint, hashes):
+                    continue
+                checked += 1
+                sat += _density_satisfied(constraint, hashes)
+        for record in live:
+            if not str(record["arm"]).startswith("solo_"):
+                continue
+            j = int(str(record["arm"]).split("_")[1])
+            if j > k:
+                continue
+            case = case_of(record)
+            constraint = case["constraints"][j - 1]
+            if not _density_eligible(constraint, hashes_of(record)):
+                continue
+            solo_checked += 1
+            solo_sat += _density_satisfied(constraint, hashes_of(record))
+        density_rows.append(
+            {
+                "density": k,
+                "satisfied": sat,
+                "checked": checked,
+                "rate": _density_rate(sat, checked),
+                "solo_satisfied": solo_sat,
+                "solo_checked": solo_checked,
+                "solo_rate": _density_rate(solo_sat, solo_checked),
+            }
+        )
+    block["by_density"] = density_rows
+
+    presence_rows: list[dict[str, Any]] = []
+    for arm in _DENSITY_ARM_KEYS:
+        present = total = 0
+        for record in live:
+            if record["arm"] != arm:
+                continue
+            total += 1
+            present += _density_task_present(case_of(record), hashes_of(record))
+        presence_rows.append(
+            {
+                "arm": arm,
+                "present": present,
+                "live": total,
+                "rate": _density_rate(present, total),
+            }
+        )
+    block["task_presence"] = presence_rows
+
+    k16_live = [r for r in live if r["arm"] == "k16"]
+    position_rows: list[dict[str, Any]] = []
+    for position in range(1, _DENSITY_CONSTRAINT_COUNT + 1):
+        sat = total = 0
+        for record in k16_live:
+            constraint = case_of(record)["constraints"][position - 1]
+            if not _density_eligible(constraint, hashes_of(record)):
+                continue
+            total += 1
+            sat += _density_satisfied(constraint, hashes_of(record))
+        position_rows.append(
+            {
+                "position": position,
+                "satisfied": sat,
+                "checked": total,
+                "rate": _density_rate(sat, total),
+            }
+        )
+    block["position_k16"] = position_rows
+    bands: list[dict[str, Any]] = []
+    for label, lo, hi in (("early", 1, 5), ("mid", 6, 11), ("late", 12, 16)):
+        sat = sum(r["satisfied"] for r in position_rows[lo - 1 : hi])
+        total = sum(r["checked"] for r in position_rows[lo - 1 : hi])
+        bands.append(
+            {"band": label, "satisfied": sat, "checked": total, "rate": _density_rate(sat, total)}
+        )
+    block["position_bands"] = bands
+
+    kind_rows: list[dict[str, Any]] = []
+    for kind in _DENSITY_KINDS:
+        row: dict[str, Any] = {"kind": kind}
+        for label, arms in (("solo", _DENSITY_SOLO_ARMS), ("k16", ("k16",))):
+            sat = checked = 0
+            for record in live:
+                if record["arm"] not in arms:
+                    continue
+                case = case_of(record)
+                hashes = hashes_of(record)
+                if label == "solo":
+                    j = int(str(record["arm"]).split("_")[1])
+                    constraint = case["constraints"][j - 1]
+                    if constraint["kind"] != kind:
+                        continue
+                    if not _density_eligible(constraint, hashes):
+                        continue
+                    checked += 1
+                    sat += _density_satisfied(constraint, hashes)
+                else:
+                    for constraint in case["constraints"]:
+                        if constraint["kind"] != kind:
+                            continue
+                        if not _density_eligible(constraint, hashes):
+                            continue
+                        checked += 1
+                        sat += _density_satisfied(constraint, hashes)
+            row[f"{label}_satisfied"] = sat
+            row[f"{label}_checked"] = checked
+            row[f"{label}_rate"] = _density_rate(sat, checked)
+        kind_rows.append(row)
+    block["by_kind"] = kind_rows
+
+    joint_sat = 0
+    for record in k16_live:
+        case = case_of(record)
+        hashes = hashes_of(record)
+        if all(_density_satisfied(c, hashes) for c in case["constraints"]):
+            joint_sat += 1
+    block["joint_k16"] = {
+        "satisfied": joint_sat,
+        "live": len(k16_live),
+        "rate": _density_rate(joint_sat, len(k16_live)),
+    }
+
+    sham_cases = [
+        case_index
+        for case_index in range(len(cases))
+        if all(
+            (case_index, arm) in by_key and _density_live(by_key[(case_index, arm)])
+            for arm in ("solo_1", "sham", "k16")
+        )
+    ]
+    sham_row: dict[str, Any] = {"cases": len(sham_cases)}
+    for arm in ("solo_1", "sham", "k16"):
+        sat = 0
+        for case_index in sham_cases:
+            record = by_key[(case_index, arm)]
+            constraint = cases[case_index]["constraints"][0]
+            if not _density_eligible(constraint, hashes_of(record)):
+                continue
+            sat += _density_satisfied(constraint, hashes_of(record))
+        sham_row[f"{arm}_satisfied"] = sat
+        sham_row[f"{arm}_rate"] = _density_rate(sat, len(sham_cases))
+    if sham_cases:
+        sham_row["sham_block_words_mean"] = sum(
+            _density_arm_block_words(cases[i], "sham") for i in sham_cases
+        ) / len(sham_cases)
+        sham_row["k16_block_words_mean"] = sum(
+            _density_arm_block_words(cases[i], "k16") for i in sham_cases
+        ) / len(sham_cases)
+    else:
+        sham_row["sham_block_words_mean"] = None
+        sham_row["k16_block_words_mean"] = None
+    block["sham"] = sham_row
+
+    per_position: list[dict[str, Any]] = [
+        {"position": position, "f": 0, "p": 0}
+        for position in range(1, _DENSITY_CONSTRAINT_COUNT + 1)
+    ]
+    total_f = total_p = 0
+    case_discordance: list[int] = []
+    for case_index, case in enumerate(cases):
+        d_c = 0
+        for position in range(1, _DENSITY_CONSTRAINT_COUNT + 1):
+            solo = by_key.get((case_index, f"solo_{position}"))
+            full = by_key.get((case_index, "k16"))
+            if solo is None or full is None or not _density_live(solo) or not _density_live(full):
+                continue
+            constraint = case["constraints"][position - 1]
+            if not _density_eligible(constraint, hashes_of(solo)) or not _density_eligible(
+                constraint, hashes_of(full)
+            ):
+                continue
+            solo_ok = _density_satisfied(constraint, hashes_of(solo))
+            full_ok = _density_satisfied(constraint, hashes_of(full))
+            row = per_position[position - 1]
+            if solo_ok and not full_ok:
+                row["f"] += 1
+                total_f += 1
+                d_c += 1
+            elif full_ok and not solo_ok:
+                row["p"] += 1
+                total_p += 1
+                d_c -= 1
+        case_discordance.append(d_c)
+    block["discordance_by_position"] = per_position
+    discordant_cases = [d for d in case_discordance if d != 0]
+    n_pos = sum(1 for d in discordant_cases if d > 0)
+    n_neg = sum(1 for d in discordant_cases if d < 0)
+    p_value = _density_sign_test_p(n_pos, n_neg)
+    decision: dict[str, Any] = {
+        "f": total_f,
+        "p": total_p,
+        "discordant_cases": len(discordant_cases),
+        "cases_positive": n_pos,
+        "cases_negative": n_neg,
+        "sign_p": p_value,
+    }
+    if len(discordant_cases) < _DENSITY_MIN_DISCORDANT_CASES:
+        decision["verdict"] = "insufficient"
+        decision["falsified"] = None
+    else:
+        falsified = total_f > total_p and p_value <= _DENSITY_ALPHA
+        decision["verdict"] = "falsified" if falsified else "not_falsified"
+        decision["falsified"] = falsified
+    block["decision"] = decision
+    return block
+
+
+def _density_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a density payload from its ground records.
+
+    The validator carries its own generator mirror, templates,
+    pools, and aggregator (no imports from density.py): the
+    protocol is rebuilt from frozen scalars plus the payload's
+    seed and backend fingerprint and compared whole; the case
+    set is regenerated from the seed and every record's
+    content digest is compared against the re-rendered arm;
+    every record's commitment is verified (list digest and
+    count) and every satisfaction verdict, readout, and the
+    falsification decision is re-derived from the commitments
+    and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _density_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _density_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available":
+            return None
+        if set(entry) != _DENSITY_AGGREGATE_KEYS | {"status", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(_DENSITY_ARM_KEYS) * len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _DENSITY_MAX_PAYLOAD_BYTES:
+            return None
+        expected_order = [
+            (case_index, arm) for case_index in range(len(generated)) for arm in _DENSITY_ARM_KEYS
+        ]
+        for record, (case_index, arm) in zip(records, expected_order, strict=True):
+            if type(record) is not dict or set(record) != _DENSITY_RECORD_KEYS:
+                return None
+            if record["candidate"] != name:
+                return None
+            if record["case_index"] != case_index or record["arm"] != arm:
+                return None
+            if record["detail"] not in _DENSITY_RECORD_DETAILS:
+                return None
+            if type(record["case_screened"]) is not bool:
+                return None
+            if type(record["boundary_found"]) is not bool:
+                return None
+            hashes = record["word_hashes"]
+            if type(hashes) is not list or any(not _density_digest_ok(h) for h in hashes):
+                return None
+            if record["word_count"] != len(hashes):
+                return None
+            if record["word_list_digest"] != _density_commitment_digest(list(hashes)):
+                return None
+            if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                return None
+            if record["answer_digest"] is not None and not _density_digest_ok(
+                record["answer_digest"]
+            ):
+                return None
+            case = generated[case_index]
+            if record["content_digest"] != _density_digest(_density_arm_content(case, arm)):
+                return None
+            if record["detail"] != "" or record["case_screened"]:
+                # A screened or degraded record carries no
+                # generation: the empty commitment, no answer
+                # digest, no boundary.
+                if hashes or record["answer_digest"] is not None or record["boundary_found"]:
+                    return None
+            else:
+                # A completed record carries the generation's
+                # answer digest (its boundary may or may not
+                # have been found; that is a measurement).
+                if record["answer_digest"] is None:
+                    return None
+        aggregates[name] = _density_aggregate(records, generated)
+    if total_records > _DENSITY_MAX_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_density(payload: Any) -> bool:
+    """Structural check for a ``density`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _density_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_density(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``density`` probe payloads; deterministic.
+
+    Answers "did the density story change between runs?":
+    per-candidate endpoint verdict and falsification drift,
+    the discordance counts, joint satisfaction at full
+    density, the screening accounting, candidates
+    added/removed, and protocol / generator / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the generated set is the
+    treatment, so a changed generator is protocol drift). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_density(old)
+    new_ok = _valid_density(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    density_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get(
+        "fingerprint"
+    )
+    density_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    density_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    density_comparable = (
+        not density_protocol_drift and not density_generator_drift and not density_backend_drift
+    )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    density_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    density_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    density_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                density_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        density_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "verdict",
+                old_entry["decision"]["verdict"],
+                new_entry["decision"]["verdict"],
+            ),
+            (
+                "falsified",
+                old_entry["decision"]["falsified"],
+                new_entry["decision"]["falsified"],
+            ),
+            ("f", old_entry["decision"]["f"], new_entry["decision"]["f"]),
+            ("p", old_entry["decision"]["p"], new_entry["decision"]["p"]),
+            (
+                "discordant_cases",
+                old_entry["decision"]["discordant_cases"],
+                new_entry["decision"]["discordant_cases"],
+            ),
+            (
+                "sign_p",
+                old_entry["decision"]["sign_p"],
+                new_entry["decision"]["sign_p"],
+            ),
+            (
+                "joint_satisfied",
+                old_entry["joint_k16"]["satisfied"],
+                new_entry["joint_k16"]["satisfied"],
+            ),
+            (
+                "joint_live",
+                old_entry["joint_k16"]["live"],
+                new_entry["joint_k16"]["live"],
+            ),
+            ("n_live", old_entry["n_live"], new_entry["n_live"]),
+            (
+                "n_boundary_screened",
+                old_entry["n_boundary_screened"],
+                new_entry["n_boundary_screened"],
+            ),
+            (
+                "n_detail_screened",
+                old_entry["n_detail_screened"],
+                new_entry["n_detail_screened"],
+            ),
+            ("n_zero_word", old_entry["n_zero_word"], new_entry["n_zero_word"]),
+        ]
+        for metric, old_value, new_value in density_metrics:
+            if old_value != new_value:
+                density_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    result["candidate_drift"] = density_candidate_drift
+    result["candidates_added"] = density_candidates_added
+    result["candidates_removed"] = density_candidates_removed
+    result["protocol_drift"] = density_protocol_drift
+    result["generator_drift"] = density_generator_drift
+    result["backend_drift"] = density_backend_drift
+    result["comparable"] = density_comparable
+    result["changed"] = bool(
+        density_candidate_drift
+        or density_candidates_added
+        or density_candidates_removed
+        or density_protocol_drift
+        or density_generator_drift
+        or density_backend_drift
     )
     return result
 

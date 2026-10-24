@@ -5297,6 +5297,159 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_density_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_density: exact top-level
+        # shape, the protocol rebuilt through the producer
+        # module (density) where the implementation rebuilds
+        # it from literal tables, every record checked against
+        # the producer-regenerated case set in canonical
+        # (case, arm) order, every record's commitment verified
+        # (list digest and count), every arm's content digest
+        # compared against the re-rendered arm content, and
+        # the aggregates recomputed through the producer's
+        # pure aggregation. A drift in either side's constants
+        # breaks the agreement.
+        import json as _json
+
+        from model_protocol_lab import density as _dn
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_dn.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _dn.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _dn.generate_cases(seed)
+        total = 0
+        records_bytes = 0
+        aggregates: dict[str, Any] = {}
+        aggregate_keys = {
+            "available",
+            "detail",
+            "n_generated",
+            "n_boundary_screened",
+            "n_detail_screened",
+            "n_no_boundary",
+            "n_zero_word",
+            "n_live",
+            "by_density",
+            "task_presence",
+            "position_k16",
+            "position_bands",
+            "by_kind",
+            "joint_k16",
+            "sham",
+            "discordance_by_position",
+            "decision",
+        }
+        record_keys = {
+            "candidate",
+            "case_index",
+            "arm",
+            "detail",
+            "case_screened",
+            "boundary_found",
+            "answer_digest",
+            "word_hashes",
+            "word_list_digest",
+            "word_count",
+            "input_tokens",
+            "content_digest",
+        }
+
+        def _digest_ok(v: Any) -> bool:
+            return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available":
+                return False
+            if set(entry) != aggregate_keys | {"status", "records"}:
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(_dn.ARM_KEYS) * len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _dn.MAX_DENSITY_PAYLOAD_BYTES:
+                return False
+            expected_order = [
+                (case_index, arm) for case_index in range(len(generated)) for arm in _dn.ARM_KEYS
+            ]
+            for record, (case_index, arm) in zip(records, expected_order, strict=True):
+                if type(record) is not dict or set(record) != record_keys:
+                    return False
+                if record["candidate"] != name:
+                    return False
+                if record["case_index"] != case_index or record["arm"] != arm:
+                    return False
+                if record["detail"] not in _dn.RECORD_DETAILS:
+                    return False
+                if type(record["case_screened"]) is not bool:
+                    return False
+                if type(record["boundary_found"]) is not bool:
+                    return False
+                hashes = record["word_hashes"]
+                if type(hashes) is not list or any(not _digest_ok(h) for h in hashes):
+                    return False
+                if record["word_count"] != len(hashes):
+                    return False
+                if record["word_list_digest"] != _dn.commitment_digest(list(hashes)):
+                    return False
+                if type(record["input_tokens"]) is not int or record["input_tokens"] < 0:
+                    return False
+                if record["answer_digest"] is not None and not _digest_ok(record["answer_digest"]):
+                    return False
+                case = generated[case_index]
+                if record["content_digest"] != _dn.digest_text(_dn.arm_content(case, arm)):
+                    return False
+                if record["detail"] != "" or record["case_screened"]:
+                    if hashes or record["answer_digest"] is not None or record["boundary_found"]:
+                        return False
+                elif record["answer_digest"] is None:
+                    return False
+            aggregates[name] = _dn.aggregate_candidate(records, generated)
+        if total > _dn.MAX_DENSITY_RECORDS:
+            return False
+        if not aggregates:
+            return False
+        for name, expected in aggregates.items():
+            entry = candidates[name]
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(generated))
+
     def _or_choiceaudit_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_choiceaudit: exact top-level
         # shape, the protocol rebuilt through the producer module
@@ -6462,6 +6615,18 @@ def oracle_diff_reports(
         _o_rt_available = "neither"
     _o_rt_asymmetric = _o_rt_available not in ("both", "neither")
 
+    _de_old_ok = _or_density_valid(old.get("density"))
+    _de_new_ok = _or_density_valid(new.get("density"))
+    if _de_old_ok and _de_new_ok:
+        _o_de_available = "both"
+    elif _de_old_ok:
+        _o_de_available = "old"
+    elif _de_new_ok:
+        _o_de_available = "new"
+    else:
+        _o_de_available = "neither"
+    _o_de_asymmetric = _o_de_available not in ("both", "neither")
+
     _ca_old_ok = _or_choiceaudit_valid(old.get("choice_audit"))
     _ca_new_ok = _or_choiceaudit_valid(new.get("choice_audit"))
     if _ca_old_ok and _ca_new_ok:
@@ -6573,6 +6738,7 @@ def oracle_diff_reports(
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
         and not _o_rt_asymmetric
+        and not _o_de_asymmetric
         and not _o_ca_asymmetric
         and not _o_pr_asymmetric
         and not _o_cn_asymmetric
@@ -6663,6 +6829,8 @@ def oracle_diff_reports(
         "confidence_asymmetric": _o_cn_asymmetric,
         "rotation_changed": False,
         "rotation_asymmetric": _o_rt_asymmetric,
+        "density_changed": False,
+        "density_asymmetric": _o_de_asymmetric,
         "cache_profile_changed": False,
         "cache_profile_asymmetric": _o_cp_asymmetric,
         "template_robustness_changed": False,
@@ -6718,6 +6886,7 @@ def oracle_diff_reports(
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},
         "rotation": {"available": _o_rt_available, "changed": False},
+        "density": {"available": _o_de_available, "changed": False},
         "cache_profile": {"available": _o_cp_available, "changed": False},
         "template_robustness": {"available": _o_trob_available, "changed": False},
         "ablation": {"available": _o_ab_available, "changed": False},
