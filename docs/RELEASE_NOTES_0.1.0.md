@@ -2,7 +2,11 @@
 
 **Status: DRAFT notes.** Prepared 2026-10-16 by the release-readiness
 audit worker. These notes are pending the owner's release tag; no tag
-has been created.
+has been created. Maintainer: review this draft before tagging — the
+release workflow uses this file for the release notes when its
+version matches the tag (the versioned RELEASE_NOTES file for
+that tag), and falls back to a fixed template when no such
+file exists.
 
 ## What this is
 

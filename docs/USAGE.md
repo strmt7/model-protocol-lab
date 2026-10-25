@@ -228,6 +228,49 @@ Output requires a new directory and will not overwrite an existing one. Inspect 
 
 Exit status: 0 for compatibility on the supplied fixture set; 2 for completed negative or ambiguous decisions; 130 for cancellation; 1 for recorded evaluator failure or caught initialization, loading or filesystem errors. Argument-parser errors also return 2. Inspect the decision field rather than interpreting exit 2 alone.
 
+Exit codes for every subcommand (the table is the contract; a
+failure path always exits non-zero with a fixed-vocabulary message
+on stderr, never a traceback):
+
+| Subcommand | 0 | Non-zero |
+| --- | --- | --- |
+| `catalog` | listed the catalog | — (no failure code; misuse is an argparse error, 2) |
+| `inspect` | fixture file valid | 1 invalid fixture file |
+| `doctor` | verdict `ok` | 1 any other verdict |
+| `run` | decision `compatible_on_fixture_set` | 2 negative or ambiguous decision; 130 cancellation; 1 recorded evaluator failure or caught initialization, loading, or filesystem error |
+| `fixtures build` | fixture file written | 1 invalid authoring source or output collision |
+| `fixtures fuzz` | report `ok` | 1 otherwise |
+| `diff-reports` | comparison written, even when it finds differences | 1 input load failure |
+| `diff-backends` | comparison written | 1 tokenizer, encode, or validation failure |
+| `debug` | session or script completed | 1 invalid dataset, tokenizer, or script |
+| `surface-noise probe` | probe completed | 2 cancelled; 3 unavailable; 1 invalid input |
+| `surface-noise diff`, `surface-noise protocol` | completed | 1 invalid input |
+| `verify` | verdict `ok` | 2 any other verdict; 1 when the determinism-audit backend cannot initialize, or on a bundle `ValueError` |
+| `pack` | bundle written | 1 fixed-vocabulary failure (unreadable entry, unwritable output, or similar) |
+
+The `run` code 2 is deliberately shared: a negative or ambiguous
+decision and an argparse usage error both return 2, which is why
+the decision field — not the exit code alone — is the verdict for
+`run`.
+
+Output contract: machine-parseable JSON goes to stdout for
+`catalog`, `inspect`, `doctor`, `fixtures`, `run`, `verify`,
+`pack`, `diff-reports`, `diff-backends`, and `surface-noise`;
+human-readable summaries, warnings, and progress notes go to
+stderr, so stdout stays parseable when stderr is discarded. A
+long `run` prints nothing until it finishes — there is no
+progress heartbeat and no `--verbose` flag; that silence is the
+documented behavior, not a missing feature. Scripts should read
+the JSON on stdout and the exit code, not scrape stderr.
+
+`results.json` carries `"schema_version": 1`. Validators reject
+any other value as `unsupported_schema_version`. Additive
+fields may appear within a version; a breaking change to the
+result shape bumps the version. Consumers should check the
+field before parsing the rest of the payload, and treat an
+unknown version as unreadable rather than guessing at its
+layout.
+
 ## 7. Validate the source
 
 From the repository root, in a disposable environment:
@@ -3280,5 +3323,24 @@ toward false confidence, never a guarantee), and scores are comparable
 only under identical fixtures, backend, and protocol fingerprint. It
 says nothing about semantic paraphrase, prompt injection, hierarchy
 attacks, or tool-call adherence under noise. An MCP server
-(`tools/surface_noise_mcp_server.py`, stdlib-only) exposes the same
-instrument to agents.
+(`model-protocol-lab-mcp`, stdlib-only, shipped in the package)
+exposes the same instrument to agents; from a checkout,
+`python tools/surface_noise_mcp_server.py` launches the same
+server. Configure a client with:
+
+```json
+{
+  "mcpServers": {
+    "mpl-surface-noise": {
+      "command": "model-protocol-lab-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+The server speaks newline-delimited JSON-RPC 2.0 over stdio, needs
+no model by itself (`--backend selftest` in `probe` exercises the
+loop without a checkpoint), and caps prompts at 1 MiB and any single
+content block at 64 KiB. Run `model-protocol-lab-mcp --self-test`
+to verify it before wiring it up.

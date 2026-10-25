@@ -1,13 +1,17 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–207 (executed 2026-10-14 → 2026-10-25, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–208 (executed 2026-10-14 → 2026-10-25, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-- `python -m pytest -q -p no:cacheprovider` — **8281 tests collected**
+Platform: CI tests Linux x86-64; macOS and Windows are untested —
+the Jinja render watchdog, the MCP server's SIGALRM budget, and
+doctor's resource fallbacks degrade there.
+
+- `python -m pytest -q -p no:cacheprovider` — **8295 tests collected**
   (cycle 207, 2026-10-25). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -44,16 +48,21 @@ installed; the `[dev]` extra now includes `pytest>=8.0`).
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.7176% (cycle 207, 2026-10-25)**. The gate compares the
+  95.3024% (cycle 208, 2026-10-25)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+1.211) is auditable rather than inferred from the display.
+  (+0.802) is auditable rather than inferred from the display.
+  The dip from 207's 95.7176% is the newly measured
+  `model_protocol_lab/mcp_server.py` (moved from unmeasured `tools/`
+  into the package; 44.8% coverage-visible because its tests exercise
+  it mostly via subprocess spawns, which coverage does not collect) —
+  not uncovered new behavior.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (284 files in that CI scope; the repo-root scope counts more.
+  (286 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (62 source files).
+- `mypy model_protocol_lab` — clean (63 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

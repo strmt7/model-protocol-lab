@@ -32,6 +32,7 @@ dev = ["ruff>=0.14", "mypy>=1.18", "coverage>=7.10", "hypothesis>=6.140", "pytes
 
 [project.scripts]
 model-protocol-lab = "model_protocol_lab.cli:main"
+model-protocol-lab-mcp = "model_protocol_lab.mcp_server:serve"
 
 [project.urls]
 Homepage = "https://github.com/strmt7/model-protocol-lab"

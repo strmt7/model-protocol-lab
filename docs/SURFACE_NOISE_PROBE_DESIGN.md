@@ -206,7 +206,7 @@ prompt quality.
 
 ## 13. MCP server
 
-Stdlib-only stdio JSON-RPC 2.0 server (`tools/surface_noise_mcp_server.py`).
+Stdlib-only stdio JSON-RPC 2.0 server (`model_protocol_lab.mcp_server`, shipped with the `model-protocol-lab-mcp` console script; a `tools/surface_noise_mcp_server.py` launcher remains for checkouts).
 `--self-test` runs one embedded probe end-to-end and exits 0. Contract
 wording: "local and offline" (the VulnerabilityScreener skeleton's
 "never touches the network" docstring was proven false in its own code;
@@ -243,7 +243,7 @@ per-prompt instrument producing standalone probe.json files, not a
 per-candidate experiment. Forcing it into `model-protocol-lab run` would conflate two
 workflows; the improve-then-re-probe loop is `probe → edit → probe → diff`.
 
-`tools/surface_noise_mcp_server.py`, stdlib-only (json, sys, threading —
+`model_protocol_lab.mcp_server`, stdlib-only (json, sys, threading —
 no third-party; must run on the no-optional-deps CI job). Ported from
 the VulnerabilityScreener stdio skeleton (framing, MCPError, TOOLS
 registry, handle_request, real-stdio serve loop) with the contract

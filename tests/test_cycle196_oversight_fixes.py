@@ -33,8 +33,9 @@ from tests.test_cycle191_needle import _payload as _needle_payload
 from tests.test_cycle193_placement import _payload as _placement_payload
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER = ROOT / "tools" / "surface_noise_mcp_server.py"
 PYTHON = sys.executable
+# The server ships as model_protocol_lab.mcp_server (cycle 208).
+SERVER_CMD = [PYTHON, "-m", "model_protocol_lab.mcp_server"]
 
 
 def _sealed_files():
@@ -211,7 +212,7 @@ class DisplayCapTests(unittest.TestCase):
 
 def _run_server(raw_input, timeout=60):
     proc = subprocess.run(
-        [PYTHON, str(SERVER)],
+        SERVER_CMD,
         input=raw_input,
         capture_output=True,
         timeout=timeout,

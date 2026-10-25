@@ -6,6 +6,47 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 208 — release-readiness-2, 2026-10-25)
+
+- The MCP server now ships in the package: `model_protocol_lab.mcp_server`
+  with the `model-protocol-lab-mcp` console script (the
+  `tools/surface_noise_mcp_server.py` launcher remains for checkouts).
+  The advertised server was previously reachable only from a source
+  checkout, which no distribution contained (wave-10 finding M2).
+  USAGE §14 documents the server and a client `mcpServers` snippet.
+- The release workflow now installs the built wheel in a fresh
+  virtual environment and smoke-tests it (`catalog`, `inspect`, and
+  the MCP server's `--self-test`) before publishing (M1); it also
+  uses the versioned release-notes file when the tree carries one
+  for the tag (S6).
+
+### Changed (cycle 208 — release-readiness-2, 2026-10-25)
+
+- README quickstart now sequences the zero-dependency install
+  first (`pip install -e .`, then `catalog`/`inspect`), with
+  `.[hf]` for `doctor`/`run` and `.[dev]` pointed at CONTRIBUTING
+  (M3). The previous first step installed the dev toolchain and
+  the multi-GB CUDA stack to run two commands that need no
+  dependencies.
+- The release workflow derives `SOURCE_DATE_EPOCH` from the
+  tagged commit's timestamp instead of a fixed constant, matching
+  `tools/release_build.py`'s documented convention (S4).
+- `docs/SECURITY.md` gains a supported-versions policy (latest
+  release line only; Python versions per `requires-python` and
+  CI) and a "Verifying a release" section (S1, S5); USAGE §6
+  gains the exit-code table for every subcommand, the
+  stdout-JSON/stderr output contract, and the `schema_version`
+  consumer contract (S7, S8, S9). Supported platforms are
+  stated in README and VALIDATION (CI tests Linux x86-64;
+  macOS/Windows untested, with named degradations) (S2).
+
+### Fixed (cycle 208 — release-readiness-2, 2026-10-25)
+
+- The bug-report template no longer claims the version cannot
+  be printed: it now gives the
+  `python -c "import model_protocol_lab; print(model_protocol_lab.__version__)"`
+  command and a `0.1.0` placeholder (S10).
+
 ### Fixed (cycle 207 — wave-10 corrections, 2026-10-25)
 
 - The sensitivity sweeps no longer trust a caller-supplied

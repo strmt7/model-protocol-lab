@@ -286,6 +286,43 @@ Current safeguards limit fixture size, candidate count, token output and configu
 
 Do not expose the library or CLI directly as a multi-user network service. Authentication, tenant isolation, safe job scheduling, audit logging and resource enforcement are not implemented.
 
+## Supported versions
+
+Security fixes ship on the latest release line only; older lines are
+not backported. Supported Python versions are those in
+`pyproject.toml`'s `requires-python` that CI exercises (currently
+3.11, 3.12, 3.13). No response-time commitment is made for reports;
+the private reporting route below is the channel, and fixes land on
+the latest line.
+
+## Verifying a release
+
+Releases are built reproducibly and published with PEP 740
+attestations (see `.github/workflows/release.yml`). To verify an
+artifact you downloaded:
+
+```sh
+gh attestation verify <artifact> --repo strmt7/model-protocol-lab
+```
+
+To reproduce the artifacts yourself, build twice from the tagged
+tree with the tagged commit's timestamp as the epoch and compare
+SHA-256 hashes with the published assets:
+
+```sh
+EPOCH=$(git log -1 --format=%ct <tag>)
+python tools/release_build.py --source . --output /tmp/mpl-verify-dist --epoch "$EPOCH"
+```
+
+The base wheel installs zero dependencies — check its METADATA:
+every `Requires-Dist` line is gated on an extra (`extra == "hf"`
+or `extra == "dev"`), so a plain `pip install` pulls nothing.
+The `[hf]` extra is declared as version ranges in
+`pyproject.toml`, not a lockfile;
+inventory your resolved set after installing it (for example with
+`pip freeze`) rather than trusting any bill of materials the
+release does not ship.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.
