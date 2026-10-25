@@ -6,6 +6,58 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 206 — token-depth sensitivity sweep, 2026-10-25)
+
+- `run --token-depth-sweep` with `--max-drop-tokens`
+  (default 4, cap 8, provisional): a token-depth extension of
+  the shipped byte sensitivity sweep, not a new probe. For
+  each depth in 1..`--max-drop-tokens`, every prompt loses
+  that many trailing token ids under the backend's own
+  tokenization (a new `TokenTruncatedPromptBackend` with the
+  distinct `+prompt-trunc-{K}t` fingerprint) and the full
+  search re-runs. It closes the wave-9 qualification that
+  multi-token turn-closing suffixes (chatml 22 bytes, llama3
+  47 bytes, gemma 21 bytes, each beginning with a special
+  token) are measured by no shipped readout: dropping all
+  suffix tokens yields the pre-suffix prompt, which no byte
+  drop of 8 or fewer can yield. The token payload is a
+  separate key (`sensitivity_sweep_tokens`) and a separate
+  HTML section, and it corrects the byte sweep's known flaw
+  in the new mode only: every depth carries a `status`,
+  depths at or beyond the shortest truncatable prompt
+  length (pre-run token-length check, never post-hoc from a
+  failed decision) are `inapplicable`, listed separately,
+  and excluded from `flips_at`, with `winner_changed` gated
+  on `status == "applied"`. Byte mode is byte-identical and
+  its failed-depth-counts-as-flip behaviour is pinned and
+  unchanged. The two sweeps are combinable and share one
+  native run when both are requested (saving exactly one
+  `run_experiment`). Default 4 / cap 8 stay provisional:
+  freezing them awaits per-candidate suffix-token counts
+  measured on a real checkpoint tokenizer, which this cycle
+  does not claim; the payload's `suffix_token_counts`
+  annotation is the mechanism for that measurement. The
+  design went through the full adversarial round before any
+  code (red-team A's blocking F1 flip-pollution and F2
+  vacuous-or-unguaranteeable P4, red-team B's corrections
+  and prefill/id-rewriting composition caveats, verifier
+  re-execution of every load-bearing claim) and is
+  `docs/TOKENDEPTH_DESIGN.md`. Tests in
+  `tests/test_cycle206_tokendepth.py`.
+
+### Fixed (cycle 206 — per-probe HTML escaping, 2026-10-25)
+
+- The sensitivity-sweep, token-depth-sweep, rotation, and
+  schema field-order report sections now route payload-derived
+  strings through `_escape_text` (control characters and lone
+  surrogates stripped) instead of bare `escape()`: a
+  surrogate-bearing library-supplied payload previously passed
+  through verbatim and made `save_report` raise
+  `UnicodeEncodeError` on its UTF-8 write (wave-10 red-team
+  finding A-F2, re-verified by execution before fixing).
+  Output for control-free payloads is byte-identical, and
+  U+2028/U+2029 pass through unchanged.
+
 ### Added (cycle 205 — schema field-order probe, 2026-10-24)
 
 - `run --field-order`: a schema field-order probe (wave-9

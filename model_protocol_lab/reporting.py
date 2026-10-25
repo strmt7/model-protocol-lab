@@ -844,17 +844,17 @@ def _sweep_section(result: dict[str, Any]) -> str:
         drop = depth.get("drop_bytes")
         rows.append(
             '<tr><th scope="row" data-sort="'
-            + escape(str(drop) if type(drop) is int else "")
+            + _escape_text(str(drop) if type(drop) is int else "")
             + '">'
-            + escape(str(depth.get("drop_bytes", "?")))
+            + _escape_text(str(depth.get("drop_bytes", "?")))
             + '</th><td data-sort="'
-            + escape(str(depth.get("decision", "?")))
+            + _escape_text(str(depth.get("decision", "?")))
             + '">'
-            + escape(str(depth.get("decision", "?")))
+            + _escape_text(str(depth.get("decision", "?")))
             + '</td><td data-sort="'
-            + escape(str(depth.get("selected_candidate", "?")))
+            + _escape_text(str(depth.get("selected_candidate", "?")))
             + '">'
-            + escape(str(depth.get("selected_candidate", "?")))
+            + _escape_text(str(depth.get("selected_candidate", "?")))
             + '</td><td data-sort="'
             + ("changed" if changed else "stable")
             + '">'
@@ -880,11 +880,83 @@ def _sweep_section(result: dict[str, Any]) -> str:
         "<p>Each depth drops that many trailing bytes from the rendered prompt "
         "and re-encodes it, truncating the prompt in the middle of its final "
         "token, then re-runs the full search. Native winner: "
-        + escape(str(sweep.get("native_winner", "?")))
+        + _escape_text(str(sweep.get("native_winner", "?")))
         + " ("
-        + escape(str(sweep.get("native_decision", "?")))
+        + _escape_text(str(sweep.get("native_decision", "?")))
         + "). Depths where the winner or decision changed: "
-        + escape(str(sweep.get("flips_at", "?")))
+        + _escape_text(str(sweep.get("flips_at", "?")))
+        + ".</p>"
+        + table
+        + "</section>"
+    )
+
+
+def _token_depth_section(result: dict[str, Any]) -> str:
+    """Token-depth sensitivity sweep section (cycle 206).
+
+    Mirrors ``_sweep_section`` for the ``sensitivity_sweep_tokens``
+    payload, with its own section id and a Status column: an
+    inapplicable depth renders as "inapplicable", never as a flip.
+    Byte HTML is produced by ``_sweep_section`` alone and is
+    untouched by this function.
+    """
+    sweep = result.get("sensitivity_sweep_tokens")
+    if type(sweep) is not dict:
+        return ""
+    rows = []
+    for depth in sweep.get("depths") or []:
+        if type(depth) is not dict:
+            continue
+        changed = depth.get("winner_changed")
+        drop = depth.get("drop_tokens")
+        status = depth.get("status", "?")
+        rows.append(
+            '<tr><th scope="row" data-sort="'
+            + _escape_text(str(drop) if type(drop) is int else "")
+            + '">'
+            + _escape_text(str(depth.get("drop_tokens", "?")))
+            + '</th><td data-sort="'
+            + _escape_text(str(depth.get("decision", "?")))
+            + '">'
+            + _escape_text(str(depth.get("decision", "?")))
+            + '</td><td data-sort="'
+            + _escape_text(str(depth.get("selected_candidate", "?")))
+            + '">'
+            + _escape_text(str(depth.get("selected_candidate", "?")))
+            + '</td><td data-sort="'
+            + ("changed" if changed else "stable")
+            + '">'
+            + (
+                '<span class="badge fail">changed</span>'
+                if changed
+                else '<span class="badge pass">stable</span>'
+            )
+            + '</td><td data-sort="'
+            + _escape_text(str(status))
+            + '">'
+            + _escape_text(str(status))
+            + "</td></tr>"
+        )
+    table = (
+        '<div class="table-wrap"><table class="sortable">'
+        "<caption>Search re-run with the prompt truncated by whole trailing tokens.</caption>"
+        '<thead><tr><th scope="col">Dropped tokens</th><th scope="col">Decision</th>'
+        '<th scope="col">Selected</th><th scope="col">Vs native</th>'
+        '<th scope="col">Status</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
+        if rows
+        else "<p>No depths were evaluated.</p>"
+    )
+    return (
+        '<section id="token-depth-sweep"><h2>Token-depth sensitivity sweep</h2>'
+        "<p>Each depth drops that many trailing tokens from the rendered "
+        "prompt and re-runs the full search. Native winner: "
+        + _escape_text(str(sweep.get("native_winner", "?")))
+        + " ("
+        + _escape_text(str(sweep.get("native_decision", "?")))
+        + "). Depths where the winner or decision changed: "
+        + _escape_text(str(sweep.get("flips_at", "?")))
+        + ". Depths that could not be applied (shorter than the depth): "
+        + _escape_text(str(sweep.get("inapplicable_at", "?")))
         + ".</p>"
         + table
         + "</section>"
@@ -6981,11 +7053,11 @@ def _rotation_section(result: dict[str, Any]) -> str:
 
     def _rate(value: Any) -> str:
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
-        return escape(str(value)) if type(value) is int else "n/a"
+        return _escape_text(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
     for name in sorted(candidates, key=str):
@@ -6995,7 +7067,7 @@ def _rotation_section(result: dict[str, Any]) -> str:
         if entry.get("status") != "available":
             rows.append(
                 '<tr><td><span class="mono">'
-                + escape(str(name))
+                + _escape_text(str(name))
                 + '</span></td><td colspan="2">unavailable</td></tr>'
             )
             continue
@@ -7018,7 +7090,7 @@ def _rotation_section(result: dict[str, Any]) -> str:
                 + ", invariance rate "
                 + _rate(headline.get("invariance_rate"))
                 + " ("
-                + escape(str(entry.get("classification", "")))
+                + _escape_text(str(entry.get("classification", "")))
                 + "); invariance falsified: "
                 + ("yes" if entry.get("invariance_falsified") is True else "no")
                 + ". Token-exact share of completed rotation cells "
@@ -7094,7 +7166,7 @@ def _rotation_section(result: dict[str, Any]) -> str:
             )
         rows.append(
             '<tr><td><span class="mono">'
-            + escape(str(name))
+            + _escape_text(str(name))
             + "</span></td><td>"
             + "".join(bits)
             + "</td></tr>"
@@ -7106,13 +7178,13 @@ def _rotation_section(result: dict[str, Any]) -> str:
             continue
         label = "reversal" if arm == "mir_4" else arm.replace("_", " ")
         if cond.get("withheld"):
-            winners.append(escape(label) + ": selection withheld")
+            winners.append(_escape_text(label) + ": selection withheld")
         else:
             winner = cond.get("winner")
             winners.append(
-                escape(label)
+                _escape_text(label)
                 + ": "
-                + (escape(str(winner)) if winner else "no unique winner")
+                + (_escape_text(str(winner)) if winner else "no unique winner")
                 + (" (flip vs rot 0)" if cond.get("flip") is True else "")
             )
     return (
@@ -7443,16 +7515,16 @@ def _field_order_section(result: dict[str, Any]) -> str:
 
     def _rate(value: Any) -> str:
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _pvalue(value: Any) -> str:
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3g}")
+            return _escape_text(f"{float(value):.3g}")
         return "n/a"
 
     def _count(value: Any) -> str:
-        return escape(str(value)) if type(value) is int else "n/a"
+        return _escape_text(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
     for name in sorted(candidates, key=str):
@@ -7462,7 +7534,7 @@ def _field_order_section(result: dict[str, Any]) -> str:
         if entry.get("status") != "available":
             rows.append(
                 '<tr><td><span class="mono">'
-                + escape(str(name))
+                + _escape_text(str(name))
                 + '</span></td><td colspan="2">unavailable</td></tr>'
             )
             continue
@@ -7494,14 +7566,14 @@ def _field_order_section(result: dict[str, Any]) -> str:
             elif verdict == "falsified":
                 decision_text = (
                     "field-order invariance falsified (direction: "
-                    + escape(str(decision.get("direction", "")))
+                    + _escape_text(str(decision.get("direction", "")))
                     + ")"
                 )
             else:
                 decision_text = "not falsified"
             bits.append(
                 "<div>Endpoint decision (answer field first vs last, paired specs): "
-                + escape(decision_text)
+                + _escape_text(decision_text)
                 + " -- first-only "
                 + _count(decision.get("n_first_only"))
                 + ", last-only "
@@ -7555,7 +7627,7 @@ def _field_order_section(result: dict[str, Any]) -> str:
                     continue
                 whole = whole_doc_by_arm.get(arm) if type(whole_doc_by_arm) is dict else None
                 points.append(
-                    escape(arm)
+                    _escape_text(arm)
                     + ": adherent "
                     + _rate(row.get("adherent_rate"))
                     + " (parse "
@@ -7587,7 +7659,7 @@ def _field_order_section(result: dict[str, Any]) -> str:
                 three = {}
             bits.append(
                 "<div>Sensitivities: extraction-only decision "
-                + escape(str(extraction.get("verdict", "")))
+                + _escape_text(str(extraction.get("verdict", "")))
                 + " over "
                 + _count(extraction.get("n_paired"))
                 + " paired extraction specs; paired counts by "
@@ -7608,7 +7680,7 @@ def _field_order_section(result: dict[str, Any]) -> str:
             )
         rows.append(
             '<tr><td><span class="mono">'
-            + escape(str(name))
+            + _escape_text(str(name))
             + "</span></td><td>"
             + "".join(bits)
             + "</td></tr>"
@@ -9586,6 +9658,7 @@ def render_html(result: dict[str, Any]) -> str:
     template_robustness_html = _template_robustness_section(result)
     ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
+    token_depth_html = _token_depth_section(result)
     logprob_html = _logprob_section(result)
     held_out_html = _held_out_section(result)
     toc = _toc(
@@ -9799,6 +9872,7 @@ def render_html(result: dict[str, Any]) -> str:
                 ablation_html,
             ),
             ("sensitivity-sweep", "Prompt-boundary sensitivity sweep", sweep_html),
+            ("token-depth-sweep", "Token-depth sensitivity sweep", token_depth_html),
             ("logprob-diagnostic", "Log-likelihood diagnostic", logprob_html),
             ("held-out-stage", "Held-out stage", held_out_html),
         ]
@@ -9879,6 +9953,7 @@ def render_html(result: dict[str, Any]) -> str:
         + template_robustness_html
         + ablation_html
         + sweep_html
+        + token_depth_html
         + logprob_html
         + held_out_html
         + "<footer>"

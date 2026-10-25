@@ -886,6 +886,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Truncation depths for --sensitivity-sweep (1-8)",
     )
     run.add_argument(
+        "--token-depth-sweep",
+        action="store_true",
+        help="Re-run search with the prompt truncated by whole trailing "
+        "tokens at each depth (1..--max-drop-tokens) to measure "
+        "token-depth sensitivity; a prompt-format researcher checking "
+        "whether a winner survives losing its trailing tokens (for "
+        "example the multi-token assistant turn-closing header) uses "
+        "this readout before trusting the verdict; multiplies search "
+        "compute, combinable with --sensitivity-sweep",
+    )
+    run.add_argument(
+        "--max-drop-tokens",
+        type=int,
+        default=4,
+        help="Truncation depths for --token-depth-sweep (1-8, provisional)",
+    )
+    run.add_argument(
         "--logprob-diagnostic",
         action="store_true",
         help="Teacher-force each candidate's expected answer after search "
@@ -2966,6 +2983,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Seed must be an unsigned 64-bit integer")
         if not 1 <= args.max_drop_bytes <= 8:
             parser.error("--max-drop-bytes must be between 1 and 8")
+        if not 1 <= args.max_drop_tokens <= 8:
+            parser.error("--max-drop-tokens must be between 1 and 8")
         if args.output.exists():
             parser.error("Output path already exists; use a fresh directory")
         # The candidate set is pure (no model involved): compute it before
@@ -4078,20 +4097,60 @@ def main(argv: list[str] | None = None) -> int:
                             "thresholds": {},
                             "candidates": [],
                         }
-                if args.sensitivity_sweep:
-                    from .experiments import prompt_sensitivity_sweep
-
-                    result["sensitivity_sweep"] = prompt_sensitivity_sweep(
-                        backend,
-                        formats,
-                        split,
-                        boundary=args.boundary_ids,
-                        boundary_map=boundary_map,
-                        max_drop_bytes=args.max_drop_bytes,
-                        max_new_tokens=args.max_new_tokens,
-                        seed=args.seed,
-                        cancel=cancel,
+                if args.sensitivity_sweep or args.token_depth_sweep:
+                    from .experiments import (
+                        prompt_sensitivity_sweep,
+                        prompt_token_depth_sweep,
                     )
+                    from .experiments import run_experiment as _diagnostics_run_experiment
+
+                    # One native shared by both sweeps when both are
+                    # requested: saving exactly one run_experiment
+                    # versus two sweep calls (the CLI main run is a
+                    # separate native and is not reused here). Each
+                    # sweep alone recomputes its native, as before.
+                    # Token mode inherits this block's
+                    # diagnostics_unavailable fallback, documented in
+                    # USAGE §8.53 -- a sweep failure degrades the
+                    # diagnostics, never the run.
+                    _shared_native = None
+                    if args.sensitivity_sweep and args.token_depth_sweep:
+                        _shared_native = _diagnostics_run_experiment(
+                            backend,
+                            formats,
+                            split,
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                            cancel=cancel,
+                        )
+                    if args.sensitivity_sweep:
+                        result["sensitivity_sweep"] = prompt_sensitivity_sweep(
+                            backend,
+                            formats,
+                            split,
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_drop_bytes=args.max_drop_bytes,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                            cancel=cancel,
+                            native=_shared_native,
+                        )
+                    if args.token_depth_sweep:
+                        result["sensitivity_sweep_tokens"] = prompt_token_depth_sweep(
+                            backend,
+                            formats,
+                            split,
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_drop_tokens=args.max_drop_tokens,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                            cancel=cancel,
+                            native=_shared_native,
+                        )
             except Exception:  # noqa: BLE001 -- diagnostics must not fail the run
                 result["diagnostics_unavailable"] = True
             results_path, report_path = save_report(

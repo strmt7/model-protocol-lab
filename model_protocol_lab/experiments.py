@@ -22,6 +22,7 @@ from .aliasing import suspect_cells as aliasing_suspect_cells
 from .backends import (
     StopOutcome,
     TokenHealingBackend,
+    TokenTruncatedPromptBackend,
     TruncatedPromptBackend,
     emulate_eos_stop,
     emulate_hf_stop_string,
@@ -3467,6 +3468,7 @@ def prompt_sensitivity_sweep(
     max_new_tokens: int = 64,
     seed: int = 0,
     cancel: Event | None = None,
+    native: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Re-run search with the prompt truncated mid-token at each depth.
 
@@ -3477,20 +3479,33 @@ def prompt_sensitivity_sweep(
     or decision differs from native: boundary sensitivity as a variable, not
     a constant. Depths that cannot be applied (e.g. a cut splitting a UTF-8
     codepoint) record the run's failed decision instead of silently
-    skipping.
+    skipping. That failed-depth-counts-as-flip behaviour is pinned by
+    test_cycle17 and is deliberately NOT changed here; the token-depth
+    sweep below carries the corrected status-gated semantics instead.
+
+    ``native`` optionally supplies a ``run_experiment`` result for the
+    same backend/formats/split/boundary to reuse as the baseline (the
+    CLI shares one native between the byte and token sweeps, saving
+    exactly one ``run_experiment`` versus two sweep calls). When
+    omitted, the native run is recomputed, as before.
     """
     if type(max_drop_bytes) is not int or not 1 <= max_drop_bytes <= 8:
         raise ValueError("max_drop_bytes must be an integer between 1 and 8")
-    native = run_experiment(
-        backend,
-        formats,
-        split,
-        boundary=boundary,
-        boundary_map=boundary_map,
-        max_new_tokens=max_new_tokens,
-        seed=seed,
-        cancel=cancel,
-    )
+    if native is not None and (
+        type(native) is not dict or "selected_candidate" not in native or "decision" not in native
+    ):
+        raise ValueError("native must be a run_experiment result dict")
+    if native is None:
+        native = run_experiment(
+            backend,
+            formats,
+            split,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
     native_winner = native["selected_candidate"]
     depths: list[dict[str, Any]] = []
     for drop in range(1, max_drop_bytes + 1):
@@ -3521,6 +3536,203 @@ def prompt_sensitivity_sweep(
         "max_drop_bytes": max_drop_bytes,
         "depths": depths,
         "flips_at": [depth["drop_bytes"] for depth in depths if depth["winner_changed"]],
+    }
+
+
+def _token_depth_prompt_lengths(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+) -> list[int]:
+    """Token lengths of every prompt the truncated run could encode.
+
+    Renders every search and held_out prompt under every candidate and
+    encodes it with the base backend. Prompts that fail to render or
+    encode are skipped: they fail natively too, so they carry no
+    truncation-specific information. The caller uses the minimum:
+    a depth is inapplicable exactly when it meets or exceeds the
+    shortest truncatable prompt, which is the condition under which
+    the first un-truncatable prompt aborts the whole depth via the
+    ``run_experiment`` early-return path.
+    """
+    lengths: list[int] = []
+    for fmt in formats:
+        for case in split.search + split.held_out:
+            length = _prompt_token_length(backend, fmt, case)
+            if length is not None:
+                lengths.append(length)
+    return lengths
+
+
+def _prompt_token_length(
+    backend: Backend,
+    fmt: Format,
+    case: Fixture,
+) -> int | None:
+    """Token length of one rendered prompt, or None when it fails
+    natively: a prompt that fails to render or encode fails the
+    native run too, so it carries no truncation-specific fact."""
+    try:
+        ids = backend.encode(fmt.render(case.messages))
+    except Exception:  # noqa: BLE001 -- natively-failing prompt, not a truncation fact
+        return None
+    return len(ids) if type(ids) is tuple else None
+
+
+def _suffix_token_counts(
+    backend: Backend,
+    formats: tuple[Format, ...],
+) -> dict[str, int | None]:
+    """Standalone-suffix token count per candidate, under this backend.
+
+    The suffix is the trailing open-reply text (``open_suffix`` when
+    set, else ``assistant_prefix``) -- the assistant turn-closing
+    header whose whole-token removal the ladder is built to reach.
+    The count is the standalone encoding of that text alone: an
+    annotation mapping depth to header state, NOT a claim about how
+    the suffix tokenizes inside a full prompt (BPE merges across the
+    seam can differ). None when the suffix does not encode.
+    """
+    counts: dict[str, int | None] = {}
+    for fmt in formats:
+        suffix = fmt.open_suffix if fmt.open_suffix is not None else fmt.assistant_prefix
+        try:
+            ids = backend.encode(suffix)
+        except Exception:  # noqa: BLE001 -- unencodable suffix is reported, not fatal
+            counts[fmt.name] = None
+        else:
+            counts[fmt.name] = len(ids) if type(ids) is tuple else None
+    return counts
+
+
+def prompt_token_depth_sweep(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_drop_tokens: int = 4,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    cancel: Event | None = None,
+    native: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Re-run search with the prompt truncated by whole trailing tokens.
+
+    For ``drop_tokens`` in 1..``max_drop_tokens``, every prompt loses
+    that many trailing token ids (backend's own tokenization, via
+    ``TokenTruncatedPromptBackend``; no decode round-trip) and the full
+    search re-runs. Reports the depths where the selected winner or
+    decision differs from native. This is the token-depth extension of
+    ``prompt_sensitivity_sweep``: the byte sweep can only mangle the
+    tail of a multi-token turn-closing suffix (byte cap 8), while this
+    ladder can remove the whole suffix cleanly.
+
+    Fail-closed status semantics (the byte sweep's known flaw, fixed
+    here only -- byte mode is untouched): every depth carries a
+    per-depth ``status``. ``status`` is ``"inapplicable"`` when the
+    depth meets or exceeds the shortest truncatable prompt length,
+    decided by a PRE-RUN token-length check over search and held_out
+    prompts (a conservative superset: a depth whose truncated winner's
+    held_out prompt alone was too short is labelled inapplicable
+    rather than claimed as a flip, because the flip claim must never
+    rest on a prompt that never ran). Inapplicable depths keep the
+    run's ``"failed"`` decision for that depth, appear in
+    ``inapplicable_at``, and are excluded from ``flips_at``;
+    ``winner_changed`` is gated on ``status == "applied"``, so no
+    consumer reading ``depths[]`` directly can mistake a never-run
+    depth for a flip. A depth that was applied but whose run failed
+    for another reason keeps ``status == "applied"`` and counts as a
+    change when its decision differs from native -- that is a genuine
+    truncated-run failure, not a labelling artefact.
+
+    Eligibility: the measurement is defined on the base prompt
+    encoding. The wrapper refuses prefill-wrapped inners at
+    construction (dropping appended prefill ids first would measure
+    the wrong thing). A backend whose ``generate`` rewrites ids
+    (``TokenHealingBackend``) does not consume ids as given, so a
+    token sweep over it measures healed ids, not prompt ids; such
+    runs are plumbing-only, never evidence -- the fingerprint chain
+    keeps the healing step visible. ``native`` optionally supplies
+    a ``run_experiment`` result to reuse as the baseline, as in
+    ``prompt_sensitivity_sweep``.
+
+    Default 4 / cap 8 are provisional working hypotheses (design
+    Q1): freezing them awaits A4, per-candidate suffix token counts
+    measured on a real checkpoint tokenizer. The payload's
+    ``suffix_token_counts`` annotation is the mechanism for that
+    measurement; no real-checkpoint count is claimed here.
+    """
+    if type(max_drop_tokens) is not int or not 1 <= max_drop_tokens <= 8:
+        raise ValueError("max_drop_tokens must be an integer between 1 and 8")
+    if native is not None and (
+        type(native) is not dict or "selected_candidate" not in native or "decision" not in native
+    ):
+        raise ValueError("native must be a run_experiment result dict")
+    if native is None:
+        native = run_experiment(
+            backend,
+            formats,
+            split,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
+    native_winner = native["selected_candidate"]
+    lengths = _token_depth_prompt_lengths(backend, formats, split)
+    min_prompt_tokens = min(lengths) if lengths else None
+    depths: list[dict[str, Any]] = []
+    for drop in range(1, max_drop_tokens + 1):
+        status = (
+            "inapplicable"
+            if min_prompt_tokens is not None and drop >= min_prompt_tokens
+            else "applied"
+        )
+        wrapped = TokenTruncatedPromptBackend(backend, drop)
+        mutated = run_experiment(
+            wrapped,
+            formats,
+            split,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
+        winner = mutated["selected_candidate"]
+        # NOTE: deliberately not the byte sweep's one-line ``changed``
+        # formula: test_cycle17's mutation gate anchors on that exact
+        # line text with an expected count of 1, so a second copy here
+        # would break the gate's anchor even though the semantics are
+        # the same. Keep the two spellings distinct.
+        winner_differs = winner != native_winner
+        decision_differs = mutated["decision"] != native["decision"]
+        depths.append(
+            {
+                "drop_tokens": drop,
+                "status": status,
+                "decision": mutated["decision"],
+                "selected_candidate": winner,
+                "winner_changed": (winner_differs or decision_differs)
+                if status == "applied"
+                else False,
+            }
+        )
+    return {
+        "granularity": "tokens",
+        "native_decision": native["decision"],
+        "native_winner": native_winner,
+        "max_drop_tokens": max_drop_tokens,
+        "min_prompt_tokens": min_prompt_tokens,
+        "suffix_token_counts": _suffix_token_counts(backend, formats),
+        "depths": depths,
+        "flips_at": [depth["drop_tokens"] for depth in depths if depth["winner_changed"]],
+        "inapplicable_at": [
+            depth["drop_tokens"] for depth in depths if depth["status"] == "inapplicable"
+        ],
     }
 
 
