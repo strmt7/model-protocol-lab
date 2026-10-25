@@ -1,6 +1,6 @@
 """Cycle 165: surface-noise MCP server contract tests (real stdio).
 
-Spawns tools/surface_noise_mcp_server.py as a subprocess over stdio and
+Spawns model_protocol_lab.mcp_server as a subprocess over stdio and
 exercises the JSON-RPC 2.0 contract: tools/list, server/discover,
 initialize-compat, tools/call for each tool, and the error codes.
 """
@@ -9,17 +9,18 @@ import json
 import subprocess
 import sys
 import unittest
-from pathlib import Path
 
-SERVER = Path(__file__).resolve().parent.parent / "tools" / "surface_noise_mcp_server.py"
 PYTHON = sys.executable
+# The server ships as model_protocol_lab.mcp_server (cycle 208);
+# spawn it as a module so the test exercises the shipped form.
+SERVER_CMD = [PYTHON, "-m", "model_protocol_lab.mcp_server"]
 
 
 def _run_session(requests, timeout=120):
     """Send newline-delimited JSON-RPC requests; return response dicts."""
     payload = "".join(json.dumps(r) + "\n" for r in requests)
     proc = subprocess.run(
-        [PYTHON, str(SERVER)],
+        SERVER_CMD,
         input=payload,
         capture_output=True,
         text=True,
@@ -44,7 +45,7 @@ def _req(id_, method, params=None):
 class MCPContractTests(unittest.TestCase):
     def test_self_test_flag(self):
         proc = subprocess.run(
-            [PYTHON, str(SERVER), "--self-test"],
+            SERVER_CMD + ["--self-test"],
             capture_output=True,
             text=True,
             timeout=60,
@@ -233,7 +234,7 @@ class MCPContractTests(unittest.TestCase):
         # Sanity: a well-formed request still works through _run_session.
         self.assertIn("result", resp)
         proc = subprocess.run(
-            [PYTHON, str(SERVER)],
+            SERVER_CMD,
             input="{not json}\n",
             capture_output=True,
             text=True,
@@ -345,12 +346,12 @@ class MCPPosixGuardTests(unittest.TestCase):
     """Wave-6 red-team A finding 7: the SIGALRM timeout is POSIX-only."""
 
     def _load_server(self):
-        import importlib.util
+        # The shipped module, shared with the rest of the process:
+        # callers that patch its globals must restore them (see the
+        # SIGALRM test's addCleanup below).
+        import importlib
 
-        spec = importlib.util.spec_from_file_location("surface_noise_mcp_server", str(SERVER))
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        return importlib.import_module("model_protocol_lab.mcp_server")
 
     def test_probe_without_sigalrm_degrades_to_best_effort(self):
         # Simulate a platform without SIGALRM (Windows): the probe must
@@ -358,6 +359,10 @@ class MCPPosixGuardTests(unittest.TestCase):
         import signal as real_signal
 
         server = self._load_server()
+        # _load_server returns the shared module now, not a fresh
+        # spec-loaded copy: restore the real signal module so later
+        # tests in this process see unpatched globals.
+        self.addCleanup(setattr, server, "signal", real_signal)
 
         class NoAlarmSignal:
             ITIMER_REAL = real_signal.ITIMER_REAL

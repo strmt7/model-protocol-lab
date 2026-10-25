@@ -7,8 +7,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: Package version (`python -c "import model_protocol_lab"` won't print one; use the git commit or release tag)
-      placeholder: commit or tag, e.g. 0.1.0a0
+      description: Package version (`python -c "import model_protocol_lab; print(model_protocol_lab.__version__)"`)
+      placeholder: e.g. 0.1.0, or the git commit for an unreleased checkout
     validations:
       required: true
   - type: input

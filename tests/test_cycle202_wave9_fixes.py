@@ -30,7 +30,8 @@ from tests.test_cycle201_readiness import _mentioned
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_REPORT = REPO_ROOT / "examples" / "sample-report"
-MCP_SERVER = REPO_ROOT / "tools" / "surface_noise_mcp_server.py"
+# The server ships as model_protocol_lab.mcp_server (cycle 208).
+MCP_SERVER_CMD = [sys.executable, "-m", "model_protocol_lab.mcp_server"]
 
 
 def _valid_bundle(tmpdir: Path) -> bytes:
@@ -322,7 +323,7 @@ class TestMcpFrameDiscipline(unittest.TestCase):
 
     def _serve(self, lines: str) -> str:
         proc = subprocess.run(
-            [sys.executable, str(MCP_SERVER)],
+            MCP_SERVER_CMD,
             input=lines,
             capture_output=True,
             text=True,
@@ -345,12 +346,9 @@ class TestMcpFrameDiscipline(unittest.TestCase):
         self.assertEqual(response["error"]["code"], -32700)
 
     def test_non_object_backend_is_invalid_params(self) -> None:
-        import importlib.util
+        import importlib
 
-        spec = importlib.util.spec_from_file_location("surface_noise_mcp_server", str(MCP_SERVER))
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        module = importlib.import_module("model_protocol_lab.mcp_server")
         response = module.handle_request(
             {
                 "jsonrpc": "2.0",

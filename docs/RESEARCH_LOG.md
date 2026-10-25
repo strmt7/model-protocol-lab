@@ -9776,3 +9776,56 @@ VALIDATION carry: the pushed VALIDATION.md still carries
 cycle 206 gate2's 95.6983% figure while gate3 measured
 95.7110%; this cycle's VALIDATION update is written from
 this cycle's own gate measurement (see VALIDATION.md).
+
+## Cycle 208 — release-readiness-2: the release pipeline installs what it publishes (2026-10-25)
+
+Second release-readiness pass, from the wave-10 enterprise audit
+(brief in ~/workspace/agents_out/wave10/enterprise_readiness.md).
+Every item below was re-derived from the tree before fixing;
+the brief's file:line evidence re-checked, not inherited.
+
+- M1: the release build job now installs the built wheel in a
+  fresh venv and smoke-tests it (`catalog`, `inspect` on a
+  checkout fixture, `model-protocol-lab-mcp --self-test`)
+  before the artifacts upload. The job is tag-triggered and
+  inert, so CI on this push cannot exercise the new steps:
+  the coordinator simulated the exact job commands locally
+  (fresh venv, release_build.py, wheel install, all three
+  smoke commands) and recorded the evidence in the cycle
+  build log. No TestPyPI lane: it needs a second Trusted
+  Publisher + environment (owner setup) and cannot run
+  without credentials.
+- M2, decided SHIP: the MCP server moves into the package
+  as `model_protocol_lab.mcp_server` with the
+  `model-protocol-lab-mcp` console script; `tools/` keeps a
+  thin launcher (the push pipeline cannot delete files).
+  Relabeling was rejected: it would disclose, but not fix,
+  the installed-package-has-no-server state. The three
+  MCP test files now spawn `python -m
+  model_protocol_lab.mcp_server` and import the module
+  (the cycle-165 `server.signal =` patch requires the
+  real module's globals, so a shim import would break it;
+  the test restores the attribute via addCleanup).
+- M3: README quickstart sequenced base install first.
+- S4: release.yml derives SOURCE_DATE_EPOCH from the
+  tagged commit (`git log -1 --format=%ct`), matching
+  release_build.py's docstring; the fixed 1700000000 is
+  gone from the workflow (it remains only as the tool's
+  usage example and the 201/202 tests' local epochs).
+- S10: bug-report template corrected to the real
+  version-printing command.
+- S1/S2/S5/S7/S8/S9 implemented as documented in
+  SECURITY.md (supported versions, verifying a release),
+  README/VALIDATION (platform statement), and USAGE §6
+  (exit-code table, output contract, schema_version).
+- S3 rejected as specified, with an alternative: an SBOM
+  of the release job's venv (build+twine only) would
+  misrepresent the artifact, and a [dev,hf] SBOM would
+  cost a multi-GB CUDA download in the release job for
+  an inventory consumers resolve themselves. The S5
+  section instead documents the zero-dependency base wheel
+  (every METADATA Requires-Dist line is gated on an extra)
+  and the consumer inventory command for the [hf] set.
+- S6: the publish job gains a checkout step and uses
+  --notes-file for docs/RELEASE_NOTES_<version>.md when
+  present, falling back to the template string.

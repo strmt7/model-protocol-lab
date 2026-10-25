@@ -32,9 +32,16 @@ jobs:
           python-version: "3.12"
       - name: Install the builder
         run: python -m pip install "build>=1.2" "twine>=5"
+      - name: Derive the release epoch from the tagged commit
+        # Cycle 208: the epoch is the tagged commit's timestamp
+        # (tools/release_build.py's documented convention), not a
+        # fixed constant — every release used to claim the same
+        # 2023 epoch. The checkout of a tag points at its commit,
+        # so `git log -1` reports exactly that commit.
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
       - name: Reproducible double build (hashes must match)
         env:
-          SOURCE_DATE_EPOCH: "1700000000"
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
         run: |
           # Bind the tag to the package version before anything is
           # built or uploaded: a tag vX.Y.Z whose tree carries a
@@ -45,6 +52,22 @@ jobs:
             --epoch "$SOURCE_DATE_EPOCH" \
             --expect-version "${GITHUB_REF_NAME#v}"
           python -m twine check dist/*
+      - name: Install the wheel and smoke-test the published artifact
+        # Cycle 208 (M1): the pipeline used to publish artifacts it
+        # never installed or ran. The wheel is installed into a
+        # fresh venv and the zero-dependency commands are run
+        # against it, plus the shipped MCP server's self-test —
+        # so a packaging regression that only appears after
+        # installation fails here, not at a customer's install.
+        # The fixture file is an input, not part of the artifact:
+        # examples/ is not in the sdist, and inspect only reads
+        # the file it is given.
+        run: |
+          python -m venv /tmp/mpl-release-smoke
+          /tmp/mpl-release-smoke/bin/pip install --quiet dist/*.whl
+          /tmp/mpl-release-smoke/bin/model-protocol-lab catalog
+          /tmp/mpl-release-smoke/bin/model-protocol-lab inspect examples/fixtures.json
+          /tmp/mpl-release-smoke/bin/model-protocol-lab-mcp --self-test
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
@@ -63,6 +86,10 @@ jobs:
         with:
           name: dist
           path: dist/
+      # Cycle 208 (S6): the publish job needs the tree to read the
+      # versioned release notes; it downloads only the dist
+      # artifact otherwise.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Attest build provenance for the artifacts
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -72,10 +99,20 @@ jobs:
       - name: Create the GitHub release with the artifacts attached
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
-          --title "$GITHUB_REF_NAME"
-          --notes "Artifacts built reproducibly from this tag
-          (tools/release_build.py) and published to PyPI with PEP 740
-          attestations. Verify provenance with:
-          gh attestation verify <artifact> --repo strmt7/model-protocol-lab"
+        run: |
+          # Cycle 208 (S6): use the versioned release notes when the
+          # tree carries them for this tag; otherwise fall back to
+          # the template so an unwritten notes file never blocks
+          # the release.
+          NOTES_FILE="docs/RELEASE_NOTES_${GITHUB_REF_NAME#v}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Artifacts built reproducibly from this tag
+              (tools/release_build.py) and published to PyPI with PEP 740
+              attestations. Verify provenance with:
+              gh attestation verify <artifact> --repo strmt7/model-protocol-lab"
+          fi
