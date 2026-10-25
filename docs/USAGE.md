@@ -2613,6 +2613,60 @@ contract is in `docs/FIELDORDER_DESIGN.md`. Informational
 only: the probe never affects selection, and the stage
 never fails the run.
 
+### 8.53 Token-depth sensitivity sweep (`run --token-depth-sweep`)
+
+```sh
+python -m model_protocol_lab run ... --token-depth-sweep --max-drop-tokens 4
+```
+
+The byte sweep (§8.5) can only mangle the tail of a multi-token
+turn-closing suffix: its cap is 8 bytes, and the shipped suffixes
+span 22 bytes (chatml), 47 bytes (llama3), and 21 bytes (gemma).
+This ladder drops whole trailing tokens instead: for each depth
+in 1..`--max-drop-tokens`, every prompt loses that many trailing
+token ids under the backend's own tokenization (no decode
+round-trip) and the full search re-runs. The report lists the
+depths where the selected winner or decision changed, plus the
+depths that could not be applied at all. A prompt-format
+researcher deciding whether a comparison's winner survives
+losing its trailing prompt tokens — for example the multi-token
+assistant turn-closing header — checks this readout before
+trusting the verdict.
+
+Two semantics differ deliberately from the byte sweep, whose
+behaviour is pinned and unchanged. First, every token depth
+carries a `status`: a depth at or beyond the shortest
+truncatable prompt length (decided by a pre-run token-length
+check over search and held-out prompts, never inferred from a
+failed run) is `inapplicable` — it keeps the run's `failed`
+decision for that depth, is listed separately, and is never
+counted as a flip; `winner_changed` is gated on
+`status == "applied"`. The byte sweep counts failed depths as
+flips, and that behaviour stays exactly as shipped. Second,
+the token payload is a separate key
+(`sensitivity_sweep_tokens`, with `granularity: "tokens"`,
+`max_drop_tokens`, per-depth `drop_tokens` / `status`, and
+per-candidate `suffix_token_counts` — the standalone-suffix
+token count under the run's tokenizer, an annotation for
+finding the whole-suffix depth, not a claim about how the
+suffix tokenizes inside a full prompt) and a separate report
+section, so no consumer can mistake a token depth for a byte
+depth. The flags are combinable with `--sensitivity-sweep`:
+when both are requested they share one native run, saving
+exactly one `run_experiment` versus two sweep calls. Like the
+byte sweep, token mode inherits the `diagnostics_unavailable`
+fallback: a sweep failure degrades the diagnostics, never the
+run. The wrapper refuses a prefill-wrapped backend at
+construction (dropping appended prefill ids first would measure
+the wrong thing), and a sweep over an id-rewriting backend
+(token healing) measures healed ids, not prompt ids, so such
+runs are plumbing-only, never evidence. Default 4 and cap 8
+are provisional working hypotheses: freezing them awaits a
+per-candidate suffix-token measurement on a real checkpoint
+tokenizer, which this cycle does not claim. Cost: native plus
+one `run_experiment` per depth, per mode. The full contract is
+in `docs/TOKENDEPTH_DESIGN.md`.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

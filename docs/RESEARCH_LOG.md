@@ -9615,3 +9615,63 @@ sentinel reading consistent with `classify_response`,
 canonical JSON pinned to `structured._canonical_json`, caps
 derived from enforced premises, decision operating
 characteristics printed).
+
+## Cycle 206 — token-depth sensitivity sweep: does the winner survive losing trailing prompt tokens? (backlog item, pre-build)
+
+Source of the item: wave-9 red-team B's qualification on the dropped
+boundary-truncation ladder (agents_out/wave9/redteam_b.md, adjudicated in
+agents_out/wave9/coordinator_adjudication.md). The shipped sensitivity
+sweep is byte-granularity, tail-only, depth ≤ 8 bytes
+(`--max-drop-bytes`, cli.py, `TruncatedPromptBackend` in backends.py,
+`truncate_text_tail` in core.py). For templates whose turn-closing
+suffix spans more than 8 bytes, a token-granularity ladder beyond that
+suffix is measured by no shipped readout. The unanswered, falsifiable
+claim: "selection/verdicts are invariant to dropping up to K trailing
+prompt tokens, K beyond the 8-byte cap." The natural home is an
+extension of the existing sweep, not a new probe; cycle 206 builds it as
+one small batch. Design: docs/TOKENDEPTH_DESIGN.md (claims, invariants,
+frozen probes P1–P4, open questions Q1–Q4 for the red teams).
+
+Neighbor check (web research pass, 2026-10-25): prompt-sensitivity
+literature studies paraphrase and template sensitivity of scores, not
+truncation ladders — Hua et al., "Flaw or Artifact? Rethinking Prompt
+Sensitivity in Evaluating LLMs", arXiv:2509.01790 (abstract verified:
+7 LLMs, 12 templates, variance attributed to evaluation heuristics).
+lm-eval-harness truncation is a length cap on few-shot examples when
+prompts exceed the context, not a sensitivity probe. No token-depth
+prompt-truncation ladder over a fixed selection rule was found in HELM
+or LightEval. Surviving claim is the combination: exact token-sequence
+selection machinery + token-depth truncation ladder + flip-depth readout
+on a local checkpoint — never "first".
+
+Built (cycle 206, 2026-10-25): the adversarial round (red-team A:
+F1 flip-pollution, F2 vacuous-or-unguaranteeable P4; red-team B:
+corrections to A1/F2/F6 plus prefill/id-rewriting composition
+caveats B1/B2; verifier: re-execution of every load-bearing
+claim) is adjudicated in agents_out/cycle206/
+coordinator_adjudication.md and the design amended before any
+code: status-gated flips (per-depth status, pre-run length
+check, inapplicable_at separate), P4 split into proven P4-reach
+(every shipped suffix exceeds 8 bytes and begins with a special
+token, so whole-suffix removal is in no byte-drop set) plus
+reported P4-flip, parallel implementation sharing
+run_experiment, separate payload key and report section, and
+the distinct +prompt-trunc-{K}t fingerprint. Shipped:
+TokenTruncatedPromptBackend (backends.py), prompt_token_depth_sweep
+(experiments.py), --token-depth-sweep / --max-drop-tokens
+(default 4, cap 8 provisional -- A4 real-checkpoint measurement
+not claimed in this cycle), shared native when both sweeps run,
+and the Token-depth report section; byte sweep and byte HTML
+byte-identical. Tests in tests/test_cycle206_tokendepth.py
+(P1 shape, P2 fail-closed, byte regression, shared native,
+CLI dispatch). Pre-push fix (wave-10 red-team A-F2,
+re-verified by execution before fixing): the four per-probe
+HTML sections (sweep, token-depth, rotation, field-order)
+routed payload-derived strings through bare escape(), so a
+lone surrogate in a library-supplied payload passed through
+verbatim and save_report raised UnicodeEncodeError on its
+UTF-8 write; all payload-derived interpolations in those
+sections now go through _escape_text, with regression tests
+in tests/test_cycle206_tokendepth.py; output for
+control-free payloads is byte-identical and U+2028/U+2029
+pass through unchanged.

@@ -807,6 +807,64 @@ class TruncatedPromptBackend:
         )
 
 
+class TokenTruncatedPromptBackend:
+    """Wrap a backend, dropping whole trailing tokens from every prompt.
+
+    ``encode(text)`` encodes with the inner backend and drops the last
+    ``drop_tokens`` token ids, so the model sees a prompt truncated by
+    whole tokens -- never a mangled re-encode of a mid-token cut. This
+    is the token-depth counterpart of ``TruncatedPromptBackend`` (which
+    drops trailing *bytes* and re-encodes); the two wrappers must never
+    be confused, hence the distinct ``t`` fingerprint suffix.
+
+    Defined on the BASE prompt encoding: the wrapper drops tokens from
+    whatever ``inner.encode`` returns, so stacking it over a backend
+    whose ``encode`` appends ids (``PrefillBackend`` appends prefill
+    ids) would drop the appended ids first and leave the prompt
+    intact -- a silent wrong measurement. Construction therefore
+    refuses any inner carrying a ``prefill_ids`` attribute. A backend
+    whose ``generate`` rewrites ids (``TokenHealingBackend``) is a
+    separate eligibility matter for the sweep caller: the wrapper
+    measures whatever ids ``generate`` actually consumes, and the
+    fingerprint chain (inner fingerprint + this suffix) keeps that
+    visible. ``decode`` and ``generate`` pass through untouched.
+    """
+
+    def __init__(self, inner: Backend, drop_tokens: int) -> None:
+        if type(drop_tokens) is not int or drop_tokens < 1:
+            raise ValueError("drop_tokens must be a positive integer")
+        inner_fingerprint = getattr(inner, "fingerprint", None)
+        if type(inner_fingerprint) is not str:
+            raise ValueError("Backend fingerprint must be a string")
+        if isinstance(getattr(inner, "prefill_ids", None), tuple):
+            raise ValueError(
+                "TokenTruncatedPromptBackend must wrap the base backend, "
+                "not a prefill-wrapped encoding"
+            )
+        self._inner = inner
+        self._drop_tokens = drop_tokens
+        self.fingerprint = f"{inner_fingerprint}+prompt-trunc-{drop_tokens}t"
+        # Truncation only rewrites prompts; the stop-string byte mapping is a
+        # pure tokenizer property, so it forwards unchanged.
+        self.hf_stop_token_bytes = getattr(inner, "hf_stop_token_bytes", None)
+
+    def encode(self, text: str) -> tuple[int, ...]:
+        ids = self._inner.encode(text)
+        if type(ids) is not tuple or self._drop_tokens >= len(ids):
+            raise ValueError("prompt_token_truncation_beyond_length")
+        return ids[: -self._drop_tokens]
+
+    def decode(self, token_ids: tuple[int, ...]) -> str:
+        return self._inner.decode(token_ids)
+
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        return self._inner.generate(
+            input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
+        )
+
+
 class TokenHealingBackend:
     """Wraps a backend; applies HF-style token healing to every prompt.
 
