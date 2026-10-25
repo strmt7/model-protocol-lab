@@ -54,6 +54,10 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "boundary_token_ids",
     "eos_token_id",
     "backend_fingerprint",
+    # Cycle 207: run_experiment stamps configuration_digest (B10-2),
+    # inserted here because the sample report's key order follows the
+    # run_experiment output literal; regenerated in the same push.
+    "configuration_digest",
     "statistical_confidence",
     "compute_comparison",
     "decision",

@@ -3487,14 +3487,26 @@ def prompt_sensitivity_sweep(
     same backend/formats/split/boundary to reuse as the baseline (the
     CLI shares one native between the byte and token sweeps, saving
     exactly one ``run_experiment`` versus two sweep calls). When
-    omitted, the native run is recomputed, as before.
+    omitted, the native run is recomputed, as before. A supplied
+    result must carry the ``configuration_digest`` of exactly this
+    sweep's configuration (see ``_require_native_match``): a
+    hand-made dict or a result from another configuration is
+    rejected, because shape alone used to let a foreign baseline
+    through and its ``flips_at`` was then computed against a run
+    that never happened here.
     """
     if type(max_drop_bytes) is not int or not 1 <= max_drop_bytes <= 8:
         raise ValueError("max_drop_bytes must be an integer between 1 and 8")
-    if native is not None and (
-        type(native) is not dict or "selected_candidate" not in native or "decision" not in native
-    ):
-        raise ValueError("native must be a run_experiment result dict")
+    _require_native_match(
+        native,
+        backend,
+        formats,
+        split,
+        boundary=boundary,
+        boundary_map=boundary_map,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+    )
     if native is None:
         native = run_experiment(
             backend,
@@ -3531,6 +3543,7 @@ def prompt_sensitivity_sweep(
             }
         )
     return {
+        "backend_fingerprint": _backend_fingerprint(backend),
         "native_decision": native["decision"],
         "native_winner": native_winner,
         "max_drop_bytes": max_drop_bytes,
@@ -3656,7 +3669,10 @@ def prompt_token_depth_sweep(
     runs are plumbing-only, never evidence -- the fingerprint chain
     keeps the healing step visible. ``native`` optionally supplies
     a ``run_experiment`` result to reuse as the baseline, as in
-    ``prompt_sensitivity_sweep``.
+    ``prompt_sensitivity_sweep`` — and under the same digest rule:
+    the supplied result must carry the ``configuration_digest``
+    of exactly this sweep's configuration (see
+    ``_require_native_match``), or it is rejected.
 
     Default 4 / cap 8 are provisional working hypotheses (design
     Q1): freezing them awaits A4, per-candidate suffix token counts
@@ -3666,10 +3682,16 @@ def prompt_token_depth_sweep(
     """
     if type(max_drop_tokens) is not int or not 1 <= max_drop_tokens <= 8:
         raise ValueError("max_drop_tokens must be an integer between 1 and 8")
-    if native is not None and (
-        type(native) is not dict or "selected_candidate" not in native or "decision" not in native
-    ):
-        raise ValueError("native must be a run_experiment result dict")
+    _require_native_match(
+        native,
+        backend,
+        formats,
+        split,
+        boundary=boundary,
+        boundary_map=boundary_map,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+    )
     if native is None:
         native = run_experiment(
             backend,
@@ -3723,6 +3745,7 @@ def prompt_token_depth_sweep(
         )
     return {
         "granularity": "tokens",
+        "backend_fingerprint": _backend_fingerprint(backend),
         "native_decision": native["decision"],
         "native_winner": native_winner,
         "max_drop_tokens": max_drop_tokens,
@@ -3858,6 +3881,108 @@ def _backend_fingerprint(backend: Backend) -> str:
     return fingerprint
 
 
+def _configuration_digest(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None,
+    max_new_tokens: int,
+    seed: int,
+    eos_id: int | None,
+) -> str:
+    """Stable identity of one ``run_experiment`` configuration.
+
+    Binds the backend fingerprint, the candidate fingerprints (in
+    order), the full fixture content of both splits (id, messages,
+    expected answer, group — ids alone would collide across
+    perturbed fixtures sharing an id), the boundary and per-format
+    boundary map, ``max_new_tokens``, ``seed``, and ``eos_id``.
+    Two runs of the same configuration produce the same digest;
+    any configuration change produces a different one. The sweeps
+    stamp-check a supplied ``native`` against the digest of their
+    own parameters, so a baseline computed for another
+    configuration — or a hand-made dict, which has no digest at
+    all — is rejected instead of silently compared (cycle 207,
+    wave-10 B10-2). Fixture content, not just ids, is hashed
+    because the digest's job is to prove the baseline ran on
+    these fixtures, not merely on fixtures with these ids.
+    """
+
+    def fixture_digest(case: Fixture) -> dict[str, Any]:
+        return {
+            "id": case.id,
+            "messages": [asdict(message) for message in case.messages],
+            "expected": case.expected,
+            "group": case.group,
+        }
+
+    payload = {
+        "backend_fingerprint": _backend_fingerprint(backend),
+        "candidate_fingerprints": [candidate_fingerprint(fmt) for fmt in formats],
+        "search": [fixture_digest(case) for case in split.search],
+        "held_out": [fixture_digest(case) for case in split.held_out],
+        "boundary_token_ids": list(boundary),
+        "boundary_map": (
+            {name: list(ids) for name, ids in sorted(boundary_map.items())}
+            if boundary_map is not None
+            else None
+        ),
+        "max_new_tokens": max_new_tokens,
+        "seed": seed,
+        "eos_id": eos_id,
+    }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "sha256:" + sha256(text.encode("utf-8")).hexdigest()
+
+
+def _require_native_match(
+    native: dict[str, Any] | None,
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None,
+    max_new_tokens: int,
+    seed: int,
+) -> None:
+    """Reject a supplied sweep baseline that is not this run's native.
+
+    A supplied ``native`` must be a ``run_experiment`` result
+    carrying the ``configuration_digest`` of exactly the
+    configuration the sweep itself would compute (same backend,
+    formats, split, boundary, seed, ``max_new_tokens``; the sweeps
+    take no ``eos_id``, so the expected digest uses ``None``).
+    Shape alone used to suffice — a hand-made dict with the two
+    keys, or a genuine result from another configuration, was
+    silently accepted and its ``flips_at`` computed against a
+    baseline that never ran here. A missing digest (hand-made
+    dicts and pre-cycle-207 artifacts) fails closed, as does a
+    mismatch. ``None`` passes: the sweep then recomputes its own
+    native, which carries the digest by construction.
+    """
+    if native is None:
+        return
+    if type(native) is not dict or "selected_candidate" not in native or "decision" not in native:
+        raise ValueError("native must be a run_experiment result dict")
+    expected = _configuration_digest(
+        backend,
+        formats,
+        split,
+        boundary=boundary,
+        boundary_map=boundary_map,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        eos_id=None,
+    )
+    if "configuration_digest" not in native:
+        raise ValueError("native is missing its configuration_digest")
+    if native["configuration_digest"] != expected:
+        raise ValueError("native configuration_digest does not match this sweep configuration")
+
+
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -3878,7 +4003,11 @@ def run_experiment(
     candidate must pass every search fixture or the decision abstains
     ("ambiguous" on ties, "no_candidate" when all fail). The returned dict
     carries the decision, per-candidate observations, and the failure
-    taxonomy on every return path.
+    taxonomy on every return path, plus ``configuration_digest``: the
+    stable identity of this run's configuration (see
+    ``_configuration_digest``), stamped on every return path so a
+    later consumer can prove a baseline belongs to this
+    configuration before comparing against it.
     """
 
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
@@ -3906,6 +4035,16 @@ def run_experiment(
         raise ValueError("Experiment fixture limit exceeded")
     boundaries = _resolve_boundaries(formats, boundary, boundary_map)
     event = cancel if cancel is not None else Event()
+    digest = _configuration_digest(
+        backend,
+        formats,
+        split,
+        boundary=boundary,
+        boundary_map=boundary_map,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        eos_id=eos_id,
+    )
     output: dict[str, Any] = {
         "schema_version": 1,
         "selection_rule": "unique_all_search_pass",
@@ -3915,6 +4054,7 @@ def run_experiment(
         "boundary_token_ids": list(boundary),
         "eos_token_id": eos_id,
         "backend_fingerprint": backend.fingerprint,
+        "configuration_digest": digest,
         "statistical_confidence": "not_estimated",
         "compute_comparison": "not_equal_compute_certified",
         "decision": "not_started",

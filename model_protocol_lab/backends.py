@@ -822,7 +822,10 @@ class TokenTruncatedPromptBackend:
     whose ``encode`` appends ids (``PrefillBackend`` appends prefill
     ids) would drop the appended ids first and leave the prompt
     intact -- a silent wrong measurement. Construction therefore
-    refuses any inner carrying a ``prefill_ids`` attribute. A backend
+    refuses any wrapper chain containing a backend carrying a
+    ``prefill_ids`` attribute, checked at every depth of the chain,
+    not just the direct inner (a prefill backend nested behind
+    another wrapper evaded the direct-only check). A backend
     whose ``generate`` rewrites ids (``TokenHealingBackend``) is a
     separate eligibility matter for the sweep caller: the wrapper
     measures whatever ids ``generate`` actually consumes, and the
@@ -836,11 +839,21 @@ class TokenTruncatedPromptBackend:
         inner_fingerprint = getattr(inner, "fingerprint", None)
         if type(inner_fingerprint) is not str:
             raise ValueError("Backend fingerprint must be a string")
-        if isinstance(getattr(inner, "prefill_ids", None), tuple):
-            raise ValueError(
-                "TokenTruncatedPromptBackend must wrap the base backend, "
-                "not a prefill-wrapped encoding"
-            )
+        # Walk the whole wrapper chain: every shipped wrapper stores
+        # its wrapped backend as ``_inner``, so a prefill backend
+        # nested behind another wrapper (e.g. the byte truncator) is
+        # reached here. Cycle-guarded: a pathological _inner loop
+        # terminates instead of hanging construction.
+        seen: set[int] = set()
+        node: Any = inner
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            if isinstance(getattr(node, "prefill_ids", None), tuple):
+                raise ValueError(
+                    "TokenTruncatedPromptBackend must wrap the base backend, "
+                    "not a prefill-wrapped encoding"
+                )
+            node = getattr(node, "_inner", None)
         self._inner = inner
         self._drop_tokens = drop_tokens
         self.fingerprint = f"{inner_fingerprint}+prompt-trunc-{drop_tokens}t"
