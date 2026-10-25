@@ -9,6 +9,7 @@
   ],
   "eos_token_id": null,
   "backend_fingerprint": "synthetic-demo-backend-v1-not-a-model",
+  "configuration_digest": "sha256:fa20aff25f1cb6404565cb0aa0c90f483bfee2f07135cedb3d046235f522e0db",
   "statistical_confidence": "not_estimated",
   "compute_comparison": "not_equal_compute_certified",
   "decision": "compatible_on_fixture_set",

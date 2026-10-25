@@ -44,6 +44,7 @@ from model_protocol_lab.core import Fixture, Format, Generation, Message, Split
 from model_protocol_lab.experiments import (
     prompt_sensitivity_sweep,
     prompt_token_depth_sweep,
+    run_experiment,
 )
 from model_protocol_lab.prefill import PrefillBackend
 
@@ -334,23 +335,57 @@ class TokenSweepTests(unittest.TestCase):
                 )
 
     def test_supplied_native_is_honoured(self) -> None:
-        # A caller-supplied native baseline governs the comparison even
-        # when the backend's own native run would differ.
-        supplied = {"decision": "ambiguous", "selected_candidate": None}
-        result = _sweep(max_drop_tokens=1, native=supplied)
-        self.assertEqual(result["native_decision"], "ambiguous")
-        self.assertIsNone(result["native_winner"])
-        for bad_native in (None, {}, {"decision": "x"}, {"selected_candidate": "y"}):
-            if bad_native is None:
-                continue
+        # Cycle 207 (wave-10 B10-2) changed the supplied-native
+        # contract: a baseline is honoured only when it carries the
+        # configuration_digest of exactly this sweep's configuration.
+        # A genuine native computed for these parameters is honoured;
+        # hand-made dicts and wrong-configuration results are rejected.
+        backend = ScriptedBackend(_script_for_flip_at_1())
+        native = run_experiment(
+            backend,
+            (_FMT_A, _FMT_B),
+            _SPLIT,
+            boundary=(_BOUNDARY,),
+            max_new_tokens=_CAP,
+            seed=0,
+        )
+        result = _sweep(max_drop_tokens=1, native=native)
+        self.assertEqual(result["native_decision"], native["decision"])
+        self.assertEqual(result["native_winner"], native["selected_candidate"])
+        for bad_native in (
+            {},
+            {"decision": "x"},
+            {"selected_candidate": "y"},
+            {"decision": "ambiguous", "selected_candidate": None},
+        ):
             with self.assertRaises(ValueError):
                 _sweep(max_drop_tokens=1, native=bad_native)  # type: ignore[arg-type]
+        stale = run_experiment(
+            ScriptedBackend(_script_for_flip_at_1()),
+            (_FMT_A, _FMT_B),
+            _SPLIT,
+            boundary=(_BOUNDARY,),
+            max_new_tokens=_CAP,
+            seed=1,
+        )
+        with self.assertRaises(ValueError):
+            _sweep(max_drop_tokens=1, native=stale)
 
     def test_shared_native_is_used_by_both_sweeps(self) -> None:
         # The CLI's shared-native path passes one native dict to both
         # sweeps; each sweep must honour it rather than recomputing.
-        supplied = {"decision": "compatible_on_fixture_set", "selected_candidate": "cand-a"}
+        # Cycle 207: the shared native must be a genuine result for
+        # these parameters (digest-stamped); hand-made dicts no longer
+        # qualify as a shared native.
         backend = ScriptedBackend(_script_for_flip_at_1())
+        native = run_experiment(
+            backend,
+            (_FMT_A, _FMT_B),
+            _SPLIT,
+            boundary=(_BOUNDARY,),
+            max_new_tokens=_CAP,
+            seed=0,
+        )
         byte_result = prompt_sensitivity_sweep(
             backend,
             (_FMT_A, _FMT_B),
@@ -359,7 +394,7 @@ class TokenSweepTests(unittest.TestCase):
             max_drop_bytes=1,
             max_new_tokens=_CAP,
             seed=0,
-            native=supplied,
+            native=native,
         )
         token_result = prompt_token_depth_sweep(
             backend,
@@ -369,10 +404,12 @@ class TokenSweepTests(unittest.TestCase):
             max_drop_tokens=1,
             max_new_tokens=_CAP,
             seed=0,
-            native=supplied,
+            native=native,
         )
-        self.assertEqual(byte_result["native_winner"], "cand-a")
-        self.assertEqual(token_result["native_winner"], "cand-a")
+        self.assertEqual(byte_result["native_winner"], native["selected_candidate"])
+        self.assertEqual(token_result["native_winner"], native["selected_candidate"])
+        self.assertEqual(byte_result["native_decision"], native["decision"])
+        self.assertEqual(token_result["native_decision"], native["decision"])
 
 
 class TokenReportingTests(unittest.TestCase):

@@ -6,6 +6,51 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 207 — wave-10 corrections, 2026-10-25)
+
+- The sensitivity sweeps no longer trust a caller-supplied
+  baseline on shape alone: `run_experiment` now stamps a
+  `configuration_digest` into every result (backend
+  fingerprint, candidate fingerprints, full fixture content
+  of both splits, boundary + boundary map,
+  `max_new_tokens`, seed, `eos_id`), and both the byte and
+  token sweeps require a supplied `native=` to carry the
+  digest of exactly their own configuration. A hand-made
+  dict, a result from another configuration, or a pre-207
+  artifact is rejected instead of silently compared
+  (wave-10 finding B10-2, re-verified by execution before
+  fixing). Both sweep payloads now also carry
+  `backend_fingerprint` (B10-3).
+- `TokenTruncatedPromptBackend` now refuses a prefill-wrapped
+  inner at any depth of the wrapper chain, not just the
+  direct inner: a `PrefillBackend` nested behind the byte
+  wrapper previously evaded the refusal and the token sweep
+  silently measured prefill removal (B10-1).
+- `verify_results` no longer crashes with `TypeError` on an
+  unhashable `decision` (dict/list from parsed JSON); it
+  records a failed schema check, as it already did for every
+  other malformed shape (A-F1). Both CLI routes were already
+  defended upstream and are unchanged.
+- `docs/RESEARCH_LOG.md` citations corrected against the
+  live arXiv records: the cycle-148 entry's
+  arXiv:2504.21038 "AgentHarm" label is re-titled to Li et
+  al., Prefill-level Jailbreak (the entry's prefill
+  substance verifies); the cycle-193 entry's description of
+  arXiv:2605.28188 is rewritten from the abstract (FRAGILE:
+  value-tinted narration, temporal slice, narrative
+  vividness; 28.6% flips; mitigation VALIGN,
+  representation-level) with the previous few-shot-placement
+  characterization withdrawn in full; the cycle-169 entry's
+  "survey" label for arXiv:2505.23817 is corrected to
+  "framework paper (SPE-LLM)". The verifier's abstract-only
+  flag on "LeakBench" (arXiv:2606.18673) was checked
+  against the paper body and overturned: LeakBench is the
+  paper's benchmark, measured with an LLM-based evaluator
+  (PLS) and embedding similarity (SS), so that text is
+  unchanged. The committed sample report was regenerated
+  for the new `run_experiment` key. Tests in
+  `tests/test_cycle207_corrections.py`.
+
 ### Added (cycle 206 — token-depth sensitivity sweep, 2026-10-25)
 
 - `run --token-depth-sweep` with `--max-drop-tokens`

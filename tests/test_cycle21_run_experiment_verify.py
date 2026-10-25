@@ -328,6 +328,46 @@ def oracle_fingerprint(fmt):
     return "sha256:" + sha256(text.encode("utf-8")).hexdigest()
 
 
+def oracle_configuration_digest(
+    backend, formats, split, *, boundary, boundary_map, max_new_tokens, seed, eos_id
+):
+    """Per _configuration_digest docstring: sha256 over the canonical JSON
+    of the backend fingerprint, the candidate fingerprints in order, the
+    full fixture content of both splits (id, messages, expected answer,
+    group), the boundary and per-format boundary map, max_new_tokens,
+    seed, and eos_id. Written from the docstring's field list, not
+    imported from the implementation, so the oracle independently pins
+    the field (cycle 207: the digest is a new run_experiment output
+    key, and the oracle diff must carry it or every oracle case
+    fails on the extra key)."""
+
+    def fixture_payload(case):
+        return {
+            "id": case.id,
+            "messages": [asdict(message) for message in case.messages],
+            "expected": case.expected,
+            "group": case.group,
+        }
+
+    payload = {
+        "backend_fingerprint": backend.fingerprint,
+        "candidate_fingerprints": [oracle_fingerprint(fmt) for fmt in formats],
+        "search": [fixture_payload(case) for case in split.search],
+        "held_out": [fixture_payload(case) for case in split.held_out],
+        "boundary_token_ids": list(boundary),
+        "boundary_map": (
+            {name: list(ids) for name, ids in sorted(boundary_map.items())}
+            if boundary_map is not None
+            else None
+        ),
+        "max_new_tokens": max_new_tokens,
+        "seed": seed,
+        "eos_id": eos_id,
+    }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "sha256:" + sha256(text.encode("utf-8")).hexdigest()
+
+
 def oracle_failure_code(records):
     """Per _failure_code docstring: scan observations from the end for the
     first fixed-vocabulary error code; None when nothing failed."""
@@ -435,6 +475,16 @@ def oracle_run_experiment(
         "boundary_token_ids": list(boundary),
         "eos_token_id": eos_id,
         "backend_fingerprint": backend.fingerprint,
+        "configuration_digest": oracle_configuration_digest(
+            backend,
+            formats,
+            split,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            eos_id=eos_id,
+        ),
         "statistical_confidence": "not_estimated",
         "compute_comparison": "not_equal_compute_certified",
         "decision": "not_started",

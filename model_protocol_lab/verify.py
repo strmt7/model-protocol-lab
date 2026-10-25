@@ -147,7 +147,12 @@ def _check_schema(data: Any, checks: list[dict[str, str]]) -> dict[str, Any] | N
         _record(checks, "schema", _FAILED, "results.json is not a JSON object")
         return None
     problems: list[str] = []
-    if data.get("decision") not in _KNOWN_DECISIONS:
+    # Type-guard before the frozenset membership test: an unhashable
+    # decision (dict/list from parsed JSON) raised TypeError here
+    # instead of recording a failed schema check (cycle 207,
+    # wave-10 A-F1). Every sibling field is already type-guarded
+    # first; decision was the only one relying on hashability.
+    if type(data.get("decision")) is not str or data.get("decision") not in _KNOWN_DECISIONS:
         problems.append("decision not in known vocabulary")
     if type(data.get("search")) is not list:
         problems.append("search is not a list")
