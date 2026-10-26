@@ -2710,6 +2710,55 @@ tokenizer, which this cycle does not claim. Cost: native plus
 one `run_experiment` per depth, per mode. The full contract is
 in `docs/TOKENDEPTH_DESIGN.md`.
 
+### 8.54 Canonical-form sensitivity (`run --canonical-form`)
+
+```sh
+model-protocol-lab run ... --canonical-form
+```
+
+A practitioner whose prompts carry accented text — names,
+places, quoted passages — learns, per template family,
+whether composing those accents (NFC) or decomposing them
+(NFD) changes verdicts on their checkpoint, instead of
+assuming Unicode normalization is invisible to the model.
+The answer is checkpoint-specific by construction: a
+tokenizer that normalizes before tokenizing makes both arms
+token-identical, and the probe reports that as
+instrument-inapplicable, never as robustness.
+
+Twenty-four cases are generated from the run seed. Each
+payload is three sentences — a neutral scene sentence, the
+one answer-bearing fact, a second neutral sentence — with
+the fact frozen in the middle position, and the question
+wording byte-identical in every arm. Accents live in
+carrier prose, topic, and question only; every expected
+value is pure ASCII, so the byte-exact scorer cannot
+manufacture discordance from an accented answer. Each case
+contributes two cells (NFC, NFD) whose contents differ only
+in canonical form, and the two arms' full render id
+sequences are compared at encode time before any generation
+is spent.
+
+The headline conditions on cases whose id sequences
+actually diverged, split by direction (NFC-only passes,
+NFD-only passes), with the ids-identical share reported
+separately and same-ids verdict flips recorded as a
+determinism finding, never as fragility. The falsification
+bar is transplanted from placement: at least 6 paired
+evaluable cases and at least 2 discordant cases, below
+which the readout is `insufficient` or `below_threshold`
+rather than falsified. The per-arm winner selections over
+the shared population are compared as a headline:
+`winner_changed` only for a genuine winner change —
+selection-vs-abstention is never a winner change. The
+diff validator recomputes both arms' content digests from
+the seed, so a payload cannot assert its own treatment.
+Cost: 48 generations per candidate (1,152 at the legal
+maximum: 24 candidates x 24 cases x 2 arms). The full
+contract is in `docs/CANONICALFORM_DESIGN.md`. Informational
+only: the probe never affects selection, and the stage
+never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

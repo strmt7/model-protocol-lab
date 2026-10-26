@@ -5119,6 +5119,185 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_canonicalform_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_canonicalform: exact
+        # top-level shape, the protocol rebuilt through the
+        # producer module (canonicalform) where the
+        # implementation rebuilds it from literal tables,
+        # every record checked against the
+        # producer-regenerated case set in canonical order
+        # INCLUDING the treatment (both arms' content digests
+        # recomputed from the producer's own form_content),
+        # the id-divergence flags checked against the arm
+        # token counts, every cell's verdict re-derived from
+        # its digest identity, completed cells bound to the
+        # record's arm token count, aggregates and per-arm
+        # selections recomputed. A drift in either side's
+        # constants breaks the agreement.
+        import hashlib as _hashlib
+        import json as _json
+
+        from model_protocol_lab import canonicalform as _cf
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "candidates",
+            "conditions",
+            "selection",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_cf.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _cf.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _cf.generate_cases(seed)
+        total = 0
+        records_bytes = 0
+        raw: dict[str, Any] = {}
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _cf.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, generated, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "topic",
+                    "expected_digest",
+                    "nfc_tokens",
+                    "nfd_tokens",
+                    "ids_identical",
+                    "id_length_delta",
+                    "nfc_content_digest",
+                    "nfd_content_digest",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                    return False
+                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                if record["expected_digest"] != expected_digest:
+                    return False
+                if record["nfc_content_digest"] != _cf.digest_text(_cf.form_content(case, "nfc")):
+                    return False
+                if record["nfd_content_digest"] != _cf.digest_text(_cf.form_content(case, "nfd")):
+                    return False
+                if record["nfc_content_digest"] == record["nfd_content_digest"]:
+                    return False
+                nfc_tokens = record["nfc_tokens"]
+                nfd_tokens = record["nfd_tokens"]
+                if type(nfc_tokens) is not int or nfc_tokens < 0:
+                    return False
+                if type(nfd_tokens) is not int or nfd_tokens < 0:
+                    return False
+                if type(record["ids_identical"]) is not bool:
+                    return False
+                if record["ids_identical"] and nfc_tokens != nfd_tokens:
+                    return False
+                if record["id_length_delta"] != nfc_tokens - nfd_tokens:
+                    return False
+                cells = record["cells"]
+                details = record["cell_details"]
+                if type(cells) is not dict or set(cells) != set(_cf.ARM_KEYS):
+                    return False
+                if type(details) is not dict or set(details) != set(_cf.ARM_KEYS):
+                    return False
+                for arm in _cf.ARM_KEYS:
+                    cell = cells[arm]
+                    detail = details[arm]
+                    if cell is None:
+                        if detail not in ("arm_context_exceeded", "arm_evaluation_failed"):
+                            return False
+                    else:
+                        if detail != "":
+                            return False
+                        if type(cell) is not dict or set(cell) != {
+                            "verdict",
+                            "boundary_found",
+                            "boundary_text_match",
+                            "input_tokens",
+                            "answer_digest",
+                        }:
+                            return False
+                        if type(cell["verdict"]) is not bool:
+                            return False
+                        if type(cell["boundary_found"]) is not bool:
+                            return False
+                        if (
+                            cell["boundary_text_match"] is not None
+                            and type(cell["boundary_text_match"]) is not bool
+                        ):
+                            return False
+                        if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+                            return False
+                        digest = cell["answer_digest"]
+                        if digest is not None and not (
+                            type(digest) is str
+                            and len(digest) == 64
+                            and all(c in "0123456789abcdef" for c in digest)
+                        ):
+                            return False
+                        verdict = (digest == expected_digest) and cell["boundary_found"]
+                        if cell["verdict"] != verdict:
+                            return False
+                        arm_tokens = nfc_tokens if arm == "nfc" else nfd_tokens
+                        if cell["input_tokens"] != arm_tokens:
+                            return False
+            raw[name] = records
+            expected = _cf.aggregate_candidate(records)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total > _cf.MAX_GROUND_RECORDS:
+            return False
+        if not raw:
+            return False
+        conditions = {arm: _cf.arm_selection(raw, arm) for arm in _cf.ARM_KEYS}
+        if value.get("conditions") != conditions:
+            return False
+        expected_selection = {
+            "nfc": conditions["nfc"],
+            "nfd": conditions["nfd"],
+            "winner": _cf.winner_headline(conditions),
+        }
+        if value.get("selection") != expected_selection:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(generated))
+
     def _or_rotation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_rotation: exact top-level
         # shape, the protocol rebuilt through the producer
@@ -6788,6 +6967,18 @@ def oracle_diff_reports(
         _o_pl_available = "neither"
     _o_pl_asymmetric = _o_pl_available not in ("both", "neither")
 
+    _cform_old_ok = _or_canonicalform_valid(old.get("canonical_form"))
+    _cform_new_ok = _or_canonicalform_valid(new.get("canonical_form"))
+    if _cform_old_ok and _cform_new_ok:
+        _o_cform_available = "both"
+    elif _cform_old_ok:
+        _o_cform_available = "old"
+    elif _cform_new_ok:
+        _o_cform_available = "new"
+    else:
+        _o_cform_available = "neither"
+    _o_cform_asymmetric = _o_cform_available not in ("both", "neither")
+
     _rt_old_ok = _or_rotation_valid(old.get("rotation"))
     _rt_new_ok = _or_rotation_valid(new.get("rotation"))
     if _rt_old_ok and _rt_new_ok:
@@ -6934,6 +7125,7 @@ def oracle_diff_reports(
         and not _o_mt_asymmetric
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
+        and not _o_cform_asymmetric
         and not _o_rt_asymmetric
         and not _o_de_asymmetric
         and not _o_fo_asymmetric
@@ -7019,6 +7211,8 @@ def oracle_diff_reports(
         "needle_asymmetric": _o_nd_asymmetric,
         "placement_changed": False,
         "placement_asymmetric": _o_pl_asymmetric,
+        "canonical_form_changed": False,
+        "canonical_form_asymmetric": _o_cform_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
         "precision_changed": False,
@@ -7082,6 +7276,7 @@ def oracle_diff_reports(
         "multiturn": {"available": _o_mt_available, "changed": False},
         "needle": {"available": _o_nd_available, "changed": False},
         "placement": {"available": _o_pl_available, "changed": False},
+        "canonical_form": {"available": _o_cform_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},

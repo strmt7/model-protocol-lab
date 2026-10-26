@@ -718,6 +718,7 @@ def diff_reports(
     multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
     needle_diff = diff_needle(old.get("needle"), new.get("needle"))
     placement_diff = diff_placement(old.get("placement"), new.get("placement"))
+    canonical_form_diff = diff_canonicalform(old.get("canonical_form"), new.get("canonical_form"))
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -792,6 +793,10 @@ def diff_reports(
         "neither",
     )
     placement_asymmetric = placement_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    canonical_form_asymmetric = canonical_form_diff["available"] not in (
         "both",
         "neither",
     )
@@ -910,6 +915,8 @@ def diff_reports(
         and not needle_asymmetric
         and not placement_diff["changed"]
         and not placement_asymmetric
+        and not canonical_form_diff["changed"]
+        and not canonical_form_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1006,6 +1013,8 @@ def diff_reports(
         "needle_asymmetric": needle_asymmetric,
         "placement_changed": placement_diff["changed"],
         "placement_asymmetric": placement_asymmetric,
+        "canonical_form_changed": canonical_form_diff["changed"],
+        "canonical_form_asymmetric": canonical_form_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1059,6 +1068,7 @@ def diff_reports(
         "multiturn": multiturn_diff,
         "needle": needle_diff,
         "placement": placement_diff,
+        "canonical_form": canonical_form_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -10654,6 +10664,842 @@ def diff_placement(old: Any, new: Any) -> dict[str, Any]:
         or placement_protocol_drift
         or placement_generator_drift
         or placement_backend_drift
+    )
+    return result
+
+
+_CANONICALFORM_ARM_KEYS = ("nfc", "nfd")
+_CANONICALFORM_BASELINE_ARM = "nfc"
+_CANONICALFORM_CASE_COUNT = 24
+_CANONICALFORM_FACT_TEMPLATE = "The {topic} inspection code is {value}."
+_CANONICALFORM_QUESTION_TEMPLATE = "What is the {topic} inspection code?"
+_CANONICALFORM_TOPICS = (
+    "café",
+    "naïve",
+    "Zürich",
+    "crème",
+    "señor",
+    "façade",
+    "résumé",
+    "piñata",
+    "jalapeño",
+    "soufflé",
+    "touché",
+    "protégé",
+    "fiancé",
+    "blasé",
+    "cliché",
+    "exposé",
+    "saké",
+    "pâté",
+    "brûlée",
+    "décor",
+    "élan",
+    "über",
+    "schön",
+    "tête",
+)
+_CANONICALFORM_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_CANONICALFORM_NEUTRAL_POOL = (
+    "The hôtel lobby smells faintly of coffee and old paper.",
+    "A forêt trail winds past the lake before sunrise.",
+    "The côte road curves above the harbour all morning.",
+    "The fête banners hang above the market stalls at dusk.",
+    "A silver locket with a fête ribbon rests on the wooden dresser.",
+    "Letters from his mère fill the shallow drawer.",
+    "The théâtre posters cover the wall beside the ticket desk.",
+    "A matinée crowd gathers outside the cinéma doors.",
+    "The musée catalogue lists every painting by number.",
+    "Rain taps the lycée windows above the courtyard all day.",
+    "The opéra programme rests on top of the piano.",
+    "A séance of quiet reading fills the long afternoon.",
+    "The Noël market smells of pine and roasted chestnuts.",
+    "Dust gathers on the crèche figures in the attic box.",
+)
+_CANONICALFORM_MIN_PAIRED_EVALUABLE = 6
+_CANONICALFORM_MIN_DISCORDANT = 2
+_CANONICALFORM_MAX_GROUND_RECORDS = 24 * _CANONICALFORM_CASE_COUNT
+_CANONICALFORM_GENERATION_BUDGET = len(_CANONICALFORM_ARM_KEYS) * _CANONICALFORM_MAX_GROUND_RECORDS
+_CANONICALFORM_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_CANONICALFORM_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_CANONICALFORM_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_CANONICALFORM_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "headline",
+    "invariance_falsified",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _canonicalform_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    canonicalform.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _canonicalform_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is None or a well-formed SHA-256
+    hex digest (fails closed on lone surrogates, the cycle-190
+    discipline)."""
+    if value is None:
+        return True
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _canonicalform_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of canonicalform._derive (frozen material string)."""
+    import hashlib as _hashlib
+
+    material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of canonicalform.generate_cases: the frozen case
+    set for a seed, regenerated from the protocol's own seed so
+    a fabricated set is rejected (the numform F2 lesson). The
+    authored content is NFC; the NFD form is derived from it,
+    exactly as the producer derives it."""
+    import unicodedata as _unicodedata
+
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_CANONICALFORM_CASE_COUNT):
+        topic = _CANONICALFORM_TOPICS[index]
+        counter = 0
+        while True:
+            word = _CANONICALFORM_WORDS[
+                _canonicalform_derive(seed, index, 0, counter) % len(_CANONICALFORM_WORDS)
+            ]
+            number = 1000 + _canonicalform_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        first = _canonicalform_derive(seed, index, 2, 0) % len(_CANONICALFORM_NEUTRAL_POOL)
+        second = _canonicalform_derive(seed, index, 3, 0) % len(_CANONICALFORM_NEUTRAL_POOL)
+        if second == first:
+            second = (first + 1) % len(_CANONICALFORM_NEUTRAL_POOL)
+        fact = _CANONICALFORM_FACT_TEMPLATE.format(topic=topic, value=value)
+        payload = (
+            f"{_CANONICALFORM_NEUTRAL_POOL[first]} {fact} {_CANONICALFORM_NEUTRAL_POOL[second]}"
+        )
+        content = f"{payload} {_CANONICALFORM_QUESTION_TEMPLATE.format(topic=topic)}"
+        cases.append(
+            {
+                "fixture_id": f"canonicalform-{index:02d}",
+                "topic": topic,
+                "value": value,
+                "sentence_indices": [first, second],
+                "content": content,
+                "nfc_content": _unicodedata.normalize("NFC", content),
+                "nfd_content": _unicodedata.normalize("NFD", content),
+            }
+        )
+    return cases
+
+
+def _canonicalform_case_material_sha256() -> str:
+    """Mirror of canonicalform.case_material_sha256."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _CANONICALFORM_FACT_TEMPLATE,
+            _CANONICALFORM_QUESTION_TEMPLATE,
+            list(_CANONICALFORM_TOPICS),
+            list(_CANONICALFORM_WORDS),
+            list(_CANONICALFORM_NEUTRAL_POOL),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _canonicalform_digest(canonical)
+
+
+def _canonicalform_ground_sha256(seed: int) -> str:
+    """Mirror of canonicalform.ground_sha256, including both
+    arms' content digests so the ground digest binds the
+    treatment."""
+    import json as _json
+
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["value"],
+            list(case["sentence_indices"]),
+            _canonicalform_digest(case["nfc_content"]),
+            _canonicalform_digest(case["nfd_content"]),
+        ]
+        for case in _canonicalform_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _canonicalform_digest(canonical)
+
+
+def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The canonical-form protocol rebuilt from this module's
+    own literals plus the payload's seed and backend
+    fingerprint, fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_CANONICALFORM_ARM_KEYS),
+        "baseline_arm": _CANONICALFORM_BASELINE_ARM,
+        "case_count": _CANONICALFORM_CASE_COUNT,
+        "case_material_sha256": _canonicalform_case_material_sha256(),
+        "ground_sha256": _canonicalform_ground_sha256(seed),
+        "min_paired_evaluable": _CANONICALFORM_MIN_PAIRED_EVALUABLE,
+        "min_discordant": _CANONICALFORM_MIN_DISCORDANT,
+        "generation_budget": _CANONICALFORM_GENERATION_BUDGET,
+        "max_ground_records": _CANONICALFORM_MAX_GROUND_RECORDS,
+        "max_records_bytes": _CANONICALFORM_MAX_RECORDS_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _canonicalform_digest(canonical)
+    return protocol
+
+
+def _canonicalform_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    import math as _math
+
+    n = a_only + b_only
+    if n == 0:
+        return None
+    k = min(a_only, b_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _canonicalform_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _canonicalform_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _canonicalform_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _canonicalform_pair_block_divergent(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of canonicalform._pair_block_divergent: the
+    headline population is both-cells-completed AND
+    ids-divergent; ids-identical records never enter."""
+    n_paired = 0
+    n_nfc_only = 0
+    n_nfd_only = 0
+    n_both = 0
+    n_pass_nfc = 0
+    n_pass_nfd = 0
+    for record in records:
+        if record.get("ids_identical") is not False:
+            continue
+        cell_nfc = _canonicalform_cell_get(record, "nfc")
+        cell_nfd = _canonicalform_cell_get(record, "nfd")
+        if cell_nfc is None or cell_nfd is None:
+            continue
+        n_paired += 1
+        verdict_nfc = bool(cell_nfc["verdict"])
+        verdict_nfd = bool(cell_nfd["verdict"])
+        if verdict_nfc:
+            n_pass_nfc += 1
+        if verdict_nfd:
+            n_pass_nfd += 1
+        if verdict_nfc and verdict_nfd:
+            n_both += 1
+        elif verdict_nfc:
+            n_nfc_only += 1
+        elif verdict_nfd:
+            n_nfd_only += 1
+    return {
+        "n_paired": n_paired,
+        "n_nfc_only": n_nfc_only,
+        "n_nfd_only": n_nfd_only,
+        "n_both": n_both,
+        "n_neither": n_paired - n_nfc_only - n_nfd_only - n_both,
+        "rate_nfc": (n_pass_nfc / n_paired) if n_paired else None,
+        "rate_nfd": (n_pass_nfd / n_paired) if n_paired else None,
+        "mcnemar_p": _canonicalform_mcnemar_p(n_nfc_only, n_nfd_only),
+    }
+
+
+def _canonicalform_classify(n_paired: int, nfc_only: int, nfd_only: int) -> str:
+    """Mirror of canonicalform.classify_canonical_form."""
+    d = nfc_only + nfd_only
+    if n_paired < _CANONICALFORM_MIN_PAIRED_EVALUABLE:
+        return "insufficient"
+    if d == 0:
+        return "no_discordance_observed"
+    if nfc_only == nfd_only and nfc_only >= _CANONICALFORM_MIN_DISCORDANT:
+        return "discordant_balanced"
+    if max(nfc_only, nfd_only) >= _CANONICALFORM_MIN_DISCORDANT:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _canonicalform_falsified(classification: str) -> bool:
+    """Mirror of canonicalform.invariance_falsified."""
+    return classification in ("discordant_balanced", "discordant_asymmetric")
+
+
+def _canonicalform_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of canonicalform.aggregate_candidate."""
+    arms: dict[str, Any] = {}
+    for key in _CANONICALFORM_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        for record in records:
+            cell = _canonicalform_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+        }
+    n_ids_identical = 0
+    n_ids_divergent = 0
+    deltas: list[int] = []
+    for record in records:
+        if record.get("ids_identical") is True:
+            n_ids_identical += 1
+        elif record.get("ids_identical") is False:
+            n_ids_divergent += 1
+        delta = record.get("id_length_delta")
+        deltas.append(delta if type(delta) is int else 0)
+    n_same_ids_flips = 0
+    for record in records:
+        if record.get("ids_identical") is not True:
+            continue
+        cell_nfc = _canonicalform_cell_get(record, "nfc")
+        cell_nfd = _canonicalform_cell_get(record, "nfd")
+        if cell_nfc is None or cell_nfd is None:
+            continue
+        if bool(cell_nfc["verdict"]) != bool(cell_nfd["verdict"]):
+            n_same_ids_flips += 1
+    headline_raw = _canonicalform_pair_block_divergent(records)
+    classification = _canonicalform_classify(
+        headline_raw["n_paired"], headline_raw["n_nfc_only"], headline_raw["n_nfd_only"]
+    )
+    headline = {
+        "n_paired": headline_raw["n_paired"],
+        "n_nfc_only": headline_raw["n_nfc_only"],
+        "n_nfd_only": headline_raw["n_nfd_only"],
+        "n_both": headline_raw["n_both"],
+        "n_neither": headline_raw["n_neither"],
+        "rate_nfc": headline_raw["rate_nfc"],
+        "rate_nfd": headline_raw["rate_nfd"],
+        "mcnemar_p": headline_raw["mcnemar_p"],
+        "classification": classification,
+    }
+    return {
+        "arms": arms,
+        "ids": {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": n_ids_divergent,
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(d) for d in deltas), default=0),
+        },
+        "headline": headline,
+        "invariance_falsified": _canonicalform_falsified(classification),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if _canonicalform_cell_get(record, "nfc") is None
+            or _canonicalform_cell_get(record, "nfd") is None
+        ),
+    }
+
+
+def _canonicalform_shared_fixtures(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+) -> frozenset[str]:
+    populations: list[frozenset[str]] = []
+    for records in records_by_candidate.values():
+        populations.append(frozenset(str(r.get("fixture")) for r in records))
+    if not populations:
+        return frozenset()
+    return frozenset.intersection(*populations)
+
+
+def _canonicalform_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    """Mirror of canonicalform._selection_over."""
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _canonicalform_cell_get(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _canonicalform_verdict(record, key)
+            for record in records
+            if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _canonicalform_arm_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    arm: str,
+) -> dict[str, Any]:
+    """Mirror of canonicalform.arm_selection."""
+    shared = _canonicalform_shared_fixtures(records_by_candidate)
+    own = _canonicalform_selection_over(records_by_candidate, arm, shared)
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+            "flip": None,
+        }
+    if arm == _CANONICALFORM_BASELINE_ARM:
+        flip: bool | None = False
+    else:
+        completed = frozenset(
+            str(record["fixture"])
+            for records in records_by_candidate.values()
+            for record in records
+            if record["fixture"] in shared and _canonicalform_cell_get(record, arm) is not None
+        )
+        baseline = _canonicalform_selection_over(
+            records_by_candidate, _CANONICALFORM_BASELINE_ARM, completed
+        )
+        flip = None if baseline is None else own != baseline
+    return {
+        "decision": own["decision"],
+        "detail": "",
+        "winner": own["winner"],
+        "withheld": False,
+        "flip": flip,
+    }
+
+
+def _canonicalform_winner_headline(conditions: dict[str, Any]) -> dict[str, Any]:
+    """Mirror of canonicalform.winner_headline."""
+    nfc = conditions.get("nfc") if isinstance(conditions, dict) else None
+    nfd = conditions.get("nfd") if isinstance(conditions, dict) else None
+    if not isinstance(nfc, dict) or not isinstance(nfd, dict):
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_missing",
+            "winner_changed": None,
+        }
+    if nfc.get("withheld") is True or nfd.get("withheld") is True:
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner_changed": None,
+        }
+    nfc_selected = nfc.get("decision") == "selected"
+    nfd_selected = nfd.get("decision") == "selected"
+    if nfc_selected and nfd_selected:
+        if nfc.get("winner") != nfd.get("winner"):
+            return {"headline": "winner_changed", "detail": "", "winner_changed": True}
+        return {"headline": "winner_stable", "detail": "", "winner_changed": False}
+    if nfc_selected != nfd_selected:
+        return {
+            "headline": "winner_abstention_asymmetric",
+            "detail": "",
+            "winner_changed": False,
+        }
+    return {"headline": "winner_undefined", "detail": "", "winner_changed": False}
+
+
+def _canonicalform_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and the verdict binding
+    ``verdict == (answer_digest == expected_digest) and
+    boundary_found``. The expected digest is the record's,
+    itself checked against the mirror-regenerated case."""
+    if type(cell) is not dict or set(cell) != _CANONICALFORM_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _canonicalform_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _canonicalform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a canonical-form payload from its ground records.
+
+    The validator carries its own generator mirror, templates,
+    pools, and aggregators (no imports from canonicalform.py):
+    the protocol is rebuilt from frozen scalars plus the
+    payload's seed and backend fingerprint and compared whole;
+    the case set is regenerated from the seed and every record's
+    construction is compared against it -- including, unlike
+    placement, the TREATMENT itself: each record's NFC/NFD
+    content digests must equal the digests of the mirror's own
+    NFC/NFD derivations, the two digests must differ, and the
+    id-divergence flags must be consistent with the arm token
+    counts (ids_identical implies equal counts; the delta is
+    the count difference). Every cell's verdict is re-derived
+    from its digest identity; every completed cell's
+    ``input_tokens`` must equal the record's arm token count
+    for that arm; the aggregates, per-arm selections, and
+    winner headline are recomputed and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _canonicalform_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _canonicalform_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _CANONICALFORM_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _CANONICALFORM_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "nfc_tokens",
+                "nfd_tokens",
+                "ids_identical",
+                "id_length_delta",
+                "nfc_content_digest",
+                "nfd_content_digest",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _canonicalform_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            if record["nfc_content_digest"] != _canonicalform_digest(case["nfc_content"]):
+                return None
+            if record["nfd_content_digest"] != _canonicalform_digest(case["nfd_content"]):
+                return None
+            if record["nfc_content_digest"] == record["nfd_content_digest"]:
+                return None
+            nfc_tokens = record["nfc_tokens"]
+            nfd_tokens = record["nfd_tokens"]
+            if type(nfc_tokens) is not int or nfc_tokens < 0:
+                return None
+            if type(nfd_tokens) is not int or nfd_tokens < 0:
+                return None
+            if type(record["ids_identical"]) is not bool:
+                return None
+            if record["ids_identical"] and nfc_tokens != nfd_tokens:
+                return None
+            if record["id_length_delta"] != nfc_tokens - nfd_tokens:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_CANONICALFORM_ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(_CANONICALFORM_ARM_KEYS):
+                return None
+            for arm in _CANONICALFORM_ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _CANONICALFORM_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _canonicalform_cell_ok(cell, expected_digest):
+                        return None
+                    arm_tokens = nfc_tokens if arm == "nfc" else nfd_tokens
+                    if cell["input_tokens"] != arm_tokens:
+                        return None
+        raw_records[name] = records
+        aggregates[name] = _canonicalform_aggregate(records)
+    if total_records > _CANONICALFORM_MAX_GROUND_RECORDS:
+        return None
+    if not raw_records:
+        return None
+    conditions = {
+        arm: _canonicalform_arm_selection(raw_records, arm) for arm in _CANONICALFORM_ARM_KEYS
+    }
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions,
+        "selection": {
+            "nfc": conditions["nfc"],
+            "nfd": conditions["nfd"],
+            "winner": _canonicalform_winner_headline(conditions),
+        },
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_canonicalform(payload: Any) -> bool:
+    """Structural check for a ``canonical_form`` payload (recompute standard)."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "selection",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    recomputed = _canonicalform_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("conditions"), recomputed["conditions"]):
+        return False
+    if not _recomputed_equal(payload.get("selection"), recomputed["selection"]):
+        return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_canonicalform(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``canonical_form`` probe payloads; deterministic.
+
+    Answers "did the canonical-form story change between runs?":
+    per-candidate classification and falsification drift, the
+    directional discordant counts, the ids-identical share and
+    same-ids flip drift, the winner-headline drift, per-arm
+    selection drift, candidates added/removed, and protocol /
+    generator / backend drift (any of which marks the comparison
+    not comparable, with the drift still listed -- the generated
+    set is the treatment, so a changed generator is protocol
+    drift). A side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_canonicalform(old)
+    new_ok = _valid_canonicalform(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    cf_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    cf_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    cf_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    cf_comparable = not cf_protocol_drift and not cf_generator_drift and not cf_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    cf_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    cf_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    cf_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                cf_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        cf_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "classification",
+                old_entry["headline"]["classification"],
+                new_entry["headline"]["classification"],
+            ),
+            (
+                "invariance_falsified",
+                old_entry["invariance_falsified"],
+                new_entry["invariance_falsified"],
+            ),
+            (
+                "n_nfc_only",
+                old_entry["headline"]["n_nfc_only"],
+                new_entry["headline"]["n_nfc_only"],
+            ),
+            (
+                "n_nfd_only",
+                old_entry["headline"]["n_nfd_only"],
+                new_entry["headline"]["n_nfd_only"],
+            ),
+            (
+                "n_ids_identical",
+                old_entry["ids"]["n_ids_identical"],
+                new_entry["ids"]["n_ids_identical"],
+            ),
+            (
+                "n_same_ids_verdict_flips",
+                old_entry["ids"]["n_same_ids_verdict_flips"],
+                new_entry["ids"]["n_same_ids_verdict_flips"],
+            ),
+        ]
+        for metric, old_value, new_value in cf_metrics:
+            if old_value != new_value:
+                cf_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    cf_condition_drift: list[dict[str, Any]] = []
+    for arm in _CANONICALFORM_ARM_KEYS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            cf_condition_drift.append(
+                {
+                    "condition": arm,
+                    "old": old["conditions"][arm],
+                    "new": new["conditions"][arm],
+                }
+            )
+    cf_selection_drift: list[dict[str, Any]] = []
+    if old["selection"] != new["selection"]:
+        cf_selection_drift.append(
+            {
+                "selection": "winner_headline",
+                "old": old["selection"]["winner"],
+                "new": new["selection"]["winner"],
+            }
+        )
+    result["candidate_drift"] = cf_candidate_drift
+    result["condition_drift"] = cf_condition_drift
+    result["selection_drift"] = cf_selection_drift
+    result["candidates_added"] = cf_candidates_added
+    result["candidates_removed"] = cf_candidates_removed
+    result["protocol_drift"] = cf_protocol_drift
+    result["generator_drift"] = cf_generator_drift
+    result["backend_drift"] = cf_backend_drift
+    result["comparable"] = cf_comparable
+    result["changed"] = bool(
+        cf_candidate_drift
+        or cf_condition_drift
+        or cf_selection_drift
+        or cf_candidates_added
+        or cf_candidates_removed
+        or cf_protocol_drift
+        or cf_generator_drift
+        or cf_backend_drift
     )
     return result
 

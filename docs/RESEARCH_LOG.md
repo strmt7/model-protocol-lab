@@ -9829,3 +9829,72 @@ the brief's file:line evidence re-checked, not inherited.
 - S6: the publish job gains a checkout step and uses
   --notes-file for docs/RELEASE_NOTES_<version>.md when
   present, falling back to the template string.
+
+## Cycle 209 — canonical-form ladder: does NFC-vs-NFD prompt text change verdicts? (`run --canonical-form`, wave-10 slate rank 1, 2026-10-26)
+
+Design round (researcher, blind red-teams A and B, verifier;
+briefs in ~/workspace/agents_out/canonicalform/; adjudication in
+~/workspace/agents_out/cycle209/build_log.md). Every load-bearing
+claim re-derived by the building coordinator's own execution
+against main 5e62aebeb733 before building; design doc
+docs/CANONICALFORM_DESIGN.md (ADJUDICATED).
+
+- Gap, verified by census: the tree's only Unicode transform
+  over prompt text is surface-noise's `unicode_variant`
+  operator (fullwidth compatibility substitution,
+  perturbation.py:101-123); every `unicodedata.normalize` call
+  in the package is a comparison key, detection signature,
+  output classification, or post-hoc answer regrading. Nothing
+  shipped re-renders message text under another canonical form
+  and re-measures. The differentiator is the combination
+  (canonically equivalent text × 29 template families ×
+  conservative winner re-selection), never "first".
+- Neighbour web pass (2026-10-26): LM Eval Harness, HELM, DSPy,
+  PromptPerfect, OpenAI evals searched for a prompt-side
+  canonical-form instrument — none found. Promptfoo's
+  `normalizeUnicode` normalizes at the assertion side (equals /
+  contains answer comparison, NFC default, NFKC option), the
+  same side as the lab's scorer-lens rung, not a prompt
+  re-render. Recorded as a search result, not proof.
+- Primary sources: UAX #15 §1.1 (canonical equivalence
+  definition) and §10 point 3 ("must respect canonical
+  equivalence or problems will result"), both verbatim;
+  Sclar et al. arXiv:2310.11324 (visible formatting, up to 76
+  points on LLaMA-2-13B, not canonical form); Rana et al.
+  arXiv:2511.03237v1 "IndicSuperTokenizer" (§3.2 NFKC in
+  pre-tokenization, Table 16 fertility by NFC/NFD/NFKC, §3.5
+  intrinsic metrics — tokens-per-word, not verdicts). The v1
+  pin is load-bearing: arXiv now lists v2 retitled "MUTANT".
+- The round's FATAL, executed twice independently and
+  reproduced by the coordinator through real `core.evaluate`:
+  the byte-exact scorer (`answer == case.expected`,
+  core.py:797) flips a zero-defect echo model's verdict when
+  the expected value itself carries accents (NFC True, NFD
+  False). Binding pin: accents in prose/topic/question only,
+  every expected value pure ASCII. The alternative (NFC-compare
+  in the verdict layer) was rejected: it redefines "verdict"
+  relative to every sibling probe.
+- Falsification population is ID-divergent paired cases only
+  (ids measured at encode time on the full render); the report
+  is three-way (ids-identical / divergent-concordant /
+  divergent-discordant) with per-case id-length deltas. A
+  100%-ids-identical run reads "instrument inapplicable to
+  this tokenizer", never "model is robust" (SentencePiece's
+  default NFKC-variant normalizer is the documented mechanism).
+  Same-ids verdict flips are determinism findings (ws-scan
+  precedent), never fragility. Floors transplanted from
+  placement (6 paired, 2 discordant); selection-vs-abstention
+  is never a winner change. Records commit NFC/NFD content
+  digests; the diff validator's independent mirror regenerates
+  both forms from the seed (field-order pattern, not
+  placement's count-only shape). No fixture arm (shipped
+  fixtures are pure ASCII; Split's NFC keys make form-twins the
+  same fixture), no NFKC arm in v1, no as-authored control
+  (degenerate == NFC). Alphabet defined by mapping, not block;
+  singletons excluded, Hangul deferred, canonical ordering by
+  construction. The equivalence assert NFC(NFD(x)) == NFC(x) is
+  a theorem, not a validation check.
+- UNVERIFIED and unused: "The Orthographic and Encoding
+  Convention Tax" 12–14% figure (contained in the wave-10
+  appendix note; no rank depends on it); the macOS-NFD-arrival
+  motivating example (background reasoning only).

@@ -291,6 +291,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "multiturn": {"available": "neither", "changed": False},
         "needle": {"available": "neither", "changed": False},
         "placement": {"available": "neither", "changed": False},
+        "canonical_form": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -384,6 +385,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "needle_asymmetric": False,
             "placement_changed": False,
             "placement_asymmetric": False,
+            "canonical_form_changed": False,
+            "canonical_form_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -5866,6 +5869,768 @@ def _o_placement(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# ---------------------------------------------------------------------------
+# Canonical-form oracle (cycle 209): mirrors
+# diffreports.diff_canonicalform with an independent
+# reimplementation -- frozen tables, generator, aggregates,
+# selections, and winner headline are all rebuilt here, never
+# imported from the producer or the mirror, so a drift in any
+# side's constants breaks the agreement the tests assert.
+# ---------------------------------------------------------------------------
+
+_O_CF_TOPICS = (
+    "café",
+    "naïve",
+    "Zürich",
+    "crème",
+    "señor",
+    "façade",
+    "résumé",
+    "piñata",
+    "jalapeño",
+    "soufflé",
+    "touché",
+    "protégé",
+    "fiancé",
+    "blasé",
+    "cliché",
+    "exposé",
+    "saké",
+    "pâté",
+    "brûlée",
+    "décor",
+    "élan",
+    "über",
+    "schön",
+    "tête",
+)
+_O_CF_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_O_CF_POOL = (
+    "The hôtel lobby smells faintly of coffee and old paper.",
+    "A forêt trail winds past the lake before sunrise.",
+    "The côte road curves above the harbour all morning.",
+    "The fête banners hang above the market stalls at dusk.",
+    "A silver locket with a fête ribbon rests on the wooden dresser.",
+    "Letters from his mère fill the shallow drawer.",
+    "The théâtre posters cover the wall beside the ticket desk.",
+    "A matinée crowd gathers outside the cinéma doors.",
+    "The musée catalogue lists every painting by number.",
+    "Rain taps the lycée windows above the courtyard all day.",
+    "The opéra programme rests on top of the piano.",
+    "A séance of quiet reading fills the long afternoon.",
+    "The Noël market smells of pine and roasted chestnuts.",
+    "Dust gathers on the crèche figures in the attic box.",
+)
+_O_CF_FACT = "The {topic} inspection code is {value}."
+_O_CF_QUESTION = "What is the {topic} inspection code?"
+_O_CF_ARM_KEYS = ("nfc", "nfd")
+_O_CF_BASELINE = "nfc"
+_O_CF_CASE_COUNT = 24
+_O_CF_MIN_PAIRED = 6
+_O_CF_MIN_DISCORDANT = 2
+_O_CF_MAX_RECORDS = 24 * 24
+_O_CF_BUDGET = 2 * _O_CF_MAX_RECORDS
+_O_CF_MAX_BYTES = 12 * 1024 * 1024
+_O_CF_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_O_CF_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_CF_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "headline",
+    "invariance_falsified",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _o_cf_digest(text: str) -> str:
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_cf_digest_ok(value: Any) -> bool:
+    if value is None:
+        return True
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _o_cf_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    import hashlib as _hashlib
+
+    material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
+    import unicodedata as _unicodedata
+
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_O_CF_CASE_COUNT):
+        topic = _O_CF_TOPICS[index]
+        counter = 0
+        while True:
+            word = _O_CF_WORDS[_o_cf_derive(seed, index, 0, counter) % len(_O_CF_WORDS)]
+            number = 1000 + _o_cf_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        first = _o_cf_derive(seed, index, 2, 0) % len(_O_CF_POOL)
+        second = _o_cf_derive(seed, index, 3, 0) % len(_O_CF_POOL)
+        if second == first:
+            second = (first + 1) % len(_O_CF_POOL)
+        fact = _O_CF_FACT.format(topic=topic, value=value)
+        payload = f"{_O_CF_POOL[first]} {fact} {_O_CF_POOL[second]}"
+        content = f"{payload} {_O_CF_QUESTION.format(topic=topic)}"
+        cases.append(
+            {
+                "fixture_id": f"canonicalform-{index:02d}",
+                "topic": topic,
+                "value": value,
+                "sentence_indices": [first, second],
+                "content": content,
+                "nfc_content": _unicodedata.normalize("NFC", content),
+                "nfd_content": _unicodedata.normalize("NFD", content),
+            }
+        )
+    return cases
+
+
+def _o_cf_case_material_sha256() -> str:
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _O_CF_FACT,
+            _O_CF_QUESTION,
+            list(_O_CF_TOPICS),
+            list(_O_CF_WORDS),
+            list(_O_CF_POOL),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _o_cf_digest(canonical)
+
+
+def _o_cf_ground_sha256(seed: int) -> str:
+    import json as _json
+
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["value"],
+            list(case["sentence_indices"]),
+            _o_cf_digest(case["nfc_content"]),
+            _o_cf_digest(case["nfd_content"]),
+        ]
+        for case in _o_cf_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_cf_digest(canonical)
+
+
+def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_O_CF_ARM_KEYS),
+        "baseline_arm": _O_CF_BASELINE,
+        "case_count": _O_CF_CASE_COUNT,
+        "case_material_sha256": _o_cf_case_material_sha256(),
+        "ground_sha256": _o_cf_ground_sha256(seed),
+        "min_paired_evaluable": _O_CF_MIN_PAIRED,
+        "min_discordant": _O_CF_MIN_DISCORDANT,
+        "generation_budget": _O_CF_BUDGET,
+        "max_ground_records": _O_CF_MAX_RECORDS,
+        "max_records_bytes": _O_CF_MAX_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_cf_digest(canonical)
+    return protocol
+
+
+def _o_cf_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    import math as _math
+
+    n = a_only + b_only
+    if n == 0:
+        return None
+    k = min(a_only, b_only)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    return min(1.0, 2.0 * tail)
+
+
+def _o_cf_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_cf_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _o_cf_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_cf_pair_block(records: list[dict[str, Any]]) -> dict[str, Any]:
+    n_paired = 0
+    n_nfc_only = 0
+    n_nfd_only = 0
+    n_both = 0
+    n_pass_nfc = 0
+    n_pass_nfd = 0
+    for record in records:
+        if record.get("ids_identical") is not False:
+            continue
+        cell_nfc = _o_cf_cell_get(record, "nfc")
+        cell_nfd = _o_cf_cell_get(record, "nfd")
+        if cell_nfc is None or cell_nfd is None:
+            continue
+        n_paired += 1
+        verdict_nfc = bool(cell_nfc["verdict"])
+        verdict_nfd = bool(cell_nfd["verdict"])
+        if verdict_nfc:
+            n_pass_nfc += 1
+        if verdict_nfd:
+            n_pass_nfd += 1
+        if verdict_nfc and verdict_nfd:
+            n_both += 1
+        elif verdict_nfc:
+            n_nfc_only += 1
+        elif verdict_nfd:
+            n_nfd_only += 1
+    return {
+        "n_paired": n_paired,
+        "n_nfc_only": n_nfc_only,
+        "n_nfd_only": n_nfd_only,
+        "n_both": n_both,
+        "n_neither": n_paired - n_nfc_only - n_nfd_only - n_both,
+        "rate_nfc": (n_pass_nfc / n_paired) if n_paired else None,
+        "rate_nfd": (n_pass_nfd / n_paired) if n_paired else None,
+        "mcnemar_p": _o_cf_mcnemar_p(n_nfc_only, n_nfd_only),
+    }
+
+
+def _o_cf_classify(n_paired: int, nfc_only: int, nfd_only: int) -> str:
+    d = nfc_only + nfd_only
+    if n_paired < _O_CF_MIN_PAIRED:
+        return "insufficient"
+    if d == 0:
+        return "no_discordance_observed"
+    if nfc_only == nfd_only and nfc_only >= _O_CF_MIN_DISCORDANT:
+        return "discordant_balanced"
+    if max(nfc_only, nfd_only) >= _O_CF_MIN_DISCORDANT:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _o_cf_falsified(classification: str) -> bool:
+    return classification in ("discordant_balanced", "discordant_asymmetric")
+
+
+def _o_cf_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    arms: dict[str, Any] = {}
+    for key in _O_CF_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        for record in records:
+            cell = _o_cf_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+        }
+    n_ids_identical = 0
+    n_ids_divergent = 0
+    deltas: list[int] = []
+    for record in records:
+        if record.get("ids_identical") is True:
+            n_ids_identical += 1
+        elif record.get("ids_identical") is False:
+            n_ids_divergent += 1
+        delta = record.get("id_length_delta")
+        deltas.append(delta if type(delta) is int else 0)
+    n_same_ids_flips = 0
+    for record in records:
+        if record.get("ids_identical") is not True:
+            continue
+        cell_nfc = _o_cf_cell_get(record, "nfc")
+        cell_nfd = _o_cf_cell_get(record, "nfd")
+        if cell_nfc is None or cell_nfd is None:
+            continue
+        if bool(cell_nfc["verdict"]) != bool(cell_nfd["verdict"]):
+            n_same_ids_flips += 1
+    headline_raw = _o_cf_pair_block(records)
+    classification = _o_cf_classify(
+        headline_raw["n_paired"], headline_raw["n_nfc_only"], headline_raw["n_nfd_only"]
+    )
+    headline = {
+        "n_paired": headline_raw["n_paired"],
+        "n_nfc_only": headline_raw["n_nfc_only"],
+        "n_nfd_only": headline_raw["n_nfd_only"],
+        "n_both": headline_raw["n_both"],
+        "n_neither": headline_raw["n_neither"],
+        "rate_nfc": headline_raw["rate_nfc"],
+        "rate_nfd": headline_raw["rate_nfd"],
+        "mcnemar_p": headline_raw["mcnemar_p"],
+        "classification": classification,
+    }
+    return {
+        "arms": arms,
+        "ids": {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": n_ids_divergent,
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(d) for d in deltas), default=0),
+        },
+        "headline": headline,
+        "invariance_falsified": _o_cf_falsified(classification),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if _o_cf_cell_get(record, "nfc") is None or _o_cf_cell_get(record, "nfd") is None
+        ),
+    }
+
+
+def _o_cf_shared(records_by_candidate: dict[str, list[dict[str, Any]]]) -> frozenset[str]:
+    populations: list[frozenset[str]] = []
+    for records in records_by_candidate.values():
+        populations.append(frozenset(str(r.get("fixture")) for r in records))
+    if not populations:
+        return frozenset()
+    return frozenset.intersection(*populations)
+
+
+def _o_cf_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _o_cf_cell_get(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _o_cf_verdict(record, key) for record in records if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _o_cf_arm_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    arm: str,
+) -> dict[str, Any]:
+    shared = _o_cf_shared(records_by_candidate)
+    own = _o_cf_selection_over(records_by_candidate, arm, shared)
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+            "flip": None,
+        }
+    if arm == _O_CF_BASELINE:
+        flip: bool | None = False
+    else:
+        completed = frozenset(
+            str(record["fixture"])
+            for records in records_by_candidate.values()
+            for record in records
+            if record["fixture"] in shared and _o_cf_cell_get(record, arm) is not None
+        )
+        baseline = _o_cf_selection_over(records_by_candidate, _O_CF_BASELINE, completed)
+        flip = None if baseline is None else own != baseline
+    return {
+        "decision": own["decision"],
+        "detail": "",
+        "winner": own["winner"],
+        "withheld": False,
+        "flip": flip,
+    }
+
+
+def _o_cf_winner_headline(conditions: dict[str, Any]) -> dict[str, Any]:
+    nfc = conditions.get("nfc") if isinstance(conditions, dict) else None
+    nfd = conditions.get("nfd") if isinstance(conditions, dict) else None
+    if not isinstance(nfc, dict) or not isinstance(nfd, dict):
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_missing",
+            "winner_changed": None,
+        }
+    if nfc.get("withheld") is True or nfd.get("withheld") is True:
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner_changed": None,
+        }
+    nfc_selected = nfc.get("decision") == "selected"
+    nfd_selected = nfd.get("decision") == "selected"
+    if nfc_selected and nfd_selected:
+        if nfc.get("winner") != nfd.get("winner"):
+            return {"headline": "winner_changed", "detail": "", "winner_changed": True}
+        return {"headline": "winner_stable", "detail": "", "winner_changed": False}
+    if nfc_selected != nfd_selected:
+        return {
+            "headline": "winner_abstention_asymmetric",
+            "detail": "",
+            "winner_changed": False,
+        }
+    return {"headline": "winner_undefined", "detail": "", "winner_changed": False}
+
+
+def _o_cf_cell_ok(cell: Any, expected_digest: str) -> bool:
+    if type(cell) is not dict or set(cell) != _O_CF_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _o_cf_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if protocol != _o_cf_protocol(seed, backend_fingerprint):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _o_cf_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    raw_records: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_CF_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_CF_MAX_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "nfc_tokens",
+                "nfd_tokens",
+                "ids_identical",
+                "id_length_delta",
+                "nfc_content_digest",
+                "nfd_content_digest",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _o_cf_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            if record["nfc_content_digest"] != _o_cf_digest(case["nfc_content"]):
+                return None
+            if record["nfd_content_digest"] != _o_cf_digest(case["nfd_content"]):
+                return None
+            if record["nfc_content_digest"] == record["nfd_content_digest"]:
+                return None
+            nfc_tokens = record["nfc_tokens"]
+            nfd_tokens = record["nfd_tokens"]
+            if type(nfc_tokens) is not int or nfc_tokens < 0:
+                return None
+            if type(nfd_tokens) is not int or nfd_tokens < 0:
+                return None
+            if type(record["ids_identical"]) is not bool:
+                return None
+            if record["ids_identical"] and nfc_tokens != nfd_tokens:
+                return None
+            if record["id_length_delta"] != nfc_tokens - nfd_tokens:
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            if type(cells) is not dict or set(cells) != set(_O_CF_ARM_KEYS):
+                return None
+            if type(details) is not dict or set(details) != set(_O_CF_ARM_KEYS):
+                return None
+            for arm in _O_CF_ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _O_CF_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_cf_cell_ok(cell, expected_digest):
+                        return None
+                    arm_tokens = nfc_tokens if arm == "nfc" else nfd_tokens
+                    if cell["input_tokens"] != arm_tokens:
+                        return None
+        raw_records[name] = records
+        aggregates[name] = _o_cf_aggregate(records)
+    if total_records > _O_CF_MAX_RECORDS:
+        return None
+    if not raw_records:
+        return None
+    conditions = {arm: _o_cf_arm_selection(raw_records, arm) for arm in _O_CF_ARM_KEYS}
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions,
+        "selection": {
+            "nfc": conditions["nfc"],
+            "nfd": conditions["nfd"],
+            "winner": _o_cf_winner_headline(conditions),
+        },
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_canonicalform_valid(value: Any) -> bool:
+    """Oracle canonical-form validator: mirrors
+    diffreports._valid_canonicalform."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "candidates",
+        "conditions",
+        "selection",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    recomputed = _o_cf_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("conditions") != recomputed["conditions"]:
+        return False
+    if value.get("selection") != recomputed["selection"]:
+        return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_canonicalform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle canonical-form section: mirrors
+    diffreports.diff_canonicalform."""
+    old_ok = _o_canonicalform_valid(old)
+    new_ok = _o_canonicalform_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics = [
+            (
+                "classification",
+                old_entry["headline"]["classification"],
+                new_entry["headline"]["classification"],
+            ),
+            (
+                "invariance_falsified",
+                old_entry["invariance_falsified"],
+                new_entry["invariance_falsified"],
+            ),
+            (
+                "n_nfc_only",
+                old_entry["headline"]["n_nfc_only"],
+                new_entry["headline"]["n_nfc_only"],
+            ),
+            (
+                "n_nfd_only",
+                old_entry["headline"]["n_nfd_only"],
+                new_entry["headline"]["n_nfd_only"],
+            ),
+            (
+                "n_ids_identical",
+                old_entry["ids"]["n_ids_identical"],
+                new_entry["ids"]["n_ids_identical"],
+            ),
+            (
+                "n_same_ids_verdict_flips",
+                old_entry["ids"]["n_same_ids_verdict_flips"],
+                new_entry["ids"]["n_same_ids_verdict_flips"],
+            ),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    condition_drift: list[dict[str, Any]] = []
+    for arm in _O_CF_ARM_KEYS:
+        if old["conditions"][arm] != new["conditions"][arm]:
+            condition_drift.append(
+                {"condition": arm, "old": old["conditions"][arm], "new": new["conditions"][arm]}
+            )
+    selection_drift: list[dict[str, Any]] = []
+    if old["selection"] != new["selection"]:
+        selection_drift.append(
+            {
+                "selection": "winner_headline",
+                "old": old["selection"]["winner"],
+                "new": new["selection"]["winner"],
+            }
+        )
+    diff["candidate_drift"] = candidate_drift
+    diff["condition_drift"] = condition_drift
+    diff["selection_drift"] = selection_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or condition_drift
+        or selection_drift
+        or added
+        or removed
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_rotation_digest_ok(item: Any) -> bool:
     if item is None:
         return True
@@ -10158,6 +10923,9 @@ def _oracle_diff(
     o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
     o_nd, o_nd_changed, o_nd_asymmetric = _o_needle(old.get("needle"), new.get("needle"))
     o_pl, o_pl_changed, o_pl_asymmetric = _o_placement(old.get("placement"), new.get("placement"))
+    o_cform, o_cform_changed, o_cform_asymmetric = _o_canonicalform(
+        old.get("canonical_form"), new.get("canonical_form")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -10256,6 +11024,8 @@ def _oracle_diff(
         and not o_nd_asymmetric
         and not o_pl_changed
         and not o_pl_asymmetric
+        and not o_cform_changed
+        and not o_cform_asymmetric
         and not o_ca_changed
         and not o_ca_asymmetric
         and not o_pr_changed
@@ -10318,6 +11088,7 @@ def _oracle_diff(
         "multiturn": o_mt,
         "needle": o_nd,
         "placement": o_pl,
+        "canonical_form": o_cform,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -10407,6 +11178,8 @@ def _oracle_diff(
             "needle_asymmetric": o_nd_asymmetric,
             "placement_changed": o_pl_changed,
             "placement_asymmetric": o_pl_asymmetric,
+            "canonical_form_changed": o_cform_changed,
+            "canonical_form_asymmetric": o_cform_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -11350,6 +12123,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "needle_asymmetric": False,
                 "placement_changed": False,
                 "placement_asymmetric": False,
+                "canonical_form_changed": False,
+                "canonical_form_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -15254,6 +16029,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not needle_asymmetric\n"
             '        and not placement_diff["changed"]\n'
             "        and not placement_asymmetric\n"
+            '        and not canonical_form_diff["changed"]\n'
+            "        and not canonical_form_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -15350,6 +16127,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or needle_asymmetric\n"
             '        or placement_diff["changed"]\n'
             "        or placement_asymmetric\n"
+            '        or canonical_form_diff["changed"]\n'
+            "        or canonical_form_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -15403,6 +16182,120 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             '    return "pass" if passes > 0 else "fail"  # MUTANT-4\n',
             scenario,
         )
+
+
+class CanonicalFormOracleAgreementTests(unittest.TestCase):
+    """Cycle 209: the canonical-form oracle must agree with the
+    real diff on REAL stage payloads, not just on the neither
+    stubs the fuzzer produces (the fuzzer emits no
+    canonical_form section, so without this test the oracle's
+    recompute depth would be unproven)."""
+
+    def _backend(self, mode="perfect", fail_count=0):
+        import re as _re
+
+        class _WordBackend:
+            fingerprint = "sha256:test-cf-oracle"
+
+            def __init__(self):
+                self.mode = mode
+                self.fail_count = fail_count
+                self.nfd_fails = 0
+                self.vocab: dict[str, int] = {}
+                self.rev: dict[int, str] = {}
+
+            def encode(self, text):
+                ids = []
+                for token in text.replace("\n", " \n ").split(" "):
+                    if not token:
+                        continue
+                    if token not in self.vocab:
+                        self.vocab[token] = len(self.vocab) + 1
+                        self.rev[self.vocab[token]] = token
+                    ids.append(self.vocab[token])
+                return tuple(ids)
+
+            def decode(self, ids):
+                return " ".join(self.rev.get(int(i), "?") for i in ids)
+
+            def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                import unicodedata as _unicodedata
+
+                text = self.decode(list(input_ids))
+                found = _re.findall(r"inspection code is (\S+?)\.", text)
+                answer = found[-1] if found else "unknown"
+                if (
+                    self.mode == "nfd_fail"
+                    and _unicodedata.normalize("NFC", text) != text
+                    and self.nfd_fails < self.fail_count
+                ):
+                    self.nfd_fails += 1
+                    answer = "wrong-0000"
+                boundary = self.encode("endmark")[0]
+                out = list(self.encode(answer)) + [boundary]
+                out = (out + [boundary] * max_new_tokens)[:max_new_tokens]
+                return Generation(token_ids=tuple(out), reason="limit")
+
+        return _WordBackend()
+
+    def _payload(self, backend):
+        fmt = Format(
+            name="cf-alpha",
+            bos="",
+            user_prefix="u:",
+            assistant_prefix="a:",
+            turn_end="</s>",
+        )
+        stage = experiments.canonicalform_stage(
+            backend,
+            (fmt,),
+            boundary=tuple(backend.encode("endmark")),
+            max_context=65536,
+            seed=0,
+        )
+        return experiments.canonicalform_analysis(stage, ("cf-alpha",))
+
+    def _pair(self, old_payload, new_payload):
+        old = _base_report()
+        new = _base_report()
+        old["canonical_form"] = old_payload
+        new["canonical_form"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        payload = self._payload(self._backend())
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["canonical_form"], real["canonical_form"])
+        self.assertEqual(
+            oracle["summary"]["canonical_form_changed"],
+            real["summary"]["canonical_form_changed"],
+        )
+        self.assertFalse(real["summary"]["canonical_form_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        first = self._payload(self._backend())
+        second = self._payload(self._backend("nfd_fail", 3))
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["canonical_form"], real["canonical_form"])
+        self.assertTrue(real["canonical_form"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        first = self._payload(self._backend())
+        bad = copy.deepcopy(first)
+        bad["candidates"]["cf-alpha"]["records"][0]["cells"]["nfc"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["canonical_form"], real["canonical_form"])
+        self.assertEqual(real["canonical_form"]["available"], "old")
+        self.assertFalse(real["canonical_form"]["changed"])
 
 
 if __name__ == "__main__":

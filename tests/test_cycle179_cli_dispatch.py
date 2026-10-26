@@ -111,6 +111,7 @@ STAGE_FLAGS = [
     ("--multiturn", "multiturn", None),
     ("--needle", "needle", None),
     ("--placement", "placement", None),
+    ("--canonical-form", "canonical_form", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -293,6 +294,12 @@ HELPER_DISPATCH = [
         "placement",
         "placement_unavailable",
         ["placement_stage", "placement_analysis"],
+    ),
+    (
+        "_run_canonical_form_probe",
+        "canonical_form",
+        "canonical_form_unavailable",
+        ["canonicalform_stage", "canonicalform_analysis"],
     ),
     (
         "_run_rotation_probe",
