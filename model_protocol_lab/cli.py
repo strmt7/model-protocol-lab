@@ -659,6 +659,38 @@ def build_parser() -> argparse.ArgumentParser:
         "stage never fails the run.",
     )
     run.add_argument(
+        "--negation",
+        action="store_true",
+        help="Antonym-negated definite-description probe (cycle 212, "
+        "research wave-10 rank 3): 16 generated numform compare "
+        "pairs from the run seed, rendered under four instruction "
+        "arms per candidate -- direct ('larger'), negated ('not "
+        "the smaller'), flipped ('smaller'), and a descriptive "
+        "negated_alt arm ('not smaller than the other', never a "
+        "decision input). The negated arm differs from direct in "
+        "two lexical moves (the negation token plus the "
+        "larger-to-smaller antonym swap), so the claim is "
+        "antonym-negated definite-description discordance, "
+        "never negation simpliciter. Headline, per candidate "
+        "over cases completed in all three headline arms: D = "
+        "direct passes, J = cases in D where the negated cell "
+        "is the wrong label AND the flipped cell passes on the "
+        "same case; D < 8 is insufficient, D >= 8 and J >= 5 is "
+        "negation_drop_observed, D >= 8 and J < 5 is "
+        "below_threshold (an observed null, not proof of "
+        "invariance). Flipped is a competence gate, and a "
+        "flipped pass rate on D below 0.5 carries the "
+        "gate-weak qualifier (negation-drop undiagnosed, not "
+        "absent). No winner readout in v1. Monday morning: "
+        "'does phrasing a comparison as not-the-smaller change "
+        "verdicts on this template, or does the candidate hold "
+        "the same label across the phrasing?' Costs 4 "
+        "generations per candidate per case (1,536 at the "
+        "legal maximum: 24 candidates x 16 cases x 4; 1,152 "
+        "headline). Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -1999,6 +2031,49 @@ def _run_canonical_form_probe(
         result["canonical_form"] = {
             "available": False,
             "detail": "canonical_form_unavailable",
+        }
+
+
+def _run_negation_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the antonym-negated definite-description probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import negation_analysis, negation_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = negation_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["negation"] = negation_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- negation must not fail the run
+        result["negation"] = {
+            "available": False,
+            "detail": "negation_unavailable",
         }
 
 
@@ -3969,6 +4044,25 @@ def main(argv: list[str] | None = None) -> int:
                 # the run.
                 if args.canonical_form:
                     _run_canonical_form_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Negation probe (cycle 212, research wave-10
+                # rank 3): generated compare pairs rendered
+                # under direct, negated, flipped, and
+                # descriptive negated_alt instructions per
+                # candidate, the run's cancel event threaded
+                # into the stage loop. Informational only --
+                # never changes selection. Never fails the run.
+                if args.negation:
+                    _run_negation_probe(
                         backend,
                         formats,
                         result,

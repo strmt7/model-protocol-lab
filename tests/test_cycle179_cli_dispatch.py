@@ -112,6 +112,7 @@ STAGE_FLAGS = [
     ("--needle", "needle", None),
     ("--placement", "placement", None),
     ("--canonical-form", "canonical_form", None),
+    ("--negation", "negation", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -300,6 +301,12 @@ HELPER_DISPATCH = [
         "canonical_form",
         "canonical_form_unavailable",
         ["canonicalform_stage", "canonicalform_analysis"],
+    ),
+    (
+        "_run_negation_probe",
+        "negation",
+        "negation_unavailable",
+        ["negation_stage", "negation_analysis"],
     ),
     (
         "_run_rotation_probe",

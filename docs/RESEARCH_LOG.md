@@ -9898,3 +9898,54 @@ docs/CANONICALFORM_DESIGN.md (ADJUDICATED).
   Convention Tax" 12–14% figure (contained in the wave-10
   appendix note; no rank depends on it); the macOS-NFD-arrival
   motivating example (background reasoning only).
+
+## Cycle 212 — antonym-negated definite-description discordance: does "not the smaller" change verdicts? (`run --negation`, wave-10 slate rank 3, 2026-10-26)
+
+Design round (researcher, blind red-teams A and B, verifier;
+briefs in ~/workspace/agents_out/negation/; adjudication in
+docs/NEGATION_DESIGN.md, ADJUDICATED: BUILD with binding
+amendments). The build implements that doc only; any
+deviation from a frozen item voids the verdict and needs
+fresh review.
+
+- Gap, verified in the design round: surface-noise
+  deliberately excludes semantic instruction variation, and
+  no shipped probe varies an instruction's criterion by a
+  frozen, derivable-ground-truth negation. The differentiator
+  is the combination (one frozen antonym-negated definite
+  description × the numform compare task's form-invariant
+  label scorer × a per-case triple pattern with a
+  Monte-Carlo-derived (8, 5) rule × a frozen echo subclass),
+  never "first".
+- The round's fatals, each executed: no single arm pair
+  diagnoses negation (a larger-default candidate passes
+  direct and negated 16/16; an always-first candidate yields
+  maximal direct-flipped discordance with zero negation
+  content), so only the per-case triple pattern (pass
+  direct, wrong-label on negated, pass flipped on the same
+  case) diagnoses the pattern, and only as a sufficient
+  detector; the byte-exact scorer makes a perfect
+  echo-comprehender score 0/16 on the negated arm, so the
+  frozen `negation_echo` subclass is load-bearing for the
+  rates (while echoes cannot fire the boolean); borrowed
+  (6, 2) floors fire on a random labeller 58% of the time,
+  so the (8, 5) rule was derived from this panel's own
+  operating characteristics (random fire ~4%, no-effect
+  competent fire 0.7%, power 84% at a 0.5 drop rate, ~21% at
+  0.25) and frozen, never re-derived.
+- Primary sources the build may safely cite (verifier
+  §3.1-confirmed figures only; full fencing in
+  docs/NEGATION_DESIGN.md §9): Truong et al.
+  arXiv:2306.08189 §3 / Table 5 (negation NLI benchmarks
+  below random for GPT-J-6B zero-shot); Ravichander et al.
+  (CondaQA) arXiv:2211.00295 (accuracy 73.26% vs human
+  91.94%; consistency 42.18% vs 81.58%); Vrabcová et al.
+  arXiv:2503.22395v2 abstract only; Zhou et al.
+  arXiv:2605.03052v1 §3.1 / Tables 1–2 (positive accuracy
+  90.7–95.5% vs negative 45.4–58.3%). REMOVED in
+  adjudication and unused: the "Negation Neglect survey"
+  citation, Zhou §4 compositional pointer, Rezaei & Blanco
+  as a load-bearing source, Kassner & Schütze Table 2
+  digits (UNVERIFIED), Vrabcová §§2–3 synthesis, Elkins &
+  Chun figures, and every "iff" / winner / negation-
+  invariance headline.

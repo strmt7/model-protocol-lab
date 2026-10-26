@@ -2759,6 +2759,69 @@ contract is in `docs/CANONICALFORM_DESIGN.md`. Informational
 only: the probe never affects selection, and the stage
 never fails the run.
 
+### 8.55 Antonym-negated definite-description discordance (`run --negation`)
+
+```sh
+model-protocol-lab run ... --negation
+```
+
+A practitioner whose evaluation prompts phrase a comparison
+in the negative — "which of these is not the smaller?" —
+learns, per template family, whether that phrasing changes
+verdicts on their checkpoint relative to the affirmative
+phrasing, instead of assuming a negated criterion is
+understood exactly as its affirmative complement.
+
+Sixteen compare pairs are generated from the run seed (the
+shipped numform compare set, plain form only). Each pair is
+rendered under four instruction arms per candidate: direct
+("larger"), negated ("not the smaller"), flipped
+("smaller"), and a descriptive negated_alt arm ("not
+smaller than the other", never a decision input). The
+negated arm differs from direct in two lexical moves — the
+negation token plus the larger-to-smaller antonym swap — so
+the claim is antonym-negated definite-description
+discordance, never negation simpliciter. The negated arm's
+expected answer is derivable only by the pair-closed
+complement rule, valid because every pair has distinct
+operands; an equal pair fails the stage closed, never gets
+tie-broken. Expected answers are the ASCII labels `first` /
+`second`, and the scorer is byte-exact conjoined with
+boundary presence, so a negated answer in echo form ("not
+second" for expected "first") is labelled `negation_echo`
+beside the rate, never counted as wrong-label and never as
+a pass.
+
+The headline, per candidate over cases completed in all
+three headline arms: D = direct passes, J = cases in D
+where the negated cell is the wrong label AND the flipped
+cell passes on the same case. D < 8 is `insufficient`
+(withheld); D >= 8 and J >= 5 is
+`negation_drop_observed`; D >= 8 and J < 5 is
+`below_threshold` (an observed null at this panel size,
+not proof of invariance). Flipped is a competence gate,
+not a control: a flipped pass rate on D below 0.5 carries
+the gate-weak qualifier (negation-drop undiagnosed, not
+absent), because a larger-default candidate passes direct
+and negated and fails flipped on every case. The section
+also prints J split by presentation order and by stratum,
+the descriptive alt arm's wrong-label and alt-joint counts,
+per-arm attrition beside every rate, the id-length deltas
+(negated minus direct, case order) with same-ids cases
+counted as a rendering anomaly (a same-ids verdict flip is
+a determinism finding, never negation fragility), the
+boundary-only vs exact-only discordance decomposition, and
+the operating characteristics paragraph: a random labeller
+fires ~4% of the time, a competent candidate with no
+negation effect fires 0.7%, power is 84% at a 0.5 drop rate
+but only ~21% at a 0.25 drop rate, so small effects are
+usually missed. There is no winner readout in v1. Cost: 64
+generations per candidate (1,536 at the legal maximum: 24
+candidates x 16 cases x 4 arms; 1,152 headline). The full
+contract is in `docs/NEGATION_DESIGN.md`. Informational
+only: the probe never affects selection, and the stage
+never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

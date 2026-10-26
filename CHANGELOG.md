@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 212 — negation probe, 2026-10-26)
+
+- `model-protocol-lab run --negation`: sixteen generated
+  numform compare pairs rendered under four instruction arms
+  per candidate — direct ("larger"), negated ("not the
+  smaller"), flipped ("smaller"), and a descriptive
+  negated_alt arm ("not smaller than the other", never a
+  decision input). The negated arm differs from direct in
+  two lexical moves (the negation token plus the
+  larger-to-smaller antonym swap), so the claim is
+  antonym-negated definite-description discordance, never
+  negation simpliciter, and the expected answer follows
+  only by the pair-closed complement rule (every pair has
+  distinct operands; an equal pair fails the stage closed).
+  The headline, per candidate over cases completed in all
+  three headline arms: D = direct passes, J = cases in D
+  where the negated cell is the wrong label AND the
+  flipped cell passes on the same case; D < 8 is
+  `insufficient`, D >= 8 and J >= 5 is
+  `negation_drop_observed`, D >= 8 and J < 5 is
+  `below_threshold` (an observed null, not proof of
+  invariance). Echo answers ("not second" for expected
+  "first") are a frozen `negation_echo` subclass printed
+  beside negated-arm rates, never pooled into
+  `wrong_label` and never a pass, so echoes cannot fire
+  the joint rule; flipped is a competence gate, and a
+  flipped pass rate on D below 0.5 carries the gate-weak
+  qualifier (negation-drop undiagnosed, not absent). No
+  winner readout in v1; token-ID divergence is reported,
+  not gated. USAGE §8.55 and
+  `docs/NEGATION_DESIGN.md` carry the full contract.
+
 ### Fixed (cycle 211 — Windows defensive-open AttributeError, 2026-10-26)
 
 - `inspect` no longer dies with an AttributeError traceback on Windows:
