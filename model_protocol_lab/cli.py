@@ -633,6 +633,32 @@ def build_parser() -> argparse.ArgumentParser:
         "never fails the run.",
     )
     run.add_argument(
+        "--canonical-form",
+        action="store_true",
+        help="Canonical-form ladder probe (cycle 209, research wave-10 "
+        "rank 1): 24 generated cases from the run seed, each a "
+        "three-sentence payload carrying exactly one answer-bearing "
+        "fact in its middle sentence, rendered in two arms per "
+        "candidate -- NFC (composed) and NFD (decomposed) forms of "
+        "the same generated message text. Accents live in carrier "
+        "prose, topic, and question only; every expected value is "
+        "pure ASCII, so the byte-exact scorer cannot manufacture "
+        "discordance. Headline: per-case verdicts and the winner "
+        "are identical across forms, conditioned on the "
+        "id-divergent paired population (cases whose full render "
+        "id sequences actually differ), with a pre-registered "
+        "falsification rule and floors (6 paired, 2 discordant). "
+        "Ids-identical cases are reported as the "
+        "instrument-inapplicable share, never as robustness. "
+        "Monday morning: 'must I NFC-normalize incoming text "
+        "before evaluation, or does the winner I picked on NFC "
+        "text silently change when the same text arrives "
+        "decomposed?' Costs 2 generations per candidate per case "
+        "(1,152 at the legal maximum: 24 candidates x 24 cases x "
+        "2). Informational only; never touches selection. The "
+        "stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -1930,6 +1956,49 @@ def _run_placement_probe(
         result["placement"] = {
             "available": False,
             "detail": "placement_unavailable",
+        }
+
+
+def _run_canonical_form_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the canonical-form ladder probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import canonicalform_analysis, canonicalform_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = canonicalform_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["canonical_form"] = canonicalform_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- canonical-form must not fail the run
+        result["canonical_form"] = {
+            "available": False,
+            "detail": "canonical_form_unavailable",
         }
 
 
@@ -3882,6 +3951,24 @@ def main(argv: list[str] | None = None) -> int:
                 # selection. Never fails the run.
                 if args.placement:
                     _run_placement_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Canonical-form ladder probe (cycle 209, research
+                # wave-10 rank 1): generated cases rendered under
+                # NFC and NFD per candidate, the run's cancel event
+                # threaded into the stage loop. Informational
+                # only -- never changes selection. Never fails
+                # the run.
+                if args.canonical_form:
+                    _run_canonical_form_probe(
                         backend,
                         formats,
                         result,

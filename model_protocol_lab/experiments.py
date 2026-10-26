@@ -9464,6 +9464,282 @@ def placement_analysis(
     }
 
 
+class _CanonicalFormCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    canonical-form stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _canonical_form_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One canonical-form generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm
+    render's ids, measured by the stage at construction for
+    the record's arm token counts; the cell's ``input_tokens``
+    come from the evaluation's own observation, so a backend
+    whose encode disagreed with itself surfaces as a validator
+    rejection downstream, never a silently wrong record. The
+    cancel event is checked before and after ``evaluate`` (the
+    multiturn rule: a cancel observed during a generation is
+    never mislabelled an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _CanonicalFormCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _CanonicalFormCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+    return "arm_evaluation_failed", None
+
+
+def canonicalform_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Canonical-form stage (cycle 209): generated single-fact
+    cases rendered under NFC and NFD per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no native arm and no dependence on the user's
+    fixtures or the primary run. Each case contributes two
+    cells (NFC, NFD) whose contents differ only in canonical
+    form, plus the id-divergence measurement: the two arms'
+    full render id sequences are compared at encode time, so
+    the headline population (id-divergent paired cases) is
+    decided before any generation is spent, and ids-identical
+    cases are reported as the instrument-inapplicable share.
+    Design: docs/CANONICALFORM_DESIGN.md.
+    """
+    from . import canonicalform as _cf
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_cf.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _cf.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    cases = _cf.generate_cases(seed)
+    if len(formats) * len(cases) > _cf.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "canonical_form_record_budget_exceeded",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    generated_text = (
+        _cf.FACT_TEMPLATE.replace("{topic}", "").replace("{value}", "")
+        + _cf.QUESTION_TEMPLATE.replace("{topic}", "")
+        + "".join(_cf.TOPICS)
+        + "".join(_cf.WORDS)
+        + "".join(_cf.NEUTRAL_POOL)
+    )
+    if audit_special_token_literals(generated_text, formats):
+        # A special-token literal in the frozen texts would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation.
+        return {
+            "available": False,
+            "detail": "canonical_form_screen_failed",
+            "protocol": protocol,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in generated_text:
+            return {
+                "available": False,
+                "detail": "canonical_form_screen_failed",
+                "protocol": protocol,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                value = str(case["expected"])
+                # Both arms' renders are encoded BEFORE any
+                # generation: id divergence is an encode-time
+                # measurement, and the headline population is
+                # decided here, not inferred from verdicts.
+                arm_ids: dict[str, tuple[int, ...]] = {}
+                arm_contents: dict[str, str] = {}
+                for arm in _cf.ARM_KEYS:
+                    content = _cf.form_content(case, arm)
+                    arm_contents[arm] = content
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", content),),
+                        expected=value,
+                        group=_cf.GROUP,
+                    )
+                    arm_ids[arm] = tuple(backend.encode(fmt.render(fixture.messages)))
+                ids_identical = arm_ids["nfc"] == arm_ids["nfd"]
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "topic": str(case["topic"]),
+                    "expected_digest": _cf.digest_text(value),
+                    "nfc_tokens": len(arm_ids["nfc"]),
+                    "nfd_tokens": len(arm_ids["nfd"]),
+                    "ids_identical": ids_identical,
+                    "id_length_delta": len(arm_ids["nfc"]) - len(arm_ids["nfd"]),
+                    "nfc_content_digest": _cf.digest_text(arm_contents["nfc"]),
+                    "nfd_content_digest": _cf.digest_text(arm_contents["nfd"]),
+                    "cells": dict.fromkeys(_cf.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_cf.ARM_KEYS, ""),
+                }
+                records.append(record)
+                for arm in _cf.ARM_KEYS:
+                    if _cancelled():
+                        raise _CanonicalFormCancelled
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", arm_contents[arm]),),
+                        expected=value,
+                        group=_cf.GROUP,
+                    )
+                    detail, cell = _canonical_form_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        arm_ids[arm],
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+        except _CanonicalFormCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
+
+
+def canonicalform_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a canonical-form stage into the stored payload
+    (cycle 209).
+
+    Per-candidate readouts come from
+    canonicalform.aggregate_candidate; the per-arm selections
+    come from canonicalform.arm_selection over the shared
+    population; the winner headline compares the two arms'
+    selections. Design: docs/CANONICALFORM_DESIGN.md.
+    """
+    from . import canonicalform as _cf
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "canonical_form_unavailable")),
+            "protocol": stage.get("protocol"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    records_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _cf.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+        records_by_candidate[name] = entry["records"]
+    conditions = {arm: _cf.arm_selection(records_by_candidate, arm) for arm in _cf.ARM_KEYS}
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "candidates": candidates_out,
+        "conditions": conditions,
+        "selection": {
+            "nfc": conditions["nfc"],
+            "nfd": conditions["nfd"],
+            "winner": _cf.winner_headline(conditions),
+        },
+        "n_candidates": len(candidate_names),
+        "n_cases": len(_cf.generate_cases(int(stage["protocol"]["seed"]))),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

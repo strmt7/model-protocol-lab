@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 209 — canonical-form ladder, 2026-10-26)
+
+- `model-protocol-lab run --canonical-form`: twenty-four
+  generated fact-recall cases rendered under NFC and NFD per
+  candidate, with the headline conditioned on cases whose
+  full render id sequences actually diverged. Accents live
+  in carrier prose, topic, and question only; every expected
+  value is pure ASCII, so the byte-exact scorer cannot
+  manufacture discordance (the scorer defect both blind
+  red teams found independently in the design round). The
+  falsification bar is transplanted from placement (6
+  paired evaluable, 2 discordant minimums); ids-identical
+  cases are the instrument-inapplicable share and same-ids
+  verdict flips are a determinism finding, never fragility.
+  The diff validator recomputes both arms' content digests
+  from the seed. USAGE §8.54 and
+  `docs/CANONICALFORM_DESIGN.md` carry the full contract.
+
 ### Added (cycle 208 — release-readiness-2, 2026-10-25)
 
 - The MCP server now ships in the package: `model_protocol_lab.mcp_server`

@@ -7022,6 +7022,139 @@ def _placement_section(result: dict[str, Any]) -> str:
     )
 
 
+def _canonical_form_section(result: dict[str, Any]) -> str:
+    """Canonical-form ladder probe: NFC vs NFD prompt text.
+
+    Renders the ``canonical_form`` payload (see
+    experiments.canonicalform_analysis): per candidate, the
+    id-divergent paired counts split by direction, the
+    classification, the ids-identical share (the
+    instrument-inapplicable share, never robustness), the
+    same-ids verdict flips (a determinism finding, never
+    fragility), and the winner headline comparing the two arms'
+    selections. The scope limits are printed with the numbers,
+    not under them: the headline conditions on cases whose full
+    render id sequences actually differ, and each cell is one
+    greedy generation on generated fixtures. Counts and rates
+    only; no payload, question, or answer text is rendered.
+    Every payload-derived value below goes through
+    _escape_text, never bare escape().
+    """
+    probe: Any = result.get("canonical_form")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            bits.append(
+                "<div>Id-divergent paired cases "
+                + _count(headline.get("n_paired"))
+                + ": NFC only "
+                + _count(headline.get("n_nfc_only"))
+                + ", NFD only "
+                + _count(headline.get("n_nfd_only"))
+                + ", both "
+                + _count(headline.get("n_both"))
+                + ", neither "
+                + _count(headline.get("n_neither"))
+                + " ("
+                + _escape_text(str(headline.get("classification", "")))
+                + ").</div>"
+            )
+        bits.append(
+            "<div>Invariance falsified: "
+            + ("yes" if entry.get("invariance_falsified") is True else "no")
+            + ".</div>"
+        )
+        ids = entry.get("ids")
+        if type(ids) is dict:
+            bits.append(
+                "<div>Ids identical "
+                + _count(ids.get("n_ids_identical"))
+                + " cases (instrument-inapplicable share), divergent "
+                + _count(ids.get("n_ids_divergent"))
+                + ", same-ids verdict flips "
+                + _count(ids.get("n_same_ids_verdict_flips"))
+                + " (determinism finding), max abs id-length delta "
+                + _count(ids.get("max_abs_id_delta"))
+                + ".</div>"
+            )
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            rates = ", ".join(
+                _escape_text(str(arm)) + ": " + _rate((arms.get(arm) or {}).get("rate"))
+                for arm in ("nfc", "nfd")
+            )
+            bits.append("<div>Pass rates — " + rates + ".</div>")
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    selection = probe.get("selection")
+    winner_line = ""
+    if type(selection) is dict:
+        winner = selection.get("winner")
+        if type(winner) is dict:
+            winner_line = (
+                "<p>Winner headline: "
+                + _escape_text(str(winner.get("headline", "")))
+                + " (winner changed: "
+                + (
+                    "yes"
+                    if winner.get("winner_changed") is True
+                    else "no"
+                    if winner.get("winner_changed") is False
+                    else "undefined"
+                )
+                + ").</p>"
+            )
+    return (
+        '<section class="card" id="canonical-form">'
+        "<h2>Canonical-form sensitivity (NFC vs NFD)</h2>"
+        "<p>Twenty-four generated cases each bury one "
+        "answer-bearing fact in the middle sentence of a "
+        "three-sentence payload; the same message text is "
+        "rendered in NFC (composed) and NFD (decomposed) form "
+        "per candidate. Accents live in carrier prose, topic, "
+        "and question only; every expected value is pure ASCII, "
+        "so the byte-exact scorer cannot manufacture "
+        "discordance. The headline conditions on cases whose "
+        "full render id sequences actually differ; cases whose "
+        "ids are identical are reported as the "
+        "instrument-inapplicable share, never as robustness. "
+        "Each cell is one greedy generation.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>" + winner_line + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -9646,6 +9779,7 @@ def render_html(result: dict[str, Any]) -> str:
     multiturn_html = _multiturn_section(result)
     needle_html = _needle_section(result)
     placement_html = _placement_section(result)
+    canonical_form_html = _canonical_form_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -9815,6 +9949,11 @@ def render_html(result: dict[str, Any]) -> str:
                 "placement",
                 "Question/payload placement",
                 placement_html,
+            ),
+            (
+                "canonical-form",
+                "Canonical-form sensitivity (NFC vs NFD)",
+                canonical_form_html,
             ),
             (
                 "choice-audit",
