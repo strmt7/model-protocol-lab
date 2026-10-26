@@ -323,6 +323,22 @@ inventory your resolved set after installing it (for example with
 `pip freeze`) rather than trusting any bill of materials the
 release does not ship.
 
+### Why no SBOM is shipped (cycle 210 adjudication)
+
+No SPDX/CycloneDX bill of materials is attached to releases, by a
+twice-considered decision (cycle 208 S3, re-adjudicated on the
+procurement merits in cycle 210). A bill of materials for this wheel
+would contain exactly one package — the wheel itself — because it has
+zero runtime dependencies; the inventory information it would carry is
+already inside the artifact as METADATA, verifiable with
+`unzip -p dist/*.whl '*/METADATA'`. A bill of materials for the
+`[hf]` resolved set would be stale on arrival (version ranges) or
+would require the multi-GB CUDA download in the release job. And any
+SBOM step would live in the tag-only release job, which never runs
+until the first real release — adding a blocking third-party step
+there, unexercised, is the wrong trade. This is revisited only at the
+first release rehearsal, once the publish path has actually run.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

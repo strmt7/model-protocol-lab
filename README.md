@@ -2,9 +2,7 @@
 
 [![CI](https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/strmt7/model-protocol-lab/actions/workflows/ci.yml)
 [![Codecov](https://img.shields.io/codecov/c/github/strmt7/model-protocol-lab?label=Codecov&logo=codecov)](https://codecov.io/gh/strmt7/model-protocol-lab)
-[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
-[![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
-[![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/strmt7/model-protocol-lab/badge)](https://scorecard.dev/viewer/?uri=github.com/strmt7/model-protocol-lab)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-informational)](CITATION.cff)
@@ -19,7 +17,17 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8374 tests, 95.4% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64; macOS and Windows are untested — the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks degrade there.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8395 tests, 95.4% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [What the report looks like](#what-the-report-looks-like)
+- [Capabilities](#capabilities)
+- [How this differs from nearby tools](#how-this-differs-from-nearby-tools)
+- [How to interpret a result](#how-to-interpret-a-result)
+- [Repository layout](#repository-layout)
+- [Privacy](#privacy)
 
 ## Quick start
 
@@ -33,6 +41,30 @@ python -m venv .venv
 python -m pip install -e .
 python -m model_protocol_lab catalog
 python -m model_protocol_lab inspect examples/fixtures.json
+```
+
+Expected output — `catalog` prints the 29-family catalog as JSON
+(first entry shown; 28 more follow), and `inspect` prints one summary
+line for the fixture file:
+
+```json
+[
+  {
+    "name": "chatml",
+    "bos": "",
+    "user_prefix": "<|im_start|>user\n",
+    "assistant_prefix": "<|im_start|>assistant\n",
+    "turn_end": "<|im_end|>\n",
+    "repeat_bos": false,
+    "user_turn_end": null,
+    "assistant_turn_end": null,
+    "open_suffix": null
+  }
+]
+```
+
+```json
+{"search_cases": 2, "held_out_cases": 2, "valid": true, "contamination": {"worst_tier": "clean", "pairs": []}}
 ```
 
 (A `model-protocol-lab` console script is installed as an equivalent entry point.)

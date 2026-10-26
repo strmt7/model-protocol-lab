@@ -1,0 +1,16 @@
+# Gitleaks allowlist (cycle 210).
+#
+# These patterns are VERIFIED-SYNTHETIC test fixtures, not credentials:
+# a sanitization test's fake key-shaped string and an aliasing test's
+# _PROBE_SECRET constant. They were found by a local gitleaks 8.30.1
+# run over the working tree (2 findings, both in tests/, both fake
+# by test context) and allowlisted by EXACT regex — never by path, so
+# a future real secret in these files is still caught. Patterns are
+# TOML literal strings so regex backslashes survive verbatim. Any new
+# finding is a genuine triage item, not an allowlist candidate, until
+# proven synthetic the same way.
+[allowlist]
+regexes = [
+    'ARBITRARY\-SECRET\-leak\-1',
+    's3cr3t\-hunter2\-leakprobe',
+]

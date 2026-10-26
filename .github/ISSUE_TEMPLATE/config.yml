@@ -1,0 +1,15 @@
+# Issue chooser (cycle 210). Blank issues are off: every report goes
+# through a form so the reproduction details the maintainers need are
+# present from the start. Security reports never go in issues — see the
+# private route below (also documented in docs/SECURITY.md).
+blank_issues_enabled: false
+contact_links:
+  - name: Frequently asked questions
+    url: https://github.com/strmt7/model-protocol-lab/blob/main/docs/FAQ.md
+    about: Check whether your question is already answered.
+  - name: Usage documentation
+    url: https://github.com/strmt7/model-protocol-lab/blob/main/docs/USAGE.md
+    about: Full command, flag and output contracts.
+  - name: Report a security vulnerability (private)
+    url: https://github.com/strmt7/model-protocol-lab/security/advisories/new
+    about: Private vulnerability reporting. Reports are visible only to the maintainer until a fix ships — never file security defects as public issues.

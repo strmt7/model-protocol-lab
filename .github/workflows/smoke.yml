@@ -1,0 +1,56 @@
+# Cross-OS smoke (cycle 210) — install + offline CLI only, NOT the
+# full suite. The full suite stays Linux-only (it runs ~55 minutes per
+# Python cell; a 3-OS × 3-Python matrix would triple it). This lane
+# answers the narrower procurement question: does the package install
+# and do its zero-dependency commands run on macOS and Windows?
+# Deliberately a separate workflow, not a ci.yml job: ci.yml's job
+# count is pinned at 4 by the suite, and this lane must never be
+# mistaken for (or delay) the full gate. The MCP server's --self-test
+# is excluded on purpose: the SIGALRM budget degrades on non-Unix
+# (a documented residual), so it is not a cross-platform signal.
+name: Cross-OS smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12"]
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/setup-python before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: "pyproject.toml"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install build
+      - run: python -m build --wheel --outdir dist
+      # Install the built wheel (not an editable checkout) through a
+      # Python glob so the step is identical on pwsh, bash and sh.
+      - run: python -c "import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', sorted(glob.glob('dist/*.whl'))[0]])"
+      - run: model-protocol-lab catalog
+      - run: model-protocol-lab inspect examples/fixtures.json
+      - run: model-protocol-lab --help

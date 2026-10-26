@@ -1,0 +1,8 @@
+# Line endings and diff display (cycle 210).
+* text=auto
+*.py text eol=lf
+# Generated/large artifacts: collapsed by default in diff views, but
+# still expandable — the byte-identical golden test, not diff review,
+# is what guards the sample report's contents.
+examples/sample-report/* linguist-generated
+pylock.toml linguist-generated

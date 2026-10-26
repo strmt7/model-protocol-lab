@@ -1,18 +1,20 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–209 (executed 2026-10-14 → 2026-10-26, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–210 (executed 2026-10-14 → 2026-10-26, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
 the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
-Platform: CI tests Linux x86-64; macOS and Windows are untested —
+Platform: CI tests Linux x86-64 for the full suite; a cross-OS smoke
+workflow (cycle 210) additionally verifies install plus the offline
+CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8295 tests collected**
-  (cycle 207, 2026-10-25). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8395 tests collected**
+  (cycle 210, 2026-10-26). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -60,7 +62,7 @@ doctor's resource fallbacks degrade there.
   in the gate itself.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (288 files in that CI scope; the repo-root scope counts more.
+  (289 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (64 source files).
@@ -77,7 +79,10 @@ doctor's resource fallbacks degrade there.
   tests; 1 documented in a code comment with no behavior change). No
   genuine finding left open.
 - GitHub Actions CI on `main` — green on the pushed tree (tests on
-  3.11/3.12/3.13, lint+typecheck, security audit, build check).
+  3.11/3.12/3.13, lint+typecheck, security audit, build check), plus
+  separate CodeQL, Scorecard, secret-scan and cross-OS smoke
+  workflows (cycle 210) whose first runs are reported in the cycle
+  closure, not asserted by the suite.
 
 ## Evidence — third hardening round, red-team (executed 2026-10-13, Python 3.12.3, Linux x86-64)
 
