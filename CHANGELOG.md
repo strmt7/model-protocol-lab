@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 211 — Windows defensive-open AttributeError, 2026-10-26)
+
+- `inspect` no longer dies with an AttributeError traceback on Windows:
+  `datasets.load_dataset`, `fixtures.read_authoring_file`,
+  `backends._open_regular_read`, `surfacenoise._load_probe_json`,
+  `diffreports.load_results`, and both pack readers
+  (`pack._read_regular_file`, `pack.load_bundle_bytes`) now open with
+  `getattr(os, "O_NONBLOCK", 0)` (and `getattr(os, "O_NOFOLLOW", 0)`
+  for the pack readers). Unix behavior is byte-identical; on Windows
+  the flags degrade to a plain open, where the FIFO concern does not
+  apply and the fstat regular-file guard still holds. Found by the
+  cycle-210 smoke lane doing its job: its Windows leg failed at
+  `inspect examples/fixtures.json` before any file work, and that
+  leg going green on this push is the closure proof for the fix.
+- Full `os.open(` audit across the tree, recorded in the cycle-211
+  build log: the only other production opens use portable flags
+  (`O_WRONLY`/`O_CREAT`/`O_EXCL`; the surface-noise output writer
+  already used `getattr` for `O_NOFOLLOW`), and the remaining
+  test-only opens use portable flags except the cycle-30 oracle,
+  which was fixed the same way. Regression tests in
+  `tests/test_cycle211_windows_open_flags.py` prove every fixed
+  reader works with both flags deleted from the `os` module (the
+  Windows attribute set); without the fix each raises AttributeError
+  before any file work.
+
 ### Added (cycle 210 — enterprise hardening, 2026-10-26)
 
 - CodeQL workflow (`.github/workflows/codeql.yml`, Python, push + PR +

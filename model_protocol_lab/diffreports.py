@@ -242,7 +242,7 @@ def load_results(path: str | Path) -> dict[str, Any]:
     # file. Checking the opened fd (not the path) closes the stat->open
     # TOCTOU window. Mirrors datasets.load_dataset.
     try:
-        fd = os.open(resolved, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         raise ValueError("results_unreadable") from None
     try:

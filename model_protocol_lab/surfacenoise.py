@@ -1494,7 +1494,7 @@ def _load_probe_json(path: Path) -> Any:
     # unbounded, with the 16 MiB check firing only after the full
     # read (oversight security S-1; the H1 class).
     try:
-        fd = os.open(target, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError as exc:
         raise ValueError(f"cannot read {path}: {exc}") from exc
     try:

@@ -58,7 +58,7 @@ def _open_regular_read(path: Path) -> int:
     Mirrors ``datasets.load_dataset`` / ``diffreports.load_results``.
     """
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         raise ValueError("missing_or_unsafe_asset") from None
     try:

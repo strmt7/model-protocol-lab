@@ -90,7 +90,7 @@ def read_authoring_file(path: str | Path) -> str:
         raise ValueError("Invalid authoring path")
     target = Path(path)
     try:
-        fd = os.open(target, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         raise ValueError("Unreadable authoring file") from None
     try:
