@@ -129,7 +129,7 @@ def load_dataset(path: str | Path) -> Split:
     # file (character/block devices, FIFOs, sockets, directories). Checking
     # the opened fd (not the path) also closes the stat->open TOCTOU window.
     try:
-        fd = os.open(target, os.O_RDONLY | os.O_NONBLOCK)
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         raise ValueError("Unreadable fixture file") from None
     try:

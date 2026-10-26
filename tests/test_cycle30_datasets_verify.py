@@ -209,7 +209,7 @@ def reference_load_dataset(path):
         raise ValueError("reference oracle: invalid fixture path")
     target = Path(path)
     try:
-        handle_id = os.open(target, os.O_RDONLY | os.O_NONBLOCK)
+        handle_id = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         raise ValueError("reference oracle: unreadable fixture file") from None
     try:

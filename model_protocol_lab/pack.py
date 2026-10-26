@@ -213,7 +213,9 @@ def _read_regular_file(path: Path, *, too_large_code: str, cap: int) -> bytes:
     file, and return its bytes — at most ``cap`` of them. Mirrors the
     single-fd discipline of ``diffreports.load_results``."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
     except OSError:
         raise ValueError("pack_entry_unreadable") from None
     try:
@@ -331,7 +333,9 @@ def load_bundle_bytes(path: Path) -> bytes:
     if not path.exists():
         raise ValueError("bundle_path_missing")
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
     except OSError:
         raise ValueError("bundle_unreadable") from None
     try:
