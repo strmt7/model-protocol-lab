@@ -1469,15 +1469,21 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
         proc = run_cli("catalog")
         self.assertEqual(json.loads(buffer.getvalue()), json.loads(proc.stdout))
 
-    def test_exactly_one_console_script_no_mpl_alias(self):
+    def test_console_scripts_no_mpl_alias(self):
         # `mpl` appears in docs as shorthand; it is NOT an installed entry
-        # point. Pin the real surface: exactly one console script.
+        # point. Pin the real surface: the CLI plus, since cycle 208
+        # (M2(a): the MCP server ships in the package), the MCP server
+        # script — and nothing else. Cycle-208 lesson: this test reads
+        # the INSTALLED distribution, so after any [project.scripts]
+        # change the venv must be reinstalled before gating, or stale
+        # dist-info entry points make it pass locally while CI's fresh
+        # install fails.
         entry_points = [
             ep.name
             for ep in distribution("model-protocol-lab").entry_points
             if ep.group == "console_scripts"
         ]
-        self.assertEqual(entry_points, ["model-protocol-lab"])
+        self.assertEqual(entry_points, ["model-protocol-lab", "model-protocol-lab-mcp"])
 
 
 class RedTeamTests(unittest.TestCase):
