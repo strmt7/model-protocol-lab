@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–211 (executed 2026-10-14 → 2026-10-26, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–212 (executed 2026-10-14 → 2026-10-26, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8402 tests collected**
-  (cycle 211, 2026-10-26). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8439 tests collected**
+  (cycle 212, 2026-10-26). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -45,27 +45,27 @@ doctor's resource fallbacks degrade there.
   the schema field-order probe (`run --field-order`),
   the token-depth sensitivity sweep (`run --token-depth-sweep`),
   the canonical-form sensitivity probe (`run --canonical-form`),
+  the antonym-negated definite-description probe (`run --negation`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.4018% (cycle 209, 2026-10-26)**. The gate compares the
+  95.3455% (cycle 212, 2026-10-26)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.902) is auditable rather than inferred from the display.
-  The rise from 208's 95.3024% is the cycle-209 gap-test pass,
-  which covered the canonical-form integration lines (diffreports
-  mirror/validator, reporting section, experiments stage/analysis)
-  that the feature's first full run left missing — not a change
-  in the gate itself.
+  (+0.845) is auditable rather than inferred from the display.
+  The dip from 209's 95.4018% is denominator growth: the negation
+  feature added 393 statements (32,655 → 33,048) while the new
+  negation module sits at 94.0% scoped — not a change in the
+  gate itself.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (290 files in that CI scope; the repo-root scope counts more.
+  (292 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (64 source files).
+- `mypy model_protocol_lab` — clean (65 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

@@ -7155,6 +7155,274 @@ def _canonical_form_section(result: dict[str, Any]) -> str:
     )
 
 
+def _negation_section(result: dict[str, Any]) -> str:
+    """Antonym-negated definite-description probe: direct vs
+    negated vs flipped instruction arms on generated compare
+    pairs.
+
+    Renders the ``negation`` payload (see
+    experiments.negation_analysis): per candidate, per-arm
+    pass rates with attrition beside each, the decomposition
+    split per arm with the ``negation_echo`` share separated
+    on the negated arms, D, J, and the section decision with
+    J split by presentation order and by stratum, the
+    rival-pattern readouts (flipped pass rate on D with the
+    gate-weak qualifier, echo-dominant flag,
+    order-concentration flag), the descriptive negated_alt
+    arm, the id-divergence report, the boundary-only vs
+    exact-only discordance decomposition, and the operating
+    characteristics paragraph. The negated arm differs from
+    direct in two lexical moves (the negation token plus the
+    larger-to-smaller antonym swap), so the claim rendered
+    here is antonym-negated definite-description discordance
+    and no sentence attributes a discordance to negation
+    simpliciter. Per-arm pass rates and the joint pattern are
+    the only readouts. Counts and rates only; no payload,
+    question, or answer text is rendered. Every
+    payload-derived value below goes through _escape_text,
+    never bare escape().
+    """
+    probe: Any = result.get("negation")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        decomp = arm.get("decomposition")
+        decomp_bits = ""
+        if type(decomp) is dict:
+            decomp_bits = (
+                " Decomposition — exact "
+                + _count(decomp.get("exact_pass"))
+                + ", wrong-label "
+                + _count(decomp.get("wrong_label"))
+                + ", echo "
+                + _count(decomp.get("negation_echo"))
+                + ", non-label "
+                + _count(decomp.get("non_label"))
+                + ", boundary-only "
+                + _count(decomp.get("boundary_only"))
+                + "."
+            )
+            if name in ("negated", "negated_alt"):
+                completed = arm.get("n_completed")
+                exact = decomp.get("exact_pass")
+                non_pass = (
+                    completed - exact if type(completed) is int and type(exact) is int else -1
+                )
+                if non_pass > 0:
+                    decomp_bits += (
+                        " Echo share among non-pass: "
+                        + _count(decomp.get("negation_echo"))
+                        + " of "
+                        + _count(non_pass)
+                        + " (printed beside the rate, never pooled into "
+                        "wrong-label)."
+                    )
+        return (
+            "<div>"
+            + _escape_text(name)
+            + " pass rate "
+            + _rate(arm.get("rate"))
+            + " ("
+            + _count(arm.get("n_completed"))
+            + " completed, "
+            + _count(arm.get("n_context_exceeded"))
+            + " context-exceeded, "
+            + _count(arm.get("n_evaluation_failed"))
+            + " evaluation-failed)."
+            + decomp_bits
+            + "</div>"
+        )
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in ("direct", "negated", "flipped", "negated_alt"):
+                arm = arms.get(arm_name)
+                if type(arm) is dict:
+                    bits.append(_arm_line(arm_name, arm))
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            direct_passes = headline.get("direct_passes")
+            j_by_order = headline.get("j_by_order")
+            order_bits = ""
+            if type(j_by_order) is dict:
+                order_bits = (
+                    " J by presentation order — larger-first "
+                    + _count(j_by_order.get("larger_first"))
+                    + ", larger-second "
+                    + _count(j_by_order.get("larger_second"))
+                    + "."
+                )
+            j_by_stratum = headline.get("j_by_stratum")
+            stratum_bits = ""
+            if type(j_by_stratum) is dict and j_by_stratum:
+                stratum_bits = (
+                    " J by stratum — "
+                    + ", ".join(
+                        _escape_text(str(key)) + " " + _count(value)
+                        for key, value in sorted(
+                            j_by_stratum.items(), key=lambda item: str(item[0])
+                        )
+                    )
+                    + "."
+                )
+            bits.append(
+                "<div>D "
+                + _count(direct_passes)
+                + ", J "
+                + _count(headline.get("joint"))
+                + ", decision "
+                + _escape_text(str(headline.get("decision", "")))
+                + "."
+                + order_bits
+                + stratum_bits
+                + "</div>"
+            )
+            bits.append(
+                "<div>Flipped pass rate on direct passes "
+                + _rate(headline.get("flipped_rate_on_d"))
+                + " ("
+                + _count(headline.get("flipped_passes_on_d"))
+                + " of "
+                + _count(direct_passes)
+                + ")."
+                + (
+                    " Gate-weak: flipped pass rate on D is below 0.5 — "
+                    "negation-drop undiagnosed, not absent "
+                    "(larger-default rival pattern)."
+                    if headline.get("gate_weak") is True
+                    else ""
+                )
+                + (
+                    " Echo-dominant: negated failures are predominantly "
+                    "negation echoes, not negation-drop."
+                    if headline.get("echo_dominant") is True
+                    else ""
+                )
+                + (
+                    " Order-concentrated: the joint pattern sits "
+                    "entirely in one presentation order, not general "
+                    "negation-drop."
+                    if headline.get("order_concentrated") is True
+                    else ""
+                )
+                + "</div>"
+            )
+        descriptive = entry.get("descriptive")
+        if type(descriptive) is dict:
+            bits.append(
+                "<div>Descriptive negated_alt (never a decision input): "
+                "wrong-label on direct passes "
+                + _count(descriptive.get("negated_alt_wrong_label_on_d"))
+                + " of "
+                + _count(descriptive.get("negated_alt_completed_on_d"))
+                + " completed, alt-joint "
+                + _count(descriptive.get("negated_alt_joint"))
+                + ".</div>"
+            )
+        ids = entry.get("ids")
+        if type(ids) is dict:
+            deltas = ids.get("id_length_delta_by_case")
+            delta_text = ", ".join(_count(d) for d in deltas) if type(deltas) is list else "n/a"
+            bits.append(
+                "<div>Ids identical (direct-negated) "
+                + _count(ids.get("n_ids_identical"))
+                + " cases (rendering anomaly, excluded from the "
+                "headline population), divergent "
+                + _count(ids.get("n_ids_divergent"))
+                + ", same-ids verdict flips "
+                + _count(ids.get("n_same_ids_verdict_flips"))
+                + " (determinism finding, never negation fragility). "
+                "Id-length deltas (negated minus direct, case order): "
+                + delta_text
+                + ". Max abs id delta "
+                + _count(ids.get("max_abs_id_delta"))
+                + ".</div>"
+            )
+        discordance = entry.get("discordance")
+        if type(discordance) is dict:
+            bits.append(
+                "<div>Discordance decomposition: boundary-only "
+                + _count(discordance.get("boundary_only"))
+                + ", exact-only "
+                + _count(discordance.get("exact_only"))
+                + ", mixed "
+                + _count(discordance.get("mixed"))
+                + ".</div>"
+            )
+        if type(headline) is dict:
+            bits.append(
+                "<div>At D = "
+                + _count(headline.get("direct_passes"))
+                + ", this panel (16 cases) falsifies only "
+                "negation-drop patterns at least as lopsided as J >= 5 at "
+                "D >= 8. It does not establish invariance. Measured "
+                "operating characteristics of the (8,5) rule: a random "
+                "labeller (independent 0.5 labels per arm) fires ~4% of "
+                "the time; a competent candidate with no negation effect "
+                "(direct/flipped pass 0.9, negated wrong-label rate 0.1) "
+                "fires 0.7%; power is 84% at a 0.5 drop rate "
+                "(direct/flipped pass 0.9) and 99%+ at 0.75, but only ~21% "
+                "at a 0.25 drop rate. Small effects are therefore usually "
+                "missed; a below_threshold on this panel is weak "
+                "evidence.</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="negation">'
+        "<h2>Antonym-negated definite-description discordance</h2>"
+        "<p>Sixteen generated compare pairs, each rendered under "
+        "four instruction arms per candidate: direct ('larger'), "
+        "negated ('not the smaller'), flipped ('smaller'), and a "
+        "descriptive negated_alt arm ('not smaller than the other', "
+        "never a decision input). The negated arm differs from "
+        "direct in two lexical moves — the negation token plus "
+        "the larger-to-smaller antonym swap — so the claim is "
+        "antonym-negated definite-description discordance, never "
+        "negation simpliciter, and the negated arm's expected "
+        "answer is derivable only by the pair-closed complement "
+        "rule, valid because every pair has distinct operands. "
+        "The scorer is byte-exact conjoined with boundary "
+        "presence; a negated answer in echo form ('not second' "
+        "for expected 'first') is labelled negation_echo beside "
+        "the rate, never counted as wrong-label and never as a "
+        "pass. Each cell is one greedy generation. Records "
+        "carry digests only.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -9780,6 +10048,7 @@ def render_html(result: dict[str, Any]) -> str:
     needle_html = _needle_section(result)
     placement_html = _placement_section(result)
     canonical_form_html = _canonical_form_section(result)
+    negation_html = _negation_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -9956,6 +10225,11 @@ def render_html(result: dict[str, Any]) -> str:
                 canonical_form_html,
             ),
             (
+                "negation",
+                "Antonym-negated definite-description discordance",
+                negation_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -10080,6 +10354,7 @@ def render_html(result: dict[str, Any]) -> str:
         + multiturn_html
         + needle_html
         + placement_html
+        + negation_html
         + choiceaudit_html
         + precision_html
         + confidence_html

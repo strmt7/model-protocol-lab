@@ -9740,6 +9740,319 @@ def canonicalform_analysis(
     }
 
 
+class _NegationCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    negation stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _negation_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One negation generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm
+    render's ids, measured by the stage at construction for
+    the record's arm token counts; the cell's ``input_tokens``
+    come from the evaluation's own observation, so a backend
+    whose encode disagreed with itself surfaces as a validator
+    rejection downstream, never a silently wrong record. The
+    cancel event is checked before and after ``evaluate`` (the
+    multiturn rule: a cancel observed during a generation is
+    never mislabelled an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _NegationCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _NegationCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+    return "arm_evaluation_failed", None
+
+
+def negation_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Negation stage (cycle 212): generated numform compare
+    pairs rendered under three headline instruction arms
+    (direct, negated, flipped) plus one descriptive arm
+    (negated_alt) per candidate.
+
+    The cases are generated from the run seed inside the
+    stage; there is no native arm and no dependence on the
+    user's fixtures or the primary run. Each case contributes
+    four cells whose contents differ only in the instruction
+    sentence, plus the id-divergence measurement: every arm's
+    full render id sequence is encoded before any generation,
+    so same-ids cases are reported as a rendering anomaly
+    rather than gated away, and the headline population
+    (completed in all three headline arms, direct-negated ids
+    diverged) is decided before any generation is spent.
+    The pre-generation audit screen (frozen instruction
+    strings, distinctness, margin-class validity, boundary
+    text) fails the whole stage closed with
+    ``negation_screen_failed``; its counts travel in the
+    payload's ``audit`` block, never silently dropped.
+    Design: docs/NEGATION_DESIGN.md.
+    """
+    from . import negation as _ng
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+    from .numform import margin_class
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_ng.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _ng.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    cases = _ng.cases_for(seed)
+    audit: dict[str, Any] = {
+        "n_audit_excluded": 0,
+        "by_reason": {},
+        # nosec B105 -- integer audit counter field, not a credential
+        "special_token_findings": 0,
+        "equal_pairs": 0,
+        "invalid_margin_classes": 0,
+    }
+    if len(formats) * len(cases) > _ng.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "negation_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    audit_text = "".join(_ng.INSTRUCTIONS[arm] for arm in _ng.ARM_KEYS) + "".join(
+        str(value) for case in cases for value in case["operands"]
+    )
+    findings = audit_special_token_literals(audit_text, formats)
+    equal_pairs = sum(1 for case in cases if case["operands"][0] == case["operands"][1])
+    invalid_margins = sum(
+        1
+        for case in cases
+        if case["stratum"] not in _ng.EMITTED_MARGIN_CLASSES
+        or margin_class(case["operands"][0], case["operands"][1]) != case["stratum"]
+    )
+    if findings or equal_pairs or invalid_margins:
+        # The screen covers the whole generated set, not one
+        # case: any failure makes the stage unavailable, with
+        # the failure counts in the audit block (never a
+        # silent per-case drop, never a tie rule).
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {
+                "special_token_literal": len(findings),
+                "equal_pair": equal_pairs,
+                "invalid_margin_class": invalid_margins,
+            },
+            "special_token_findings": len(findings),
+            "equal_pairs": equal_pairs,
+            "invalid_margin_classes": invalid_margins,
+        }
+        return {
+            "available": False,
+            "detail": "negation_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in audit_text:
+            return {
+                "available": False,
+                "detail": "negation_screen_failed",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "audit": audit,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                # Every arm's render is encoded BEFORE any
+                # generation: id divergence is an encode-time
+                # measurement, and the headline population is
+                # decided here, not inferred from verdicts.
+                arm_ids: dict[str, tuple[int, ...]] = {}
+                for arm in _ng.ARM_KEYS:
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", str(case["contents"][arm])),),
+                        expected=str(case["expected"][arm]),
+                        group=_ng.GROUP,
+                    )
+                    arm_ids[arm] = tuple(backend.encode(fmt.render(fixture.messages)))
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "operands": list(case["operands"]),
+                    "larger_first": bool(case["larger_first"]),
+                    "stratum": str(case["stratum"]),
+                    "band": int(case["band"]),
+                    "expected_digest": _ng.digest_text(str(case["expected"]["direct"])),
+                    "arm_tokens": {arm: len(arm_ids[arm]) for arm in _ng.ARM_KEYS},
+                    "id_digests": {arm: _ng.digest_ids(arm_ids[arm]) for arm in _ng.ARM_KEYS},
+                    "id_lengths": {arm: len(arm_ids[arm]) for arm in _ng.ARM_KEYS},
+                    "ids_identical": arm_ids["direct"] == arm_ids["negated"],
+                    "id_length_delta": len(arm_ids["negated"]) - len(arm_ids["direct"]),
+                    "content_digests": {
+                        arm: _ng.digest_text(str(case["contents"][arm])) for arm in _ng.ARM_KEYS
+                    },
+                    "cells": dict.fromkeys(_ng.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_ng.ARM_KEYS, ""),
+                }
+                records.append(record)
+                for arm in _ng.ARM_KEYS:
+                    if _cancelled():
+                        raise _NegationCancelled
+                    fixture = Fixture(
+                        id=f"{case_id}-{arm}",
+                        messages=(Message("user", str(case["contents"][arm])),),
+                        expected=str(case["expected"][arm]),
+                        group=_ng.GROUP,
+                    )
+                    detail, cell = _negation_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        arm_ids[arm],
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+        except _NegationCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": audit,
+        "candidates": candidates,
+    }
+
+
+def negation_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a negation stage into the stored payload
+    (cycle 212).
+
+    Per-candidate readouts come from
+    negation.aggregate_candidate over the candidate's ground
+    records. There is no selection and no winner readout in
+    v1: per-arm pass rates and the joint (D, J) pattern are
+    the only readouts. Design: docs/NEGATION_DESIGN.md.
+    """
+    from . import negation as _ng
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "negation_unavailable")),
+            "protocol": stage.get("protocol"),
+            "audit": stage.get("audit"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _ng.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "audit": stage.get("audit"),
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_cases": len(_ng.cases_for(int(stage["protocol"]["seed"]))),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed
