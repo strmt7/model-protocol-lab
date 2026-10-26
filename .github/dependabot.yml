@@ -4,11 +4,37 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Cycle 210: a 7-day cooldown is the cheap defence against a
+    # compromised fresh release — a version published yesterday is not
+    # proposed today. Minor/patch updates are grouped into one PR;
+    # majors stay individual so a breaking bump is never buried.
+    cooldown:
+      default-days: 7
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    # Patterns-only grouping (the pydantic shape, fetched live at
+    # cycle-210 build time): update-types restrictions are not used
+    # here because this ecosystem's grouping semantics differ from pip's.
+    groups:
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      pre-commit:
+        patterns:
+          - "*"

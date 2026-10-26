@@ -1,0 +1,43 @@
+# CodeQL static analysis (cycle 210) — MPL's first code-scanning engine.
+# Before this cycle the repo's only static security signal was bandit +
+# pip-audit in ci.yml; the code-scanning alerts endpoint had never
+# produced an analysis (404). CodeQL adds taint/dataflow queries bandit
+# cannot do. Python is interpreted, so there is no build step: init +
+# analyze is the whole job. Findings land in the Security tab and are
+# triaged like any other CI signal; they do not gate ci.yml.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly sweep (Mondays 07:00 UTC), offset from ci.yml's 06:00 sweep.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/github/codeql-action before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3

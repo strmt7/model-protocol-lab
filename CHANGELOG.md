@@ -6,6 +6,75 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 210 — enterprise hardening, 2026-10-26)
+
+- CodeQL workflow (`.github/workflows/codeql.yml`, Python, push + PR +
+  weekly schedule): the repo's first code-scanning analysis — before
+  this cycle the alerts endpoint had never produced an analysis.
+- OpenSSF Scorecard workflow (weekly + push, `publish_results: true`)
+  plus the README Scorecard badge; known honest deductions (required
+  reviews/status checks deliberately off; no signed releases until the
+  owner tags) are dispositioned, not hidden.
+- Gitleaks secret-scan workflow over the full git history, using the
+  pinned gitleaks 8.30.1 binary with its SHA-256 verified (no
+  third-party action executes in the job), plus `.gitleaks.toml`
+  allowlisting exactly two verified-synthetic test fixtures by exact
+  regex — never by path.
+- Cross-OS smoke workflow (`.github/workflows/smoke.yml`): install the
+  built wheel and run `catalog`, `inspect` and `--help` on
+  ubuntu/macos/windows. It is a separate workflow, not a ci.yml job
+  (the 4-job pin stands), and it runs the offline CLI only — never
+  the full suite, never the MCP self-test (SIGALRM degrades on
+  non-Unix).
+- `.github/CODEOWNERS` (documentary ownership map — reviews are
+  deliberately off, so it does not enforce anything yet),
+  `.github/ISSUE_TEMPLATE/config.yml` (blank issues off, contact
+  links), `SUPPORT.md` (best-effort, no SLA, stated plainly), a root
+  `SECURITY.md` pointer to the authoritative `docs/SECURITY.md`, and
+  `.editorconfig` / `.gitattributes`.
+- README table of contents, a quickstart expected-output block
+  (verbatim `catalog`/`inspect` output), and a CONTRIBUTING link;
+  CONTRIBUTING gains a first-contribution paragraph with scoped test
+  commands.
+
+### Changed (cycle 210 — enterprise hardening, 2026-10-26)
+
+- `ci.yml` gains a top-level `permissions: contents: read` block and
+  `timeout-minutes` on every job; every checkout in `ci.yml` and
+  `release.yml` sets `persist-credentials: false` (the release
+  publish job is safe: `gh` uses `GH_TOKEN` from env, not a persisted
+  credential, and job-level permissions replace the top-level block).
+- Dependabot gains a 7-day cooldown (a version published yesterday is
+  not proposed today) and per-ecosystem update groups.
+- `pyproject.toml` gains the `Typing :: Typed` classifier to match
+  the shipped `py.typed`.
+- README badge row drops the three maintainer-dev-tooling badges
+  (cocoindex-code, caveman, crawl4ai); the tooling is still
+  documented in `AGENTS.md` and `docs/crawl4ai.md`.
+- `docs/SECURITY.md` records the twice-considered SBOM decision: no
+  SPDX/CycloneDX bill of materials is shipped — a zero-dependency
+  wheel's SBOM would contain exactly one package (its METADATA,
+  already inside the artifact), the step would live in the
+  tag-only release job that never runs until the first real release,
+  and an `[hf]` SBOM would be stale on arrival or need the multi-GB
+  CUDA download. Consumers inventory via METADATA inspection and
+  `pip freeze`, plus PEP 740 attestations.
+- Platform statement updated in README and VALIDATION: the full suite
+  stays Linux-only; the smoke workflow verifies install plus the
+  offline CLI on macOS and Windows.
+- Queued, not started: the docs site / Diátaxis split (its own later
+  cycle); zizmor workflow lint; dependency-review; an ADR index; a
+  locked CI lane; Best Practices Passing self-certification (owner
+  form); TestPyPI rehearsal (owner Trusted Publisher setup);
+  `UPLOAD_TO_GITHUB.md` removal (owner UI click — the push helper
+  cannot delete files); the v0.1.0 tag (owner decision alone). The
+  sample-report screenshot is deferred: no headless renderer in this
+  environment could produce a PNG (three attempts hung); the README
+  keeps its link to the committed report instead of a fabricated
+  image. `.github/release.yml` note categories were considered and
+  not added: the release fallback is a hand-written template string,
+  never auto-generated notes, so the file would be inert.
+
 ### Added (cycle 209 — canonical-form ladder, 2026-10-26)
 
 - `model-protocol-lab run --canonical-form`: twenty-four

@@ -1,0 +1,22 @@
+# Ownership map (cycle 210).
+#
+# HONEST FRAMING: this file is documentary today, not enforcement.
+# Branch protection deliberately has required reviews and required
+# status checks OFF (they would block the autonomous push pipeline),
+# so CODEOWNERS does not auto-require anyone's approval. It exists so
+# an evaluator — and a future contributor — can see at a glance who is
+# accountable for the security-critical paths. If the pipeline ever
+# moves to pull-request review, this same file becomes the enforcement
+# map with no content change.
+#
+# The maintainer is the owner of everything; the narrower lines below
+# call out the paths whose breakage is load-bearing, so review
+# attention (human or automated) goes there first.
+
+* @strmt7
+/model_protocol_lab/backends.py @strmt7
+/model_protocol_lab/reporting.py @strmt7
+/.github/workflows/ @strmt7
+/tools/release_build.py @strmt7
+/docs/SECURITY.md @strmt7
+/pyproject.toml @strmt7

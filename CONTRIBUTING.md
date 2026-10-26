@@ -36,6 +36,21 @@ requires byte-identical output:
 python examples/make_sample_report.py
 ```
 
+## A first contribution
+
+You do not need the full suite to start. For a first change, run just
+the test file you touched, plus lint on the files you changed:
+
+```sh
+python -m pytest tests/test_<area>.py
+ruff check <changed files>
+ruff format --check <changed files>
+```
+
+Then run the full verification above before opening the pull request.
+Maintained by Stratos; the public CLI is stable — breaking changes are
+discussed in an issue first (see "Public CLI stays stable" below).
+
 ## Conventions
 
 - **Evidence over claims.** Do not claim a behavior you have not executed. If
