@@ -553,7 +553,9 @@ Searched 2025–2026 work on prompt/chat-format sensitivity and
 tokenizer-boundary effects: arXiv 2604.18389 ("Understanding the Prompt
 Sensitivity", 7 modification types incl. token misalignment and
 orthographic errors), arXiv 2608.18539 (interaction-based prompt
-sensitivity), arXiv 2411.10541 (prompt-formatting impact, NAACL 2025),
+sensitivity), arXiv 2411.10541 (prompt-formatting impact; its arXiv
+record says "Submitted to NAACL 2025" — an earlier draft of this entry
+stated the venue flatly; corrected in cycle 216),
 arXiv 2609.35869 ("The Price of Token Boundaries", compression cost of
 pre-tokenization, Sept 2026), and the token-healing literature
 (guidance-ai 2023; measured effects in arXiv 2402.01035 §Table 8). Every
@@ -5762,7 +5764,7 @@ After the infrastructure fix: the wave-5 specialist round.
 
 ## Cycle 165 (2026-10-19) — surface-noise self-consistency probe (prompt-quality meter build)
 
-**Research (uniqueness pass, web-verified 2026-10-19):** the meter-build swarm's researcher brief (`~/workspace/agents_out/meter/researcher.md`) found the near-miss **ctxray** (github.com/ctxray/ctxray, MIT): deterministic 0–100 prompt scoring from 30+ static features, zero LLM calls, <50ms per prompt, MCP server, CI quality-gate action. Re-checked at build time (2026-10-19): ctxray's positioning is unchanged — static features only, no perturbation radius, no minimal-flip counterfactuals, not stdlib-only. A secondary source (the author's dev.to post) claims "PromptPerfect got absorbed into Jina" — still not primary-source verified, so it is NOT cited as fact. **Positioning decision:** ctxray is the static tier; this probe is the dynamic tier. Academic precedent credited explicitly: CoIPO/NoisyPromptBench "decoding radius" R(a) (arXiv:2603.03314, ICLR 2026) and the 2026 PCE minimal-flip counterfactuals paper — both LLM-based/paper-only; cited, not claimed over. Two researcher leads remain UNVERIFIED (Glama "deterministic heuristics" MCP server; PromptPerfect sunset) and are never cited.
+**Research (uniqueness pass, web-verified 2026-10-19):** the meter-build swarm's researcher brief (`~/workspace/agents_out/meter/researcher.md`) found the near-miss **ctxray** (github.com/ctxray/ctxray, MIT): deterministic 0–100 prompt scoring from 30+ static features, zero LLM calls, <50ms per prompt, MCP server, CI quality-gate action. Re-checked at build time (2026-10-19): ctxray's positioning is unchanged — static features only, no perturbation radius, no minimal-flip counterfactuals, not stdlib-only. A secondary source (the author's dev.to post) claims "PromptPerfect got absorbed into Jina" — still not primary-source verified, so it is NOT cited as fact. **Positioning decision:** ctxray is the static tier; this probe is the dynamic tier. Academic precedent credited explicitly: CoIPO/NoisyPromptBench "decoding radius" R(a) (arXiv:2603.03314) and the 2026 PCE minimal-flip counterfactuals paper — both LLM-based/paper-only; cited, not claimed over. (Cycle 216: an "ICLR 2026" venue tag on the CoIPO citation was removed — the arXiv record carries no comments or journal-reference field supporting it.) Two researcher leads remain UNVERIFIED (Glama "deterministic heuristics" MCP server; PromptPerfect sunset) and are never cited.
 
 **Design (binding constraints from the 4/4 swarm briefs, adversarially cross-checked):** R1 [CRITICAL] — the per-prompt verdict function V did not exist (repo verdicts are selection-over-candidate-sets); design doc §1 defines V(P, F, B) as the pass/fail/abstain vector over fixtures, a flip as a vector difference, perturbation on the prompt span only. R4 [CRITICAL, proved from first principles by red-team B] — the "radius" over a searched subset S ⊂ F is mathematically an UPPER bound (d_obs ≥ d*), erring toward false confidence; labeled everywhere as "nearest observed flip under frozen search plan", never a guarantee; the instrument is honestly named a **surface-noise self-consistency probe**, not a "prompt-quality meter". R2 [HIGH] — per-operator radius vector, never a collapsed scalar; distance unit = token indel-edit rate (Myers O(ND), substitution = delete+insert, normalized by combined length) in [0,1]. R5 — budget expiry → `status: "cancelled"`, no score. R12 — no margin metric; tiers side-by-side never blended; ranking requires identical (fixtures, backend, protocol-fingerprint) triples; full denominators; lint advisory. R13 — protocol embeds backend fingerprint; cross-fingerprint comparison refused. MCP spec 2026-07-28 could not be fetched directly (network error); the server interoperates with both framings and documents the caveat. The VulnerabilityScreener skeleton's "never touches the network" docstring was proven FALSE in its own code by the verifier — corrected to "local and offline" on port.
 
@@ -7325,8 +7327,9 @@ injects an instruction only when a trigger phrase appears in a user
 message passes the AST scan with zero findings (reproduced live by
 red-team A against `scan_template_ast`). That class is demonstrated
 in the wild by arXiv:2602.04653 (chat-template backdoors keyed on
-multi-word trigger phrases in user messages, typically matched
-case-normalised). Existing tooling covers the static tier (this
+four- to six-word trigger phrases in user messages; the paper does
+not specify case-normalised matching — that is this probe's own
+trigger-variant choice, recorded in cycle 216). Existing tooling covers the static tier (this
 repo's firewall; ctxray-style scanners) and hosted guardrails score
 model outputs; a local, tokenizer-only, paired-render behavioural
 probe of the template itself — sentinel-bracketed probe
@@ -7385,8 +7388,10 @@ reported `no_template`, never probed silently.
 Wave-7 rank 4 (research section 4). Leviathan, Kalman & Matias
 (arXiv:2512.14982) show prompt repetition improves non-reasoning
 LLMs on API models rendered with each provider's own chat template;
-their padding ablation shows random-token padding does not reproduce
-the effect. No surveyed harness ships a repetition arm, and none
+their padding ablation shows period padding (inputs padded
+with "." to the same length) does not reproduce the effect.
+(Cycle 216 correction: the padding is periods, not random
+tokens.) No surveyed harness ships a repetition arm, and none
 crosses repetition with hand-rendered foreign template families
 under an abstention rule on a local checkpoint with exact-token
 greedy scoring. The combination is the claim; the paper's "no
@@ -7576,8 +7581,11 @@ monotonically with expressed certainty and is amplified by
 I-perspective framing, and by ELEPHANT's own first→third-person
 rewrite mitigation, which reduced social sycophancy only
 somewhat. Cheng et al. 2025, *ELEPHANT* (arXiv:2505.13995,
-https://arxiv.org/html/2505.13995v2; now ICLR 2026, with the
-team's extended study in Science, March 2026): social
+https://arxiv.org/html/2505.13995v2; published in Science —
+DOI 10.1126/science.aec8352 on its arXiv record; an earlier
+draft of this entry also carried an "ICLR 2026" tag and a
+"March 2026" date that the paper's record does not support,
+removed in cycle 216): social
 sycophancy as face preservation, GPT-4o-judge labels on
 open-ended advice, both sides of a moral conflict affirmed in
 48% of cases. ELEPHANT §5 reports its model ranking reverses
@@ -8112,14 +8120,28 @@ Prior art, credited: Liu et al., *Lost in the Middle*
 API-served models, closed-book/open-book bounds, edge-mean
 functional form (this probe's `mid_depth_deficit` is that
 form, credited in the design doc). NoLiMa
-(arXiv:2502.05167) — minimal-lexical-overlap needles,
-unique-token counting, needles inserted at 25/50/75% within
-the relevant text in its question-type analysis, literal
-(code-word) mark needles. RULER (arXiv:2404.06654) —
-configurable needle depth in local synthetic tasks, pass@k
-over 25 samples, substring acceptance tier alongside strict
-equality. BABILong (arXiv:2406.10149) — multiple facts
-distributed through book text, ~10% depth bins. Chroma,
+(arXiv:2502.05167) — minimal-lexical-overlap needles
+whose questions require latent association, with a
+proportion-based full placement sweep and a last-2K
+aligned-depth analysis (its §4.4.2). (Cycle 216 correction:
+an earlier version of this entry also credited NoLiMa with
+unique-token counting, needles inserted at 25/50/75%, and
+literal (code-word) mark needles; none of the three is in
+the paper's text in either version checked.) RULER (arXiv:2404.06654) —
+synthetic tasks with flexible length and complexity
+configurations, scored by recall-based presence accuracy;
+its Limitations section states it does not provide
+depth-level performance (position control is named as
+planned for the codebase only), and the paper defines no
+pass@k protocol. (Cycle 216 correction: an earlier version
+of this entry credited RULER with configurable needle
+depth, pass@k over 25 samples, and a substring acceptance
+tier; none of the three is in the paper — the depth claim
+is contradicted by its §8.) BABILong (arXiv:2406.10149) — multiple facts
+distributed through book text (PG19 background), with a
+location analysis grouping the facts by quarter of the
+input (its Appendix K). (Cycle 216 correction: "~10% depth
+bins" was not supported by the paper's text.) Chroma,
 *Context Rot* (July 2025, research.trychroma.com/context-rot)
 — total length varied with a fixed median needle position
 (not depth-rotated), distractor-count and similarity effects,
@@ -8128,8 +8150,9 @@ needle–question similarity effects.
 Verdict: the combination holds with narrowing, and the
 narrowing is recorded here so the docs stay inside it. Depth
 as an axis is NOT novel (LitM, NoLiMa, RULER, BABILong);
-token-exact placement is NOT a differentiator (NoLiMa counts
-exact tokens; RULER/BABILong place exactly); literal needles
+token-exact placement is NOT a differentiator (placement
+sweeps and exact needle placement are NoLiMa's and
+BABILong's); literal needles
 and distributed facts are prior art (NoLiMa, BABILong);
 needle-only controls are prior art (LitM's closed-book bound,
 NIAH's no-needle test). What no surveyed harness (LM
@@ -8155,8 +8178,10 @@ material by construction (Chroma: unmatched pairs confound
 retrieval with guessing); the filler is topically dissimilar
 prose, so curves are a lower bound (Chroma's similarity
 result), stated in the readout; scoring is the lab's strict
-boundary-cut exact match, with RULER's looser substring tier
-deliberately not offered; each cell is one greedy generation
+boundary-cut exact match; RULER's looser recall-based presence
+scoring is deliberately not offered (an earlier draft of this
+sentence described a RULER "substring tier" — the paper has
+none; corrected in cycle 216); each cell is one greedy generation
 with denominators printed (the sampling-variance concern is
 answered by determinism plus denominators, not by sampling).
 
@@ -8897,7 +8922,7 @@ the combination, as always):
   comparison to this probe is valid; Xiong et al.
   (arXiv:2306.13063) supplies the exact surface form and the
   pre-registered expected shape (values cluster at
-  multiples of 5, 80–100, peak 95); Seo et al., ADVICE
+  multiples of 5, 80–100); Seo et al., ADVICE
   (arXiv:2510.10913) is a primary fine-tuning study — an
   earlier brief's "survey" genre was wrong — whose §7
   answer-masking experiment is the nearest knowability
@@ -9644,8 +9669,12 @@ literature studies paraphrase and template sensitivity of scores, not
 truncation ladders — Hua et al., "Flaw or Artifact? Rethinking Prompt
 Sensitivity in Evaluating LLMs", arXiv:2509.01790 (abstract verified:
 7 LLMs, 12 templates, variance attributed to evaluation heuristics).
-lm-eval-harness truncation is a length cap on few-shot examples when
-prompts exceed the context, not a sensitivity probe. No token-depth
+lm-eval-harness truncation is a model-backend safeguard that cuts
+over-long input sequences to the model's maximum length, not a
+sensitivity probe; the few-shot-example cap an earlier draft of this
+sentence described is LightEval's `truncate_fewshots` option, not
+lm-eval's (misattribution corrected in cycle 216 against both
+codebases). No token-depth
 prompt-truncation ladder over a fixed selection rule was found in HELM
 or LightEval. Surviving claim is the combination: exact token-sequence
 selection machinery + token-depth truncation ladder + flip-depth readout
@@ -10131,3 +10160,97 @@ twenty-six preambles.
   the navigation's design set to be equal in both directions.
   The local strict build passes and the page renders with all 26
   links resolving.
+
+## Cycle 216 — verification/correction round: the FIGURE-UNCHECKED sweep, the `_valid_primary_pair` sibling, the dateline oracle caveat (2026-10-27)
+
+The wave-10 correction round (cycle 207) left three recorded
+residues; this cycle closes all three. Full sweep table:
+`~/workspace/agents_out/cycle216/build_log.md`.
+
+- **FIGURE-UNCHECKED sweep (45 items, each resolved against its
+  primary source by the coordinator's own fetch/read — no figure
+  rests on a secondary source or a search snippet).** The
+  population was reconstructed exactly from the wave-10 verifier's
+  list (30 items), plus its non-arXiv bucket (4 venue tags, 3
+  TOKENDEPTH design-doc characterizations), plus the 8 arXiv IDs
+  present in shipped docs but absent from the wave-10 population
+  (mechanical extraction: 104 unique IDs in shipped docs vs 97).
+  Verdicts: 37 confirmed, 8 corrected (two of them partially —
+  the figure confirmed, an attached element removed). Nothing was
+  removed wholesale; every correction removes or re-attributes the
+  unsupported element and keeps what the source supports.
+  Corrections: Xiong et al. (2306.13063) "peak 95" removed (the
+  paper supports multiples of 5 in the 80–100 range; the mode is
+  readable only from a histogram image) — CONFIDENCE_DESIGN.md
+  and this log. RULER (2404.06654) credited with pass@k, a
+  substring tier, and needle-depth control it does not have — its
+  metric is recall-based presence accuracy and its §8 states
+  depth-level performance is not provided; corrected in this log
+  (two sites) and NEEDLE_DESIGN.md. BABILong (2406.10149) "~10%
+  depth bins" — its location analysis groups facts by quarter of
+  the input (Appendix K). NoLiMa (2502.05167) credited with
+  unique-token counting, 25/50/75% needle placement, and
+  code-word needles, none in the paper (either version); removed
+  in this log (two sites) and NEEDLE_DESIGN.md. Prompt Repetition
+  (2512.14982) "random-token padding" — the paper's control pads
+  with periods to the same length (its Appendix A.4);
+  REPETITION_DESIGN.md and this log. Fogel et al. (2602.04653)
+  "typically matched case-normalised" — the paper specifies no
+  matching rule; the trigger phrases are four to six words, and
+  case-normalised matching is this lab's own probe variant,
+  now attributed as such (TEMPLATE_PROBE_DESIGN.md, this log).
+  CoIPO (2603.03314) "ICLR 2026" venue tag removed — its arXiv
+  record carries no comments or journal-reference field; the
+  R(a) definition itself is verbatim-confirmed.
+  arXiv 2411.10541's venue stated flatly as "NAACL 2025" — its
+  record says "Submitted to NAACL 2025"; corrected here, and the
+  same paper's misattribution to Sclar et al. in
+  RESEARCH_PORTABILITY_2026-10-15.md corrected to He et al.
+  (Sclar et al. is 2310.11324). ELEPHANT (2505.13995) "now ICLR
+  2026 ... in Science, March 2026" — the record carries a Science
+  DOI (10.1126/science.aec8352) and no ICLR support; tag and date
+  removed, Science cited by DOI; its 48% figure is confirmed.
+  TOKENDEPTH_DESIGN.md's neighbor characterization had the
+  few-shot truncation cap on the wrong harness: lm-eval's
+  truncation is a model-backend safeguard cutting over-long
+  input sequences to the model's maximum length (its task layer
+  builds few-shot contexts with no cap); the few-shot-example
+  cap is LightEval's `truncate_fewshots` option — corrected in
+  the design doc and in the cycle-206 entry above, against both
+  codebases read directly. Every corrected figure was swept for
+  downstream repetitions (six further instances found and fixed;
+  two adjudicated as the lab's own design statements and left).
+- **`_valid_primary_pair` latent sibling — a live defect, fixed.**
+  The cycle-207 entry queued this sibling of A-F1 (the verify.py
+  unhashable-decision TypeError). By execution: the helper
+  accepted the pair's decision with `decision not in
+  _PRIMARY_DECISIONS` and no type guard, so an unhashable
+  `primary_decision` (`[]`, `{}`) raised `TypeError: unhashable
+  type` instead of failing closed. Four of its six callers
+  pre-guard the pair's types; two do not — precision (via
+  `_precision_recompute`) and confidence (via
+  `_confidence_recompute`) — and both validators, and
+  `diff_precision` / `diff_confidence` end to end, raised on
+  payloads that are valid except for the mutated decision. The
+  fix is the A-F1 pattern at the shared helper: a
+  `type(decision) is not str` guard ahead of the membership
+  test, with the blast radius recorded in the docstring; the
+  cycle-27 oracle already type-guarded, so the fix aligns the
+  implementation with the oracle. Regression tests:
+  `tests/test_cycle216_corrections.py` (9 tests) — mutant-killed
+  by construction (with the guard removed, 14 tests and subtests
+  fail, 7 pass; with it, all pass).
+- **Dateline oracle caveat — closed as documentation.** The
+  cycle-188 verifier recorded that neither test oracle carries
+  its own dateline arm table or weekday computation; both
+  recompute through the producer module. The production
+  validator in diffreports.py is literal-independent (its own
+  `_DATELINE_VALUES` / `_DATELINE_FORMATS` / arm table, no
+  import of the producer), so the substantive protection
+  already ships; what was missing was the statement. Proven by
+  execution this cycle: swapping the producer's weekday names
+  (Wed↔Thu) and rebuilding the payload through the producer
+  path makes `_valid_dateline` return False — the validator
+  catches producer drift even though the oracles mirror the
+  producer. DATELINE_DESIGN.md now records the arrangement and
+  the evidence, and the drift case is pinned as a test.

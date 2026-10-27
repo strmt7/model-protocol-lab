@@ -115,10 +115,15 @@ def _valid_primary_pair(payload: dict[str, Any]) -> bool:
     NOT do: recompute the parent run's decision — the section does
     not carry the parent run's fixture outcomes, so within the
     vocabulary the decision remains stage-attested (documented in
-    docs/DATELINE_DESIGN.md)."""
+    docs/DATELINE_DESIGN.md). The decision is type-checked before
+    the vocabulary membership test, so an unhashable hostile value
+    (list/dict) fails closed instead of raising — the verify.py
+    A-F1 pattern, whose latent sibling this was until cycle 216
+    (the precision and confidence recompute paths reach this
+    function without the pre-guard the other four callers carry)."""
     decision = payload.get("primary_decision")
     winner = payload.get("primary_winner")
-    if decision not in _PRIMARY_DECISIONS:
+    if type(decision) is not str or decision not in _PRIMARY_DECISIONS:
         return False
     candidates = payload.get("candidates")
     if decision in _PRIMARY_WINNER_DECISIONS:

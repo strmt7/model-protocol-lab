@@ -96,7 +96,7 @@ them, with the researcher's corrections applied:
   (arXiv:2306.13063): the lab's exact surface form (integer
   0–100, "Answer and Confidence (0-100)") and the documented
   shape to expect: stated values cluster at multiples of 5 in
-  the 80–100 range with a peak at 95, and vanilla elicitation
+  the 80–100 range, and vanilla elicitation
   is heavily overconfident by their (judge-scored) measure.
   Top-bin-dominated, sparse low bins are the pre-registered
   expected shape here, not a surprise.

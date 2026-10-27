@@ -5,7 +5,7 @@ request inside the turn changes verdicts when the chat template is
 the variable. Leviathan, Kalman & Matias (arXiv:2512.14982) show
 that prompt repetition improves non-reasoning LLMs — measured on
 API models, each rendered with its provider's own chat template,
-with a padding ablation showing random-token padding does not
+with a padding ablation showing period padding does not
 reproduce the effect. This probe asks the lab's version of the
 question: same checkpoint, hand-rendered foreign formats, exact
 token sequences, a conservative abstention rule — does repetition

@@ -20,7 +20,9 @@ content-conditional logic written in legal Jinja: a template that
 injects an instruction only when a trigger phrase appears in a user
 message passes the AST scan with zero findings. That class is
 demonstrated by arXiv:2602.04653 (chat-template backdoors keyed on
-multi-word trigger phrases, typically matched case-normalised). The
+four- to six-word trigger phrases in user messages; case-normalised
+matching is this probe's own variant choice, not a claim about the
+paper — cycle 216). The
 probe is the dynamic tier next to the firewall's static tier: the
 firewall runs first, and a denied template is never rendered.
 

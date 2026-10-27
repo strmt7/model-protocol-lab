@@ -38,11 +38,16 @@ Liu et al. (*Lost in the Middle*, arXiv:2307.03172) measured a
 U-shaped recall curve over document position in API-served
 models, with mid-context accuracy sometimes dropping below the
 closed-book bound; NoLiMa (arXiv:2502.05167) extends
-needle-in-a-haystack with minimal-lexical-overlap needles,
-unique-token counting, and — in its question-type analysis —
-needles inserted at 25/50/75% within the relevant text; RULER
-(arXiv:2404.06654) places needles at controlled depths in
-synthetic local-model tasks; BABILong (arXiv:2406.10149)
+needle-in-a-haystack with minimal-lexical-overlap needles
+and a proportion-based placement sweep over the haystack
+(its §4.4.2; an earlier draft of this paragraph also credited
+it with unique-token counting and needles inserted at
+25/50/75% — neither is in the paper, corrected in cycle 216);
+RULER
+(arXiv:2404.06654) runs synthetic local-model tasks at
+flexible length and complexity configurations, scored by
+recall-based presence accuracy (its paper states depth-level
+position control is not yet reported); BABILong (arXiv:2406.10149)
 distributes multiple facts through book text; Chroma's
 *Context Rot* report (July 2025,
 https://research.trychroma.com/context-rot) varies total length

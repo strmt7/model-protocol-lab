@@ -471,6 +471,20 @@ validator-specific rules:
   decision remains stage-attested. The same binding applies to the
   repetition, distraction, and leading validators, which carry the
   same pair under the same mapping.
+- **Oracle ground truth (cycle-188 verifier caveat, closed as
+  documentation in cycle 216):** the two test oracles recompute
+  the dateline arm table and weekday strings through the producer
+  module (`dateline.py`) — the oracle family's standing
+  producer-as-ground-truth pattern, stated in the oracles' own
+  docstrings — so the oracles are not a second literal copy of
+  the arm table, and a producer-side weekday drift would move a
+  payload and both oracles together. The independent literal
+  check is this validator: it carries its own frozen date tables
+  and weekday recomputation, and rejects a drifted payload even
+  when the payload's protocol and fingerprint are self-consistent
+  under the drift (executed in cycle 216: a payload rebuilt
+  through a producer with a swapped weekday table validates
+  before the drift and is rejected after it).
 
 Both test oracles (cycle-27 and cycle-67) mirror the validator in
 the same push, per the standing oracle blast-radius rule; after
