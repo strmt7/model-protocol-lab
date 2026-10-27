@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–212 (executed 2026-10-14 → 2026-10-26, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–213 (executed 2026-10-14 → 2026-10-27, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8439 tests collected**
-  (cycle 212, 2026-10-26). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8442 tests collected**
+  (cycle 213, 2026-10-27). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -52,17 +52,19 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.3455% (cycle 212, 2026-10-26)**. The gate compares the
+  95.3455% (cycle 213, 2026-10-27)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.845) is auditable rather than inferred from the display.
-  The dip from 209's 95.4018% is denominator growth: the negation
-  feature added 393 statements (32,655 → 33,048) while the new
-  negation module sits at 94.0% scoped — not a change in the
-  gate itself.
+  The figure is unchanged from cycle 212 (31,820 of 33,048
+  statements): the cycle-213 fix adds a concatenation line
+  inside an existing return expression, so neither the
+  numerator nor the denominator moves. (Cycle 212's dip from
+  209's 95.4018% was denominator growth: the negation feature
+  added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (292 files in that CI scope; the repo-root scope counts more.
+  (293 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (65 source files).

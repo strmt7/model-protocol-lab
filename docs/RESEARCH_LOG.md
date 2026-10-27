@@ -9949,3 +9949,52 @@ fresh review.
   digits (UNVERIFIED), Vrabcová §§2–3 synthesis, Elkins &
   Chun figures, and every "iff" / winner / negation-
   invariance headline.
+
+## Cycle 213 — canonical-form section computed and TOC-linked but never rendered: a defect-class fix (2026-10-27)
+
+Found by the cycle-212 coordinator as a pre-existing defect
+deliberately not fixed in that cycle, and verified here by
+direct source read before any edit: in
+`reporting.render_html` the canonical-form section had two of
+its three touchpoints — the compute call
+(`canonical_form_html = _canonical_form_section(result)`) and
+the table-of-contents tuple — but was never concatenated into
+the returned document, where the chain jumped from
+`placement_html` directly to `negation_html`. Because `_toc`
+links every entry whose section HTML is non-empty, the report
+carried a working-looking TOC link whose target id existed
+nowhere in the body; the section's content never appeared in
+any rendered report since cycle 209 shipped it.
+
+- Why the suite missed it: the cycle-209 tests call
+  `_canonical_form_section` directly and never render through
+  `render_html` with the payload populated (cycle 212's
+  negation tests do exactly this for their section — the
+  pattern existed one cycle later); the cycle-33 TOC
+  correspondence check renders a full result with no probe
+  payloads populated, so no probe section renders there, and
+  its section-id regex does not match the probe sections'
+  `<section class="card" id="...">` shape in any case.
+- The audit, by execution, before fixing: (a) AST extraction
+  over `render_html` — 57 computed section variables, 58 TOC
+  entries (the search section is built inline), 56 section
+  variables in the return concatenation; exactly one
+  TOC-listed variable missing from the body, no body variable
+  missing from the TOC, no anchor disagreeing with its
+  section's emitted id. (b) A dynamic render through the real
+  `render_html`/`_toc` with section functions stubbed to
+  return their real emitted ids: 58 TOC hrefs vs 57 body
+  section ids, the only difference being canonical-form.
+  (c) An end-to-end render with real canonical-form and
+  negation payloads: the canonical-form link present, its
+  body absent; negation present in both. Conclusion:
+  canonical-form was the only instance of the class.
+- Fix: the single missing concatenation, placed between
+  placement and negation to match the TOC order. No result
+  shape changed. Regression tests
+  (`tests/test_cycle213_toc_body.py`) assert the section body
+  (not just the link) on a populated render, assert exact
+  TOC/body correspondence on that render, and guard the
+  invariant over `render_html`'s source for sections added
+  later; all three were verified to fail with the
+  concatenation removed and to pass with it restored.
