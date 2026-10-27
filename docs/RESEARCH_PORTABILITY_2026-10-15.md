@@ -39,8 +39,10 @@ models, and (b) is statistical estimation, fundamentally incompatible with
 this lab's exact-token-sequence / no-estimation discipline
 (`not_estimated`). Not adoptable.
 
-**Prompt-sensitivity literature.** Sclar et al. 2024 ("Does Prompt
-Formatting Have Any Impact on LLM Performance?", arXiv 2411.10541):
+**Prompt-sensitivity literature.** He et al. 2024 ("Does Prompt
+Formatting Have Any Impact on LLM Performance?", arXiv 2411.10541;
+an earlier draft of this entry misattributed the paper to Sclar
+et al. — Sclar wrote arXiv 2310.11324 — corrected in cycle 216):
 matched-pairs t-tests between best/worst formats per model and a CMD
 dispersion metric — per-model format sensitivity, never cross-checkpoint
 portability of a specific template. The 2025 follow-up "Flaw or Artifact?

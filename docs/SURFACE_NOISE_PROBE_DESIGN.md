@@ -14,7 +14,7 @@ rewrite, MCP server — but no perturbation, no radius, no counterfactuals,
 not stdlib-only. This probe is the *dynamic* tier: perturbation-based
 verdict stability over a frozen operator set. The two compose; they do not
 overlap. Academic credit: CoIPO/NoisyPromptBench "decoding radius" R(a)
-(arXiv:2603.03314, ICLR 2026) is the model-centric precedent for a
+(arXiv:2603.03314) is the model-centric precedent for a
 perturbation radius; the 2026 PCE paper is the precedent for minimal-flip
 counterfactuals (LLM-based, research-only). Our combination — per-prompt,
 frozen deterministic protocol, stdlib-only MCP, zero LLM calls — has no

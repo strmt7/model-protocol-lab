@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 216 — verification/correction round: claims sweep, primary-pair sibling, dateline caveat, 2026-10-27)
+
+- A latent sibling of cycle 207's A-F1 defect in
+  `diffreports.py`: `_valid_primary_pair` tested the pair's
+  decision for membership without a type guard, so an unhashable
+  `primary_decision` raised `TypeError` instead of failing
+  closed. Four of its six callers pre-guarded; the precision and
+  confidence paths did not, and both validators (and the
+  end-to-end diff entry points) crashed on such payloads. The
+  helper now type-guards before the membership test, matching
+  the cycle-27 oracle's semantics. Regression tests in
+  `tests/test_cycle216_corrections.py` (mutant-killed: removing
+  the guard fails 14 tests and subtests).
+- Every quantitative figure and externally checkable claim the
+  wave-10 verifier had left FIGURE-UNCHECKED (45 items,
+  including venue tags, the TOKENDEPTH neighbor
+  characterizations, and eight arXiv IDs outside the wave-10
+  population) was resolved against its primary source: 37
+  confirmed, 8 corrected. Among the corrections: Xiong et al.'s
+  unsupported "peak 95" removed; RULER's metric and depth
+  claims restated to its recall-based presence accuracy and its
+  stated no-depth-level limitation; NoLiMa's three unsupported
+  elements removed (two documents, three sites); Prompt
+  Repetition's padding control corrected to period padding;
+  CoIPO's unsupported "ICLR 2026" tag removed (its R(a)
+  definition confirmed); arXiv 2411.10541's venue corrected to
+  its record's "Submitted to NAACL 2025" and its authorship in
+  the portability survey corrected from Sclar et al. to He
+  et al.; ELEPHANT's venue corrected to its Science publication
+  (DOI on its arXiv record); and the few-shot truncation cap
+  re-attributed from lm-eval-harness (whose truncation is a
+  backend max-length safeguard) to LightEval's
+  `truncate_fewshots`. Each correction is noted in place, and
+  downstream repetitions were swept and fixed in the same pass.
+- The dateline oracle caveat left by the cycle-188 verifier is
+  closed as documentation: `docs/DATELINE_DESIGN.md` now states
+  that the test oracles mirror the producer's weekday
+  computation by design while the production validator is
+  literal-independent, with the executed drift evidence (a
+  producer weekday swap makes the validator reject the payload)
+  recorded and pinned as a regression test.
+
 ### Added (cycle 215 — enterprise polish 2: workflow-security lint, dependency review, ADR index, 2026-10-27)
 
 - A workflow-security lint lane (`.github/workflows/zizmor.yml`):

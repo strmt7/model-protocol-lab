@@ -137,8 +137,10 @@ Exact token-sequence selection machinery + a token-depth truncation ladder
 research pass (RESEARCH_LOG cycle-206 entry): prompt-sensitivity work
 studies paraphrase and template sensitivity of scores (Hua et al.,
 arXiv:2509.01790), not truncation ladders; lm-eval-harness truncation is
-a length cap on few-shot examples when prompts are too long, not a
-sensitivity probe; no token-depth prompt-truncation ladder over a fixed
+a model-backend safeguard that cuts over-long input sequences to the
+model's maximum length, not a sensitivity probe (the few-shot-example
+cap an earlier draft described is LightEval's `truncate_fewshots`
+option; misattribution corrected in cycle 216); no token-depth prompt-truncation ladder over a fixed
 selection rule was found in HELM or LightEval. The surviving claim is
 this combination.
 
