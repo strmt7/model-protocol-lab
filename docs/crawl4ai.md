@@ -4,7 +4,7 @@ Model Protocol Lab uses [Crawl4AI](https://github.com/unclecode/crawl4ai) as a l
 development tool for reading and crawling web pages. It is separate from the
 lab's measurement runtime and requires no cloud account, API key, paid service or
 public server. The [latest stable release reviewed on 19 October 2026](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.4)
-is 0.9.4. Its base package is pinned in [the installation lock](../tools/requirements/crawl4ai.txt).
+is 0.9.4. Its base package is pinned in [the installation lock](https://github.com/strmt7/model-protocol-lab/blob/main/tools/requirements/crawl4ai.txt).
 The installed crawler is the explicitly identified upstream `0.9.4` release.
 
 Normal research invokes Crawl4AI's own `crawl` command through the portable

@@ -17,11 +17,12 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8442 tests, 95.3% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8451 tests, 95.3% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Documentation](#documentation)
 - [What the report looks like](#what-the-report-looks-like)
 - [Capabilities](#capabilities)
 - [How this differs from nearby tools](#how-this-differs-from-nearby-tools)
@@ -112,6 +113,18 @@ enforced at build time:
 python -m model_protocol_lab fixtures build examples/fixtures.csv --output /tmp/mpl-fixtures.json
 # (a fresh path: fixtures build never overwrites an existing file)
 ```
+
+## Documentation
+
+The documentation is organised in four parts — tutorials, how-to
+guides, reference and explanation — and published as a site at
+https://strmt7.github.io/model-protocol-lab/. The same pages live in
+this repository under [docs/](docs/index.md), starting from the
+[documentation index](docs/index.md); [docs/USAGE.md](docs/USAGE.md)
+remains the complete command reference. To build the site locally:
+`python -m pip install -r requirements-docs.txt`, then
+`mkdocs build --strict`. The build tooling is documentation-only —
+the package itself keeps zero runtime dependencies.
 
 ## What the report looks like
 
@@ -296,7 +309,7 @@ The current adapter uses greedy full-prefix recomputation, float32 weights for t
 model_protocol_lab/       Renderer, evaluator, catalog, loader, experiment, reports, CLI
 tests/                    Core, workflow, adapter-integration, e2e and sample-report tests
 examples/                 Fixture files (JSON + CSV) and a byte-deterministic sample report
-docs/                     Usage, FAQ, research log, and security guidance
+docs/                     Usage, FAQ, research log, security guidance, site source
 .github/workflows/       CI: lint, typecheck, tests on 3.11-3.13, packaging
 DEVELOPMENT_PLAN.md       Architecture, milestones, test matrices and release gates
 VALIDATION.md             Verification evidence and limitations
