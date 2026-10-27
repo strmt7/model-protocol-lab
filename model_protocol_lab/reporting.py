@@ -10354,6 +10354,7 @@ def render_html(result: dict[str, Any]) -> str:
         + multiturn_html
         + needle_html
         + placement_html
+        + canonical_form_html
         + negation_html
         + choiceaudit_html
         + precision_html

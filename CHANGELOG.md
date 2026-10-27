@@ -38,6 +38,26 @@ All notable changes to this project are documented here. The format follows
   not gated. USAGE §8.55 and
   `docs/NEGATION_DESIGN.md` carry the full contract.
 
+### Fixed (cycle 213 — canonical-form section missing from the HTML report body, 2026-10-27)
+
+- The canonical-form section of the HTML report now actually
+  renders. Since cycle 209 the section was computed and linked
+  from the report's table of contents, but its HTML was never
+  concatenated into `render_html`'s body, so the TOC link landed
+  nowhere and the section's content never appeared in the
+  rendered report. The fix is the one missing concatenation.
+  A whole-class audit (AST extraction over `render_html` plus
+  renders through the real render path, stubbed and fully
+  populated) proved this was the only instance: every other
+  section is computed, TOC-listed, and concatenated, with its
+  anchor matching the emitted section id. New regression tests
+  in `tests/test_cycle213_toc_body.py` render through
+  `render_html` with the canonical-form payload populated and
+  assert the section body is present, assert exact TOC/body
+  correspondence on a populated render, and guard the invariant
+  at the source level for sections added later; each test was
+  verified to fail when the concatenation is removed.
+
 ### Fixed (cycle 211 — Windows defensive-open AttributeError, 2026-10-26)
 
 - `inspect` no longer dies with an AttributeError traceback on Windows:
