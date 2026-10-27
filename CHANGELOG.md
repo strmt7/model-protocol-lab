@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 215 — enterprise polish 2: workflow-security lint, dependency review, ADR index, 2026-10-27)
+
+- A workflow-security lint lane (`.github/workflows/zizmor.yml`):
+  zizmor 1.31.1, pip-pinned, pedantic persona at the lowest
+  severity/confidence floor, running on pushes and pull requests
+  that touch `.github/workflows/`. Its first local run produced
+  fourteen findings against the pre-cycle workflows; all fourteen
+  were fixed in the workflows themselves — workflow-level write
+  grants in `docs.yml`, `codeql.yml` and `scorecard.yml` moved
+  into the jobs that use them, a matrix value in `ci.yml`'s test
+  step now reaches the script via the environment instead of
+  template expansion, every grant carries an explanatory comment,
+  the release workflow's jobs are named and the workflow has a
+  concurrency limit — with no suppressions (no config file, no
+  inline ignores). Two suite pins that asserted the old top-level
+  permission blocks (cycles 210 and 214) were updated to the
+  job-level shape with the move recorded in the tests.
+- A dependency-review gate (`.github/workflows/dependency-review.yml`,
+  `actions/dependency-review-action` v5.0.0, SHA-pinned) on pull
+  requests only — it cannot block the push pipeline. It fails a PR
+  that introduces a vulnerability of severity high or above in the
+  runtime or development scopes, or a dependency under a copyleft
+  license (GPL/AGPL/LGPL families). The posture and its two honest
+  limits (an undetectable license warns rather than fails; the
+  deny-licenses option is deprecated upstream in v5) are recorded
+  in `docs/SECURITY.md`.
+- An architecture-decision index
+  (`docs/explanation/adr-index.md`, in the site navigation): the
+  26 shipped probe/instrument design documents and the standing
+  decisions recorded in other shipped documents, each with a
+  one-line outcome. It links only to documents that ship on
+  `main`; new regression tests
+  (`tests/test_cycle215_enterprise_polish2.py`) pin the index
+  against the navigation's design set in both directions, the
+  zizmor lane's shape, the permission scoping, and the
+  dependency-review posture.
+
 ### Added (cycle 214 — documentation site and Diátaxis structure, 2026-10-27)
 
 - A documentation site, built from `docs/` with MkDocs and the

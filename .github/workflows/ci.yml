@@ -54,9 +54,9 @@ jobs:
     # failure-artifact upload need actions read/write; the Codecov OIDC
     # upload needs id-token:write.
     permissions:
-      contents: read
-      actions: write
-      id-token: write
+      contents: read # checkout
+      actions: write # pip cache + failure-artifact upload
+      id-token: write # Codecov OIDC upload
     strategy:
       fail-fast: false
       matrix:
@@ -76,9 +76,16 @@ jobs:
       # diagnosable via the uploaded artifact (job logs are not
       # API-accessible). pipefail preserves unittest's exit status.
       - name: run tests (output captured)
+        # Cycle 215 (zizmor template-injection): the matrix value
+        # reaches the script through env, never by template expansion
+        # inside the script. The values are repo-controlled literals
+        # today; the env route keeps the script expansion-free if
+        # the matrix ever takes a less trusted value.
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
           set -o pipefail
-          coverage run -m unittest discover -s tests -t . 2>&1 | tee "$RUNNER_TEMP/unittest-py${{ matrix.python-version }}.log"
+          coverage run -m unittest discover -s tests -t . 2>&1 | tee "$RUNNER_TEMP/unittest-py$PYTHON_VERSION.log"
       - run: coverage report --fail-under=95
       - name: coverage xml
         if: always()

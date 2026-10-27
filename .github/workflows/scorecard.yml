@@ -16,11 +16,10 @@ on:
     - cron: "0 8 * * 1"
   workflow_dispatch:
 
+# Cycle 215 (zizmor excessive-permissions): read-only default; the
+# single analysis job declares its own grants below.
 permissions:
-  security-events: write
-  id-token: write
   contents: read
-  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,6 +30,11 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      security-events: write # upload the SARIF results
+      id-token: write # OIDC token for publish_results
+      contents: read # checkout
+      actions: read # run metadata for the Scorecard action
     steps:
       # Pinned to SHAs (comments name the tag). Verify at
       # https://github.com/actions/checkout,

@@ -16,10 +16,11 @@ on:
     - cron: "0 7 * * 1"
   workflow_dispatch:
 
+# Cycle 215 (zizmor excessive-permissions): the default every job
+# inherits is read-only; the analyze job declares its own grants, so
+# a future job added here inherits nothing beyond this.
 permissions:
-  actions: read
   contents: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,6 +31,10 @@ jobs:
     name: CodeQL (Python)
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      actions: read # run metadata for the CodeQL action
+      contents: read # checkout
+      security-events: write # upload results to code scanning
     steps:
       # Pinned to SHAs (comments name the tag). Verify at
       # https://github.com/actions/checkout and

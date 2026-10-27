@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–214 (executed 2026-10-14 → 2026-10-27, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–215 (executed 2026-10-14 → 2026-10-27, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8451 tests collected**
-  (cycle 214, 2026-10-27). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8468 tests collected**
+  (cycle 215, 2026-10-27). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -64,7 +64,7 @@ doctor's resource fallbacks degrade there.
   32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (294 files in that CI scope; the repo-root scope counts more.
+  (295 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (65 source files).

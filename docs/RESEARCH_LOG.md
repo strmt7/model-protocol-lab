@@ -10058,3 +10058,76 @@ Method and sources:
   only pushed files. Lesson class: a build whose inputs are file
   presence must be verified against the pushed file set, not the
   working tree.
+
+## Cycle 215 — enterprise polish 2: workflow-security lint, dependency review, ADR index (2026-10-27)
+
+The three items deferred from cycle 210. These are commodity
+enterprise controls adopted deliberately — zizmor is the
+ecosystem's workflow linter, dependency review is GitHub's own
+action, and an ADR index is the Nygard pattern applied to the
+design record the lab already keeps. No uniqueness is claimed for
+any of them; their value is that the controls are real and
+verified, not novel. Utility, one sentence each: a maintainer
+changing a workflow learns from CI whether the change re-opens a
+permissions or injection hole before it merges; a reviewer of a
+dependency PR gets a failing check for high-severity
+vulnerabilities and copyleft licenses instead of auditing the diff
+by hand; a reader deciding whether to trust an instrument finds
+each design decision and its outcome on one page instead of in
+twenty-six preambles.
+
+- Zizmor (PyPI, version 1.31.1, the current release at build
+  time) ran locally over `.github/workflows/` before anything was
+  written: 14 findings in the pedantic persona (the default
+  persona surfaces only the 2 highest-severity ones — five
+  excessive-permissions findings (workflow-level write grants in
+  docs.yml, codeql.yml and scorecard.yml), five undocumented
+  grants, one template expansion of a matrix value inside ci.yml's
+  test script, two unnamed release jobs, one missing concurrency
+  limit on the release workflow). Every finding was adjudicated
+  against the tree and fixed in place: grants moved to the jobs
+  that use them (both docs jobs genuinely need pages/id-token —
+  the defect was inheritance by future jobs, not the grants
+  themselves), the matrix value now travels via `env:`, grants
+  carry trailing explanations, release jobs are named, and the
+  release workflow has a per-ref concurrency group that never
+  cancels mid-flight. Zero suppressions: no config file, no inline
+  ignores, and a regression test pins that absence. Re-run with
+  the exact CI command (`--persona pedantic --min-severity low
+  --min-confidence low --offline`): exit 0, no findings. Two
+  process catches worth keeping: the first draft of the lane used
+  `--no-online`, a flag 1.31.1 does not accept (exit 2) — running
+  the exact CI command locally before pushing is what caught it;
+  and the proper fixes moved two suite pins (cycle 210's CodeQL
+  assertion, cycle 214's docs assertion), updated in place with
+  the reason recorded in the tests, per the cycle-172 precedent.
+- Dependency review: `actions/dependency-review-action` v5.0.0
+  (latest release at build time; tag resolved to commit
+  a1d282b36b6f3519aa1f3fc636f609c47dddb294 through the API and
+  SHA-pinned like every other action). The README at the pinned
+  tag is the configuration source: `fail-on-severity` accepts
+  low/moderate/high/critical; `fail-on-scopes` defaults to
+  runtime only, so the workflow sets `runtime, development`
+  explicitly — the shipped wheel has zero runtime dependencies,
+  so the scope that matters today is the dev/docs tooling.
+  `deny-licenses` takes SPDX identifiers and is deprecated
+  upstream in v5 (issue #938) while remaining functional in the
+  pinned major; the workflow denies the GPL/AGPL/LGPL families
+  and discloses the deprecation in its header and in
+  docs/SECURITY.md, so a future major bump has to re-decide the
+  license posture rather than silently inheriting or losing it.
+  The workflow triggers on `pull_request` only; pushes to main —
+  the autonomous pipeline — are structurally out of its reach.
+- ADR index: `docs/explanation/adr-index.md`, wired into the
+  mkdocs navigation and linked from the explanation index. It
+  lists the 26 `*_DESIGN.md` documents that ship on main (the set
+  was read from the API's git tree at the cycle's base commit,
+  not from the working tree) plus two standing decisions recorded
+  in other shipped documents (the no-SBOM adjudication in
+  SECURITY.md; release readiness as assessment, not assertion).
+  The nine wave-10/11 design documents that exist only in the
+  local working tree are not linked — cycle 214's lesson, now
+  also pinned by a test that requires the index's design set and
+  the navigation's design set to be equal in both directions.
+  The local strict build passes and the page renders with all 26
+  links resolving.

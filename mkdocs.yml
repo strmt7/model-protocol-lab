@@ -43,6 +43,7 @@ nav:
       - Security and data handling: SECURITY.md
   - Explanation:
       - explanation/index.md
+      - Architecture decisions: explanation/adr-index.md
       - Research log: RESEARCH_LOG.md
       - Release readiness 0.1.0: RELEASE_READINESS_0.1.0.md
       - Release notes 0.1.0: RELEASE_NOTES_0.1.0.md

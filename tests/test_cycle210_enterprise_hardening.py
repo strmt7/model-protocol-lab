@@ -76,7 +76,12 @@ class TestWorkflowHygiene(unittest.TestCase):
         text = (WORKFLOWS / "codeql.yml").read_text(encoding="utf-8")
         self.assertIn("languages: python", text)
         self.assertIn("schedule:", text)
-        self.assertEqual(doc["permissions"].get("security-events"), "write")
+        # Cycle 215: the grant moved into the analyze job (zizmor
+        # excessive-permissions — a workflow-level write grant is
+        # inherited by every future job added to the file). Through
+        # cycle 214 this pin asserted the top-level block.
+        self.assertEqual(doc["jobs"]["analyze"]["permissions"].get("security-events"), "write")
+        self.assertNotEqual(doc["permissions"].get("security-events"), "write")
 
     def test_scorecard_publishes_results(self):
         doc = _load_yaml(WORKFLOWS / "scorecard.yml")

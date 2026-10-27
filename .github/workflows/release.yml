@@ -22,8 +22,16 @@ on:
 permissions:
   contents: read
 
+# Cycle 215 (zizmor concurrency-limits): one release run per tag,
+# and a release is never cancelled mid-flight — a half-published
+# release is worse than a queued one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
+    name: build release artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -77,6 +85,7 @@ jobs:
           path: dist/
 
   publish:
+    name: publish to PyPI and GitHub
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -84,7 +93,7 @@ jobs:
     permissions:
       contents: write # create the GitHub release for the tag
       id-token: write # Trusted Publishing (OIDC) + attestations
-      attestations: write
+      attestations: write # build-provenance attestations for dist/*
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
