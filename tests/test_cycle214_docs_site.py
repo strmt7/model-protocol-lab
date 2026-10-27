@@ -113,7 +113,13 @@ class TestDocsWorkflow(unittest.TestCase):
     def test_docs_workflow_builds_strict_and_deploys(self):
         path = REPO_ROOT / ".github" / "workflows" / "docs.yml"
         doc = _load_yaml(path)
-        self.assertEqual(doc["permissions"].get("pages"), "write")
+        # Cycle 215: the Pages grants moved into the build and
+        # deploy jobs (zizmor excessive-permissions — workflow-level
+        # write grants are inherited by every job). Through cycle
+        # 214 this pin asserted the top-level block.
+        self.assertNotEqual(doc["permissions"].get("pages"), "write")
+        for job_name in ("build", "deploy"):
+            self.assertEqual(doc["jobs"][job_name]["permissions"].get("pages"), "write", job_name)
         for job_name, job in doc["jobs"].items():
             self.assertIsInstance(job.get("timeout-minutes"), int, job_name)
         text = path.read_text(encoding="utf-8")

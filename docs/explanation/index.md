@@ -35,7 +35,9 @@ population, the scorer, the decision rule, and the adversarial review
 that shaped it — including the rounds that returned NO-BUILD, whose
 documents record the executed counterexamples that killed the sketch
 and the narrower resubmission candidates they left behind. The full
-list is in this section's navigation. The chronological record of
+list is in this section's navigation; the one-line index of the
+decisions themselves is the
+[architecture decision index](adr-index.md). The chronological record of
 the whole programme is the [research log](../RESEARCH_LOG.md);
 release readiness is assessed in
 [RELEASE_READINESS_0.1.0.md](../RELEASE_READINESS_0.1.0.md), and the

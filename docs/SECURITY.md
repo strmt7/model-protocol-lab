@@ -339,6 +339,38 @@ until the first real release — adding a blocking third-party step
 there, unexercised, is the wrong trade. This is revisited only at the
 first release rehearsal, once the publish path has actually run.
 
+### Workflow security and dependency review (cycle 215)
+
+The workflows hold the OIDC grants (PyPI publishing, Codecov,
+Pages), so their own hygiene is enforced, not just practised.
+Workflow permissions are job-scoped: a top-level block grants at
+most `contents: read`, and every write grant sits on the one job
+that needs it, with a comment saying why. A dedicated lane lints
+`.github/workflows/` with zizmor (pinned at 1.31.1, pedantic
+persona, lowest severity and confidence floor, offline) on every
+push and pull request that touches a workflow; run locally with
+the exact CI command over the tree this cycle fixed, it reported
+no findings — the fourteen findings the same command produced
+before the fixes (five workflow-level write grants, five
+undocumented grants, one template expansion inside a run script,
+two unnamed jobs, one missing concurrency limit) were each fixed
+in the workflows themselves, with no suppressions: there is no
+zizmor config file and no inline ignore anywhere in the tree.
+
+Dependency changes get a second, separate gate: a dependency
+review runs on pull requests only (never on pushes, so it cannot
+block the push pipeline) and fails the check when a pull request
+would introduce a vulnerability of severity high or above in the
+runtime or development scopes, or a dependency under a copyleft
+license (the GPL, AGPL and LGPL families). The shipped package has
+zero runtime dependencies, so in practice the gate watches the
+dev/docs tooling and any future dependency. Two limits are the
+action's own, stated here so the gate is not over-read: a
+dependency whose license cannot be detected is reported but does
+not fail the check, and the deny-licenses option is deprecated
+upstream in the pinned v5.0.0 (functional there; a future major
+bump must re-decide the license posture rather than inherit it).
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

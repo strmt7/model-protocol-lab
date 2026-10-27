@@ -1,0 +1,52 @@
+# Dependency review (cycle 215) — pull requests only. Compares the
+# PR's dependency graph against the base branch and fails the check
+# on what the PR would introduce. Deliberately NOT on push: it can
+# never block the autonomous push pipeline, and a dependency change
+# only ever enters this repo through a PR (Dependabot's, in
+# practice).
+#
+# Posture, stated plainly: the shipped package has zero runtime
+# dependencies, so today's real surface is the dev/docs tooling
+# (ruff, mypy, mkdocs, the HF extra) and any future dependency a PR
+# proposes. The vulnerability check therefore covers the runtime
+# AND development scopes (upstream's default is runtime only),
+# failing on new vulnerabilities of severity high or above. The
+# license check denies the copyleft families (GPL/AGPL/LGPL):
+# a dependency under one of those would change what shipping this
+# project's code obliges, and that decision belongs in the open,
+# not inside a transitive bump. Two honest limits, from the
+# action's own documentation: a dependency whose license cannot be
+# detected is reported but does not fail the check, and the
+# deny-licenses option is deprecated upstream in v5 (still
+# functional in the pinned v5.0.0) — a future major bump of this
+# action must re-decide the license posture rather than inherit it.
+name: Dependency review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read # dependency-graph comparison API + checkout
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/dependency-review-action before
+      # bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime, development
+          deny-licenses: AGPL-1.0, AGPL-3.0, GPL-1.0, GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0

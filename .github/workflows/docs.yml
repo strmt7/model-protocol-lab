@@ -11,12 +11,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least privilege: the build needs contents:read plus the Pages
-# grants upload-pages-artifact and deploy-pages require.
+# Least privilege default: read-only. Each job declares the Pages
+# grants it needs in its own block — workflow-level write grants
+# would be inherited by every job, present and future (cycle 215,
+# zizmor excessive-permissions; through cycle 214 the Pages grants
+# sat at this top level).
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One Pages deployment at a time; a newer push supersedes the queue,
 # never cancels a deployment mid-flight.
@@ -29,6 +30,10 @@ jobs:
     name: build site (mkdocs --strict)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read # checkout
+      pages: write # upload-pages-artifact publishes the site artifact
+      id-token: write # OIDC token upload-pages-artifact exchanges
     steps:
       # Pinned to SHAs (comments name the tag). Verify at
       # https://github.com/actions/checkout and
@@ -58,6 +63,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      pages: write # deploy-pages publishes the deployment
+      id-token: write # OIDC token deploy-pages exchanges
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

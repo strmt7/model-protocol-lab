@@ -1,0 +1,50 @@
+# Workflow security lint (cycle 215) — zizmor over .github/workflows/.
+# The workflows are this repo's supply chain: they hold the OIDC
+# grants for PyPI publishing, Codecov and Pages, so a sloppy
+# permissions block or a template expansion in a run script is a
+# real attack surface, not style. zizmor runs in the pedantic
+# persona at the lowest severity/confidence floor: under the pinned
+# version the tree is clean at that floor (every cycle-215 finding
+# was fixed, none suppressed — there is no zizmor config file and
+# no inline ignore in the tree), so any future finding fails here.
+# The version is pinned like every other tool in the tree;
+# Dependabot proposes bumps, and a bump that adds audits is
+# reviewed like any other change. --offline keeps the lane
+# deterministic: action-version freshness is Dependabot's job,
+# not this lane's.
+name: Zizmor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read # checkout only
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    name: zizmor (workflow security lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/setup-python before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "zizmor==1.31.1"
+      - run: zizmor --persona pedantic --min-severity low --min-confidence low --offline .github/workflows/

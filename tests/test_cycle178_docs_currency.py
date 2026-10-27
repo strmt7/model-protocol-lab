@@ -139,9 +139,9 @@ class DocsCurrencyTests(unittest.TestCase):
         # 207 -> 208 in cycle 208; 208 -> 209 in cycle 209;
         # 209 -> 210 in cycle 210; 210 -> 211 in cycle 211;
         # 211 -> 212 in cycle 212; 212 -> 213 in cycle 213;
-        # 213 -> 214 in cycle 214).
+        # 213 -> 214 in cycle 214; 214 -> 215 in cycle 215).
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–214", top)
+        self.assertIn("cycles 10–215", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):
