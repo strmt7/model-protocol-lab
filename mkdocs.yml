@@ -1,0 +1,87 @@
+# Documentation site configuration (cycle 214).
+#
+# The site is built from docs/ only; the repository-root records
+# (README.md, VALIDATION.md, CHANGELOG.md) stay where the test suite
+# pins them and are linked, not moved. Build tooling is docs-only:
+# install with `python -m pip install -r requirements-docs.txt`, then
+# `mkdocs build --strict`. The shipped package keeps zero runtime
+# dependencies; nothing here enters the wheel.
+site_name: Model Protocol Lab
+site_description: >-
+  Local conversation-protocol experiments with held-out evidence:
+  exact token-sequence comparisons across chat-format families.
+site_url: https://strmt7.github.io/model-protocol-lab/
+repo_url: https://github.com/strmt7/model-protocol-lab
+repo_name: strmt7/model-protocol-lab
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.indexes
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Tutorials: tutorials/index.md
+  - How-to guides:
+      - how-to/index.md
+      - FAQ: FAQ.md
+  - Reference:
+      - reference/index.md
+      - Usage: USAGE.md
+      - Security and data handling: SECURITY.md
+  - Explanation:
+      - explanation/index.md
+      - Research log: RESEARCH_LOG.md
+      - Release readiness 0.1.0: RELEASE_READINESS_0.1.0.md
+      - Release notes 0.1.0: RELEASE_NOTES_0.1.0.md
+      - Portability research (2026-10-15): RESEARCH_PORTABILITY_2026-10-15.md
+      - Agent tooling notes: crawl4ai.md
+      - Evidence notes: evidence/README.md
+      - Design documents:
+          - Aliasing audit: ALIASING_AUDIT_DESIGN.md
+          - Answer syntax: ANSWERSYNTAX_DESIGN.md
+          - Batch path: BATCH_PATH_DESIGN.md
+          - Bundle (multi-question): BUNDLE_DESIGN.md
+          - Canonical form: CANONICALFORM_DESIGN.md
+          - Choice audit: CHOICE_AUDIT_DESIGN.md
+          - Confidence: CONFIDENCE_DESIGN.md
+          - Dateline: DATELINE_DESIGN.md
+          - Density: DENSITY_DESIGN.md
+          - Determinism audit: DETERMINISM_AUDIT_DESIGN.md
+          - Directive ladder: DIRECTIVE_DESIGN.md
+          - Distraction: DISTRACTION_DESIGN.md
+          - Field order: FIELDORDER_DESIGN.md
+          - Fixture fuzz: FIXTURE_FUZZ_DESIGN.md
+          - History frame: HISTORYFRAME_DESIGN.md
+          - Instruction distance: INSTRUCTIONDISTANCE_DESIGN.md
+          - Instruction language: INSTRUCTIONLANGUAGE_DESIGN.md
+          - Leading claim: LEADING_DESIGN.md
+          - Multi-question (restated): MULTIQUESTION_DESIGN.md
+          - Multi-turn drift: MULTITURN_DESIGN.md
+          - Needle depth: NEEDLE_DESIGN.md
+          - Negation: NEGATION_DESIGN.md
+          - Numeric form: NUMFORM_DESIGN.md
+          - Payload serialization: PAYLOADSERIALIZATION_DESIGN.md
+          - Placement: PLACEMENT_DESIGN.md
+          - Precision: PRECISION_DESIGN.md
+          - Prune sweep: PRUNESWEEP_DESIGN.md
+          - Repetition: REPETITION_DESIGN.md
+          - Rotation: ROTATION_DESIGN.md
+          - Scorer lens: SCORER_LENS_DESIGN.md
+          - Sealed bundle: SEALED_BUNDLE_DESIGN.md
+          - Surface noise: SURFACE_NOISE_PROBE_DESIGN.md
+          - Template probe: TEMPLATE_PROBE_DESIGN.md
+          - Template robustness: TEMPLATE_ROBUSTNESS_DESIGN.md
+          - Token depth: TOKENDEPTH_DESIGN.md

@@ -1,0 +1,66 @@
+# Documentation site (cycle 214) — builds docs/ with MkDocs Material
+# in strict mode and deploys to GitHub Pages (Pages is configured
+# with build_type=workflow, so this workflow is the deployment
+# mechanism). Deliberately a separate workflow, not a ci.yml job:
+# ci.yml's job count is pinned at 4 by the suite, and a docs failure
+# must never block or be mistaken for the verification gate.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: the build needs contents:read plus the Pages
+# grants upload-pages-artifact and deploy-pages require.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time; a newer push supersedes the queue,
+# never cancels a deployment mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build site (mkdocs --strict)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/setup-python before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: "requirements-docs.txt"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-docs.txt
+      # NO_MKDOCS_2_WARNING silences the theme's end-of-life banner in
+      # the log; it is a console notice, not a build warning, and
+      # --strict already fails the build on any real warning.
+      - run: mkdocs build --strict
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -9998,3 +9998,50 @@ any rendered report since cycle 209 shipped it.
   invariant over `render_html`'s source for sections added
   later; all three were verified to fail with the
   concatenation removed and to pass with it restored.
+
+## Cycle 214 — documentation site and Diátaxis structure (2026-10-27)
+
+Queued in cycle 210 on convergent evidence from the
+enterprise-benchmark swarm: the evaluator surface was bottom-quartile,
+`docs/USAGE.md` is a ~3,400-line monolith, and the repo had no docs
+site and no organising structure for its 40+ documents.
+
+Method and sources:
+
+- Structure follows the Diátaxis framework (Procida,
+  https://diataxis.fr/start-here/): documentation divides by reader
+  need into tutorials (action, skill acquisition), how-to guides
+  (action, application), reference (cognition, application) and
+  explanation (cognition, acquisition), and blurring the four is the
+  named failure mode. The cycle is additive: a landing page plus one
+  index per quadrant route readers into the existing documents;
+  nothing was moved, because every moved file risks a pinned path or
+  an external link, and `docs/USAGE.md` stays the single reference
+  anchor (a split, if ever, is a future cycle).
+- Site tooling: MkDocs 1.6.1 + Material for MkDocs 9.8.0
+  (pip-resolved and fully pinned in `requirements-docs.txt`,
+  docs-only; the wheel keeps zero runtime dependencies). The local
+  build runs `mkdocs build --strict` with zero warnings. The theme's
+  own console notice records Material's end-of-life (2027-05-05,
+  critical fixes until then) and names its successor
+  (https://zensical.org/docs/compatibility/mkdocs/migration/); the
+  pinned build is unaffected, and migration is a future cycle's
+  question, recorded here so it is not rediscovered.
+- The strict build initially failed on exactly two links in the
+  whole tree — `docs/FAQ.md` -> `../VALIDATION.md` and
+  `docs/crawl4ai.md` -> `../tools/requirements/crawl4ai.txt` — both
+  relative links escaping the docs root, which would 404 on the
+  rendered site. Both now point at the canonical GitHub blob URLs;
+  no test pinned either literal string (grep-verified).
+- GitHub Pages was enabled via the API with `build_type=workflow`,
+  so `.github/workflows/docs.yml` (SHA-pinned actions, strict build,
+  upload + deploy) is the deployment mechanism; the site URL is
+  https://strmt7.github.io/model-protocol-lab/. The workflow is
+  separate from ci.yml, whose job count is pinned at 4.
+- Constraint survey (executed before any edit, recorded in the
+  cycle build log): test_cycle133's shorthand scan, test_cycle178's
+  header and live ruff-count pins, test_cycle99's frozen
+  DEVELOPMENT_PLAN.md (untouched), test_cycle87's path scan over its
+  seven audited docs, test_cycle201's changelog gate (this entry is
+  why the cycle-214 CHANGELOG entry exists), test_cycle44's mypy
+  source-file count (unchanged: no package code touched).

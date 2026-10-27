@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 214 — documentation site and Diátaxis structure, 2026-10-27)
+
+- A documentation site, built from `docs/` with MkDocs and the
+  Material theme (`mkdocs build --strict`, zero warnings) and
+  deployed to GitHub Pages by a dedicated workflow
+  (`.github/workflows/docs.yml`, SHA-pinned actions; Pages enabled
+  with `build_type=workflow`): https://strmt7.github.io/model-protocol-lab/.
+  The build toolchain is pinned in full in `requirements-docs.txt`
+  and is documentation-only — the shipped wheel keeps zero runtime
+  dependencies.
+- A Diátaxis organisation for the docs, additively: a landing page
+  (`docs/index.md`) plus one index per quadrant —
+  `docs/tutorials/` (a guided first-experiment path),
+  `docs/how-to/` (task routes into the authoritative sections),
+  `docs/reference/` (USAGE as the anchor reference) and
+  `docs/explanation/` (the confound rationale and the design
+  record). No existing document moved: USAGE stays the single
+  reference anchor, and pinned paths (including the frozen
+  `DEVELOPMENT_PLAN.md`) are untouched.
+- Two links that escaped the docs root and would have 404'd on the
+  rendered site (`docs/FAQ.md` to VALIDATION.md, `docs/crawl4ai.md`
+  to the Crawl4AI lock file) now point at the canonical GitHub
+  URLs. New regression tests in `tests/test_cycle214_docs_site.py`
+  pin the site configuration, the nav targets, the quadrant pages,
+  the pinned toolchain, the zero-dependency wheel, and the docs
+  workflow.
+
 ### Added (cycle 212 — negation probe, 2026-10-26)
 
 - `model-protocol-lab run --negation`: sixteen generated

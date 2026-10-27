@@ -194,6 +194,6 @@ the rate travels with exact counts so you can judge it yourself.
 
 ## Where is the evidence that any of this was actually verified?
 
-[VALIDATION.md](../VALIDATION.md): exact commands, counts, dates and
+[VALIDATION.md](https://github.com/strmt7/model-protocol-lab/blob/main/VALIDATION.md): exact commands, counts, dates and
 environment for every verification round — including what is still *not*
 established.
