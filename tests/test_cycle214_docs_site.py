@@ -46,7 +46,12 @@ class TestMkdocsConfig(unittest.TestCase):
     def test_every_nav_target_exists(self):
         doc = _load_yaml(REPO_ROOT / "mkdocs.yml")
         targets = sorted(set(_nav_targets(doc["nav"])))
-        self.assertGreater(len(targets), 40)
+        # Anti-stub floor only: completeness against the pushed tree
+        # is enforced by the docs workflow's `mkdocs build --strict`
+        # on the CI checkout (a nav entry for a file that exists only
+        # in a local working tree passes here but fails there — the
+        # first docs run failed exactly that way).
+        self.assertGreater(len(targets), 35)
         missing = [t for t in targets if not (DOCS / t).exists()]
         self.assertEqual(missing, [], f"nav targets missing under docs/: {missing}")
 

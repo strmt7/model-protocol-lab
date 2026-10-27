@@ -10045,3 +10045,16 @@ Method and sources:
   seven audited docs, test_cycle201's changelog gate (this entry is
   why the cycle-214 CHANGELOG entry exists), test_cycle44's mypy
   source-file count (unchanged: no package code touched).
+- First-run correction: the first Docs workflow run failed its
+  strict build. The nav listed nine design documents that exist
+  only in the local working tree (the uncommitted wave-10/11
+  adjudicated docs, this one included before its own push in
+  earlier rounds' convention) — present locally, absent from the
+  CI checkout, where a nav entry for a missing file is a strict
+  warning. The nav now covers the shipped tree only (26 design
+  documents); completeness against the pushed tree is enforced by
+  the strict build on the CI checkout itself, and the local
+  pre-push build was re-verified in a pristine copy containing
+  only pushed files. Lesson class: a build whose inputs are file
+  presence must be verified against the pushed file set, not the
+  working tree.
