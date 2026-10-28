@@ -1,5 +1,5 @@
 # PEP 751 lock for the DEVELOPMENT environment (the [dev] extra),
-# generated 2026-10-23 with pip 26.2.1 on CPython 3.12 / Linux x86_64.
+# generated 2026-10-28 with pip 26.2.2 on CPython 3.12 / Linux x86_64.
 # It pins what a contributor's dev venv resolves to, with wheel hashes.
 # It does not constrain library consumers (they get the pyproject
 # ranges), and CI does not install from it: CI deliberately installs the
@@ -35,14 +35,14 @@ sha256 = "85932227e9dd38e62cd29c17fefdfecfb919eead6af1e3259522d03cf85de983"
 
 [[packages]]
 name = "hypothesis"
-version = "6.170.8"
+version = "6.170.12"
 
 [[packages.wheels]]
-name = "hypothesis-6.170.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-url = "https://files.pythonhosted.org/packages/5f/8d/051d191bc91e23847a388126adbe02dfbb40ab74124aac804cfab961b428/hypothesis-6.170.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+name = "hypothesis-6.170.12-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+url = "https://files.pythonhosted.org/packages/70/ff/4f1eb1bb67283240aac366b77e2ebbf864e1fd4d93c3762399f499d200db/hypothesis-6.170.12-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
 
 [packages.wheels.hashes]
-sha256 = "76e2d62bfac25fba0d42072a0bdf5b2a0b34ca4fde247871fb807f6a8b1c9d6d"
+sha256 = "51ccd8964291b6cba57709b6acf1cad2e9c4347e993198ef8ece5653cdafcbdc"
 
 [[packages]]
 name = "iniconfig"
@@ -141,25 +141,25 @@ sha256 = "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
 
 [[packages]]
 name = "pytest"
-version = "9.1.1"
+version = "9.2.0"
 
 [[packages.wheels]]
-name = "pytest-9.1.1-py3-none-any.whl"
-url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl"
+name = "pytest-9.2.0-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl"
 
 [packages.wheels.hashes]
-sha256 = "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c"
+sha256 = "07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588"
 
 [[packages]]
 name = "ruff"
-version = "0.17.2"
+version = "0.17.3"
 
 [[packages.wheels]]
-name = "ruff-0.17.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-url = "https://files.pythonhosted.org/packages/c3/d8/59894cf630d2d86882457a2a6a0a1533410c5c805bfbac6f6eb4b5aef69d/ruff-0.17.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+name = "ruff-0.17.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+url = "https://files.pythonhosted.org/packages/f0/20/fecedea2209f574ab92033b344e01a7f0c2dc76c6d6d19a14c9f8141173f/ruff-0.17.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
 
 [packages.wheels.hashes]
-sha256 = "c60f93fec7142dba5b8f487f94bf2f6231dae24dc11e4c48648347c8b0720004"
+sha256 = "7fa4b0f931cdbcb8a52044f370a3eb429fb42eb88807b0e800fcaa98dd42b24e"
 
 [[packages]]
 name = "sortedcontainers"

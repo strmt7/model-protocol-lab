@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import re
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -27,6 +28,42 @@ from model_protocol_lab.reporting import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "examples" / "make_sample_report.py"
 COMMITTED = REPO_ROOT / "examples" / "sample-report"
+
+
+class _ScriptCollector(HTMLParser):
+    """Collect <script> element bodies without case-sensitive regexes.
+
+    Cycle 217 (CodeQL py/bad-tag-filter): a lowercase-only
+    ``<script>`` regex misses uppercase tags, so a renderer change
+    that emitted ``<SCRIPT>`` would silently void the extraction.
+    The parser lowercases tag names and reads script content as
+    raw data, so every script element is found regardless of case.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.bodies: list[str] = []
+        self._current: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script":
+            self._current = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self._current is not None:
+            self.bodies.append("".join(self._current))
+            self._current = None
+
+    def handle_data(self, data: str) -> None:
+        if self._current is not None:
+            self._current.append(data)
+
+
+def _script_bodies(html: str) -> list[str]:
+    collector = _ScriptCollector()
+    collector.feed(html)
+    collector.close()
+    return collector.bodies
 
 
 def _obs(fixture: str, passed: bool) -> dict[str, Any]:
@@ -223,11 +260,9 @@ class SortableTableTests(unittest.TestCase):
 
     def test_sort_script_is_single_and_inert_safe(self) -> None:
         html = render_html(_rich_result())
-        self.assertEqual(html.count("<script>"), 1)
-        match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
-        self.assertIsNotNone(match)
-        assert match is not None
-        body = match.group(1)
+        bodies = _script_bodies(html)
+        self.assertEqual(len(bodies), 1)
+        body = bodies[0]
         self.assertIn("document.querySelectorAll", body)  # inert-safe guard
         self.assertIn("data-sort", body)
         self.assertNotIn("</script>", body)  # never breaks out of the element
@@ -264,10 +299,9 @@ class TocTests(unittest.TestCase):
 class CspScriptTests(unittest.TestCase):
     def test_csp_hash_allowlist_matches_emitted_script(self) -> None:
         html = render_html(_rich_result())
-        match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
-        self.assertIsNotNone(match)
-        assert match is not None
-        body = match.group(1)
+        bodies = _script_bodies(html)
+        self.assertEqual(len(bodies), 1)
+        body = bodies[0]
         # The emitted script is exactly the module constant: no per-render
         # mutation, so the hash is stable and byte-deterministic.
         self.assertEqual(body, _SCRIPT)

@@ -15,6 +15,21 @@ updates:
         update-types:
           - "minor"
           - "patch"
+  # Cycle 217: the hash-pinned workflow installs live here
+  # (tools/requirements/*.txt, --require-hashes). Dependabot's pip
+  # updater refreshes both the versions and their hashes, so the
+  # Scorecard hash pins move weekly instead of freezing the tree.
+  - package-ecosystem: "pip"
+    directory: "/tools/requirements"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

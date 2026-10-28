@@ -23,6 +23,19 @@ Run `tools/agent_context.py startup` at a new context boundary to load both
 mandatory skills. The startup gate fails closed if this file stops declaring
 the mandates above.
 
+- DeepSource findings are retrieved, never guessed: use
+  `tools/deepsource_inventory.py` (see `docs/SECURITY.md`, "DeepSource
+  analysis", and `.agents/skills/mpl-security/SKILL.md`) for the
+  complete active inventory bound to an exact commit, and the
+  findings guard (`.github/workflows/findings-guard.yml`) for the
+  enforced thresholds — more than two open CodeQL code findings, or
+  any DeepSource finding, fails. The app is connected through the
+  `deepsource-io` GitHub App with no repo config file; read its
+  presence from GitHub check suites, never from check runs alone
+  (2026-10-27 lesson: suites sit queued with zero runs on push
+  commits). A missing credential is NOT-CONFIGURED, never zero
+  findings.
+
 ## Product direction (standing owner directive, 2026-10-19)
 
 - Sharp direction, real utility, verified uniqueness. Every piece of

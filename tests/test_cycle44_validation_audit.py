@@ -167,9 +167,10 @@ class ValidationEnvironmentTests(unittest.TestCase):
         import hypothesis  # noqa: F401
 
     def test_pytest_in_dev_extra(self):
-        # Doc: "the [dev] extra now includes pytest>=8.0".
+        # Doc: "the [dev] extra now includes pytest>=9.2.0"
+        # (floor raised cycle 217 to the resolved latest).
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn("pytest>=8.0", text)
+        self.assertIn("pytest>=9.2.0", text)
 
 
 class ValidationToolchainTests(unittest.TestCase):
@@ -293,7 +294,8 @@ class ValidationFormatFamilyTests(unittest.TestCase):
 class ValidationConfigFileTests(unittest.TestCase):
     def test_ci_yaml_four_jobs_sha_pinned(self):
         # Doc: "CI YAML (4 jobs, actions pinned to SHAs)"; the 2026-10-12
-        # section pins checkout@v7.0.1 and setup-python@v7.0.0.
+        # section pins checkout@v7.0.1 and setup-python@v7.1.0
+        # (bumped cycle 217 to the latest release SHA).
         import yaml
 
         ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -305,7 +307,7 @@ class ValidationConfigFileTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
+            "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0",
             text,
         )
 
@@ -374,13 +376,18 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertIn("ruff-pre-commit", text)
         self.assertIn("rev: v0.17.1", text)
 
-    def test_dependabot_three_ecosystems(self):
+    def test_dependabot_ecosystems(self):
         # Doc: "Dependabot YAML (pip, github-actions, pre-commit)".
+        # Cycle 217 added a second pip entry (tools/requirements for
+        # the hash-pinned workflow installs), so four updates cover
+        # three ecosystem names; the two pip directories must differ.
         import yaml
 
         doc = yaml.safe_load((REPO_ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
         ecosystems = sorted(u["package-ecosystem"] for u in doc["updates"])
-        self.assertEqual(ecosystems, ["github-actions", "pip", "pre-commit"])
+        self.assertEqual(ecosystems, ["github-actions", "pip", "pip", "pre-commit"])
+        pip_dirs = sorted(u["directory"] for u in doc["updates"] if u["package-ecosystem"] == "pip")
+        self.assertEqual(pip_dirs, ["/", "/tools/requirements"])
 
     def test_citation_cff_title_and_authors(self):
         # Doc: "CITATION.cff (title/authors present)".

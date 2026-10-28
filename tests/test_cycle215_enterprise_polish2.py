@@ -77,7 +77,17 @@ class TestZizmorLane(unittest.TestCase):
         # The exact command the lane runs; locally verified to exit 0
         # on the fixed tree (cycle-215 build log). Pedantic persona,
         # lowest severity/confidence floor, offline for determinism.
-        self.assertIn("zizmor==1.31.1", self.text)
+        # Cycle 217 moved the install to the hash-pinned closure, so
+        # the pin lives in tools/requirements/zizmor.txt, not in the
+        # workflow text.
+        self.assertIn(
+            "python -m pip install --require-hashes -r tools/requirements/zizmor.txt",
+            self.text,
+        )
+        zizmor_txt = (REPO_ROOT / "tools" / "requirements" / "zizmor.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("zizmor==1.31.1", zizmor_txt)
         self.assertIn(
             "zizmor --persona pedantic --min-severity low "
             "--min-confidence low --offline .github/workflows/",

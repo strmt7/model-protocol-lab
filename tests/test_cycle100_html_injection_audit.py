@@ -71,10 +71,43 @@ def _hostile_result() -> dict:
     }
 
 
+class _TextExtractor(HTMLParser):
+    """Extract visible text without case-sensitive tag regexes.
+
+    Cycle 217 (CodeQL py/bad-tag-filter): stripping tags with
+    ``re.sub(r"<[^>]*>", ...)`` after lowercase-only script/style
+    pre-filters misses uppercase elements; the parser lowercases tag
+    names, so every script/style element is excluded regardless of
+    case. Character references stay undecoded (convert_charrefs=False)
+    so escaped payload text remains in its inert entity form, as the
+    previous helper left it. Only well-formed renderer output is fed
+    here; an unclosed script element drops trailing text, where the
+    old regex kept it minus tags.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self._skip = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in ("script", "style"):
+            self._skip += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("script", "style") and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip:
+            self.parts.append(data)
+
+
 def _text_content(html: str) -> str:
-    nojs = re.sub(r"<script>.*?</script>", "", html, flags=re.S)
-    nojs = re.sub(r"<style>.*?</style>", "", nojs, flags=re.S)
-    return re.sub(r"<[^>]*>", "", nojs)
+    extractor = _TextExtractor()
+    extractor.feed(html)
+    extractor.close()
+    return "".join(extractor.parts)
 
 
 class _WellFormedChecker(HTMLParser):
