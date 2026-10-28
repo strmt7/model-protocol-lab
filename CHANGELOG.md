@@ -52,6 +52,31 @@ All notable changes to this project are documented here. The format follows
   removed. Local Scorecard verification: Pinned-Dependencies
   10/10, Fuzzing 10/10.
 
+### Fixed (cycle 217 fix round — cross-target hashed-requirements repair, 2026-10-28)
+
+- The hashed requirements files were resolved on one host
+  (Linux / CPython 3.12), which left them silently
+  target-specific in two ways CI caught on the first run
+  (hash sets themselves were complete — verified against
+  PyPI for every pin): (a) `numpy==2.5.4` and
+  `networkx==3.7` declare Requires-Python >=3.12, so the
+  3.11 CI leg could never install `tools/requirements/dev-hf.txt`;
+  both pins are now marker-split — latest on
+  `python_version >= "3.12"`, the newest 3.11-admitting
+  releases (numpy 2.4.6, networkx 3.6.1) on
+  `python_version < "3.12"` — proven by a real install on a
+  CPython 3.11 interpreter; (b) two Windows-only dependencies
+  never entered the Linux resolution at all, so the Windows
+  smoke leg resolved requirements `tools/requirements/build.txt`
+  does not pin: it now carries `colorama==0.4.6` under
+  `os_name == "nt"` (gated by `build`) and
+  `pywin32-ctypes==0.2.3` under `sys_platform == "win32"`
+  (gated by `keyring`), each with its complete hash set.
+  Contract tests in
+  `tests/test_cycle217_workflow_pinning.py` pin the
+  multi-target properties (multi-hash sets, the Windows
+  marker lines, the version splits).
+
 ### Changed (cycle 217 — security remediation, package currency, findings guard, DeepSource port, 2026-10-28)
 
 - All packages moved to their latest compatible versions:
