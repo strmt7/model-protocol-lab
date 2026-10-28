@@ -10254,3 +10254,123 @@ residues; this cycle closes all three. Full sweep table:
   catches producer drift even though the oracles mirror the
   producer. DATELINE_DESIGN.md now records the arrangement and
   the evidence, and the drift case is pinned as a test.
+
+## Cycle 217 — security remediation, package currency, findings guard, DeepSource port (2026-10-28)
+
+No new probe. This cycle closes the 2026-10-27 all-alerts order
+against the API-verified baseline (Dependabot open 0;
+code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
+2026-10-27 DeepSource correction. Full build record:
+`~/workspace/agents_out/cycle217/build_log.md`.
+
+- **DeepSource connection, corrected same evening it was
+  misjudged (2026-10-27).** The Phase 0 "not connected"
+  conclusion rested on an absent `.deepsource.toml` and absent
+  check runs — both non-evidence. The `deepsource-io` GitHub
+  App registers a check *suite* on MPL's main head and on every
+  recent commit (queued, zero runs), the same pattern as the
+  reference repo. App presence is read from suites, never runs.
+  No owner step remains for the connection. What remains
+  owner-gated: the `DEEPSOURCE_TOKEN` repo secret (the repo's
+  Actions secret list is empty, API-verified), without which
+  the guard's DeepSource leg reports NOT-CONFIGURED and the
+  live inventory cannot run; the required-analyzer set, which
+  must be read from MPL's own DeepSource `configJson` once an
+  inventory runs and must never be copied from another repo's
+  set.
+- **Port, don't invent (amendment v2).** The first design (a
+  new tool from DeepSource's API docs) was discarded on the
+  owner's "do not reinvent the wheel" correction. The shipped
+  mechanism is the reference repo's `tools/deepsource_inventory.py`
+  (one-line adaptation: the user-agent string) plus its
+  `tools/json_input.py` dependency, byte-identical, with the
+  contract tests integrated into the tree's test layout. The
+  ported tool binds findings to the exact commit, requires a
+  finished run, validates repository identity and `configJson`,
+  paginates with drift/duplicate rejection, re-observes at the
+  end, and retains pages with a sha256 manifest. A live run
+  against the current main head without a credential exits 1
+  with the tool's explicit authentication failure before any
+  manifest is written — original behaviour, not a port defect.
+  Correction recorded same cycle: the build's early decision
+  to leave the ported tool's >100-char lines unformatted
+  ("tools/ is outside CI's ruff scope") was wrong — the tree's
+  own `test_cycle44` runs bare `ruff check`/`format --check`,
+  which includes `tools/`, and it failed on 18 E501s plus an
+  S310 and an F841 in the new files. The tool was formatted,
+  its lines wrapped (string values byte-identical; the GraphQL
+  query split is whitespace-only and the contract test compares
+  against the live constant), the guard's unused subprocess
+  result is now a fail-closed returncode check, and the S310
+  carries a justification (fixed api.github.com host, https
+  scheme; only the path carries the operator-supplied slug).
+  Bare ruff check and format are clean (374 files).
+- **CodeQL, adjudicated by execution.** The two
+  `clear-text-logging` findings are false positives: realistic
+  old/new confidentiality payloads through `diff_reports`
+  print exactly the derived section (availability enum,
+  candidate label, booleans, numeric gaps) and zero
+  credential-shaped hits, while input-only hostile fields
+  (fake prompt, fake key, hidden note) appear in neither sink
+  — the sinks print the derived diff, never loaded inputs, and
+  cells admit only ints, unit-range floats, booleans, or None.
+  Renaming the section to dodge the heuristic was rejected as
+  a workaround; the sink's output contract is now in its
+  docstring, and the dismissal (post-push, against the new
+  analysis only) cites the proof and the regression test. The
+  three `bad-tag-filter` findings were real: lowercase-only
+  regexes found nothing for uppercase tags, so both sites now
+  use `html.parser` (tag names lowered by the parser;
+  `convert_charrefs=False` keeps escaped payloads inert), with
+  the substring-count assertion replaced by a stronger
+  parsed single-script assertion.
+- **Scorecard, proven locally before pushing.** The minimal-repo
+  experiment showed only the extras form
+  (`pip install -e ".[dev]"`) is unpinned; hashed closures
+  plus bare `--no-deps -e .` count pinned. Official Scorecard
+  v5.6.0 `--local` on the final tree: Pinned-Dependencies
+  10/10 (35/35 GitHub actions, 3/3 third-party, 1/1 container
+  image, 21/21 pip commands), Fuzzing 10/10 (ClusterFuzzLite
+  config plus an independently detected Atheris target over
+  the bounded result reader; 500 coverage-guided runs, zero
+  crashes; no Docker on this VM, so the image build itself is
+  CI-proven, not locally proven — recorded, not claimed).
+  Expected post-push residual: CII Best Practices, CodeReview,
+  Maintained only. The "2 cannot be fixed" maps to CII
+  (owner self-certification at bestpractices.dev) and
+  CodeReview (direct-push model, changing it not authorised);
+  Maintained is time-based and ages out ~2027-01-10.
+- **Package currency, all latest, gate-proven.** Dev floors
+  raised to ruff 0.17.3, mypy 2.4.0, coverage 7.17.0,
+  hypothesis 6.170.12, pytest 9.2.0; hf ranges untouched
+  (they admit latest) with `dev-hf.txt` pinning torch 2.14.1,
+  transformers 5.21.0, safetensors 0.8.0, jinja2 3.1.6,
+  huggingface_hub 2.3.0. Note: huggingface_hub 2.3.0 depends
+  on `httpx2>=2` — the httpx project's 2026 rename, declared
+  in Hugging Face's own metadata, not a typosquat;
+  hash-pinning is the protection regardless. Docs toolchain
+  re-pinned (platformdirs 4.13.6 → 4.13.7, the only docs
+  bump); `pylock.toml` regenerated with pip 26.2.2 (three
+  bumps, matching the dev closure); actions at latest release
+  SHAs (setup-python v7.0.0 → v7.1.0 was the only lag).
+- **Guard, Stratos's exact thresholds.** Fails above two open
+  CodeQL code findings (tool-name filter excludes Scorecard
+  posture) or on any DeepSource finding for the audited
+  commit; missing credential fails as NOT-CONFIGURED. Live
+  smoke on the pre-push head: CodeQL 5 (correct), DeepSource
+  NOT-CONFIGURED (correct — no credential), exit 1 with both
+  failures printed. Post-push expectation: CodeQL 0 after the
+  dismissals; DeepSource leg NOT-CONFIGURED until the secret
+  exists.
+- **Interrupted-run incident (gate attempt 1).** A runtime
+  restart killed the full pytest run at 7% and orphaned an
+  in-place mutant in `model_protocol_lab/boundary_audit.py`
+  (`if joint == expected:` → `if True:`). Found by the
+  post-interruption blob-hash audit, reverted from the green
+  commit, and re-verified; every other differing file's diff
+  was eyeballed as intended-only, and the mutant-pair audit's
+  four flags were adjudicated as non-orphans (one legitimate
+  constant, three generic literals from a tempdir-only gate).
+  Gate attempt 2 uses a runner that resets signal dispositions
+  itself, records the child PID for the waiter, and appends
+  the exit code into the log.

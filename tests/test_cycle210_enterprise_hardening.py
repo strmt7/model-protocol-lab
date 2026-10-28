@@ -165,7 +165,10 @@ class TestCommunityFiles(unittest.TestCase):
 
     def test_dependabot_cooldown_and_groups(self):
         doc = _load_yaml(REPO_ROOT / ".github" / "dependabot.yml")
-        self.assertEqual(len(doc["updates"]), 3)
+        # Cycle 217 added the pip entry for tools/requirements
+        # (hash-pinned workflow installs); the cooldown/groups
+        # discipline below applies to all four updates.
+        self.assertEqual(len(doc["updates"]), 4)
         for update in doc["updates"]:
             self.assertEqual(update.get("cooldown", {}).get("default-days"), 7)
             self.assertTrue(update.get("groups"))

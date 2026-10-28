@@ -1,0 +1,63 @@
+# Findings guard (cycle 217) — Stratos's thresholds, enforced in CI.
+#
+# FAILS when either leg fails:
+#   - open CodeQL code findings (tool.name == "CodeQL", state open)
+#     number more than two (Scorecard posture checks are not code
+#     findings and are excluded by the tool-name filter);
+#   - any DeepSource finding exists for the audited commit, read
+#     through tools/deepsource_inventory.py (complete manifest,
+#     total_count >= 1).
+# A missing DeepSource credential is NOT-CONFIGURED: the leg fails
+# explicitly and never reports a silent zero. The credential is the
+# DEEPSOURCE_TOKEN repo secret (DeepSource dashboard PAT); adding it
+# is the one owner step that turns the leg from NOT-CONFIGURED to
+# a live reading. The audited commit is the push/schedule/dispatch
+# head (GITHUB_SHA); if DeepSource has not finished analysing that
+# exact commit, the inventory fails closed with its diagnostic
+# rather than passing — see tools/deepsource_inventory.py.
+#
+# The script is standard-library only, so this workflow installs
+# nothing: no pip command, no new Scorecard surface. The CodeQL leg
+# reads through GITHUB_TOKEN with security-events: read.
+name: Findings guard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly findings sweep (Mondays 07:00 UTC, after the CI sweep).
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read # checkout
+  security-events: read # CodeQL leg: open code-scanning alerts
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  findings-guard:
+    name: findings guard (CodeQL + DeepSource thresholds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/setup-python before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # Tokens reach the script through env only, never by template
+      # expansion inside the script (cycle-215 template-injection
+      # discipline). An absent DEEPSOURCE_TOKEN secret yields an
+      # empty value, which the script reports as NOT-CONFIGURED.
+      - name: enforce findings thresholds
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEEPSOURCE_TOKEN: ${{ secrets.DEEPSOURCE_TOKEN }}
+        run: python tools/findings_guard.py

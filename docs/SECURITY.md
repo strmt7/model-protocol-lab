@@ -371,6 +371,61 @@ not fail the check, and the deny-licenses option is deprecated
 upstream in the pinned v5.0.0 (functional there; a future major
 bump must re-decide the license posture rather than inherit it).
 
+### DeepSource analysis (cycle 217)
+
+The [DeepSource GitHub integration](https://app.deepsource.com/gh/strmt7/model-protocol-lab)
+analyzes commits and pull requests through the `deepsource-io` GitHub
+App. There is no DeepSource config file in this repo — the connection
+is app-only, and analyzer settings live in the DeepSource dashboard.
+That shape is deliberate: it is exactly how the reference integration
+was already running, and inventing a local config to look equivalent
+would be theatre, not parity. Do not copy another repository's
+analyzer set into this repo's docs or audits: the enabled set for
+this repo is whatever its own DeepSource configuration says, and the
+inventory tool below surfaces that configuration (`configJson`) with
+every capture. Read it before asserting coverage.
+
+Retrieve the complete active default-branch inventory with
+`tools/deepsource_inventory.py`, ported verbatim from the reference
+implementation (cycle 217) except for its user-agent identity. It
+calls the documented repository occurrence API directly, needs only
+the standard library, and binds its findings to the exact commit:
+
+```sh
+python tools/deepsource_inventory.py --repository strmt7/model-protocol-lab --commit FULL_MAIN_SHA --output out/deepsource-review
+```
+
+Use a new output directory and the full main SHA. Authenticate with
+the official CLI (`deepsource auth login`, config at
+`~/.deepsource/config.toml`) or set `DEEPSOURCE_TOKEN`; the
+environment token takes precedence. Never put a token in a command,
+a report, or Git. The tool refuses redirects, bounds each page to
+4 MiB and 45 seconds, rejects duplicate occurrence IDs, count drift,
+changed repository/commit/configuration, and unfinished analyses,
+and reconciles the collected count against the native `totalCount`
+with a final re-observation. Inspect `manifest.json` first: it must
+say `complete: true` for the intended repository and commit.
+`findings.json` is the full list; the native pages stay alongside
+it with their digests. A failed run keeps its pages and an
+incomplete manifest — that is evidence, not a zero.
+
+Two readings of DeepSource state that have already misled this
+project (2026-10-27, corrected the same evening): the absence of a
+config file does not mean the app is not installed, and the absence
+of check *runs* does not mean the app is absent — the app registers
+a check *suite* on each commit that may sit queued with zero runs.
+Read app presence from check suites, never from runs alone.
+
+Acceptance: the findings guard (`.github/workflows/findings-guard.yml`)
+fails on any DeepSource finding for the audited commit, and on more
+than two open CodeQL code findings. A dashboard aggregate count, a
+green unrelated workflow, or a capped CLI export does not establish
+acceptance — only a complete, source-matched inventory manifest
+does. When the credential is absent, the guard reports
+NOT-CONFIGURED explicitly and fails closed; that is a missing input,
+not a passing check, and the input is the `DEEPSOURCE_TOKEN` secret
+in the repo's Actions settings.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

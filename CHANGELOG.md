@@ -6,6 +6,73 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 217 — security remediation, package currency, findings guard, DeepSource port, 2026-10-28)
+
+- A findings guard (`.github/workflows/findings-guard.yml` +
+  `tools/findings_guard.py`, standard-library only): the workflow
+  fails when open CodeQL code findings number more than two, or
+  when any DeepSource finding exists for the audited commit. A
+  missing DeepSource credential reports NOT-CONFIGURED and fails
+  explicitly, never as a silent zero.
+- The DeepSource inventory mechanism ported from the reference
+  integration (`tools/deepsource_inventory.py` plus its
+  `tools/json_input.py` dependency, the contract tests in
+  `tests/test_cycle217_deepsource_inventory.py`, the
+  `docs/SECURITY.md` "DeepSource analysis" section, and the
+  `.agents/skills/mpl-security` skill pointer): a complete
+  finding inventory bound to an exact commit, with manifest-first
+  reading, retained pages, and sha256 digests.
+- A ClusterFuzzLite configuration (`.clusterfuzzlite/`) and a
+  scheduled fuzz workflow over an Atheris target for the
+  cycle-172 loader's bounded result reader
+  (`fuzz/fuzz_parse_results.py`); the target smoke-ran 500
+  coverage-guided executions with zero crashes.
+
+### Fixed (cycle 217 — security remediation, package currency, findings guard, DeepSource port, 2026-10-28)
+
+- All five CodeQL findings. The two `clear-text-logging`
+  findings on the confidentiality section were proven false
+  positives by execution (the sinks print only the derived
+  diff — availability enum, booleans, numeric gaps, candidate
+  labels — never the loaded inputs) and are dismissed as such
+  with the proof and a regression test
+  (`tests/test_cycle217_codeql_logging.py`); the sink's output
+  contract is now stated in its docstring. The three
+  `bad-tag-filter` findings were real: lowercase-only tag
+  regexes missed uppercase elements, so the HTML audit and
+  report tests now extract script bodies and visible text with
+  `html.parser` (case-insensitive by construction), with
+  guard-engagement proven on uppercase tags.
+- All fifteen Scorecard pinned-dependency findings: every
+  workflow pip install is now hash-pinned
+  (`tools/requirements/*.txt`, `--require-hashes`) including
+  pip itself, and Dependabot tracks the new requirements
+  directory so pins move weekly. The ClusterFuzzLite Dockerfile
+  image is digest-pinned and its unpinned pip-upgrade line
+  removed. Local Scorecard verification: Pinned-Dependencies
+  10/10, Fuzzing 10/10.
+
+### Changed (cycle 217 — security remediation, package currency, findings guard, DeepSource port, 2026-10-28)
+
+- All packages moved to their latest compatible versions:
+  ruff 0.17.3, mypy 2.4.0, coverage 7.17.0, hypothesis
+  6.170.12, pytest 9.2.0 (dev floors raised to match);
+  torch 2.14.1, transformers 5.21.0, safetensors 0.8.0,
+  jinja2 3.1.6 (hf ranges already admitted them; the hashed
+  `dev-hf.txt` pins the exact closure); docs toolchain
+  re-pinned with hashes (platformdirs 4.13.6 → 4.13.7, the only
+  docs bump); `pylock.toml` regenerated at latest; GitHub
+  Actions moved to latest release SHAs (setup-python v7.1.0).
+- `tools/` is held to the same bare `ruff check` /
+  `ruff format --check` bar as the rest of the repo: the
+  ported inventory tool was formatted and its long lines
+  wrapped, and the guard script now fails closed on a nonzero
+  inventory exit code instead of ignoring the result.
+- Scorecard posture documented as residual: CII Best Practices
+  (owner self-certification) and CodeReview (direct-push
+  model) are owner decisions, and Maintained ages out on time;
+  no fix is claimed for them.
+
 ### Fixed (cycle 216 — verification/correction round: claims sweep, primary-pair sibling, dateline caveat, 2026-10-27)
 
 - A latent sibling of cycle 207's A-F1 defect in

@@ -19939,6 +19939,15 @@ def run_diff_reports(args: argparse.Namespace, parser: argparse.ArgumentParser) 
     JSON goes to stdout, the human-readable summary to stderr (mirroring
     ``diff-backends``). A successful comparison exits 0 even when it finds
     differences -- differences are the tool's useful output, not a failure.
+
+    Output contract (cycle 217, CodeQL logging adjudication): both sinks
+    print the DERIVED diff dict only, never the loaded input payloads, so
+    no input-only field can reach either sink. The ``confidentiality``
+    section's name refers to the behavioral labeled-block exposure probe
+    (cycle 169), not to secret material: the section carries only an
+    availability enum, booleans, numeric gaps, and candidate labels from
+    structurally validated payloads -- no prompt, completion, or
+    credential material exists in it to leak.
     """
     loaded: dict[str, dict[str, Any]] = {}
     for side, path in (("old", args.old_results), ("new", args.new_results)):

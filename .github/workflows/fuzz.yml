@@ -1,0 +1,43 @@
+# Scheduled fuzzing (cycle 217) — the results-loader fuzz target.
+#
+# Runs fuzz/fuzz_parse_results.py (atheris, coverage-guided) against
+# model_protocol_lab.diffreports.parse_results_bytes on a bounded
+# weekly budget. Every loader rejection is a fixed ValueError code,
+# so only a non-ValueError escape is a finding: the job fails on
+# any fuzzer crash. The target is also the ClusterFuzzLite target
+# (.clusterfuzzlite/build.sh compiles the same file); this job is
+# the continuously-exercised complement, not a second target.
+# The atheris install is hash-pinned like every other workflow
+# install (tools/requirements/fuzz.txt, --require-hashes).
+name: Fuzz
+
+on:
+  schedule:
+    # Weekly fuzz budget (Sundays 06:00 UTC).
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read # checkout only
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: fuzz results loader (atheris)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/checkout and
+      # https://github.com/actions/setup-python before bumping.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --require-hashes -r tools/requirements/fuzz.txt
+      - run: python fuzz/fuzz_parse_results.py -runs=20000 -max_total_time=600 -max_len=1048576
