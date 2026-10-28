@@ -10053,6 +10053,406 @@ def negation_analysis(
     }
 
 
+class _InstructionDistanceCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    instruction-distance stage; the stage unwinds to its
+    fail-closed payload rather than mislabelling the
+    interruption."""
+
+
+def _instruction_distance_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One instruction-distance generation: (detail, cell).
+
+    Exactly one of the pair is set. The cell carries the
+    span's digest-bound primitives (amendment C): the answer
+    digest, the first-ASCII-digit-run digest ("" when the span
+    has no run), and the non-digit-projection digest, from
+    which the decomposition class is recomputed identically
+    by the stage's aggregator and by the diff validator;
+    ``answer_len`` / ``digit_count`` ride along as descriptive
+    counts only. The cancel event is checked before and after
+    ``evaluate`` (the multiturn rule: a cancel observed during
+    a generation is never mislabelled an evaluation failure).
+    """
+    from . import instructiondistance as _id
+
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _InstructionDistanceCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _InstructionDistanceCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        span = obs.answer if type(obs.answer) is str else ""
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(span),
+            "first_digit_run_digest": _id.first_digit_run_digest(span),
+            "nondigit_projection_digest": _id.nondigit_projection_digest(span),
+            "answer_len": len(span),
+            "digit_count": _id.digit_count(span),
+        }
+    return "arm_evaluation_failed", None
+
+
+def instruction_distance_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Instruction-distance stage (cycle 218): generated
+    fact+question cases governed by one frozen format
+    directive, rendered in six arms per candidate -- adjacent,
+    separated at doses 256/1024 (filler between the directive
+    and the block), displaced at the same doses (filler after
+    the block), and a descriptive order control.
+
+    The cases are generated from the run seed inside the
+    stage; there is no dependence on the user's fixtures or
+    the primary run. Each sized arm's filler span is searched
+    by the frozen single-phase sizing rule in
+    instructiondistance.py: probes render the full arm content
+    from the stream head in closeness order, one encode per
+    probe inside the 512-encode per-cell budget, accepting the
+    first construction whose rendered delta over the case's
+    adjacent render equals the dose exactly on its final ids.
+    A sized arm whose exact final length cannot fit the
+    context is reported ``arm_context_exceeded`` before any
+    sizing encode is spent (the needle discipline), and its
+    record carries no arm token count -- an unconstructed arm
+    has no render to measure. Constructed spans are screened
+    per cell (``arm_screened``); the frozen texts are audited
+    for special-token literals and boundary-text containment
+    before any generation, failing the whole stage closed
+    with ``instruction_distance_screen_failed``. Design:
+    docs/INSTRUCTIONDISTANCE_DESIGN.md.
+    """
+    from . import instructiondistance as _id
+    from .core import Fixture, Message
+    from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_id.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _id.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    cases = _id.generate_cases(seed)
+    audit: dict[str, Any] = {
+        "n_audit_excluded": 0,
+        "by_reason": {},
+        # nosec B105 -- integer audit counter field, not a credential
+        "special_token_findings": 0,
+    }
+    if len(formats) * len(cases) > _id.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "instruction_distance_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    generated_text = (
+        _id.CONSTRAINT
+        + _id.FACT_TEMPLATE.replace("{topic}", "").replace("{value}", "")
+        + _id.QUESTION_TEMPLATE.replace("{topic}", "")
+        + "".join(_id.TOPICS)
+    )
+    corpus_text = "".join(NEUTRAL_CORPUS)
+    findings = audit_special_token_literals(generated_text + corpus_text, formats)
+    if findings:
+        # A special-token literal in the frozen texts would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation, with the
+        # count in the audit block (never silently dropped).
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {"special_token_literal": len(findings)},
+            "special_token_findings": len(findings),
+        }
+        return {
+            "available": False,
+            "detail": "instruction_distance_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    boundary_text: dict[str, str] = {}
+    for fmt in formats:
+        try:
+            boundary_text[fmt.name] = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text[fmt.name] = ""
+    for fmt in formats:
+        if boundary_text[fmt.name] and boundary_text[fmt.name] in generated_text:
+            return {
+                "available": False,
+                "detail": "instruction_distance_screen_failed",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+    stream = _id.filler_stream()
+    corpus_tokens = max(1, len(backend.encode(corpus_text)))
+    chars_per_token = len(corpus_text) / corpus_tokens
+    order_cache: dict[int, list[tuple[int, int, int]]] = {}
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    def _order(dose: int) -> list[tuple[int, int, int]]:
+        order = order_cache.get(dose)
+        if order is None:
+            order = span_candidates(stream, target=dose, chars_per_token=chars_per_token)
+            order_cache[dose] = order
+        return order
+
+    def _render_ids(fmt: Any, content: str) -> tuple[int, ...]:
+        fixture = Fixture(
+            id="instructiondistance-probe",
+            messages=(Message("user", content),),
+            expected="",
+            group=_id.GROUP,
+        )
+        return tuple(backend.encode(fmt.render(fixture.messages)))
+
+    def _size_span(
+        fmt: Any, case: dict[str, Any], arm: str, dose: int, adj_ids: tuple[int, ...]
+    ) -> tuple[str, tuple[int, ...]] | None:
+        """(span, arm_ids) for the first construction whose
+        rendered delta over the adjacent render equals ``dose``
+        exactly -- None when the encode budget runs out first
+        (the cell is then arm_unmatchable, never approximated).
+        """
+        for probe_index, (whole, suffix, _chars) in enumerate(_order(dose)):
+            if probe_index >= _id.SIZING_ENCODE_BUDGET:
+                return None
+            span = span_text(stream, whole, suffix)
+            arm_ids = _render_ids(fmt, _id.arm_content(case, arm, span))
+            if len(arm_ids) - len(adj_ids) == dose:
+                return span, arm_ids
+        return None
+
+    def _run_cell(
+        fmt: Any,
+        boundary_ids: tuple[int, ...],
+        record: dict[str, Any],
+        case_id: str,
+        value: str,
+        arm: str,
+        content: str,
+        ids: tuple[int, ...],
+    ) -> None:
+        """Generate one constructed cell into its record."""
+        if _cancelled():
+            raise _InstructionDistanceCancelled
+        fixture = Fixture(
+            id=f"{case_id}-{arm}",
+            messages=(Message("user", content),),
+            expected=value,
+            group=_id.GROUP,
+        )
+        detail, cell = _instruction_distance_cell(
+            backend,
+            fmt,
+            fixture,
+            ids,
+            boundary_ids=boundary_ids,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        if detail is not None:
+            record["cell_details"][arm] = detail
+        elif cell is not None:
+            record["cells"][arm] = cell
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "audit": audit,
+                        "candidates": {},
+                    }
+                case_id = str(case["fixture_id"])
+                value = str(case["value"])
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "topic": str(case["topic"]),
+                    "expected_digest": _id.digest_text(str(case["expected"])),
+                    "arm_tokens": dict.fromkeys(_id.ARM_KEYS),
+                    "id_digests": dict.fromkeys(_id.ARM_KEYS),
+                    "cells": dict.fromkeys(_id.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_id.ARM_KEYS, ""),
+                }
+                records.append(record)
+                contents: dict[str, str] = {}
+                arm_ids: dict[str, tuple[int, ...]] = {}
+                for arm in ("adj", "adj_after"):
+                    contents[arm] = _id.arm_content(case, arm)
+                    arm_ids[arm] = _render_ids(fmt, contents[arm])
+                    record["arm_tokens"][arm] = len(arm_ids[arm])
+                    record["id_digests"][arm] = _id.digest_ids(arm_ids[arm])
+                _run_cell(
+                    fmt,
+                    boundaries[name],
+                    record,
+                    case_id,
+                    value,
+                    "adj",
+                    contents["adj"],
+                    arm_ids["adj"],
+                )
+                adj_ids = arm_ids["adj"]
+                for arm in _id.SIZED_ARMS:
+                    if _cancelled():
+                        raise _InstructionDistanceCancelled
+                    dose = _id.arm_dose(arm)
+                    if len(adj_ids) + dose + max_new_tokens > max_context:
+                        # The delta identity fixes this cell's
+                        # final length before sizing; a cell
+                        # that cannot fit is reported without
+                        # spending sizing encodes on it, and no
+                        # construction exists to record.
+                        record["cell_details"][arm] = "arm_context_exceeded"
+                        continue
+                    sized = _size_span(fmt, case, arm, dose, adj_ids)
+                    if sized is None:
+                        record["cell_details"][arm] = "arm_unmatchable"
+                        continue
+                    span, sized_ids = sized
+                    contents[arm] = _id.arm_content(case, arm, span)
+                    record["arm_tokens"][arm] = len(sized_ids)
+                    record["id_digests"][arm] = _id.digest_ids(sized_ids)
+                    if _id.filler_screened(span, value, boundary_text[name]):
+                        record["cell_details"][arm] = "arm_screened"
+                        continue
+                    _run_cell(
+                        fmt, boundaries[name], record, case_id, value, arm, contents[arm], sized_ids
+                    )
+                _run_cell(
+                    fmt,
+                    boundaries[name],
+                    record,
+                    case_id,
+                    value,
+                    "adj_after",
+                    contents["adj_after"],
+                    arm_ids["adj_after"],
+                )
+        except _InstructionDistanceCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": audit,
+        "candidates": candidates,
+    }
+
+
+def instruction_distance_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate an instruction-distance stage into the stored
+    payload (cycle 218).
+
+    Per-candidate readouts come from
+    instructiondistance.aggregate_candidate over the
+    candidate's ground records: per-arm compliance and
+    byte-exact rates with the decomposition, the per-dose
+    (D, S, T) decisions, and the id-divergence report. There
+    is no selection and no winner readout: per-candidate
+    per-dose decisions are the only headline. Design:
+    docs/INSTRUCTIONDISTANCE_DESIGN.md.
+    """
+    from . import instructiondistance as _id
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "instruction_distance_unavailable")),
+            "protocol": stage.get("protocol"),
+            "audit": stage.get("audit"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _id.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "audit": stage.get("audit"),
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_cases": len(_id.generate_cases(int(stage["protocol"]["seed"]))),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

@@ -691,6 +691,55 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--instruction-distance",
+        action="store_true",
+        help="Instruction-distance probe (cycle 218, research wave-11 "
+        "rank 2): 24 generated cases from the run seed, each a fixed "
+        "fact+question block governed by one frozen format directive "
+        "('Reply with only the number: no units, no sentence, nothing "
+        "else.'), rendered in six arms per candidate -- adjacent "
+        "(directive, block), separated at two doses (directive, "
+        "filler, block), displaced at the same two doses (directive, "
+        "block, filler), and a descriptive order control (block, "
+        "directive). Distance here means rendered tokens between "
+        "the frozen directive and the question block, verified per "
+        "candidate on its own rendered tokens (never edit "
+        "distance): a dose is the exact rendered-token delta of the "
+        "arm over the case's adjacent render, sized from the "
+        "neutral corpus with a single-phase exact sizing rule; a "
+        "cell whose delta cannot be sized exactly is "
+        "arm_unmatchable, never approximated. Headline, per "
+        "candidate per dose over cases completed in the adjacent, "
+        "separated, and displaced arms of that dose: D = adjacent "
+        "compliant-correct under the frozen digits grammar (the "
+        "span matches [0-9]+ over the whole span, ASCII digits "
+        "only), S = separated noncompliant in D, T = displaced "
+        "noncompliant in D; the label "
+        "instruction_distance_drop_observed fires iff D >= 10 and "
+        "S >= 6 and S - T >= 5, and D < 10 is insufficient. The "
+        "instrument is a per-dose large-drop falsifier: power is "
+        "0.909 at a 50 percent conditional drop rate and only "
+        "0.246 at a 25 percent drop rate, which is below this "
+        "panel's resolution, so a below_threshold verdict "
+        "excludes large "
+        "separation-driven collapse and claims nothing smaller. "
+        "The label is an excess-of-between-losses label, never a "
+        "distance effect simpliciter: a pure constraint-to-"
+        "generation effect yields S = T and reads below_threshold "
+        "even at total collapse. No winner readout; discordance "
+        "is never pooled across candidates. Monday morning: 'does "
+        "placing 256 or 1024 tokens of filler between a format "
+        "directive and the question it governs produce a large "
+        "format-compliance collapse beyond what the same filler "
+        "after the question produces, on this template family?' "
+        "Costs 6 generations per candidate per case (3,456 at the "
+        "legal maximum: 24 candidates x 24 cases x 6), plus "
+        "sizing encodes (about 56K expected at the shipped "
+        "estimator's mean, worst case about 1.18M at the frozen "
+        "512-encode per-cell budget). Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2074,6 +2123,49 @@ def _run_negation_probe(
         result["negation"] = {
             "available": False,
             "detail": "negation_unavailable",
+        }
+
+
+def _run_instruction_distance_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the instruction-distance probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import instruction_distance_analysis, instruction_distance_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = instruction_distance_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["instruction_distance"] = instruction_distance_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- instruction-distance must not fail the run
+        result["instruction_distance"] = {
+            "available": False,
+            "detail": "instruction_distance_unavailable",
         }
 
 
@@ -4063,6 +4155,26 @@ def main(argv: list[str] | None = None) -> int:
                 # never changes selection. Never fails the run.
                 if args.negation:
                     _run_negation_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Instruction-distance probe (cycle 218,
+                # research wave-11 rank 2): generated cases
+                # rendered under adjacent, dose-separated,
+                # dose-displaced, and order-control layouts of
+                # one frozen format directive per candidate, the
+                # run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.instruction_distance:
+                    _run_instruction_distance_probe(
                         backend,
                         formats,
                         result,

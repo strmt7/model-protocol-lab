@@ -10415,3 +10415,71 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   the workspace lessons: sweep Requires-Python against every CI
   interpreter and Requires-Dist against every CI platform's marker
   environment before pushing hashed requirements.
+
+## Cycle 218 — instruction-distance probe: directive-to-question separation as a verified token dose (2026-10-28)
+
+- **What shipped:** `run --instruction-distance`
+  (`model_protocol_lab/instructiondistance.py`, the package's 66th
+  source file): 24 seed-generated cases, each a fixed fact+question
+  block governed by one frozen format directive, rendered in six
+  layouts — adjacent, separated by 256 or 1024 filler tokens,
+  displaced by the same filler after the block, and a descriptive
+  order control. A dose is an exact rendered-token delta over the
+  case's adjacent render, verified per candidate (needle's sizing
+  discipline, single-phase per amendment J). Compliance is derived
+  from the recorded answer under a frozen ASCII-digit grammar and
+  decomposed against correctness; the per-dose decision
+  (`instruction_distance_drop_observed` iff D >= 10, S >= 6,
+  S - T >= 5) differences the separated losses against the
+  dose-matched displaced control, so filler presence and prompt
+  length alone cannot fire it. The diff validator recomputes the
+  decomposition from digest-bound record fields, including a
+  non-digit-projection digest added by amendment C after the
+  adjudication executed a forgery that flipped compliance classes
+  through the descriptive integer fields alone.
+- **Uniqueness pass (combination framing; "first" claimed
+  nowhere).** The combination is: verified rendered-token doses
+  of separation between one frozen format directive and a fixed
+  fact+question block, on a local checkpoint crossed with
+  chat-template families, filler presence differenced out by a
+  dose-matched displaced control inside the decision rule, and
+  compliance scored under a frozen grammar separately from
+  correctness, with a panel-derived rule whose operating
+  characteristics are printed beside every verdict. Neighbours
+  surveyed in the design rounds: LM Evaluation Harness, HELM /
+  IFEval, OpenAI Evals, PromptPerfect, DSPy — none doses a
+  directive's separation from its question on a local checkpoint
+  under a derived decision rule (search-level pass over the named
+  neighbours, stated as such).
+- **Primary sources, fenced.** LongIns (arXiv:2406.17588, §4.3):
+  LIST-vs-GIST shows instruction-to-input separation degrading
+  exam-task performance at long-context lengths on hosted models;
+  fenced — performance not format compliance, repetition count
+  varies there and is held at exactly one here. Instructional
+  distractions (arXiv:2502.04362, §5.2): the distance explanation
+  is the authors' own post-hoc hedge ("may be due to"), quoted
+  with the hedge restored; the length manipulation it explains is
+  precisely the confound the displaced control removes. LIFBench
+  (arXiv:2411.07037, Wu et al., ACL 2025, Anthology
+  2025.acl-long.803, pp. 16445–16468; not LIFEbench,
+  arXiv:2505.16234): instruction at the END of the prompt, six
+  intervals to 128k, decline "particularly beyond 16k or 32k",
+  while §5.3 reports "'Format' performance remains relatively
+  stable across all input lengths in most models" — cited only
+  as prior art that long-context instruction following declines
+  with length; never as support for a format drop at doses
+  256/1024 or for directive-at-head geometry.
+- **Honest limits, printed in the report itself:** the
+  instrument is a per-dose large-drop falsifier (exact power
+  0.909 at a 50% conditional drop rate; 0.246 at 25%, labelled
+  below resolution); the label is an excess-of-between-losses
+  label — a pure constraint-to-generation effect yields S = T
+  and reads `below_threshold` even at total collapse; the
+  filler-proximity channel (filler immediately before the block
+  is coextensive with between-ness on directive-first arms) is
+  named beside value-mediation as a residual, with the
+  value-kept/value-lost split printed but not gating; the
+  displaced arm is byte-identical to a shipped distraction
+  after-cell on the candidate fixture, so the residue is a
+  contrast and a scorer, not an arm set (design doc §9 /
+  amendment H).

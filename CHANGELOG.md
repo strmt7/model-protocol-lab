@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 218 — instruction-distance probe, 2026-10-28)
+
+- An instruction-distance probe (`run --instruction-distance`,
+  `model_protocol_lab/instructiondistance.py`): for each
+  candidate, 24 seed-generated cases place one frozen format
+  directive ("Reply with only the number: no units, no
+  sentence, nothing else.") before a fixed fact+question
+  block, at six layouts — adjacent, separated by 256 or 1024
+  verified rendered tokens of neutral filler, displaced by
+  the same filler after the block, and a descriptive order
+  control. Compliance with the directive is derived from the
+  recorded answer under a frozen ASCII-digit grammar and
+  decomposed against correctness in a 2-by-2 per arm; the
+  per-dose decision (`instruction_distance_drop_observed`
+  iff D >= 10 adjacent compliant-correct cases with at least
+  6 separated losses and a separated-minus-displaced loss
+  margin of at least 5) is a per-dose large-drop falsifier
+  (exact power 0.909 at a 50% conditional drop; a 25% drop
+  is below the panel's resolution at 0.246). The report
+  section prints per-arm attrition including the screened
+  count, the value-kept/value-lost split, reverse
+  discordants, id-length deltas, and the operating
+  characteristics with family-wise conversions; the diff
+  validator recomputes the decomposition from digest-bound
+  record fields (including a non-digit-projection digest, so
+  compliance cannot be forged through the descriptive
+  integer fields). The design of record is
+  `docs/INSTRUCTIONDISTANCE_DESIGN.md`, consolidated in this
+  cycle with the fresh review's binding amendments A–J
+  incorporated into the instrument text. Informational only:
+  the stage never affects selection and never fails the run.
+
 ### Added (cycle 217 — security remediation, package currency, findings guard, DeepSource port, 2026-10-28)
 
 - A findings guard (`.github/workflows/findings-guard.yml` +

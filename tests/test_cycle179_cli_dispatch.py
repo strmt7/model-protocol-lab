@@ -113,6 +113,7 @@ STAGE_FLAGS = [
     ("--placement", "placement", None),
     ("--canonical-form", "canonical_form", None),
     ("--negation", "negation", None),
+    ("--instruction-distance", "instruction_distance", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -307,6 +308,12 @@ HELPER_DISPATCH = [
         "negation",
         "negation_unavailable",
         ["negation_stage", "negation_analysis"],
+    ),
+    (
+        "_run_instruction_distance_probe",
+        "instruction_distance",
+        "instruction_distance_unavailable",
+        ["instruction_distance_stage", "instruction_distance_analysis"],
     ),
     (
         "_run_rotation_probe",

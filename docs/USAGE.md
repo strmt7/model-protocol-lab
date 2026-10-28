@@ -2822,6 +2822,89 @@ contract is in `docs/NEGATION_DESIGN.md`. Informational
 only: the probe never affects selection, and the stage
 never fails the run.
 
+### 8.56 Instruction distance (`run --instruction-distance`)
+
+```sh
+model-protocol-lab run ... --instruction-distance
+```
+
+A maintainer laying out a long system prompt or a RAG
+template learns, per template family on their local
+checkpoint, whether placing 256 or 1024 tokens of filler
+between a format directive and the question it governs
+produces a large format-compliance collapse beyond what the
+same filler after the question produces — and where the
+panel cannot distinguish the layouts, it says so instead of
+guessing.
+
+Distance here means rendered tokens between the frozen
+directive and the question block, verified per candidate on
+its own rendered tokens (never edit distance). Twenty-four
+cases are generated from the run seed; each is a fixed
+fact+question block ("The {topic} number is {value}. /
+What is the {topic} number?") governed by one frozen
+directive — "Reply with only the number: no units, no
+sentence, nothing else." — the only directive in any
+prompt. Six arms per candidate: adjacent (directive,
+block), separated at two doses (directive, filler, block),
+displaced at the same two doses (directive, block, filler),
+and a descriptive order control (block, directive). A dose
+is the exact rendered-token delta of the arm over the
+case's adjacent render, sized from the neutral corpus by a
+single-phase exact sizing rule (whole sentences plus one
+truncated suffix, probed in closeness order, 512-encode
+budget per cell); a cell whose delta cannot be sized
+exactly is `arm_unmatchable`, never approximated, and a
+cell over the run's context cap is `arm_context_exceeded`,
+counted per arm.
+
+The headline scorer is compliance under a frozen grammar —
+the answer span is ASCII digits only over the whole span —
+decomposed against correctness (the value kept or lost) and
+printed per arm beside the byte-exact verdict, which is
+descriptive only. The decision conditions on the adjacent
+arm alone, over cases completed in the adjacent, separated,
+and displaced arms of the dose: D = adjacent
+compliant-correct, S = separated noncompliant in D, T =
+displaced noncompliant in D. The label
+`instruction_distance_drop_observed` fires iff D >= 10 and
+S >= 6 and S - T >= 5; D < 10 is `insufficient`; otherwise
+`below_threshold`. The instrument is a per-dose large-drop
+falsifier: exact power is 0.909 at a 50% conditional drop
+rate and only 0.246 at a 25% drop rate, which is below this
+panel's resolution — a `below_threshold` verdict excludes
+large separation-driven collapse and claims nothing
+smaller. The label is an excess-of-between-losses label,
+never a distance effect simpliciter: a pure
+constraint-to-generation effect yields S = T and reads
+`below_threshold` even at total collapse. Two residual
+channels are printed beside every decision, not argued
+away: the separated filler also sits between the directive
+and the fact (the S split by value-kept vs value-lost makes
+a fact-mediated pattern visible), and filler immediately
+before the block is coextensive with between-ness on these
+arms, so a pure filler-proximity effect would fire the
+label; the separating arm is not among the six. The
+section also prints per-arm attrition (context-exceeded,
+evaluation-failed, unmatchable, screened), the reverse
+discordants beside each decision, the per-arm id-length
+deltas against the adjacent render, and the operating
+characteristics paragraph with the family-wise conversions
+(no-effect expectation 0.28 false labels per 48 decisions;
+0.40–0.59 under candidate-level frailty; about 3.78 at the
+printed pure-length bound, whose worst case holds only
+under non-negative correlation between the separated and
+displaced losses — at most 13.3% under negatively paired
+nulls). There is no winner readout, and discordance is
+never pooled across candidates. Cost: 6 generations per
+candidate per case (3,456 at the legal maximum: 24
+candidates x 24 cases x 6), plus sizing encodes (about 56K
+expected at the shipped estimator's mean, worst case about
+1.18M). The full contract is in
+`docs/INSTRUCTIONDISTANCE_DESIGN.md`. Informational only:
+the probe never affects selection, and the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

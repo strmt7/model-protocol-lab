@@ -31,6 +31,8 @@ from tests.test_cycle33_reporting_verify import _full_result
 from tests.test_cycle209_canonicalform import _payload as _canonical_payload
 from tests.test_cycle212_negation import _payload as _negation_payload
 from tests.test_cycle212_negation import _WordBackend
+from tests.test_cycle218_instructiondistance import _payload as _instruction_distance_payload
+from tests.test_cycle218_instructiondistance import _WordBackend as _IdWordBackend
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -50,6 +52,7 @@ def _populated_result():
     result = _full_result()
     result["canonical_form"] = _canonical_payload()
     result["negation"] = _negation_payload(_WordBackend("negation_drop"))
+    result["instruction_distance"] = _instruction_distance_payload(_IdWordBackend("drop"))
     return result
 
 
@@ -67,6 +70,16 @@ class CanonicalFormBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="canonical-form"'), html.index("</nav>"))
 
 
+class InstructionDistanceBodyTests(unittest.TestCase):
+    def test_instruction_distance_body_present_in_rendered_report(self):
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#instruction-distance"', html)
+        self.assertIn('<section class="card" id="instruction-distance">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("excess-of-between-losses label", html)
+        self.assertGreater(html.index('id="instruction-distance"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     def test_populated_sections_match_toc_exactly(self):
         html = reporting_mod.render_html(_populated_result())
@@ -75,6 +88,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         # Both probe sections populated for this render are linked.
         self.assertIn("canonical-form", hrefs)
         self.assertIn("negation", hrefs)
+        self.assertIn("instruction-distance", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)

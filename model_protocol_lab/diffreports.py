@@ -724,6 +724,9 @@ def diff_reports(
     needle_diff = diff_needle(old.get("needle"), new.get("needle"))
     placement_diff = diff_placement(old.get("placement"), new.get("placement"))
     canonical_form_diff = diff_canonicalform(old.get("canonical_form"), new.get("canonical_form"))
+    instruction_distance_diff = diff_instruction_distance(
+        old.get("instruction_distance"), new.get("instruction_distance")
+    )
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -802,6 +805,10 @@ def diff_reports(
         "neither",
     )
     canonical_form_asymmetric = canonical_form_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    instruction_distance_asymmetric = instruction_distance_diff["available"] not in (
         "both",
         "neither",
     )
@@ -922,6 +929,8 @@ def diff_reports(
         and not placement_asymmetric
         and not canonical_form_diff["changed"]
         and not canonical_form_asymmetric
+        and not instruction_distance_diff["changed"]
+        and not instruction_distance_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1020,6 +1029,8 @@ def diff_reports(
         "placement_asymmetric": placement_asymmetric,
         "canonical_form_changed": canonical_form_diff["changed"],
         "canonical_form_asymmetric": canonical_form_asymmetric,
+        "instruction_distance_changed": instruction_distance_diff["changed"],
+        "instruction_distance_asymmetric": instruction_distance_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1074,6 +1085,7 @@ def diff_reports(
         "needle": needle_diff,
         "placement": placement_diff,
         "canonical_form": canonical_form_diff,
+        "instruction_distance": instruction_distance_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -11505,6 +11517,804 @@ def diff_canonicalform(old: Any, new: Any) -> dict[str, Any]:
         or cf_protocol_drift
         or cf_generator_drift
         or cf_backend_drift
+    )
+    return result
+
+
+_INSTRUCTIONDISTANCE_ARM_KEYS = (
+    "adj",
+    "sep_256",
+    "sep_1024",
+    "disp_256",
+    "disp_1024",
+    "adj_after",
+)
+_INSTRUCTIONDISTANCE_SIZED_ARMS = ("sep_256", "sep_1024", "disp_256", "disp_1024")
+_INSTRUCTIONDISTANCE_DOSES = (256, 1024)
+_INSTRUCTIONDISTANCE_CASE_COUNT = 24
+_INSTRUCTIONDISTANCE_CONSTRAINT = "Reply with only the number: no units, no sentence, nothing else."
+_INSTRUCTIONDISTANCE_FACT_TEMPLATE = "The {topic} number is {value}."
+_INSTRUCTIONDISTANCE_QUESTION_TEMPLATE = "What is the {topic} number?"
+_INSTRUCTIONDISTANCE_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+)
+_INSTRUCTIONDISTANCE_MIN_D = 10
+_INSTRUCTIONDISTANCE_MIN_S = 6
+_INSTRUCTIONDISTANCE_MIN_MARGIN = 5
+_INSTRUCTIONDISTANCE_MAX_GROUND_RECORDS = 24 * _INSTRUCTIONDISTANCE_CASE_COUNT
+_INSTRUCTIONDISTANCE_GENERATION_BUDGET = (
+    len(_INSTRUCTIONDISTANCE_ARM_KEYS) * _INSTRUCTIONDISTANCE_MAX_GROUND_RECORDS
+)
+_INSTRUCTIONDISTANCE_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_INSTRUCTIONDISTANCE_SIZING_ENCODE_BUDGET = 512
+_INSTRUCTIONDISTANCE_STREAM_CYCLES = 6
+_INSTRUCTIONDISTANCE_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "first_digit_run_digest",
+    "nondigit_projection_digest",
+    "answer_len",
+    "digit_count",
+}
+_INSTRUCTIONDISTANCE_DETAILS = (
+    "arm_context_exceeded",
+    "arm_evaluation_failed",
+    "arm_unmatchable",
+    "arm_screened",
+)
+_INSTRUCTIONDISTANCE_UNSIZED_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_INSTRUCTIONDISTANCE_AGGREGATE_KEYS = {
+    "arms",
+    "doses",
+    "ids",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+_INSTRUCTIONDISTANCE_SIZING_RULE_TEXT = (
+    "instructiondistance-single-phase-exact-v1: spans are whole "
+    "sentences plus one truncated suffix (span_text) over the "
+    "cycled neutral corpus stream, every sized cell searching "
+    "from the stream head; candidates are probed in "
+    "span_candidates closeness order against the dose, each "
+    "probe rendering the full arm content under the candidate's "
+    "own template, accepting the first whose rendered token "
+    "count minus the case's adjacent-arm rendered token count "
+    "equals the dose exactly, verified on the accepted "
+    "construction's final ids (the probe render IS the arm "
+    "render, so acceptance and verification are one encode). "
+    "One encode per probe; the per-cell encode budget is 512 "
+    "and a cell with no exact construction inside it is "
+    "arm_unmatchable, never approximated. Unlike needle's "
+    "phased rule there is no in-span offset-verification phase: "
+    "this instrument has no offset variable (the filler sits "
+    "wholly between the directive and the block, or wholly "
+    "after it) and the newline joiner insulates the span from "
+    "the block it precedes or follows, so delta-exactness on "
+    "the final render is the only acceptance condition."
+)
+_INSTRUCTIONDISTANCE_SCREENING_RULE_TEXT = (
+    "instructiondistance-screen-v1: per constructed filler "
+    "span, case-folded: the span is screened (the cell is "
+    "arm_screened) when it contains the case value, or when "
+    "the candidate's decoded boundary text occurs in it. The "
+    "constraint and the case block are the treatment and are "
+    "never screened per-cell. Stage-level, the frozen texts "
+    "(constraint, fact and question templates, topics, neutral "
+    "corpus) are audited for special-token literals against "
+    "every candidate format, and the generated texts "
+    "(constraint, templates with slots emptied, topics) are "
+    "checked for containment of any candidate's decoded "
+    "boundary text; a hit fails the whole stage closed before "
+    "any generation."
+)
+_INSTRUCTIONDISTANCE_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "random_labeller_fire_rate": 0.0013,
+    "no_effect_competent_fire_rate": 0.0058,
+    "no_effect_paired_max_fire_rate": 0.0077,
+    "power_drop_rate_0_25": 0.246,
+    "power_drop_rate_0_50": 0.9088,
+    "power_drop_rate_0_75": 0.9993,
+    "pure_length_independent_fire_rate": 0.0788,
+    "pure_length_fully_correlated_fire_rate": 0.0,
+    "pure_length_negative_rho_max_fire_rate": 0.133,
+    "familywise_decisions": 48,
+    "familywise_no_effect_expected": 0.28,
+    "familywise_no_effect_p_at_least_one": 0.24,
+    "familywise_frailty_expected_low": 0.40,
+    "familywise_frailty_expected_high": 0.59,
+    "familywise_frailty_p_low": 0.33,
+    "familywise_frailty_p_high": 0.44,
+    "familywise_pure_length_expected": 3.78,
+    "familywise_pure_length_p_at_least_one": 0.98,
+    "verdict_availability_at_adjacent_cc_0_40": 0.511,
+    "verdict_availability_at_adjacent_cc_0_30": 0.153,
+}
+_INSTRUCTIONDISTANCE_DECOMPOSITION_CLASSES = (
+    "compliant_correct",
+    "compliant_wrong",
+    "noncompliant_correct_value",
+    "noncompliant_wrong",
+    "boundary_only",
+)
+_INSTRUCTIONDISTANCE_NONCOMPLIANT = ("noncompliant_correct_value", "noncompliant_wrong")
+_INSTRUCTIONDISTANCE_COMPLIANT = ("compliant_correct", "compliant_wrong")
+
+
+def _instructiondistance_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    instructiondistance.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _instructiondistance_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest (this probe's answer digests are never None: a
+    completed cell always carries a decoded span)."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _instructiondistance_run_digest_ok(value: Any) -> bool:
+    """The first-digit-run digest field: "" (no ASCII digit
+    run, amendment B3) or a well-formed digest."""
+    if value == "":
+        return True
+    return _instructiondistance_digest_ok(value)
+
+
+def _instructiondistance_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of instructiondistance._derive (frozen material
+    string)."""
+    import hashlib as _hashlib
+
+    material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of instructiondistance.generate_cases: the
+    frozen case set for a seed, regenerated from the
+    protocol's own seed so a fabricated set is rejected (the
+    numform F2 lesson)."""
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_INSTRUCTIONDISTANCE_CASE_COUNT):
+        topic = _INSTRUCTIONDISTANCE_TOPICS[index]
+        counter = 0
+        while True:
+            value = str(100 + _instructiondistance_derive(seed, index, 0, counter) % 900)
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        cases.append(
+            {
+                "fixture_id": f"instructiondistance-{index:02d}",
+                "topic": topic,
+                "value": value,
+            }
+        )
+    return cases
+
+
+def _instructiondistance_case_material_sha256() -> str:
+    """Mirror of instructiondistance.case_material_sha256."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [
+            _INSTRUCTIONDISTANCE_CONSTRAINT,
+            _INSTRUCTIONDISTANCE_FACT_TEMPLATE,
+            _INSTRUCTIONDISTANCE_QUESTION_TEMPLATE,
+            list(_INSTRUCTIONDISTANCE_TOPICS),
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _instructiondistance_digest(canonical)
+
+
+def _instructiondistance_ground_sha256(seed: int) -> str:
+    """Mirror of instructiondistance.ground_sha256."""
+    import json as _json
+
+    rows = [
+        [case["fixture_id"], case["topic"], case["value"]]
+        for case in _instructiondistance_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _instructiondistance_digest(canonical)
+
+
+def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The instruction-distance protocol rebuilt from this
+    module's own literals plus the payload's seed and backend
+    fingerprint, fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_INSTRUCTIONDISTANCE_ARM_KEYS),
+        "doses": list(_INSTRUCTIONDISTANCE_DOSES),
+        "baseline_arm": "adj",
+        "case_count": _INSTRUCTIONDISTANCE_CASE_COUNT,
+        "case_material_sha256": _instructiondistance_case_material_sha256(),
+        "ground_sha256": _instructiondistance_ground_sha256(seed),
+        "sizing_rule_sha256": _instructiondistance_digest(_INSTRUCTIONDISTANCE_SIZING_RULE_TEXT),
+        "sizing_encode_budget": _INSTRUCTIONDISTANCE_SIZING_ENCODE_BUDGET,
+        "screening_rule_sha256": _instructiondistance_digest(
+            _INSTRUCTIONDISTANCE_SCREENING_RULE_TEXT
+        ),
+        "stream_cycles": _INSTRUCTIONDISTANCE_STREAM_CYCLES,
+        "min_d": _INSTRUCTIONDISTANCE_MIN_D,
+        "min_s": _INSTRUCTIONDISTANCE_MIN_S,
+        "min_margin": _INSTRUCTIONDISTANCE_MIN_MARGIN,
+        "generation_budget": _INSTRUCTIONDISTANCE_GENERATION_BUDGET,
+        "max_ground_records": _INSTRUCTIONDISTANCE_MAX_GROUND_RECORDS,
+        "max_records_bytes": _INSTRUCTIONDISTANCE_MAX_RECORDS_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _instructiondistance_digest(canonical)
+    return protocol
+
+
+def _instructiondistance_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _instructiondistance_decompose(cell: dict[str, Any], expected_digest: str) -> str:
+    """Mirror of instructiondistance.decompose_cell: the
+    class from the recorded digests alone (amendment C --
+    compliance rides on the answer and non-digit-projection
+    digests, never on the descriptive integer counts, so a
+    forged digit_count cannot move a class)."""
+    empty = _instructiondistance_digest("")
+    answer_digest = cell.get("answer_digest")
+    compliant = (
+        type(answer_digest) is str
+        and answer_digest != empty
+        and cell.get("nondigit_projection_digest") == empty
+    )
+    if compliant and answer_digest == expected_digest:
+        return "compliant_correct" if cell.get("boundary_found") else "boundary_only"
+    if compliant:
+        return "compliant_wrong"
+    run_digest = cell.get("first_digit_run_digest")
+    if type(run_digest) is str and run_digest != "" and run_digest == expected_digest:
+        return "noncompliant_correct_value"
+    return "noncompliant_wrong"
+
+
+def _instructiondistance_classify(direct_passes: int, separated: int, displaced: int) -> str:
+    """Mirror of instructiondistance.classify_instruction_distance."""
+    if direct_passes < _INSTRUCTIONDISTANCE_MIN_D:
+        return "insufficient"
+    if (
+        separated >= _INSTRUCTIONDISTANCE_MIN_S
+        and separated - displaced >= _INSTRUCTIONDISTANCE_MIN_MARGIN
+    ):
+        return "instruction_distance_drop_observed"
+    return "below_threshold"
+
+
+def _instructiondistance_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of instructiondistance.aggregate_candidate."""
+    arms: dict[str, Any] = {}
+    for key in _INSTRUCTIONDISTANCE_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_compliant = 0
+        n_context = 0
+        n_failed = 0
+        n_unmatchable = 0
+        n_screened = 0
+        decomposition: dict[str, int] = dict.fromkeys(_INSTRUCTIONDISTANCE_DECOMPOSITION_CLASSES, 0)
+        for record in records:
+            details = record.get("cell_details")
+            detail = details.get(key, "") if isinstance(details, dict) else ""
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            elif detail == "arm_unmatchable":
+                n_unmatchable += 1
+            elif detail == "arm_screened":
+                n_screened += 1
+            cell = _instructiondistance_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            cls = _instructiondistance_decompose(cell, str(record.get("expected_digest", "")))
+            decomposition[cls] = decomposition.get(cls, 0) + 1
+            if cls in _INSTRUCTIONDISTANCE_COMPLIANT:
+                n_compliant += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_compliant": n_compliant,
+            "compliance_rate": (n_compliant / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "n_unmatchable": n_unmatchable,
+            "n_screened": n_screened,
+            "decomposition": decomposition,
+        }
+    doses: dict[str, Any] = {}
+    for dose in _INSTRUCTIONDISTANCE_DOSES:
+        sep = f"sep_{dose}"
+        disp = f"disp_{dose}"
+        n_population = 0
+        direct_passes = 0
+        separated_losses = 0
+        displaced_losses = 0
+        s_value_kept = 0
+        s_value_lost = 0
+        n_reverse = 0
+        for record in records:
+            expected_digest = str(record.get("expected_digest", ""))
+            adj = _instructiondistance_cell_get(record, "adj")
+            sep_cell = _instructiondistance_cell_get(record, sep)
+            disp_cell = _instructiondistance_cell_get(record, disp)
+            if adj is not None and sep_cell is not None:
+                adj_cls = _instructiondistance_decompose(adj, expected_digest)
+                sep_cls = _instructiondistance_decompose(sep_cell, expected_digest)
+                if (
+                    adj_cls in _INSTRUCTIONDISTANCE_NONCOMPLIANT
+                    and sep_cls in _INSTRUCTIONDISTANCE_COMPLIANT
+                ):
+                    n_reverse += 1
+            if adj is None or sep_cell is None or disp_cell is None:
+                continue
+            n_population += 1
+            if _instructiondistance_decompose(adj, expected_digest) != "compliant_correct":
+                continue
+            direct_passes += 1
+            sep_cls = _instructiondistance_decompose(sep_cell, expected_digest)
+            if sep_cls in _INSTRUCTIONDISTANCE_NONCOMPLIANT:
+                separated_losses += 1
+                if sep_cls == "noncompliant_correct_value":
+                    s_value_kept += 1
+                else:
+                    s_value_lost += 1
+            if (
+                _instructiondistance_decompose(disp_cell, expected_digest)
+                in _INSTRUCTIONDISTANCE_NONCOMPLIANT
+            ):
+                displaced_losses += 1
+        doses[str(dose)] = {
+            "n_population": n_population,
+            "direct_passes": direct_passes,
+            "separated_losses": separated_losses,
+            "displaced_losses": displaced_losses,
+            "margin": separated_losses - displaced_losses,
+            "s_value_kept": s_value_kept,
+            "s_value_lost": s_value_lost,
+            "n_reverse": n_reverse,
+            "decision": _instructiondistance_classify(
+                direct_passes, separated_losses, displaced_losses
+            ),
+        }
+    ids: dict[str, Any] = {}
+    for key in _INSTRUCTIONDISTANCE_ARM_KEYS:
+        if key == "adj":
+            continue
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            arm_tokens = record.get("arm_tokens") or {}
+            id_digests = record.get("id_digests") or {}
+            adj_tokens = arm_tokens.get("adj")
+            other_tokens = arm_tokens.get(key)
+            if type(adj_tokens) is int and type(other_tokens) is int:
+                deltas.append(other_tokens - adj_tokens)
+            else:
+                deltas.append(0)
+            adj_digest = id_digests.get("adj")
+            other_digest = id_digests.get(key)
+            if type(adj_digest) is str and adj_digest != "" and adj_digest == other_digest:
+                n_ids_identical += 1
+                adj_cell = _instructiondistance_cell_get(record, "adj")
+                other_cell = _instructiondistance_cell_get(record, key)
+                if adj_cell is not None and other_cell is not None:
+                    expected_digest = str(record.get("expected_digest", ""))
+                    adj_compliant = (
+                        _instructiondistance_decompose(adj_cell, expected_digest)
+                        in _INSTRUCTIONDISTANCE_COMPLIANT
+                    )
+                    other_compliant = (
+                        _instructiondistance_decompose(other_cell, expected_digest)
+                        in _INSTRUCTIONDISTANCE_COMPLIANT
+                    )
+                    if adj_compliant != other_compliant:
+                        n_same_ids_flips += 1
+        ids[key] = {
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(d) for d in deltas), default=0),
+            "n_ids_identical": n_ids_identical,
+            "n_same_ids_compliance_flips": n_same_ids_flips,
+        }
+    return {
+        "arms": arms,
+        "doses": doses,
+        "ids": ids,
+        "operating_characteristics": dict(_INSTRUCTIONDISTANCE_OPERATING_CHARACTERISTICS),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(
+                _instructiondistance_cell_get(record, arm) is None
+                for arm in ("adj", "sep_256", "sep_1024", "disp_256", "disp_1024")
+            )
+        ),
+    }
+
+
+def _instructiondistance_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and bindings: the verdict binding
+    ``verdict == (answer_digest == expected_digest) and
+    boundary_found`` plus the digest shapes of the
+    amendment-C primitives (the descriptive counts are
+    shape-checked and bounded by the span length, never
+    trusted as verdict inputs)."""
+    if type(cell) is not dict or set(cell) != _INSTRUCTIONDISTANCE_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _instructiondistance_digest_ok(cell["answer_digest"]):
+        return False
+    if not _instructiondistance_run_digest_ok(cell["first_digit_run_digest"]):
+        return False
+    if not _instructiondistance_digest_ok(cell["nondigit_projection_digest"]):
+        return False
+    if type(cell["answer_len"]) is not int or cell["answer_len"] < 0:
+        return False
+    if type(cell["digit_count"]) is not int or cell["digit_count"] < 0:
+        return False
+    if cell["digit_count"] > cell["answer_len"]:
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _instructiondistance_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute an instruction-distance payload from its
+    ground records.
+
+    The validator carries its own generator mirror, frozen
+    texts, and aggregators (no imports from
+    instructiondistance.py): the protocol is rebuilt from
+    frozen literals plus the payload's seed and backend
+    fingerprint and compared whole; the case set is
+    regenerated from the seed and every record is checked
+    against it; every constructed sized arm's token count
+    must sit exactly its dose above the adjacent arm's (the
+    sizing rule's acceptance identity, checked on the stored
+    counts); unconstructed arms (unmatchable, or
+    context-exceeded before sizing) carry no token count and
+    no id digest; every cell's verdict is re-derived from its
+    digest identity and bound to the record's arm token
+    count; the decomposition and the (D, S, T) decisions are
+    recomputed from the recorded digests alone; the
+    aggregates are recomputed and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _instructiondistance_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _instructiondistance_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _INSTRUCTIONDISTANCE_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _INSTRUCTIONDISTANCE_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "id_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _instructiondistance_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_INSTRUCTIONDISTANCE_ARM_KEYS):
+                    return None
+            adj_tokens = arm_tokens["adj"]
+            if type(adj_tokens) is not int or adj_tokens < 0:
+                return None
+            if type(arm_tokens["adj_after"]) is not int or arm_tokens["adj_after"] < 0:
+                return None
+            for arm in _INSTRUCTIONDISTANCE_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                id_digest = id_digests[arm]
+                if tokens is None:
+                    # Unconstructed arm: no render exists to
+                    # carry a token count or an id digest.
+                    if id_digest is not None:
+                        return None
+                else:
+                    if type(tokens) is not int or tokens < 0:
+                        return None
+                    if not _instructiondistance_digest_ok(id_digest):
+                        return None
+                    if arm in _INSTRUCTIONDISTANCE_SIZED_ARMS:
+                        dose = 256 if arm.endswith("256") else 1024
+                        if tokens - adj_tokens != dose:
+                            return None
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    allowed = (
+                        _INSTRUCTIONDISTANCE_DETAILS
+                        if arm in _INSTRUCTIONDISTANCE_SIZED_ARMS
+                        else _INSTRUCTIONDISTANCE_UNSIZED_DETAILS
+                    )
+                    if detail not in allowed:
+                        return None
+                    if tokens is None and detail not in (
+                        "arm_unmatchable",
+                        "arm_context_exceeded",
+                    ):
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _instructiondistance_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != tokens:
+                        return None
+        aggregates[name] = _instructiondistance_aggregate(records)
+    if total_records > _INSTRUCTIONDISTANCE_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_instruction_distance(payload: Any) -> bool:
+    """Structural check for an ``instruction_distance``
+    payload (recompute standard). The audit block is
+    shape-checked only: its counts are stage observations
+    (special-token findings against the run's own formats),
+    not recomputable from records."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _instructiondistance_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_instruction_distance(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``instruction_distance`` probe payloads;
+    deterministic.
+
+    Answers "did the instruction-distance story change between
+    runs?": per-candidate per-dose decision drift with the
+    (D, S, T) counts that carry it, the same-ids compliance
+    flip drift on the largest separated arm, candidates
+    added/removed, and protocol / generator / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the generated set is the
+    treatment, so a changed generator is protocol drift). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_instruction_distance(old)
+    new_ok = _valid_instruction_distance(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    id_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    id_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    )
+    id_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    id_comparable = not id_protocol_drift and not id_generator_drift and not id_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    id_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    id_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    id_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                id_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        id_metrics: list[tuple[str, Any, Any]] = []
+        for dose_key in ("256", "1024"):
+            old_dose = old_entry["doses"][dose_key]
+            new_dose = new_entry["doses"][dose_key]
+            id_metrics.extend(
+                [
+                    (f"decision_{dose_key}", old_dose["decision"], new_dose["decision"]),
+                    (
+                        f"direct_passes_{dose_key}",
+                        old_dose["direct_passes"],
+                        new_dose["direct_passes"],
+                    ),
+                    (
+                        f"separated_losses_{dose_key}",
+                        old_dose["separated_losses"],
+                        new_dose["separated_losses"],
+                    ),
+                    (
+                        f"displaced_losses_{dose_key}",
+                        old_dose["displaced_losses"],
+                        new_dose["displaced_losses"],
+                    ),
+                ]
+            )
+        id_metrics.append(
+            (
+                "n_same_ids_compliance_flips_sep_1024",
+                old_entry["ids"]["sep_1024"]["n_same_ids_compliance_flips"],
+                new_entry["ids"]["sep_1024"]["n_same_ids_compliance_flips"],
+            )
+        )
+        for metric, old_value, new_value in id_metrics:
+            if old_value != new_value:
+                id_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = id_candidate_drift
+    result["candidates_added"] = id_candidates_added
+    result["candidates_removed"] = id_candidates_removed
+    result["protocol_drift"] = id_protocol_drift
+    result["generator_drift"] = id_generator_drift
+    result["backend_drift"] = id_backend_drift
+    result["comparable"] = id_comparable
+    result["changed"] = bool(
+        id_candidate_drift
+        or id_candidates_added
+        or id_candidates_removed
+        or id_protocol_drift
+        or id_generator_drift
+        or id_backend_drift
     )
     return result
 

@@ -17,7 +17,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8509 tests, 95.3% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (8573 tests, 95.3% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
 
 ## Contents
 
