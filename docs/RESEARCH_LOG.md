@@ -10374,3 +10374,44 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   Gate attempt 2 uses a runner that resets signal dispositions
   itself, records the child PID for the waiter, and appends
   the exit code into the log.
+
+## Cycle 217 fix round — hashed requirements are target-specific: Requires-Python splits and marker-gated deps (2026-10-28)
+
+- **The first CI run on the cycle-217 push was not green, and both
+  failures were install-step failures, not test failures.** The 3.11
+  test leg failed installing `tools/requirements/dev-hf.txt`; the
+  Windows smoke leg failed installing `tools/requirements/build.txt`.
+  Neither suite ran on those legs.
+- **The parent's first hypothesis (incomplete hash sets) was measured
+  false.** A full sweep against PyPI showed every pinned release in
+  every hashed file already carried its complete distribution-file
+  hash set (listed == PyPI, 0 missing). The defect was the
+  single-host RESOLUTION underneath the hashes, in two independent
+  forms: (1) `numpy==2.5.4` and `networkx==3.7` declare
+  Requires-Python >=3.12 — no artifact of either can install on
+  3.11 (reproduced with pip for the cp311 target: "No matching
+  distribution found for networkx==3.7"); (2) `build`'s
+  `colorama; os_name == "nt"` and `keyring`'s
+  `pywin32-ctypes>=0.2.0; sys_platform == "win32"` never enter a
+  Linux resolution, so the Windows leg resolved two requirements
+  the hashed file does not pin — pip's rejection text was captured
+  from the structurally identical host case ("In --require-hashes
+  mode, all requirements must have their versions pinned with ==").
+- **Local target emulation has a hard limit, recorded so it is not
+  re-learned:** pip on Linux evaluates environment markers against
+  the HOST even with `--platform`/`--python-version` (empirically,
+  a win_amd64 download of keyring pulled its Linux deps). The 3.11
+  fix was therefore proven on a real CPython 3.11.18 interpreter
+  (full `--require-hashes` install of dev-hf.txt: numpy 2.4.6 +
+  networkx 3.6.1 from the new `<3.12` branches, torch 2.14.1,
+  transformers 5.21.0); the Windows lines were proven at the
+  artifact level (both win wheels download and hash-verify), with
+  the marker behaviour itself adjudicated by CI's Windows leg.
+- **Fix shape:** marker-split pins for the Requires-Python boundary
+  (latest stays on `>= "3.12"`; newest 3.11-admitting release on
+  `< "3.12"`), hand-carried marker lines for the platform-gated
+  deps, complete hash sets on every new block, and contract tests
+  pinning all three properties. The standing rule is recorded in
+  the workspace lessons: sweep Requires-Python against every CI
+  interpreter and Requires-Dist against every CI platform's marker
+  environment before pushing hashed requirements.
