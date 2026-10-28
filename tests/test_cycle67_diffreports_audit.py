@@ -292,6 +292,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "needle": {"available": "neither", "changed": False},
         "placement": {"available": "neither", "changed": False},
         "canonical_form": {"available": "neither", "changed": False},
+        "instruction_distance": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -387,6 +388,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "placement_asymmetric": False,
             "canonical_form_changed": False,
             "canonical_form_asymmetric": False,
+            "instruction_distance_changed": False,
+            "instruction_distance_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -6631,6 +6634,704 @@ def _o_canonicalform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# ---------------------------------------------------------------------------
+# Cycle 218: instruction-distance section oracle -- mirrors
+# diffreports.diff_instruction_distance with an independent
+# reimplementation -- frozen tables, generator, decomposition,
+# aggregates, and decisions are all rebuilt here, never
+# imported from the producer or the mirror, so a drift in any
+# side's constants breaks the agreement the tests assert.
+# ---------------------------------------------------------------------------
+
+_O_ID_ARM_KEYS = (
+    "adj",
+    "sep_256",
+    "sep_1024",
+    "disp_256",
+    "disp_1024",
+    "adj_after",
+)
+_O_ID_SIZED_ARMS = ("sep_256", "sep_1024", "disp_256", "disp_1024")
+_O_ID_DOSES = (256, 1024)
+_O_ID_CASE_COUNT = 24
+_O_ID_CONSTRAINT = "Reply with only the number: no units, no sentence, nothing else."
+_O_ID_FACT = "The {topic} number is {value}."
+_O_ID_QUESTION = "What is the {topic} number?"
+_O_ID_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+)
+_O_ID_MIN_D = 10
+_O_ID_MIN_S = 6
+_O_ID_MIN_MARGIN = 5
+_O_ID_MAX_RECORDS = 24 * _O_ID_CASE_COUNT
+_O_ID_BUDGET = len(_O_ID_ARM_KEYS) * _O_ID_MAX_RECORDS
+_O_ID_MAX_BYTES = 12 * 1024 * 1024
+_O_ID_SIZING_BUDGET = 512
+_O_ID_STREAM_CYCLES = 6
+_O_ID_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "first_digit_run_digest",
+    "nondigit_projection_digest",
+    "answer_len",
+    "digit_count",
+}
+_O_ID_DETAILS = (
+    "arm_context_exceeded",
+    "arm_evaluation_failed",
+    "arm_unmatchable",
+    "arm_screened",
+)
+_O_ID_UNSIZED_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_ID_AGGREGATE_KEYS = {
+    "arms",
+    "doses",
+    "ids",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+_O_ID_SIZING_RULE_TEXT = (
+    "instructiondistance-single-phase-exact-v1: spans are whole "
+    "sentences plus one truncated suffix (span_text) over the "
+    "cycled neutral corpus stream, every sized cell searching "
+    "from the stream head; candidates are probed in "
+    "span_candidates closeness order against the dose, each "
+    "probe rendering the full arm content under the candidate's "
+    "own template, accepting the first whose rendered token "
+    "count minus the case's adjacent-arm rendered token count "
+    "equals the dose exactly, verified on the accepted "
+    "construction's final ids (the probe render IS the arm "
+    "render, so acceptance and verification are one encode). "
+    "One encode per probe; the per-cell encode budget is 512 "
+    "and a cell with no exact construction inside it is "
+    "arm_unmatchable, never approximated. Unlike needle's "
+    "phased rule there is no in-span offset-verification phase: "
+    "this instrument has no offset variable (the filler sits "
+    "wholly between the directive and the block, or wholly "
+    "after it) and the newline joiner insulates the span from "
+    "the block it precedes or follows, so delta-exactness on "
+    "the final render is the only acceptance condition."
+)
+_O_ID_SCREENING_RULE_TEXT = (
+    "instructiondistance-screen-v1: per constructed filler "
+    "span, case-folded: the span is screened (the cell is "
+    "arm_screened) when it contains the case value, or when "
+    "the candidate's decoded boundary text occurs in it. The "
+    "constraint and the case block are the treatment and are "
+    "never screened per-cell. Stage-level, the frozen texts "
+    "(constraint, fact and question templates, topics, neutral "
+    "corpus) are audited for special-token literals against "
+    "every candidate format, and the generated texts "
+    "(constraint, templates with slots emptied, topics) are "
+    "checked for containment of any candidate's decoded "
+    "boundary text; a hit fails the whole stage closed before "
+    "any generation."
+)
+_O_ID_OC: dict[str, Any] = {
+    "random_labeller_fire_rate": 0.0013,
+    "no_effect_competent_fire_rate": 0.0058,
+    "no_effect_paired_max_fire_rate": 0.0077,
+    "power_drop_rate_0_25": 0.246,
+    "power_drop_rate_0_50": 0.9088,
+    "power_drop_rate_0_75": 0.9993,
+    "pure_length_independent_fire_rate": 0.0788,
+    "pure_length_fully_correlated_fire_rate": 0.0,
+    "pure_length_negative_rho_max_fire_rate": 0.133,
+    "familywise_decisions": 48,
+    "familywise_no_effect_expected": 0.28,
+    "familywise_no_effect_p_at_least_one": 0.24,
+    "familywise_frailty_expected_low": 0.40,
+    "familywise_frailty_expected_high": 0.59,
+    "familywise_frailty_p_low": 0.33,
+    "familywise_frailty_p_high": 0.44,
+    "familywise_pure_length_expected": 3.78,
+    "familywise_pure_length_p_at_least_one": 0.98,
+    "verdict_availability_at_adjacent_cc_0_40": 0.511,
+    "verdict_availability_at_adjacent_cc_0_30": 0.153,
+}
+_O_ID_CLASSES = (
+    "compliant_correct",
+    "compliant_wrong",
+    "noncompliant_correct_value",
+    "noncompliant_wrong",
+    "boundary_only",
+)
+_O_ID_NONCOMPLIANT = ("noncompliant_correct_value", "noncompliant_wrong")
+_O_ID_COMPLIANT = ("compliant_correct", "compliant_wrong")
+
+
+def _o_id_digest(text: str) -> str:
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_id_digest_ok(value: Any) -> bool:
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _o_id_run_digest_ok(value: Any) -> bool:
+    if value == "":
+        return True
+    return _o_id_digest_ok(value)
+
+
+def _o_id_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    import hashlib as _hashlib
+
+    material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
+    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _o_id_generate(seed: int) -> list[dict[str, Any]]:
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_O_ID_CASE_COUNT):
+        topic = _O_ID_TOPICS[index]
+        counter = 0
+        while True:
+            value = str(100 + _o_id_derive(seed, index, 0, counter) % 900)
+            if value not in seen:
+                break
+            counter += 1
+        seen.add(value)
+        cases.append(
+            {"fixture_id": f"instructiondistance-{index:02d}", "topic": topic, "value": value}
+        )
+    return cases
+
+
+def _o_id_case_material_sha256() -> str:
+    import json as _json
+
+    canonical = _json.dumps(
+        [_O_ID_CONSTRAINT, _O_ID_FACT, _O_ID_QUESTION, list(_O_ID_TOPICS)],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _o_id_digest(canonical)
+
+
+def _o_id_ground_sha256(seed: int) -> str:
+    import json as _json
+
+    rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _o_id_generate(seed)]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_id_digest(canonical)
+
+
+def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_O_ID_ARM_KEYS),
+        "doses": list(_O_ID_DOSES),
+        "baseline_arm": "adj",
+        "case_count": _O_ID_CASE_COUNT,
+        "case_material_sha256": _o_id_case_material_sha256(),
+        "ground_sha256": _o_id_ground_sha256(seed),
+        "sizing_rule_sha256": _o_id_digest(_O_ID_SIZING_RULE_TEXT),
+        "sizing_encode_budget": _O_ID_SIZING_BUDGET,
+        "screening_rule_sha256": _o_id_digest(_O_ID_SCREENING_RULE_TEXT),
+        "stream_cycles": _O_ID_STREAM_CYCLES,
+        "min_d": _O_ID_MIN_D,
+        "min_s": _O_ID_MIN_S,
+        "min_margin": _O_ID_MIN_MARGIN,
+        "generation_budget": _O_ID_BUDGET,
+        "max_ground_records": _O_ID_MAX_RECORDS,
+        "max_records_bytes": _O_ID_MAX_BYTES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_id_digest(canonical)
+    return protocol
+
+
+def _o_id_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_id_decompose(cell: dict[str, Any], expected_digest: str) -> str:
+    empty = _o_id_digest("")
+    answer_digest = cell.get("answer_digest")
+    compliant = (
+        type(answer_digest) is str
+        and answer_digest != empty
+        and cell.get("nondigit_projection_digest") == empty
+    )
+    if compliant and answer_digest == expected_digest:
+        return "compliant_correct" if cell.get("boundary_found") else "boundary_only"
+    if compliant:
+        return "compliant_wrong"
+    run_digest = cell.get("first_digit_run_digest")
+    if type(run_digest) is str and run_digest != "" and run_digest == expected_digest:
+        return "noncompliant_correct_value"
+    return "noncompliant_wrong"
+
+
+def _o_id_classify(direct_passes: int, separated: int, displaced: int) -> str:
+    if direct_passes < _O_ID_MIN_D:
+        return "insufficient"
+    if separated >= _O_ID_MIN_S and separated - displaced >= _O_ID_MIN_MARGIN:
+        return "instruction_distance_drop_observed"
+    return "below_threshold"
+
+
+def _o_id_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    arms: dict[str, Any] = {}
+    for key in _O_ID_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_compliant = 0
+        counts = {
+            "arm_context_exceeded": 0,
+            "arm_evaluation_failed": 0,
+            "arm_unmatchable": 0,
+            "arm_screened": 0,
+        }
+        decomposition: dict[str, int] = dict.fromkeys(_O_ID_CLASSES, 0)
+        for record in records:
+            details = record.get("cell_details")
+            detail = details.get(key, "") if isinstance(details, dict) else ""
+            if detail in counts:
+                counts[detail] += 1
+            cell = _o_id_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            cls = _o_id_decompose(cell, str(record.get("expected_digest", "")))
+            decomposition[cls] = decomposition.get(cls, 0) + 1
+            if cls in _O_ID_COMPLIANT:
+                n_compliant += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_compliant": n_compliant,
+            "compliance_rate": (n_compliant / n_completed) if n_completed else None,
+            "n_context_exceeded": counts["arm_context_exceeded"],
+            "n_evaluation_failed": counts["arm_evaluation_failed"],
+            "n_unmatchable": counts["arm_unmatchable"],
+            "n_screened": counts["arm_screened"],
+            "decomposition": decomposition,
+        }
+    doses: dict[str, Any] = {}
+    for dose in _O_ID_DOSES:
+        sep = f"sep_{dose}"
+        disp = f"disp_{dose}"
+        n_population = 0
+        direct_passes = 0
+        separated_losses = 0
+        displaced_losses = 0
+        s_value_kept = 0
+        s_value_lost = 0
+        n_reverse = 0
+        for record in records:
+            expected_digest = str(record.get("expected_digest", ""))
+            adj = _o_id_cell_get(record, "adj")
+            sep_cell = _o_id_cell_get(record, sep)
+            disp_cell = _o_id_cell_get(record, disp)
+            if (
+                adj is not None
+                and sep_cell is not None
+                and (
+                    _o_id_decompose(adj, expected_digest) in _O_ID_NONCOMPLIANT
+                    and _o_id_decompose(sep_cell, expected_digest) in _O_ID_COMPLIANT
+                )
+            ):
+                n_reverse += 1
+            if adj is None or sep_cell is None or disp_cell is None:
+                continue
+            n_population += 1
+            if _o_id_decompose(adj, expected_digest) != "compliant_correct":
+                continue
+            direct_passes += 1
+            sep_cls = _o_id_decompose(sep_cell, expected_digest)
+            if sep_cls in _O_ID_NONCOMPLIANT:
+                separated_losses += 1
+                if sep_cls == "noncompliant_correct_value":
+                    s_value_kept += 1
+                else:
+                    s_value_lost += 1
+            if _o_id_decompose(disp_cell, expected_digest) in _O_ID_NONCOMPLIANT:
+                displaced_losses += 1
+        doses[str(dose)] = {
+            "n_population": n_population,
+            "direct_passes": direct_passes,
+            "separated_losses": separated_losses,
+            "displaced_losses": displaced_losses,
+            "margin": separated_losses - displaced_losses,
+            "s_value_kept": s_value_kept,
+            "s_value_lost": s_value_lost,
+            "n_reverse": n_reverse,
+            "decision": _o_id_classify(direct_passes, separated_losses, displaced_losses),
+        }
+    ids: dict[str, Any] = {}
+    for key in _O_ID_ARM_KEYS:
+        if key == "adj":
+            continue
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            arm_tokens = record.get("arm_tokens") or {}
+            id_digests = record.get("id_digests") or {}
+            adj_tokens = arm_tokens.get("adj")
+            other_tokens = arm_tokens.get(key)
+            if type(adj_tokens) is int and type(other_tokens) is int:
+                deltas.append(other_tokens - adj_tokens)
+            else:
+                deltas.append(0)
+            adj_digest = id_digests.get("adj")
+            other_digest = id_digests.get(key)
+            if type(adj_digest) is str and adj_digest != "" and adj_digest == other_digest:
+                n_ids_identical += 1
+                adj_cell = _o_id_cell_get(record, "adj")
+                other_cell = _o_id_cell_get(record, key)
+                if adj_cell is not None and other_cell is not None:
+                    expected_digest = str(record.get("expected_digest", ""))
+                    if (_o_id_decompose(adj_cell, expected_digest) in _O_ID_COMPLIANT) != (
+                        _o_id_decompose(other_cell, expected_digest) in _O_ID_COMPLIANT
+                    ):
+                        n_same_ids_flips += 1
+        ids[key] = {
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(d) for d in deltas), default=0),
+            "n_ids_identical": n_ids_identical,
+            "n_same_ids_compliance_flips": n_same_ids_flips,
+        }
+    return {
+        "arms": arms,
+        "doses": doses,
+        "ids": ids,
+        "operating_characteristics": dict(_O_ID_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(
+                _o_id_cell_get(record, arm) is None
+                for arm in ("adj", "sep_256", "sep_1024", "disp_256", "disp_1024")
+            )
+        ),
+    }
+
+
+def _o_id_cell_ok(cell: Any, expected_digest: str) -> bool:
+    if type(cell) is not dict or set(cell) != _O_ID_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if not _o_id_digest_ok(cell["answer_digest"]):
+        return False
+    if not _o_id_run_digest_ok(cell["first_digit_run_digest"]):
+        return False
+    if not _o_id_digest_ok(cell["nondigit_projection_digest"]):
+        return False
+    if type(cell["answer_len"]) is not int or cell["answer_len"] < 0:
+        return False
+    if type(cell["digit_count"]) is not int or cell["digit_count"] < 0:
+        return False
+    if cell["digit_count"] > cell["answer_len"]:
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if protocol != _o_id_protocol(seed, backend_fingerprint):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    generated = _o_id_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_ID_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_ID_MAX_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "id_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _o_id_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_O_ID_ARM_KEYS):
+                    return None
+            adj_tokens = arm_tokens["adj"]
+            if type(adj_tokens) is not int or adj_tokens < 0:
+                return None
+            if type(arm_tokens["adj_after"]) is not int or arm_tokens["adj_after"] < 0:
+                return None
+            for arm in _O_ID_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                id_digest = id_digests[arm]
+                if tokens is None:
+                    if id_digest is not None:
+                        return None
+                else:
+                    if type(tokens) is not int or tokens < 0:
+                        return None
+                    if not _o_id_digest_ok(id_digest):
+                        return None
+                    if arm in _O_ID_SIZED_ARMS:
+                        dose = 256 if arm.endswith("256") else 1024
+                        if tokens - adj_tokens != dose:
+                            return None
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    allowed = _O_ID_DETAILS if arm in _O_ID_SIZED_ARMS else _O_ID_UNSIZED_DETAILS
+                    if detail not in allowed:
+                        return None
+                    if tokens is None and detail not in (
+                        "arm_unmatchable",
+                        "arm_context_exceeded",
+                    ):
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _o_id_cell_ok(cell, expected_digest):
+                        return None
+                    if cell["input_tokens"] != tokens:
+                        return None
+        aggregates[name] = _o_id_aggregate(records)
+    if total_records > _O_ID_MAX_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_instructiondistance_valid(value: Any) -> bool:
+    """Oracle instruction-distance validator: mirrors
+    diffreports._valid_instruction_distance."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_id_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_instructiondistance(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle instruction-distance section: mirrors
+    diffreports.diff_instruction_distance."""
+    old_ok = _o_instructiondistance_valid(old)
+    new_ok = _o_instructiondistance_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get("ground_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list[tuple[str, Any, Any]] = []
+        for dose_key in ("256", "1024"):
+            old_dose = old_entry["doses"][dose_key]
+            new_dose = new_entry["doses"][dose_key]
+            metrics.extend(
+                [
+                    (f"decision_{dose_key}", old_dose["decision"], new_dose["decision"]),
+                    (
+                        f"direct_passes_{dose_key}",
+                        old_dose["direct_passes"],
+                        new_dose["direct_passes"],
+                    ),
+                    (
+                        f"separated_losses_{dose_key}",
+                        old_dose["separated_losses"],
+                        new_dose["separated_losses"],
+                    ),
+                    (
+                        f"displaced_losses_{dose_key}",
+                        old_dose["displaced_losses"],
+                        new_dose["displaced_losses"],
+                    ),
+                ]
+            )
+        metrics.append(
+            (
+                "n_same_ids_compliance_flips_sep_1024",
+                old_entry["ids"]["sep_1024"]["n_same_ids_compliance_flips"],
+                new_entry["ids"]["sep_1024"]["n_same_ids_compliance_flips"],
+            )
+        )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_rotation_digest_ok(item: Any) -> bool:
     if item is None:
         return True
@@ -10926,6 +11627,9 @@ def _oracle_diff(
     o_cform, o_cform_changed, o_cform_asymmetric = _o_canonicalform(
         old.get("canonical_form"), new.get("canonical_form")
     )
+    o_idist, o_idist_changed, o_idist_asymmetric = _o_instructiondistance(
+        old.get("instruction_distance"), new.get("instruction_distance")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -11026,6 +11730,8 @@ def _oracle_diff(
         and not o_pl_asymmetric
         and not o_cform_changed
         and not o_cform_asymmetric
+        and not o_idist_changed
+        and not o_idist_asymmetric
         and not o_ca_changed
         and not o_ca_asymmetric
         and not o_pr_changed
@@ -11089,6 +11795,7 @@ def _oracle_diff(
         "needle": o_nd,
         "placement": o_pl,
         "canonical_form": o_cform,
+        "instruction_distance": o_idist,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -11180,6 +11887,8 @@ def _oracle_diff(
             "placement_asymmetric": o_pl_asymmetric,
             "canonical_form_changed": o_cform_changed,
             "canonical_form_asymmetric": o_cform_asymmetric,
+            "instruction_distance_changed": o_idist_changed,
+            "instruction_distance_asymmetric": o_idist_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -12125,6 +12834,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "placement_asymmetric": False,
                 "canonical_form_changed": False,
                 "canonical_form_asymmetric": False,
+                "instruction_distance_changed": False,
+                "instruction_distance_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -16031,6 +16742,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not placement_asymmetric\n"
             '        and not canonical_form_diff["changed"]\n'
             "        and not canonical_form_asymmetric\n"
+            '        and not instruction_distance_diff["changed"]\n'
+            "        and not instruction_distance_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -16129,6 +16842,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or placement_asymmetric\n"
             '        or canonical_form_diff["changed"]\n'
             "        or canonical_form_asymmetric\n"
+            '        or instruction_distance_diff["changed"]\n'
+            "        or instruction_distance_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -16296,6 +17011,61 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
         self.assertEqual(oracle["canonical_form"], real["canonical_form"])
         self.assertEqual(real["canonical_form"]["available"], "old")
         self.assertFalse(real["canonical_form"]["changed"])
+
+
+class InstructionDistanceOracleAgreementTests(unittest.TestCase):
+    """Cycle 218: the instruction-distance oracle must agree
+    with the real diff on REAL stage payloads, not just on the
+    neither stubs the fuzzer produces (the fuzzer emits no
+    instruction_distance section, so without this test the
+    oracle's recompute depth would be unproven)."""
+
+    def _payload(self, mode):
+        from tests.test_cycle218_instructiondistance import _payload, _WordBackend
+
+        return _payload(_WordBackend(mode))
+
+    def _pair(self, old_payload, new_payload):
+        old = _base_report()
+        new = _base_report()
+        old["instruction_distance"] = old_payload
+        new["instruction_distance"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        payload = self._payload("perfect")
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["instruction_distance"], real["instruction_distance"])
+        self.assertEqual(
+            oracle["summary"]["instruction_distance_changed"],
+            real["summary"]["instruction_distance_changed"],
+        )
+        self.assertFalse(real["summary"]["instruction_distance_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        first = self._payload("perfect")
+        second = self._payload("drop")
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["instruction_distance"], real["instruction_distance"])
+        self.assertTrue(real["instruction_distance"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["adj"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["instruction_distance"], real["instruction_distance"])
+        self.assertEqual(real["instruction_distance"]["available"], "old")
+        self.assertFalse(real["instruction_distance"]["changed"])
 
 
 if __name__ == "__main__":

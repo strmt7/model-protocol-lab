@@ -7423,6 +7423,294 @@ def _negation_section(result: dict[str, Any]) -> str:
     )
 
 
+def _instruction_distance_section(result: dict[str, Any]) -> str:
+    """Instruction-distance probe: one frozen format directive
+    separated from the block it governs by verified token doses.
+
+    Renders the ``instruction_distance`` payload (see
+    experiments.instruction_distance_analysis): per candidate,
+    per-arm compliance and byte-exact rates with the
+    decomposition and attrition (context-exceeded,
+    evaluation-failed, unmatchable, screened) beside each, the
+    per-dose D/S/T decision block with the S value-kept /
+    value-lost split and the reverse-discordant count, the
+    id-divergence report per arm, and the operating
+    characteristics paragraph beside every dose decision. The
+    claim discipline is amendment F of the design doc: the
+    label is an excess-of-between-losses label, power is
+    stated for a large drop only, the 0.25 power row is
+    labelled below resolution, and no sentence describes a
+    curve, a threshold, or decay. Counts and rates only; no
+    payload, question, or answer text is rendered. Every
+    payload-derived value below goes through _escape_text,
+    never bare escape().
+    """
+    probe: Any = result.get("instruction_distance")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        decomp = arm.get("decomposition")
+        decomp_bits = ""
+        if type(decomp) is dict:
+            decomp_bits = (
+                " Decomposition — compliant-correct "
+                + _count(decomp.get("compliant_correct"))
+                + ", compliant-wrong "
+                + _count(decomp.get("compliant_wrong"))
+                + ", noncompliant-correct-value "
+                + _count(decomp.get("noncompliant_correct_value"))
+                + ", noncompliant-wrong "
+                + _count(decomp.get("noncompliant_wrong"))
+                + ", boundary-only "
+                + _count(decomp.get("boundary_only"))
+                + "."
+            )
+        return (
+            "<div>"
+            + _escape_text(name)
+            + " compliance rate "
+            + _rate(arm.get("compliance_rate"))
+            + " ("
+            + _count(arm.get("n_compliant"))
+            + " of "
+            + _count(arm.get("n_completed"))
+            + " completed), byte-exact pass rate "
+            + _rate(arm.get("rate"))
+            + " ("
+            + _count(arm.get("n_pass"))
+            + " of "
+            + _count(arm.get("n_completed"))
+            + "), "
+            + _count(arm.get("n_context_exceeded"))
+            + " context-exceeded, "
+            + _count(arm.get("n_evaluation_failed"))
+            + " evaluation-failed, "
+            + _count(arm.get("n_unmatchable"))
+            + " unmatchable, "
+            + _count(arm.get("n_screened"))
+            + " screened."
+            + decomp_bits
+            + "</div>"
+        )
+
+    def _oc_paragraph(direct_passes: Any) -> str:
+        return (
+            "<div>At D = "
+            + _count(direct_passes)
+            + ", this panel (24 cases) is a per-dose large-drop "
+            "falsifier: the label fires only when separated-arm "
+            "noncompliance on the adjacent compliant-correct "
+            "cases reaches S &gt;= 6 and exceeds the dose-matched "
+            "displaced control's losses by S - T &gt;= 5, at "
+            "D &gt;= 10. Measured operating characteristics of "
+            "the (10, 6, 5) rule (exact enumeration, four "
+            "independent derivations): a random labeller fires "
+            "0.13% of the time; a competent candidate with no "
+            "distance effect fires 0.58%, and at most 0.77% "
+            "under every paired null executed. Power is 90.9% at "
+            "a 50% conditional drop rate — the drop size this "
+            "instrument is built to catch — and 99.9% at 0.75, "
+            "but only 24.6% at a 25% drop rate, which is below "
+            "this panel's resolution: at that size a "
+            "below_threshold is the expected outcome three times "
+            "in four, not evidence of no effect. The pure-length "
+            "confound (filler presence alone, nothing between "
+            "the directive and the block) fires 7.88% under the "
+            "independent-cells convention; that convention is "
+            "the worst case only when the separated and "
+            "displaced losses are non-negatively correlated — "
+            "under negatively paired nulls the pure-length rate "
+            "rises to at most 13.3% (at correlation -0.8, "
+            "executed), while a perfectly case-correlated length "
+            "effect gives S = T and can never fire. Family-wise "
+            "over this panel's 48 decisions (2 doses x 24 "
+            "candidates): at the no-effect rate the exact "
+            "expectation is 0.28 false labels with probability "
+            "0.24 of at least one; under candidate-level frailty "
+            "(Beta baselines, kappa 50/20/10) the expectation is "
+            "0.40-0.59 with probability 0.33-0.44; at the "
+            "printed pure-length bound the expectation is about "
+            "3.78 labels with probability about 0.98 — read any "
+            "single fire against the panel it sits in. Verdict "
+            "availability: the D &gt;= 10 floor is reached with "
+            "probability 0.511 when the adjacent "
+            "compliant-correct rate is 0.40 and 0.153 at 0.30, "
+            "so insufficient is the common verdict for weak "
+            "candidates by construction.</div>"
+        )
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in (
+                "adj",
+                "sep_256",
+                "sep_1024",
+                "disp_256",
+                "disp_1024",
+                "adj_after",
+            ):
+                arm = arms.get(arm_name)
+                if type(arm) is dict:
+                    bits.append(_arm_line(arm_name, arm))
+        doses = entry.get("doses")
+        if type(doses) is dict:
+            for dose_key in ("256", "1024"):
+                dose_block = doses.get(dose_key)
+                if type(dose_block) is not dict:
+                    continue
+                bits.append(
+                    "<div>Dose "
+                    + _escape_text(dose_key)
+                    + ": population "
+                    + _count(dose_block.get("n_population"))
+                    + " (completed in adjacent, separated, and "
+                    "displaced), D "
+                    + _count(dose_block.get("direct_passes"))
+                    + ", S "
+                    + _count(dose_block.get("separated_losses"))
+                    + " (value kept "
+                    + _count(dose_block.get("s_value_kept"))
+                    + ", value lost "
+                    + _count(dose_block.get("s_value_lost"))
+                    + "), T "
+                    + _count(dose_block.get("displaced_losses"))
+                    + ", S - T "
+                    + _count(dose_block.get("margin"))
+                    + ", reverse discordants "
+                    + _count(dose_block.get("n_reverse"))
+                    + " (adjacent noncompliant, separated "
+                    "compliant; printed beside the decision, never "
+                    "in the rule), decision "
+                    + _escape_text(str(dose_block.get("decision", "")))
+                    + ".</div>"
+                )
+                bits.append(_oc_paragraph(dose_block.get("direct_passes")))
+        ids = entry.get("ids")
+        if type(ids) is dict:
+            for arm_name in ("sep_256", "sep_1024", "disp_256", "disp_1024", "adj_after"):
+                block = ids.get(arm_name)
+                if type(block) is not dict:
+                    continue
+                deltas = block.get("id_length_delta_by_case")
+                delta_text = ", ".join(_count(d) for d in deltas) if type(deltas) is list else "n/a"
+                bits.append(
+                    "<div>Ids ("
+                    + _escape_text(arm_name)
+                    + " vs adjacent): identical in "
+                    + _count(block.get("n_ids_identical"))
+                    + " cases (a rendering anomaly — the arms "
+                    "differ in text by construction), same-ids "
+                    "compliance flips "
+                    + _count(block.get("n_same_ids_compliance_flips"))
+                    + " (a determinism finding). Id-length deltas "
+                    "("
+                    + _escape_text(arm_name)
+                    + " minus adjacent, case order): "
+                    + delta_text
+                    + ". Max abs id delta "
+                    + _count(block.get("max_abs_id_delta"))
+                    + ".</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    return (
+        '<section class="card" id="instruction-distance">'
+        "<h2>Instruction distance (directive-to-question separation)</h2>"
+        "<p>Twenty-four generated cases, each a fixed "
+        "fact+question block governed by one frozen format "
+        "directive ('Reply with only the number: no units, no "
+        "sentence, nothing else.' — the only directive in any "
+        "prompt), rendered in six arms per candidate: adjacent "
+        "(directive, block), separated at 256 and 1024 "
+        "(directive, filler, block), displaced at the same "
+        "doses (directive, block, filler), and a descriptive "
+        "order control (block, directive). Distance here means "
+        "rendered tokens between the frozen directive and the "
+        "question block, verified per candidate on its own "
+        "rendered tokens — never edit distance. A dose is the "
+        "exact rendered-token delta of the arm over the case's "
+        "adjacent render, sized from the neutral corpus; a cell "
+        "whose delta cannot be sized exactly is unmatchable, "
+        "never approximated. The headline scorer is compliance "
+        "under a frozen grammar — the answer span is ASCII "
+        "digits only over the whole span — decomposed against "
+        "correctness (the value kept or lost) and printed per "
+        "arm beside the byte-exact verdict, which is "
+        "descriptive only. The decision conditions on the "
+        "adjacent arm alone: D counts cases whose adjacent cell "
+        "is compliant-correct among cases completed in the "
+        "adjacent, separated, and displaced arms of the dose. "
+        "The label is an excess-of-between-losses label: it "
+        "certifies separated-arm losses beyond the dose-matched "
+        "displaced control's, and nothing more — a pure "
+        "constraint-to-generation effect yields S = T and reads "
+        "below_threshold even at total collapse, and a "
+        "between-effect exactly matched by the control's own "
+        "trailing-filler losses does the same. Two residual "
+        "channels are named, not argued away: in the separated "
+        "arms the filler also sits between the directive and "
+        "the fact (fact-to-question adjacency is held, and the "
+        "value-kept / value-lost split of S is printed so a "
+        "fact-mediated pattern is visible as such), and on the "
+        "constraint-first arms, filler immediately before the "
+        "block is coextensive with between-ness, so a pure "
+        "filler-proximity effect — the directive never "
+        "consulted — would fire this label; the separating arm "
+        "is not among the six. Duplication disclosure: the "
+        "displaced arm is byte-identical to a shipped "
+        "distraction after-cell on the candidate fixture, and "
+        "the separated arm is a constant prefix over a shipped "
+        "before-cell; the residue this probe adds is the "
+        "mid-message insertion point between a directive and "
+        "the block it governs, the differencing of the "
+        "displaced control inside the decision rule, and the "
+        "compliance scorer. Closed-book floor, by construction "
+        "rather than by an arm: the value is a seed-derived "
+        "3-digit number stated only in the fact sentence, so a "
+        "candidate that never saw the fact can be "
+        "compliant-correct only by guessing (900 equiprobable "
+        "values under the generator; model priors over round "
+        "numbers are a stated caveat, not a hidden one). The "
+        "claim is scoped to this one frozen directive string "
+        "and to neutral prose filler; a second phrasing or a "
+        "topically related filler is a different treatment. "
+        "Each cell is one greedy generation. Records carry "
+        "digests only.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -10049,6 +10337,7 @@ def render_html(result: dict[str, Any]) -> str:
     placement_html = _placement_section(result)
     canonical_form_html = _canonical_form_section(result)
     negation_html = _negation_section(result)
+    instruction_distance_html = _instruction_distance_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -10230,6 +10519,11 @@ def render_html(result: dict[str, Any]) -> str:
                 negation_html,
             ),
             (
+                "instruction-distance",
+                "Instruction distance (directive-to-question separation)",
+                instruction_distance_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -10356,6 +10650,7 @@ def render_html(result: dict[str, Any]) -> str:
         + placement_html
         + canonical_form_html
         + negation_html
+        + instruction_distance_html
         + choiceaudit_html
         + precision_html
         + confidence_html

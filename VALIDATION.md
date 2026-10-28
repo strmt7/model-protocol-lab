@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–217 (executed 2026-10-14 → 2026-10-28, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–218 (executed 2026-10-14 → 2026-10-28, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,7 +13,7 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8509 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **8573 tests collected**
   (cycle 217 fix round, 2026-10-28). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -46,30 +46,32 @@ doctor's resource fallbacks degrade there.
   the token-depth sensitivity sweep (`run --token-depth-sweep`),
   the canonical-form sensitivity probe (`run --canonical-form`),
   the antonym-negated definite-description probe (`run --negation`),
+  the instruction-distance probe (`run --instruction-distance`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.3455% (cycle 214, 2026-10-27)**. The gate compares the
+  95.2578% (cycle 218, 2026-10-28)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.845) is auditable rather than inferred from the display.
-  The figure is unchanged from cycle 213 (31,820 of 33,048
-  statements): cycle 214 changes no package code (documentation
-  site and structure only), so neither the numerator nor the
-  denominator moves. (Cycle 212's dip from 209's 95.4018% was
-  denominator growth: the negation feature added 393 statements,
-  32,655 → 33,048.) Cycle 217 likewise moves neither figure:
-  its only package change is a docstring, which adds no
-  statements.
+  (+0.758) is auditable rather than inferred from the display.
+  Cycle 218 moves both figures: the instruction-distance
+  feature added 850 statements (33,048 → 33,898) and 802
+  covered statements (31,820 → 32,622), so the dip from cycle
+  213–217's 95.3455% is denominator growth, partially
+  recovered by the cycle-218 gap-test pass (the feature's
+  first full run measured 95.0024% before the gap battery;
+  the new module itself measures 98.3%). (Cycle 212's dip
+  from 209's 95.4018% was the same shape: the negation
+  feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (300 files in that CI scope; the repo-root scope counts more.
+  (302 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (65 source files).
+- `mypy model_protocol_lab` — clean (66 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

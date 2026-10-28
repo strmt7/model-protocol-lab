@@ -5298,6 +5298,215 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_instructiondistance_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_instruction_distance: exact
+        # top-level shape (the audit block shape-checked only),
+        # the protocol rebuilt through the producer module
+        # (instructiondistance) where the implementation rebuilds
+        # it from literal tables, every record checked against
+        # the producer-regenerated case set in canonical order,
+        # every constructed sized arm's token count bound to the
+        # exact dose delta over the adjacent arm, unconstructed
+        # arms carrying neither a token count nor an id digest,
+        # every cell's verdict re-derived from its digest
+        # identity, completed cells bound to the record's arm
+        # token count, and the aggregates recomputed through
+        # the producer's aggregator (whose classes derive from
+        # the recorded digests alone, amendment C). A drift in
+        # either side's constants breaks the agreement.
+        import hashlib as _hashlib
+        import json as _json
+
+        from model_protocol_lab import instructiondistance as _idm
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "audit",
+            "candidates",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool) or type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_idm.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _idm.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        audit = value.get("audit")
+        if type(audit) is not dict or set(audit) != {
+            "n_audit_excluded",
+            "by_reason",
+            "special_token_findings",
+        }:
+            return False
+        if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+            return False
+        if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+            return False
+        if type(audit["by_reason"]) is not dict:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        generated = _idm.generate_cases(seed)
+        total = 0
+        records_bytes = 0
+        for entry in candidates.values():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(generated):
+                return False
+            total += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _idm.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, generated, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "topic",
+                    "expected_digest",
+                    "arm_tokens",
+                    "id_digests",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                    return False
+                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                if record["expected_digest"] != expected_digest:
+                    return False
+                arm_tokens = record["arm_tokens"]
+                id_digests = record["id_digests"]
+                cells = record["cells"]
+                details = record["cell_details"]
+                for mapping in (arm_tokens, id_digests, cells, details):
+                    if type(mapping) is not dict or set(mapping) != set(_idm.ARM_KEYS):
+                        return False
+                adj_tokens = arm_tokens["adj"]
+                if type(adj_tokens) is not int or adj_tokens < 0:
+                    return False
+                for arm in _idm.ARM_KEYS:
+                    tokens = arm_tokens[arm]
+                    id_digest = id_digests[arm]
+                    if tokens is None:
+                        if id_digest is not None:
+                            return False
+                    else:
+                        if type(tokens) is not int or tokens < 0:
+                            return False
+                        if not (
+                            type(id_digest) is str
+                            and len(id_digest) == 64
+                            and all(c in "0123456789abcdef" for c in id_digest)
+                        ):
+                            return False
+                        if arm in _idm.SIZED_ARMS and tokens - adj_tokens != _idm.arm_dose(arm):
+                            return False
+                    cell = cells[arm]
+                    detail = details[arm]
+                    if cell is None:
+                        allowed = (
+                            _idm.CELL_DETAILS[1:]
+                            if arm in _idm.SIZED_ARMS
+                            else ("arm_context_exceeded", "arm_evaluation_failed")
+                        )
+                        if detail not in allowed:
+                            return False
+                        if tokens is None and detail not in (
+                            "arm_unmatchable",
+                            "arm_context_exceeded",
+                        ):
+                            return False
+                    else:
+                        if detail != "":
+                            return False
+                        if type(cell) is not dict or set(cell) != {
+                            "verdict",
+                            "boundary_found",
+                            "boundary_text_match",
+                            "input_tokens",
+                            "answer_digest",
+                            "first_digit_run_digest",
+                            "nondigit_projection_digest",
+                            "answer_len",
+                            "digit_count",
+                        }:
+                            return False
+                        if type(cell["verdict"]) is not bool:
+                            return False
+                        if type(cell["boundary_found"]) is not bool:
+                            return False
+                        if (
+                            cell["boundary_text_match"] is not None
+                            and type(cell["boundary_text_match"]) is not bool
+                        ):
+                            return False
+                        if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+                            return False
+                        digest = cell["answer_digest"]
+                        if not (
+                            type(digest) is str
+                            and len(digest) == 64
+                            and all(c in "0123456789abcdef" for c in digest)
+                        ):
+                            return False
+                        run_digest = cell["first_digit_run_digest"]
+                        if run_digest != "" and not (
+                            type(run_digest) is str
+                            and len(run_digest) == 64
+                            and all(c in "0123456789abcdef" for c in run_digest)
+                        ):
+                            return False
+                        projection = cell["nondigit_projection_digest"]
+                        if not (
+                            type(projection) is str
+                            and len(projection) == 64
+                            and all(c in "0123456789abcdef" for c in projection)
+                        ):
+                            return False
+                        if type(cell["answer_len"]) is not int or cell["answer_len"] < 0:
+                            return False
+                        if type(cell["digit_count"]) is not int or cell["digit_count"] < 0:
+                            return False
+                        if cell["digit_count"] > cell["answer_len"]:
+                            return False
+                        verdict = (digest == expected_digest) and cell["boundary_found"]
+                        if cell["verdict"] != verdict:
+                            return False
+                        if cell["input_tokens"] != tokens:
+                            return False
+            expected = _idm.aggregate_candidate(records)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total > _idm.MAX_GROUND_RECORDS:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(generated))
+
     def _or_rotation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_rotation: exact top-level
         # shape, the protocol rebuilt through the producer
@@ -6979,6 +7188,18 @@ def oracle_diff_reports(
         _o_cform_available = "neither"
     _o_cform_asymmetric = _o_cform_available not in ("both", "neither")
 
+    _idist_old_ok = _or_instructiondistance_valid(old.get("instruction_distance"))
+    _idist_new_ok = _or_instructiondistance_valid(new.get("instruction_distance"))
+    if _idist_old_ok and _idist_new_ok:
+        _o_idist_available = "both"
+    elif _idist_old_ok:
+        _o_idist_available = "old"
+    elif _idist_new_ok:
+        _o_idist_available = "new"
+    else:
+        _o_idist_available = "neither"
+    _o_idist_asymmetric = _o_idist_available not in ("both", "neither")
+
     _rt_old_ok = _or_rotation_valid(old.get("rotation"))
     _rt_new_ok = _or_rotation_valid(new.get("rotation"))
     if _rt_old_ok and _rt_new_ok:
@@ -7126,6 +7347,7 @@ def oracle_diff_reports(
         and not _o_nd_asymmetric
         and not _o_pl_asymmetric
         and not _o_cform_asymmetric
+        and not _o_idist_asymmetric
         and not _o_rt_asymmetric
         and not _o_de_asymmetric
         and not _o_fo_asymmetric
@@ -7213,6 +7435,8 @@ def oracle_diff_reports(
         "placement_asymmetric": _o_pl_asymmetric,
         "canonical_form_changed": False,
         "canonical_form_asymmetric": _o_cform_asymmetric,
+        "instruction_distance_changed": False,
+        "instruction_distance_asymmetric": _o_idist_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
         "precision_changed": False,
@@ -7277,6 +7501,7 @@ def oracle_diff_reports(
         "needle": {"available": _o_nd_available, "changed": False},
         "placement": {"available": _o_pl_available, "changed": False},
         "canonical_form": {"available": _o_cform_available, "changed": False},
+        "instruction_distance": {"available": _o_idist_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},

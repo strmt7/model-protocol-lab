@@ -62,6 +62,7 @@ nav:
           - Distraction: DISTRACTION_DESIGN.md
           - Field order: FIELDORDER_DESIGN.md
           - Fixture fuzz: FIXTURE_FUZZ_DESIGN.md
+          - Instruction distance: INSTRUCTIONDISTANCE_DESIGN.md
           - Leading claim: LEADING_DESIGN.md
           - Multi-turn drift: MULTITURN_DESIGN.md
           - Needle depth: NEEDLE_DESIGN.md
