@@ -9,5 +9,5 @@
 # This repo pins the upstream release version; tools/crawl4ai_tool.py verifies
 # the installed version matches before use.
 
-crawl4ai==0.9.4
-playwright==1.55.0
+crawl4ai==0.9.5
+playwright==1.64.0
