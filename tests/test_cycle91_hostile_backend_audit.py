@@ -254,7 +254,6 @@ class HostileGenerationShapeTest(unittest.TestCase):
             """Ids."""
 
             # noqa: F841
-            pass
 
         _failed_with(
             self._gen(Generation(Ids((1001, 1002, 1003, 1004)), "limit")), "invalid_generation"
@@ -284,8 +283,6 @@ class HostileGenerationShapeTest(unittest.TestCase):
 
         class SubGeneration(Generation):
             """Sub generation."""
-
-            pass
 
         _failed_with(
             self._gen(SubGeneration((1001, 1002, 1003, 1004), "limit")), "invalid_generation"
@@ -392,8 +389,6 @@ class HostileGenerateRaisesTest(unittest.TestCase):
         class WeirdError(Exception):
             """Weird error."""
 
-            pass
-
         _failed_with(_run(self._raising(WeirdError("x"))), "generate_failed")
 
     def test_stop_iteration(self) -> None:
@@ -473,8 +468,6 @@ class HostileDecodeTest(unittest.TestCase):
 
         class Text(str):
             """Text."""
-
-            pass
 
         _failed_with(self._decode_case(lambda tids: Text("ok")), "decode_failed")
 

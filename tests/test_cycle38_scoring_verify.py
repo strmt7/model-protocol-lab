@@ -350,8 +350,6 @@ class TestScoreSpanRejections(unittest.TestCase):
         class MyTuple(tuple):
             """My tuple."""
 
-            pass
-
         self.assert_rejects(
             "invalid_target_ids",
             ValueError,
@@ -723,8 +721,6 @@ class TestSafeDecode(unittest.TestCase):
         class MyStr(str):
             """My str."""
 
-            pass
-
         codec = FakeCodec()
         codec.decode_fn = lambda ids: MyStr("x")
         self.assertIsNone(_safe_decode(codec, (1,)))
@@ -785,8 +781,6 @@ class TestSafeEncode(unittest.TestCase):
 
         class MyTuple(tuple):
             """My tuple."""
-
-            pass
 
         codec = FakeCodec()
         codec.encode_fn = lambda text: MyTuple((1, 2))
@@ -1032,8 +1026,6 @@ class TestProviderCode(unittest.TestCase):
         # Conservative: only exact-str codes pass, never subclasses.
         class SneakyStr(str):
             """Sneaky str."""
-
-            pass
 
         self.assertEqual(
             _provider_code(ValueError(SneakyStr("invalid_input_ids"))), "forward_failed"

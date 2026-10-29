@@ -1030,8 +1030,6 @@ class TestPinnedBehavior(unittest.TestCase):
         class Sub(str):
             """Sub."""
 
-            pass
-
         payload = Sub(_dump(_base_doc()))
         with self.assertRaisesRegex(ValueError, "Dataset exceeds size limit"):
             datasets_mod.parse_dataset(payload)

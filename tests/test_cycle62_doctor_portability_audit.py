@@ -522,8 +522,6 @@ def _row_by_format(report: dict[str, Any], name: str) -> dict[str, Any]:
 class _StrSub(str):
     """Str sub."""
 
-    pass
-
 
 def _raise_decode(ids: list) -> Any:
     """Raise decode."""

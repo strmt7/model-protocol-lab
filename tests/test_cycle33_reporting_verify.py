@@ -1214,8 +1214,8 @@ def _fuzz_string(rng, hostile_pool):
 class TestFuzzReportInternals(unittest.TestCase):
     """Test fuzz report internals."""
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     @staticmethod
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _random_result(rng, hostile_pool):
         """Random result."""
         decisions = [

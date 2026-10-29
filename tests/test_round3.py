@@ -1350,8 +1350,6 @@ class TruncatedPromptBackendTests(unittest.TestCase):
         class NoFingerprint:
             """No fingerprint."""
 
-            pass
-
         with self.assertRaises(ValueError):
             TruncatedPromptBackend(NoFingerprint(), 1)
 
@@ -1505,8 +1503,6 @@ class CLIFeatureTests(unittest.TestCase):
 
         class WithoutEos:
             """Without eos."""
-
-            pass
 
         class BadEos:
             """Bad eos."""

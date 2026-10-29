@@ -572,8 +572,6 @@ class TestPinnedBehavior(unittest.TestCase):
         class S(str):
             """S."""
 
-            pass
-
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(S(_two_row_csv()))
 
@@ -619,8 +617,6 @@ class TestPinnedBehavior(unittest.TestCase):
 
         class SubSplit(Split):
             """Sub split."""
-
-            pass
 
         with self.assertRaises(ValueError):
             fx.split_to_json_text(SubSplit(split.search, split.held_out))  # type: ignore[arg-type]

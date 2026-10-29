@@ -403,8 +403,6 @@ class VerbosityStageTests(unittest.TestCase):
         class NoEncode:
             """No encode."""
 
-            pass
-
         with self.assertRaises(ValueError):
             verbosity_stage(
                 observations=[_obs("a", "f-blue", 4)],

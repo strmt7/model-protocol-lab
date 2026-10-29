@@ -150,8 +150,6 @@ class TestFingerprintGuard(unittest.TestCase):
         class MissingBackend:
             """Missing backend."""
 
-            pass
-
         for backend in (MethodBackend(), IntBackend(), MissingBackend()):
             with self.subTest(backend=type(backend).__name__):
                 with self.assertRaises(ValueError) as ctx:

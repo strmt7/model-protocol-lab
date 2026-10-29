@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main() -> int:
     """Run the shipped surface-noise MCP server."""
+    # skipcq: PYL-R0401 - the package's internal cycles are managed by
+    # its own deferred-import discipline; this launcher only enters it.
     from model_protocol_lab.mcp_server import serve
 
     return serve()

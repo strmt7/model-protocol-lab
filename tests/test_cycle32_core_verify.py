@@ -407,12 +407,8 @@ def _render_container_probes(core_mod, fmt) -> list:
     class _MessageSub(core_mod.Message):
         """Message sub."""
 
-        pass
-
     class _TupleSub(tuple):
         """Tuple sub."""
-
-        pass
 
     return [
         None,
@@ -961,12 +957,8 @@ class TestRenderValidation(unittest.TestCase):
         class _TupleSub(tuple):
             """Tuple sub."""
 
-            pass
-
         class _MessageSub(real_core.Message):
             """Message sub."""
-
-            pass
 
         bad_containers = [
             None,

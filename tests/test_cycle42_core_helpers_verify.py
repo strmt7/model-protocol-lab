@@ -512,8 +512,6 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
         class _StrSub(str):
             """Str sub."""
 
-            pass
-
         with self.assertRaises(ValueError):
             real_core.truncate_text_tail(_StrSub("abc"), 1)
 
@@ -779,8 +777,6 @@ class TestTemplateDiffDifferential(unittest.TestCase):
         class _TupleSub(tuple):
             """Tuple sub."""
 
-            pass
-
         with self.assertRaises(ValueError):
             real_core.template_diff(_TupleSub((1, 2)), good)
 
@@ -922,8 +918,6 @@ class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
 
         class _StrSub(str):
             """Str sub."""
-
-            pass
 
         with self.assertRaises(ValueError):
             real_core.check_boundary_portability(_StrSub("<stop>"), (99,), enc)

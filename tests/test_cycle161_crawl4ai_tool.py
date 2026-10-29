@@ -34,10 +34,10 @@ class CrawlerContracts(unittest.TestCase):
                 observed = []
 
                 def resolve(
-                    # skipcq: PYL-W0102 - The list default binds the shared observed list by design.
                     command,
                     env,
                     timeout=900,
+                    # skipcq: PYL-W0102 - The list default binds the shared observed list by design.
                     _calls=observed,
                     _home=home,
                     _failure=failure,
