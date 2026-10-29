@@ -10647,3 +10647,123 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   the figures print. Power at a 25 percent conditional
   drop is 0.3969, so `below_threshold` is weak evidence,
   never invariance.
+
+## Cycle 221 — record-notation probe: one table, two notations, descriptive discordance (2026-10-29)
+
+- **What shipped:** `run --record-notation`
+  (`model_protocol_lab/recordnotation.py`, the package's
+  69th source file): a generated 24-case panel of frozen
+  code tables (4 to 6 records of 3 to 4 fields over a
+  frozen 24-word single-token alphabet, 216,000 code
+  space, all values in a table distinct) rendered two
+  ways inside the user message — prose sentences (an
+  injective rendering: the exhibited inverse parser
+  recovers the identical table, executed over the whole
+  generated panel in the build's tests) and canonical
+  JSON (list of record objects, record sequence held
+  constant) — plus a closed-book screen arm. The fresh
+  review's eight binding amendments are all implemented
+  and each carries named test evidence: the generator's
+  RNG call sequence is frozen in the protocol's case
+  material and re-executed literally in the tests
+  (A); the instantiated-key overlap (the answer's word
+  equals the key's word in about 4.17 percent of cases,
+  analytic 8999/215999) is printed in the report and
+  never redrawn (B); the candidate text's claim that the
+  parsed-value rate is a subset of the echo rate was
+  false — executed counterexample `{"code":
+  "amber\u002d1001"}` parses to the expected value
+  without containing it — and the two diagnostics are
+  reported as independent everywhere they render (C);
+  the validator mirror binds every completed cell's
+  `input_tokens` to the record's arm token count and
+  states the aggregate-eligible-only recording
+  invariant, closing the forgery the review executed
+  against the candidate's mirror spec (D); the section
+  6.1 power figures print with their marginal bases
+  (.85/.60 for the 25-point column, .90/.70 for the
+  20-point column; at the table's own .90 base the
+  25-point McNemar power is 0.4000 and the N=96
+  Bonferroni power is 0.8329, not 0.7452) — every figure
+  re-derived by exact Fraction enumeration in the
+  build's tests under the candidate's own `oc_tables.py`
+  method (E); the resolution (100/n_paired points per
+  discordant case) prints beside every discordance count
+  (F); the candidate's "4.0x margin" budget claim was
+  false — 2,048 chars IS the tree's 64-token bound, the
+  ASCII worst case on the built record shape measures
+  3.96x headroom, and a non-ASCII-stressed panel
+  measures about 14.28 MiB, over the 12 MiB cap, failing
+  closed with the frozen budget detail (G); and the
+  flag census was re-derived by parser instantiation
+  (H, next bullet). No classification and no winner
+  readout ship: the executed operating characteristics
+  (transplant fire 0.8897 / Rule A 0.6500 on a competent
+  independent null; McNemar power 0.3547 at the gaps
+  that matter) forced both drops in the review, and the
+  build re-verified them rather than re-arguing them.
+- **Uniqueness pass (combination framing; "first"
+  claimed nowhere).** The combination is: a generated
+  data table serialised into the prompt in two frozen
+  notations, one of them an injective prose rendering
+  over a frozen single-token alphabet with an exhibited
+  inverse, the record sequence and the question held
+  byte-identical, per-candidate paired discordance with
+  a total decomposition and printed resolution, a
+  closed-book screen, and digest-bound validator-mirrored
+  records. Primary sources resolved in the design
+  rounds: He et al. (arXiv:2411.10541 — whole-template
+  format variation on hosted models, no exact-token
+  discipline, no chat-template crossing), Sclar et al.
+  (arXiv:2310.11324 — few-shot formatting sensitivity),
+  Zhang et al. POML (arXiv:2508.13948 — table styles
+  bundled with other styling dimensions), Tam et al.
+  (arXiv:2408.02442 — emitted key order under
+  constrained decoding, an output effect), and
+  JSONSchemaBench (arXiv:2501.10868 — output adherence);
+  the fencing for each is recorded in the design doc's
+  section 5 and travels with the citations. Inside the
+  tree the neighbours are field-order (paired discordance
+  between schema-presentation orders over structured
+  specs whose answers are JSON documents — it never
+  serialises a data table as input), canonical-form
+  (sub-lexical normalisation), and structured (output
+  adherence) — each varies a different dimension, as the
+  review's researcher verified by direct reading.
+- **Naming audit (amendment H, binding; executed by
+  parser instantiation of `cli.build_parser()` at build
+  start).** Post-cycle-220 the tree carried 79 distinct
+  long options including `--help` (78 excluding), 62 of
+  them on `run` including `--help`; `--record-notation`
+  was absent, and no existing option contains the stem
+  "record". The candidate text's "69 flags" census was
+  wrong (the review's own count was 77 including
+  `--help`), and the correction is recorded in the
+  design doc's section 9 as amended. Post-build census:
+  80 distinct long options, 63 on `run`. The coinage
+  was free under every counting method; the name's
+  plain reading is accurate — the probe varies the
+  notation the records are written in — and the help
+  text's first sentence says exactly that.
+- **Honest limits, printed in the report itself:** the
+  treatment is the two renderings as wholes (token
+  length, delimiters and punctuation, lexical framing,
+  field order as a prose reading sequence, and output
+  priming move together and are never attributed
+  individually); the readout is descriptive — no
+  classification, no winner, no causal claim, and no
+  generalisation beyond the two frozen renderings, the
+  generated code-table population, and a candidate's own
+  template family on this checkpoint (the scope phrase
+  the review's researcher required, printed in the
+  report, the CLI help, this log's instrument text, and
+  USAGE section 8.59). The screen arm's expected
+  exclusions are about 1.11e-04 per candidate; it is
+  retained as fail-closed hygiene against generator or
+  code-space drift, with its cost (576 of 1,728
+  generations at the legal maximum) stated wherever the
+  budget is stated. Token-ID divergence is reported,
+  not gated; a same-ids case is excluded from the
+  headline as a rendering anomaly and a same-ids
+  verdict flip is recorded as a determinism finding,
+  never as notation fragility.

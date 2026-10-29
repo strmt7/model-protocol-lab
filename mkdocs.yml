@@ -70,6 +70,7 @@ nav:
           - Needle depth: NEEDLE_DESIGN.md
           - Negation: NEGATION_DESIGN.md
           - Numeric form: NUMFORM_DESIGN.md
+          - Payload serialization: PAYLOADSERIALIZATION_DESIGN.md
           - Placement: PLACEMENT_DESIGN.md
           - Precision: PRECISION_DESIGN.md
           - Repetition: REPETITION_DESIGN.md

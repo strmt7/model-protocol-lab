@@ -729,6 +729,9 @@ def diff_reports(
     )
     history_frame_diff = diff_history_frame(old.get("history_frame"), new.get("history_frame"))
     prune_sweep_diff = diff_prune_sweep(old.get("prune_sweep"), new.get("prune_sweep"))
+    record_notation_diff = diff_record_notation(
+        old.get("record_notation"), new.get("record_notation")
+    )
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -819,6 +822,10 @@ def diff_reports(
         "neither",
     )
     prune_sweep_asymmetric = prune_sweep_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    record_notation_asymmetric = record_notation_diff["available"] not in (
         "both",
         "neither",
     )
@@ -945,6 +952,8 @@ def diff_reports(
         and not history_frame_asymmetric
         and not prune_sweep_diff["changed"]
         and not prune_sweep_asymmetric
+        and not record_notation_diff["changed"]
+        and not record_notation_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1049,6 +1058,8 @@ def diff_reports(
         "history_frame_asymmetric": history_frame_asymmetric,
         "prune_sweep_changed": prune_sweep_diff["changed"],
         "prune_sweep_asymmetric": prune_sweep_asymmetric,
+        "record_notation_changed": record_notation_diff["changed"],
+        "record_notation_asymmetric": record_notation_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1106,6 +1117,7 @@ def diff_reports(
         "instruction_distance": instruction_distance_diff,
         "history_frame": history_frame_diff,
         "prune_sweep": prune_sweep_diff,
+        "record_notation": record_notation_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -14281,6 +14293,1003 @@ def diff_prune_sweep(old: Any, new: Any) -> dict[str, Any]:
         or ps_protocol_drift
         or ps_generator_drift
         or ps_backend_drift
+    )
+    return result
+
+
+_RECORDNOTATION_WORDS = (
+    "amber",
+    "birch",
+    "cedar",
+    "copper",
+    "coral",
+    "falcon",
+    "garnet",
+    "harbor",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "marble",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+    "saddle",
+    "saffron",
+    "summit",
+    "tundra",
+    "velvet",
+    "walnut",
+    "willow",
+)
+_RECORDNOTATION_FIELDS_3 = ("code", "label", "zone")
+_RECORDNOTATION_FIELDS_4 = ("code", "label", "mark", "zone")
+_RECORDNOTATION_ANSWER_FIELD = "code"
+_RECORDNOTATION_KEY_FIELD = "zone"
+_RECORDNOTATION_QUESTION_TEMPLATE = "What is the code of the record whose zone is {key}?"
+_RECORDNOTATION_CONTRACT = "Answer with ONLY the value."
+_RECORDNOTATION_GENERATOR_SPEC = (
+    "rng = random.Random(seed * 1000 + i); per value draw, in order: "
+    "word = WORDS[rng.randrange(24)], then number = rng.randrange(1000, 10000); "
+    "a duplicate value is consumed and discarded; the table fills row-major, "
+    "fields in alphabetical order; the queried record index is the next draw, "
+    "rng.randrange(n_records), after the table is complete"
+)
+_RECORDNOTATION_HEADLINE_ARMS = ("prose", "canonical_json")
+_RECORDNOTATION_SCREEN_ARM = "closed_book"
+_RECORDNOTATION_ARM_KEYS = ("prose", "canonical_json", "closed_book")
+_RECORDNOTATION_CASE_COUNT = 24
+_RECORDNOTATION_CODE_SPACE = 216000
+_RECORDNOTATION_MAX_CANDIDATES = 24
+_RECORDNOTATION_MAX_GROUND_RECORDS = _RECORDNOTATION_MAX_CANDIDATES * _RECORDNOTATION_CASE_COUNT
+_RECORDNOTATION_GENERATION_BUDGET = (
+    len(_RECORDNOTATION_ARM_KEYS) * _RECORDNOTATION_MAX_GROUND_RECORDS
+)
+_RECORDNOTATION_HEADLINE_GENERATIONS = (
+    len(_RECORDNOTATION_HEADLINE_ARMS) * _RECORDNOTATION_MAX_GROUND_RECORDS
+)
+_RECORDNOTATION_SCREEN_GENERATIONS = _RECORDNOTATION_MAX_GROUND_RECORDS
+_RECORDNOTATION_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_RECORDNOTATION_HEADLINE_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_RECORDNOTATION_SCREEN_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_RECORDNOTATION_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_RECORDNOTATION_CELL_CLASSES = ("pass", "boundary_only", "other_failure")
+_RECORDNOTATION_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_RECORDNOTATION_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "transplant_fire_competent_independent": 0.8897,
+    "transplant_fire_competent_paired_phi05": 0.5088,
+    "transplant_fire_delta_005": 0.2276,
+    "transplant_familywise_expected": 21.35,
+    "transplant_familywise_any": 1.0,
+    "rule_a_fire_competent_independent": 0.65,
+    "rule_a_fire_competent_paired_phi05": 0.1648,
+    "rule_a_fire_delta_005": 0.0298,
+    "rule_a_familywise_expected": 0.71,
+    "rule_a_familywise_any": 0.516,
+    "mcnemar_fire_competent_independent": 0.0061,
+    "mcnemar_fire_competent_paired_phi05": 0.0005,
+    "mcnemar_power_gap25_marginals_85_60": 0.3547,
+    "mcnemar_power_gap20_marginals_90_70": 0.2598,
+    "mcnemar_power_gap25_base_90": 0.4,
+    "sign_bonferroni_power_gap25_marginals_85_60": 0.0542,
+    "sign_bonferroni_power_gap20_marginals_90_70": 0.0242,
+    "panel96_bonferroni_false_fire": 0.0008,
+    "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
+    "panel96_bonferroni_power_gap25_base_90": 0.8329,
+    "panel96_generations": 6912,
+    "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    "screen_guess_probability": 1 / 216000,
+    "screen_expected_exclusions_per_candidate": 24 / 216000,
+    "screen_expected_exclusions_per_panel": 576 / 216000,
+}
+_RECORDNOTATION_AGGREGATE_KEYS = {
+    "arms",
+    "audit",
+    "headline",
+    "ids",
+    "sensitivities",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _recordnotation_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    recordnotation.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _recordnotation_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _recordnotation_table_shape(index: int) -> tuple[int, tuple[str, ...]]:
+    """Mirror of recordnotation.table_shape."""
+    return 4 + (index % 3), (_RECORDNOTATION_FIELDS_4 if index % 2 else _RECORDNOTATION_FIELDS_3)
+
+
+def _recordnotation_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of recordnotation.generate_cases: the frozen
+    case generator with its RNG call sequence frozen
+    (amendment A) -- per value draw the word first, then the
+    number; duplicates consumed; row-major fill; the queried
+    index is the next draw."""
+    import random as _random
+
+    cases: list[dict[str, Any]] = []
+    for index in range(_RECORDNOTATION_CASE_COUNT):
+        n_records, fields = _recordnotation_table_shape(index)
+        rng = _random.Random(seed * 1000 + index)  # noqa: S311 # nosec B311
+        values: list[str] = []
+        seen: set[str] = set()
+        while len(values) < n_records * len(fields):
+            word = _RECORDNOTATION_WORDS[rng.randrange(len(_RECORDNOTATION_WORDS))]
+            number = rng.randrange(1000, 10000)
+            value = f"{word}-{number}"
+            if value in seen:
+                continue
+            seen.add(value)
+            values.append(value)
+        table = [
+            {field: values[r * len(fields) + j] for j, field in enumerate(fields)}
+            for r in range(n_records)
+        ]
+        query_index = rng.randrange(n_records)
+        cases.append(
+            {
+                "fixture_id": f"record-{index:02d}",
+                "table": table,
+                "query_index": query_index,
+                "key": table[query_index][_RECORDNOTATION_KEY_FIELD],
+                "expected": table[query_index][_RECORDNOTATION_ANSWER_FIELD],
+            }
+        )
+    return cases
+
+
+def _recordnotation_render_json(table: list[dict[str, str]]) -> str:
+    """Mirror of recordnotation.render_json (the canonical
+    JSON parameters, applied to the record sequence)."""
+    import json as _json
+
+    return _json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
+
+
+def _recordnotation_render_prose(table: list[dict[str, str]]) -> str:
+    """Mirror of recordnotation.render_prose."""
+    sentences: list[str] = []
+    for record in table:
+        parts = [f"the {field} is {record[field]}" for field in sorted(record)]
+        if len(parts) == 1:
+            sentence = f"The {parts[0][4:]}."
+        elif len(parts) == 2:
+            sentence = f"The {parts[0][4:]} and {parts[1]}."
+        else:
+            sentence = "The " + ", ".join([parts[0][4:], *parts[1:-1]]) + f", and {parts[-1]}."
+        sentences.append(sentence)
+    return " ".join(sentences)
+
+
+def _recordnotation_arm_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of recordnotation.arm_content."""
+    question = _RECORDNOTATION_QUESTION_TEMPLATE.format(key=case["key"])
+    if arm == _RECORDNOTATION_SCREEN_ARM:
+        return f"{question} {_RECORDNOTATION_CONTRACT}"
+    if arm == "prose":
+        rendering = _recordnotation_render_prose(case["table"])
+    elif arm == "canonical_json":
+        rendering = _recordnotation_render_json(case["table"])
+    else:
+        raise ValueError(f"unknown record-notation arm: {arm}")
+    return f"{rendering}\n\n{question} {_RECORDNOTATION_CONTRACT}"
+
+
+def _recordnotation_embedding_audit() -> dict[str, Any]:
+    """Mirror of recordnotation.audit_answer_embedding (the
+    guard set stated exactly, amendment B)."""
+    import re as _re
+
+    tokens = set(_RECORDNOTATION_FIELDS_4)
+    tokens.update(
+        _re.findall(r"[a-z]+", _RECORDNOTATION_QUESTION_TEMPLATE.replace("{key}", " ").lower())
+    )
+    tokens.update(_re.findall(r"[a-z]+", _RECORDNOTATION_CONTRACT.lower()))
+    violations = 0
+    for token in tokens:
+        for word in _RECORDNOTATION_WORDS:
+            if token[:4] == word[:4] or word.startswith(token) or token.startswith(word):
+                violations += 1
+    return {
+        "template_violations": violations,
+        "key_word_prefix_cases": len(_RECORDNOTATION_WORDS),
+        "key_word_prefix_of": len(_RECORDNOTATION_WORDS),
+        "answer_key_same_word_rate": 8999 / 215999,
+    }
+
+
+def _recordnotation_case_material_sha256() -> str:
+    """Mirror of recordnotation.case_material_sha256."""
+    import json as _json
+
+    material = {
+        "words": list(_RECORDNOTATION_WORDS),
+        "fields_3": list(_RECORDNOTATION_FIELDS_3),
+        "fields_4": list(_RECORDNOTATION_FIELDS_4),
+        "answer_field": _RECORDNOTATION_ANSWER_FIELD,
+        "key_field": _RECORDNOTATION_KEY_FIELD,
+        "question_template": _RECORDNOTATION_QUESTION_TEMPLATE,
+        "contract": _RECORDNOTATION_CONTRACT,
+        "generator_spec": _RECORDNOTATION_GENERATOR_SPEC,
+        "case_count": _RECORDNOTATION_CASE_COUNT,
+        "arm_keys": list(_RECORDNOTATION_ARM_KEYS),
+        "embedding_audit": _recordnotation_embedding_audit(),
+    }
+    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _recordnotation_digest(canonical)
+
+
+def _recordnotation_ground_sha256(seed: int) -> str:
+    """Mirror of recordnotation.ground_sha256."""
+    import json as _json
+
+    rows = [
+        [
+            case["fixture_id"],
+            [[[field, record[field]] for field in sorted(record)] for record in case["table"]],
+            case["query_index"],
+            case["key"],
+            case["expected"],
+        ]
+        for case in _recordnotation_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _recordnotation_digest(canonical)
+
+
+def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The record-notation protocol rebuilt from this module's
+    own literals, fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_RECORDNOTATION_ARM_KEYS),
+        "headline_arms": list(_RECORDNOTATION_HEADLINE_ARMS),
+        "screen_arm": _RECORDNOTATION_SCREEN_ARM,
+        "answer_field": _RECORDNOTATION_ANSWER_FIELD,
+        "key_field": _RECORDNOTATION_KEY_FIELD,
+        "case_count": _RECORDNOTATION_CASE_COUNT,
+        "code_space": _RECORDNOTATION_CODE_SPACE,
+        "case_material_sha256": _recordnotation_case_material_sha256(),
+        "ground_sha256": _recordnotation_ground_sha256(seed),
+        "embedding_audit": _recordnotation_embedding_audit(),
+        "generation_budget": _RECORDNOTATION_GENERATION_BUDGET,
+        "headline_generations": _RECORDNOTATION_HEADLINE_GENERATIONS,
+        "screen_generations": _RECORDNOTATION_SCREEN_GENERATIONS,
+        "max_ground_records": _RECORDNOTATION_MAX_GROUND_RECORDS,
+        "max_records_bytes": _RECORDNOTATION_MAX_RECORDS_BYTES,
+        "max_candidates": _RECORDNOTATION_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _recordnotation_digest(canonical)
+    return protocol
+
+
+def _recordnotation_scorer_r1(text: str) -> str:
+    """Literal mirror of scorerlens._norm_r1: trim, collapse
+    space/tab runs, cap newline runs at two."""
+    import re as _re
+
+    out = text.strip()
+    out = out.replace("\r\n", "\n").replace("\r", "\n")
+    out = _re.sub(r"[ \t]+", " ", out)
+    out = _re.sub(r"\n{3,}", "\n\n", out)
+    return out
+
+
+def _recordnotation_scorer_fence(text: str) -> str:
+    """Literal mirror of scorerlens._fence_strip: remove one
+    pair of line-anchored fences, if present."""
+    import re as _re
+
+    lines = text.split("\n")
+    if len(lines) >= 3 and _re.fullmatch(r"```[^`]*", lines[0]) and lines[-1] == "```":
+        return "\n".join(lines[1:-1]).strip("\n")
+    return text
+
+
+def _recordnotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _recordnotation_detail_get(record: dict[str, Any], key: str) -> str:
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _recordnotation_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _recordnotation_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _recordnotation_screened(record: dict[str, Any]) -> bool:
+    cell = _recordnotation_cell_get(record, _RECORDNOTATION_SCREEN_ARM)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _recordnotation_ids_identical(record: dict[str, Any]) -> bool:
+    """Mirror of recordnotation._ids_identical: derived from
+    the recorded id digests alone."""
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    return digests.get("prose") is not None and digests.get("prose") == digests.get(
+        "canonical_json"
+    )
+
+
+def _recordnotation_decompose_cell(cell: dict[str, Any], expected_digest: str) -> str:
+    """Mirror of recordnotation.decompose_cell."""
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    return "other_failure"
+
+
+def _recordnotation_decompose_pair(prose_cell: dict[str, Any], json_cell: dict[str, Any]) -> str:
+    """Mirror of recordnotation.decompose_pair."""
+    if prose_cell.get("answer_digest") == json_cell.get("answer_digest"):
+        return "boundary_only"
+    if prose_cell.get("boundary_found") and json_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _recordnotation_parsed_hit(answer_text: str, expected: str) -> bool:
+    """Mirror of recordnotation._parsed_hit."""
+    import json as _json
+
+    try:
+        parsed = _json.loads(answer_text)
+    except ValueError:
+        return False
+    return type(parsed) is dict and parsed.get(_RECORDNOTATION_ANSWER_FIELD) == expected
+
+
+def _recordnotation_regrade_verdict(cell: dict[str, Any], expected: str, transform: Any) -> bool:
+    """Mirror of recordnotation._regrade_verdict."""
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return False
+    return transform(text) == expected and bool(cell.get("boundary_found"))
+
+
+def _recordnotation_aggregate(
+    records: list[dict[str, Any]], cases: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Mirror of recordnotation.aggregate_candidate."""
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict[str, Any] = {}
+    for key in _RECORDNOTATION_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_RECORDNOTATION_CELL_CLASSES, 0)
+        n_failures = 0
+        echo_hits = 0
+        parsed_hits = 0
+        for record in records:
+            detail = _recordnotation_detail_get(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _recordnotation_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[
+                _recordnotation_decompose_cell(cell, str(record.get("expected_digest", "")))
+            ] += 1
+            if key in _RECORDNOTATION_HEADLINE_ARMS and not cell["verdict"]:
+                n_failures += 1
+                text = cell.get("answer_text")
+                expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+                if type(text) is str:
+                    if expected in text:
+                        echo_hits += 1
+                    if _recordnotation_parsed_hit(text, expected):
+                        parsed_hits += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+            "n_failures": n_failures,
+            "echo_rate": ((echo_hits / n_failures) if n_failures else None)
+            if key in _RECORDNOTATION_HEADLINE_ARMS
+            else None,
+            "parsed_rate": ((parsed_hits / n_failures) if n_failures else None)
+            if key in _RECORDNOTATION_HEADLINE_ARMS
+            else None,
+        }
+    both = [
+        record
+        for record in records
+        if _recordnotation_cell_get(record, "prose") is not None
+        and _recordnotation_cell_get(record, "canonical_json") is not None
+    ]
+    unscreened_pairs = [record for record in both if not _recordnotation_ids_identical(record)]
+    live_pairs = [record for record in unscreened_pairs if not _recordnotation_screened(record)]
+
+    def _discordance(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+        prose_only = 0
+        json_only = 0
+        decomposition = dict.fromkeys(_RECORDNOTATION_PAIR_CLASSES, 0)
+        for record in pairs:
+            prose_cell = _recordnotation_cell_get(record, "prose")
+            json_cell = _recordnotation_cell_get(record, "canonical_json")
+            if prose_cell is None or json_cell is None:
+                continue
+            if bool(prose_cell["verdict"]) == bool(json_cell["verdict"]):
+                continue
+            if prose_cell["verdict"]:
+                prose_only += 1
+            else:
+                json_only += 1
+            decomposition[_recordnotation_decompose_pair(prose_cell, json_cell)] += 1
+        return {
+            "n_paired": len(pairs),
+            "discordant": prose_only + json_only,
+            "n_prose_only": prose_only,
+            "n_canonical_json_only": json_only,
+            "decomposition": decomposition,
+        }
+
+    headline_counts = _discordance(live_pairs)
+    headline = {
+        **headline_counts,
+        "prose_rate": (
+            (
+                sum(1 for record in live_pairs if _recordnotation_verdict(record, "prose"))
+                / len(live_pairs)
+            )
+            if live_pairs
+            else None
+        ),
+        "canonical_json_rate": (
+            (
+                sum(1 for record in live_pairs if _recordnotation_verdict(record, "canonical_json"))
+                / len(live_pairs)
+            )
+            if live_pairs
+            else None
+        ),
+        "resolution_points": (100.0 / len(live_pairs)) if live_pairs else None,
+    }
+    deltas: list[int] = []
+    n_same_ids_flips = 0
+    for record in records:
+        tokens = record.get("arm_tokens")
+        tokens = tokens if isinstance(tokens, dict) else {}
+        prose_tokens = tokens.get("prose")
+        json_tokens = tokens.get("canonical_json")
+        if type(prose_tokens) is int and type(json_tokens) is int:
+            deltas.append(json_tokens - prose_tokens)
+        else:
+            deltas.append(0)
+        if _recordnotation_ids_identical(record):
+            prose_cell = _recordnotation_cell_get(record, "prose")
+            json_cell = _recordnotation_cell_get(record, "canonical_json")
+            if (
+                prose_cell is not None
+                and json_cell is not None
+                and prose_cell["verdict"] != json_cell["verdict"]
+            ):
+                n_same_ids_flips += 1
+    ids = {
+        "n_ids_identical": sum(1 for record in records if _recordnotation_ids_identical(record)),
+        "id_length_delta": deltas,
+        "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+        "n_same_ids_verdict_flips": n_same_ids_flips,
+    }
+    regrade: dict[str, int] = {}
+    for label, transform in (
+        ("r1", _recordnotation_scorer_r1),
+        ("fence", _recordnotation_scorer_fence),
+    ):
+        count = 0
+        for record in live_pairs:
+            prose_cell = _recordnotation_cell_get(record, "prose")
+            json_cell = _recordnotation_cell_get(record, "canonical_json")
+            if prose_cell is None or json_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            if _recordnotation_regrade_verdict(
+                prose_cell, expected, transform
+            ) != _recordnotation_regrade_verdict(json_cell, expected, transform):
+                count += 1
+        regrade[label] = count
+    sensitivities = {
+        "unscreened": _discordance(unscreened_pairs),
+        "regrade_r1_discordant": regrade["r1"],
+        "regrade_fence_discordant": regrade["fence"],
+    }
+    return {
+        "arms": arms,
+        "audit": {
+            "n_screened": sum(1 for record in records if _recordnotation_screened(record)),
+            "n_closed_book_incomplete": sum(
+                1
+                for record in records
+                if _recordnotation_cell_get(record, _RECORDNOTATION_SCREEN_ARM) is None
+            ),
+        },
+        "headline": headline,
+        "ids": ids,
+        "sensitivities": sensitivities,
+        "operating_characteristics": dict(_RECORDNOTATION_OPERATING_CHARACTERISTICS),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(
+                _recordnotation_cell_get(record, arm) is None for arm in _RECORDNOTATION_ARM_KEYS
+            )
+        ),
+    }
+
+
+def _recordnotation_cell_ok(cell: Any, expected_digest: str, headline: bool) -> bool:
+    """One cell's shape and bindings: exact field set for its
+    arm class; the verdict binding ``verdict ==
+    (answer_digest == expected_digest) and boundary_found``;
+    the input-token binding to the record's arm token count is
+    checked by the caller (amendment D); a headline cell's
+    carried ``answer_text`` must hash to its ``answer_digest``
+    (the cycle-190 binding), and a screen cell carries no text
+    at all."""
+    fields = (
+        _RECORDNOTATION_HEADLINE_CELL_FIELDS if headline else _RECORDNOTATION_SCREEN_CELL_FIELDS
+    )
+    if type(cell) is not dict or set(cell) != fields:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _recordnotation_digest_ok(digest):
+        return False
+    if headline:
+        text = cell["answer_text"]
+        if text is None:
+            if digest is not None:
+                return False
+        elif type(text) is not str or _recordnotation_digest(text) != digest:
+            return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _recordnotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a record-notation payload from its ground
+    records.
+
+    The validator carries its own generator mirror with the
+    frozen RNG call sequence, both renderers, the embedding
+    audit, and the aggregators (no imports from
+    recordnotation.py): the protocol is rebuilt from frozen
+    literals plus the payload's seed and backend fingerprint
+    and compared whole -- the fingerprint binds the
+    seed-to-table mapping, so a payload whose tables were
+    generated under any other RNG reading fails regeneration
+    (amendment A); the case set is regenerated from the seed
+    and every record is checked against it in protocol order;
+    every record's per-arm content digests are rebound to the
+    regenerated arm contents; the record's ids_identical flag
+    and id_length_delta must equal the derivations from its
+    recorded digests and token counts; every headline cell's
+    answer_text is verified against its answer_digest, its
+    verdict is re-derived from its digest identity, and its
+    input_tokens are bound to the record's arm token count
+    (amendment D -- a payload with fabricated token fields
+    fails here, as it does under every sibling mirror); the
+    decompositions, diagnostics, headline discordance,
+    sensitivities, and id report are recomputed from the
+    records and the regenerated expected values; the
+    aggregates are recomputed and compared. Cells exist only
+    from aggregate-eligible reports, so a non-null cell
+    certifies a completed evaluation and the verdict's status
+    conjunct is discharged structurally (amendment D).
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _recordnotation_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _RECORDNOTATION_MAX_CANDIDATES:
+        return None
+    generated = _recordnotation_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _RECORDNOTATION_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _RECORDNOTATION_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "n_records",
+                "n_fields",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["n_records"] != len(case["table"]) or record["n_fields"] != len(
+                case["table"][0]
+            ):
+                return None
+            expected_digest = _recordnotation_digest(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_RECORDNOTATION_ARM_KEYS):
+                    return None
+            if record["ids_identical"] is not (id_digests["prose"] == id_digests["canonical_json"]):
+                return None
+            for arm in _RECORDNOTATION_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _recordnotation_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _recordnotation_digest(
+                    _recordnotation_arm_content(case, arm)
+                ):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_RECORDNOTATION_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _recordnotation_cell_ok(
+                    cell, expected_digest, arm in _RECORDNOTATION_HEADLINE_ARMS
+                ):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+            if record["id_length_delta"] != arm_tokens["canonical_json"] - arm_tokens["prose"]:
+                return None
+        aggregates[name] = _recordnotation_aggregate(records, generated)
+    if total_records > _RECORDNOTATION_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_record_notation(payload: Any) -> bool:
+    """Structural check for a ``record_notation`` payload
+    (recompute standard). The audit block is shape-checked
+    only: its counts are stage observations (special-token
+    findings against the run's own formats), not recomputable
+    from records."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _recordnotation_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_record_notation(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``record_notation`` probe payloads;
+    deterministic.
+
+    Answers "did the record-notation story change between
+    runs?": per-candidate drift in the audit counts, the
+    headline paired discordance with its direction and
+    decomposition, the paired per-arm rates, the per-arm echo
+    and parsed-value rates, the id report, and the
+    sensitivities; candidates added/removed; and protocol /
+    generator / backend drift (any of which marks the
+    comparison not comparable, with the drift still listed --
+    the generated panel is the treatment, so a changed
+    generator is protocol drift). The instrument is
+    descriptive: there is no decision whose drift could be
+    reported. A side without a valid payload is reported
+    plainly.
+    """
+    old_ok = _valid_record_notation(old)
+    new_ok = _valid_record_notation(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    rn_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    rn_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    rn_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    rn_comparable = not rn_protocol_drift and not rn_generator_drift and not rn_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    rn_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    rn_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    rn_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                rn_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        rn_metrics: list[tuple[str, Any, Any]] = [
+            (
+                "n_screened",
+                old_entry["audit"]["n_screened"],
+                new_entry["audit"]["n_screened"],
+            ),
+            (
+                "n_closed_book_incomplete",
+                old_entry["audit"]["n_closed_book_incomplete"],
+                new_entry["audit"]["n_closed_book_incomplete"],
+            ),
+            ("n_paired", old_entry["headline"]["n_paired"], new_entry["headline"]["n_paired"]),
+            (
+                "discordant",
+                old_entry["headline"]["discordant"],
+                new_entry["headline"]["discordant"],
+            ),
+            (
+                "n_prose_only",
+                old_entry["headline"]["n_prose_only"],
+                new_entry["headline"]["n_prose_only"],
+            ),
+            (
+                "n_canonical_json_only",
+                old_entry["headline"]["n_canonical_json_only"],
+                new_entry["headline"]["n_canonical_json_only"],
+            ),
+            (
+                "prose_rate",
+                old_entry["headline"]["prose_rate"],
+                new_entry["headline"]["prose_rate"],
+            ),
+            (
+                "canonical_json_rate",
+                old_entry["headline"]["canonical_json_rate"],
+                new_entry["headline"]["canonical_json_rate"],
+            ),
+            (
+                "decomposition_exact_only",
+                old_entry["headline"]["decomposition"]["exact_only"],
+                new_entry["headline"]["decomposition"]["exact_only"],
+            ),
+            (
+                "decomposition_boundary_only",
+                old_entry["headline"]["decomposition"]["boundary_only"],
+                new_entry["headline"]["decomposition"]["boundary_only"],
+            ),
+            (
+                "decomposition_mixed",
+                old_entry["headline"]["decomposition"]["mixed"],
+                new_entry["headline"]["decomposition"]["mixed"],
+            ),
+            (
+                "prose_echo_rate",
+                old_entry["arms"]["prose"]["echo_rate"],
+                new_entry["arms"]["prose"]["echo_rate"],
+            ),
+            (
+                "prose_parsed_rate",
+                old_entry["arms"]["prose"]["parsed_rate"],
+                new_entry["arms"]["prose"]["parsed_rate"],
+            ),
+            (
+                "canonical_json_echo_rate",
+                old_entry["arms"]["canonical_json"]["echo_rate"],
+                new_entry["arms"]["canonical_json"]["echo_rate"],
+            ),
+            (
+                "canonical_json_parsed_rate",
+                old_entry["arms"]["canonical_json"]["parsed_rate"],
+                new_entry["arms"]["canonical_json"]["parsed_rate"],
+            ),
+            (
+                "n_ids_identical",
+                old_entry["ids"]["n_ids_identical"],
+                new_entry["ids"]["n_ids_identical"],
+            ),
+            (
+                "max_abs_id_delta",
+                old_entry["ids"]["max_abs_id_delta"],
+                new_entry["ids"]["max_abs_id_delta"],
+            ),
+            (
+                "n_same_ids_verdict_flips",
+                old_entry["ids"]["n_same_ids_verdict_flips"],
+                new_entry["ids"]["n_same_ids_verdict_flips"],
+            ),
+            (
+                "unscreened_discordant",
+                old_entry["sensitivities"]["unscreened"]["discordant"],
+                new_entry["sensitivities"]["unscreened"]["discordant"],
+            ),
+            (
+                "regrade_r1_discordant",
+                old_entry["sensitivities"]["regrade_r1_discordant"],
+                new_entry["sensitivities"]["regrade_r1_discordant"],
+            ),
+            (
+                "regrade_fence_discordant",
+                old_entry["sensitivities"]["regrade_fence_discordant"],
+                new_entry["sensitivities"]["regrade_fence_discordant"],
+            ),
+        ]
+        for metric, old_value, new_value in rn_metrics:
+            if old_value != new_value:
+                rn_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = rn_candidate_drift
+    result["candidates_added"] = rn_candidates_added
+    result["candidates_removed"] = rn_candidates_removed
+    result["protocol_drift"] = rn_protocol_drift
+    result["generator_drift"] = rn_generator_drift
+    result["backend_drift"] = rn_backend_drift
+    result["comparable"] = rn_comparable
+    result["changed"] = bool(
+        rn_candidate_drift
+        or rn_candidates_added
+        or rn_candidates_removed
+        or rn_protocol_drift
+        or rn_generator_drift
+        or rn_backend_drift
     )
     return result
 

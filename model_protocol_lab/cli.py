@@ -858,6 +858,70 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--record-notation",
+        action="store_true",
+        help="Record-notation probe (cycle 221, payload-"
+        "serialisation line): this probe renders the same "
+        "generated data table in two frozen notations -- prose "
+        "sentences and canonical JSON -- inside the user "
+        "message, and reports, per candidate, on how many of "
+        "24 paired generated tables the two notations' "
+        "byte-exact verdicts discord, in which direction, and "
+        "whether the discordance is exact-only, boundary-only, "
+        "or mixed. It is descriptive only: no classification, "
+        "no winner readout. Each case is one generated code "
+        "table (4 to 6 records of 3 to 4 fields by a frozen "
+        "shape schedule; every value a single token of the form "
+        "word-digits from a frozen 24-word list over a 216,000 "
+        "code space, all values in a table distinct, so the "
+        "prose rendering is injective -- it has an exhibited "
+        "inverse -- and JSON escaping is unreachable). The "
+        "generator's RNG call sequence is frozen (word draw, "
+        "then number draw, duplicates consumed, row-major fill, "
+        "the queried record is the next draw). Arms per "
+        "candidate: prose and canonical_json (the record "
+        "sequence held constant; only the notation moves, as a "
+        "bundle of length, delimiters, punctuation, lexical "
+        "framing, field order as a reading sequence, and output "
+        "priming), plus a closed_book screen arm (question and "
+        "contract only; a case passed closed-book is excluded "
+        "from that candidate's live populations, and the "
+        "unscreened discordance prints as a sensitivity). The "
+        "screen arm costs 576 of the 1,728 generations at the "
+        "legal maximum (plus 50 percent over the headline arms) "
+        "for an expected 0.000111 exclusions per candidate -- "
+        "it is retained as fail-closed hygiene against "
+        "generator or code-space drift, and its pass count is "
+        "printed as a leak readout. Scoring is byte-exact with "
+        "boundary, every arm a fixture with the same id, so "
+        "request seeds are identical across arms. The headline "
+        "population is live cases with both headline cells "
+        "completed, minus same-ids anomalies; token-ID "
+        "divergence is reported, not gated. Beside the counts: "
+        "per-arm echo and parsed-value rates (independent "
+        "diagnostics -- JSON string escapes break the subset "
+        "relation between them), R1 and fence regrade "
+        "discordance, and the readout's resolution (one paired "
+        "case is 4.2 points of discordance rate at the full "
+        "panel). Why no classification: at 24 cases every "
+        "count-based rule false-fires on competent panels (the "
+        "canonical-form transplant fires 0.8897 under a "
+        "competent independent null) and every family-wise "
+        "controlled rule is near-inert (Bonferroni sign power "
+        "0.0542 at a 25-point gap); the panel that would "
+        "license a directional claim costs 6,912 generations "
+        "for a claim this readout does not consume. Monday "
+        "morning: 'for this checkpoint and this candidate's "
+        "template family, on how many of 24 paired tables do "
+        "prose sentences and canonical JSON discord -- and in "
+        "which direction -- before we switch the frozen "
+        "notation our prompt assembly uses for generated data "
+        "tables?' Costs 3 generations per candidate per case "
+        "(1,728 at the legal maximum: 24 candidates x 24 cases "
+        "x 3; 1,152 headline). Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2378,6 +2442,49 @@ def _run_prune_sweep_probe(
         result["prune_sweep"] = {
             "available": False,
             "detail": "prune_unavailable",
+        }
+
+
+def _run_record_notation_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the record-notation probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/SIGTERM
+    stop the stage cooperatively.
+    """
+    try:
+        from .experiments import record_notation_analysis, record_notation_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = record_notation_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["record_notation"] = record_notation_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- record-notation must not fail the run
+        result["record_notation"] = {
+            "available": False,
+            "detail": "record_notation_unavailable",
         }
 
 
@@ -4429,6 +4536,28 @@ def main(argv: list[str] | None = None) -> int:
                 # selection. Never fails the run.
                 if args.prune_sweep:
                     _run_prune_sweep_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Record-notation probe (cycle 221, payload-
+                # serialisation line): generated 24-case code-
+                # table panel rendered in two frozen notations
+                # (prose sentences and canonical JSON) inside
+                # the user message, plus the closed-book screen
+                # arm, the run's cancel event threaded into the
+                # stage loop. Descriptive only -- no
+                # classification, no winner readout.
+                # Informational only -- never changes selection.
+                # Never fails the run.
+                if args.record_notation:
+                    _run_record_notation_probe(
                         backend,
                         formats,
                         result,

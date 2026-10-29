@@ -6,6 +6,49 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 221 — record-notation probe, 2026-10-29)
+
+- A record-notation probe (`run --record-notation`,
+  `model_protocol_lab/recordnotation.py`): a generated
+  panel of 24 frozen code tables (4 to 6 records of 3 to
+  4 fields; every value a single token from a frozen
+  24-word list over a 216,000 code space, drawn by a
+  generator whose exact RNG call sequence is frozen in
+  the protocol) is rendered two ways inside the user
+  message — as prose sentences (an injective rendering
+  with an exhibited inverse: a reader given either
+  rendering recovers the identical table) and as
+  canonical JSON (a list of record objects, record
+  sequence held constant) — plus a closed-book screen
+  arm that sees the question alone. The readout is
+  descriptive only: per candidate, the paired
+  discordance count over live, both-arms-completed,
+  not-ids-identical cases, with its direction, its total
+  decomposition (exact-only / boundary-only / mixed),
+  and its resolution printed beside the count; per-arm
+  rates with the echo and parsed-value diagnostics
+  (independent — neither contains the other; the
+  candidate text's subset claim was false on an executed
+  escaped-hyphen counterexample and is corrected in the
+  design doc and the report, not repeated); regrade
+  sensitivities; and the token-ID report (reported, not
+  gated). No classification and no winner readout ship:
+  the executed operating characteristics show every
+  count-based rule false-firing on competent nulls
+  (transplant 0.8897, Rule A 0.6500) and every
+  family-wise-controlled rule near-inert at the gaps
+  that matter (McNemar power 0.3547 at a 25-point gap on
+  marginals .85/.60; 0.4000 at the .90 base — the bases
+  are printed wherever the figures are). Headline-cell
+  records carry digest-bound answer text (the cycle-190
+  pattern); screen cells carry none. The design of
+  record is `docs/PAYLOADSERIALIZATION_DESIGN.md`,
+  consolidated in this cycle with the restated candidate
+  and the fresh review's binding amendments A–H
+  incorporated into the instrument text. Informational
+  only: the stage never affects selection and never
+  fails the run.
+
 ### Added (cycle 220 — prune-sweep probe, 2026-10-29)
 
 - A prune-sweep probe (`run --prune-sweep`,
