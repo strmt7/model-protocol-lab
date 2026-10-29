@@ -125,6 +125,7 @@ def inapplicable_fields(base: Format) -> tuple[str, ...]:
 
 
 def _check_verdicts(verdicts: tuple[bool, ...], name: str) -> tuple[bool, ...]:
+    """Check verdicts."""
     if type(verdicts) is not tuple or any(type(v) is not bool for v in verdicts):
         raise ValueError(f"{name} must be a tuple of bool")
     return verdicts
@@ -147,7 +148,7 @@ def summarize_arm(
     arm_verdicts = _check_verdicts(arm_verdicts, "arm_verdicts")
     if type(fixture_ids) is not tuple or any(type(i) is not str for i in fixture_ids):
         raise ValueError("fixture_ids must be a tuple of str")
-    if not (len(base_verdicts) == len(arm_verdicts) == len(fixture_ids)):
+    if not len(base_verdicts) == len(arm_verdicts) == len(fixture_ids):
         raise ValueError("verdict vectors and fixture_ids must be parallel")
     flipped: list[str] = []
     pass_to_fail = 0

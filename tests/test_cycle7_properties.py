@@ -93,7 +93,8 @@ class PropertyTableBackend:
 
     fingerprint = "cycle7-properties-table-backend-not-a-model"
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(_TOKEN_TEXTS[token] for token in token_ids)
 
 

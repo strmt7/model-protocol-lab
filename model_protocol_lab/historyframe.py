@@ -326,14 +326,16 @@ def digest_text(text: str) -> str:
 
 def digest_ids(ids: tuple[int, ...]) -> str:
     """SHA-256 hex digest of a render id sequence, so records
-    carry the sequence's identity without its contents."""
+    carry the sequence's identity without its contents.
+    """
     canonical = ",".join(str(i) for i in ids)
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
 def donor_format(arm: str) -> Format:
     """The frozen donor Format for a foreign arm, from the
-    catalog. Raises ValueError on an unknown arm."""
+    catalog. Raises ValueError on an unknown arm.
+    """
     from .catalog import CATALOG
 
     family = DONOR_FAMILIES.get(arm)
@@ -344,12 +346,14 @@ def donor_format(arm: str) -> Format:
 
 def _turn_end(fmt: Format, role: str) -> str:
     """The per-role terminator with render's fallback: the
-    per-role field when it is not None, else ``turn_end``."""
+    per-role field when it is not None, else ``turn_end``.
+    """
     per_role = fmt.user_turn_end if role == "user" else fmt.assistant_turn_end
     return per_role if per_role is not None else fmt.turn_end
 
 
 def _segment(fmt: Format, messages: tuple[Any, ...], indices: range) -> str:
+    """Return the segment."""
     parts: list[str] = []
     for i in indices:
         message = messages[i]
@@ -364,11 +368,13 @@ def history_segment(fmt: Format, messages: tuple[Any, ...]) -> str:
     """The history segment of ``messages`` framed by ``fmt``:
     the first ``HISTORY_TURNS`` messages under the frozen
     segment semantics (no leading bos -- the prompt-initial
-    bos is the final format's, added by :func:`hybrid_text`)."""
+    bos is the final format's, added by :func:`hybrid_text`).
+    """
     return _segment(fmt, messages, range(min(HISTORY_TURNS, len(messages))))
 
 
 def _open_suffix(final_fmt: Format) -> str:
+    """Return the open suffix."""
     suffix = (
         final_fmt.open_suffix if final_fmt.open_suffix is not None else final_fmt.assistant_prefix
     )
@@ -380,7 +386,8 @@ def hybrid_text(hist_fmt: Format, final_fmt: Format, messages: tuple[Any, ...]) 
     segment in the history format's framing, the tail in the
     final format's framing, the final format's open suffix.
     Under hist == final this reproduces ``Format.render``
-    byte-identically (screen S1)."""
+    byte-identically (screen S1).
+    """
     k = min(HISTORY_TURNS, len(messages))
     return (
         final_fmt.bos
@@ -394,7 +401,8 @@ def verbatim_text(hist_fmt: Format, final_fmt: Format, messages: tuple[Any, ...]
     """The descriptive verbatim arm: the history format's bos
     followed by the hybrid with ONLY the leading final-format
     bos removed (amendment A1 -- internal bos occurrences of
-    repeat_bos formats are never touched)."""
+    repeat_bos formats are never touched).
+    """
     hybrid = hybrid_text(hist_fmt, final_fmt, messages)
     if final_fmt.bos and hybrid.startswith(final_fmt.bos):
         hybrid = hybrid[len(final_fmt.bos) :]
@@ -404,7 +412,8 @@ def verbatim_text(hist_fmt: Format, final_fmt: Format, messages: tuple[Any, ...]
 def history_segment_digest(fmt: Format, messages: tuple[Any, ...]) -> str:
     """Digest of one format's history segment over
     ``messages`` -- the render-divergence primitive the
-    records carry."""
+    records carry.
+    """
     return digest_text(history_segment(fmt, messages))
 
 
@@ -420,7 +429,8 @@ def slice_swap_identity(
     exchanged. Assembly-level seam corruption (a separator
     inserted or dropped at the seam, a tail byte altered)
     fails this identity for the affected arm even when the
-    diagonal hybrid(B, B) is intact."""
+    diagonal hybrid(B, B) is intact.
+    """
     prefix = bos + native_segment
     if not native_text.startswith(prefix):
         return False
@@ -439,7 +449,8 @@ def verbatim_slice_identity(
     with only the history-segment slice exchanged and the
     leading bos substituted by the history format's bos --
     the arm's defining difference. Seam corruption fails it
-    exactly as it fails the headline identity."""
+    exactly as it fails the headline identity.
+    """
     prefix = bos + native_segment
     if not native_text.startswith(prefix):
         return False
@@ -449,7 +460,8 @@ def verbatim_slice_identity(
 def carrier_format(final_fmt: Format) -> Format:
     """The carrier Format holding a hybrid text as a single
     user message: empty framing fields render the message
-    verbatim (verified against ``Format.render``)."""
+    verbatim (verified against ``Format.render``).
+    """
     from .core import Format
 
     return Format(final_fmt.name, "", "", "", "")
@@ -459,7 +471,8 @@ def verbatim_applicable(own_bos_digest: Any, donor_bos_digest: Any) -> bool:
     """Amendment A1's applicability, derived from digests:
     the verbatim arm is applicable iff the candidate's bos
     differs from the chatml donor's bos (equal bos strings
-    make the arm byte-identical to its headline twin)."""
+    make the arm byte-identical to its headline twin).
+    """
     return (
         type(own_bos_digest) is str
         and type(donor_bos_digest) is str
@@ -473,7 +486,8 @@ def stage_fixtures(fixtures: tuple[Any, ...]) -> tuple[Any, ...]:
     re-wrap them under each fixture's ORIGINAL id, original
     ``expected``, and this module's frozen group label. The
     built fixtures' namespaced ids are never used (they
-    would change the request seed of every cell)."""
+    would change the request seed of every cell).
+    """
     from .core import Fixture
     from .synthhistory import build_history_fixtures
 
@@ -489,7 +503,8 @@ def framing_literals(fmt: Format) -> tuple[str, ...]:
     segment in ``fmt``'s framing is built from: bos, per-role
     prefixes, and the resolved per-role terminators. The open
     suffix is excluded -- the history family's open suffix
-    never appears in any prompt."""
+    never appears in any prompt.
+    """
     values = (
         fmt.bos,
         fmt.user_prefix,
@@ -511,7 +526,8 @@ def encoding_stratum(backend: Any, fmt: Format) -> dict[str, Any]:
     ``all_single`` when every literal is token-real,
     ``all_fragmented`` when none is, else ``mixed``. A
     run-time measurement of the checkpoint's tokenizer,
-    never a design-time assertion."""
+    never a design-time assertion.
+    """
     literals: dict[str, bool] = {}
     for literal in framing_literals(fmt):
         literals[literal] = len(backend.encode(literal)) == 1
@@ -534,7 +550,8 @@ def segment_rule_sha256() -> str:
 def _history_material_sha256() -> str:
     """Digest of the frozen history transcript (the
     synthhistory turns' roles and contents): the transcript
-    is part of the treatment, so the protocol binds it."""
+    is part of the treatment, so the protocol binds it.
+    """
     from .synthhistory import SYNTHETIC_TURNS
 
     canonical = json.dumps(
@@ -550,7 +567,8 @@ def protocol_object(seed: int, backend_fingerprint: str, fixture_ids: list[str])
     against (amendment A4's sibling-pattern protocol): arms,
     the donor pair, the prepend, floors, budgets, the history
     material digest, and the seed / backend / fixture-set
-    identity that generated the records."""
+    identity that generated the records.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -589,7 +607,8 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str, fixture_ids: list[
 
 def _mcnemar_p(a: int, b: int) -> float | None:
     """Two-sided exact McNemar p for discordant counts a, b
-    (the tree's ``confidentiality.mcnemar_exact_p``)."""
+    (the tree's ``confidentiality.mcnemar_exact_p``).
+    """
     from .confidentiality import mcnemar_exact_p
 
     return mcnemar_exact_p(a, b)
@@ -627,7 +646,8 @@ def decompose_pair(own_cell: dict[str, Any], foreign_cell: dict[str, Any]) -> st
     ``boundary_only`` when the answer digests are equal (the
     discordance is a boundary event), ``exact_only`` when the
     digests differ and both boundaries were found, else
-    ``mixed``."""
+    ``mixed``.
+    """
     if own_cell.get("answer_digest") == foreign_cell.get("answer_digest"):
         return "boundary_only"
     if own_cell.get("boundary_found") and foreign_cell.get("boundary_found"):
@@ -642,7 +662,8 @@ def random_labeller_fire_rate(n: int) -> float:
     discordant count and its split. Reproduces the design's
     tabulated rows (n=100 -> 0.0367). Below the n floor the
     classification is always ``insufficient``, so the fire
-    rate is 0."""
+    rate is 0.
+    """
     if type(n) is not int or n < MIN_N:
         return 0.0
     total = 0.0
@@ -666,7 +687,8 @@ def familywise_expectation(rates: list[float]) -> dict[str, Any]:
     emitted classifications: the expected false-label count
     is the sum of the exact at-n random-labeller fire rates,
     and P(at least one) assumes independence across
-    decisions. Never a frozen constant."""
+    decisions. Never a frozen constant.
+    """
     expected = sum(rates)
     survival = 1.0
     for rate in rates:
@@ -679,6 +701,7 @@ def familywise_expectation(rates: list[float]) -> dict[str, Any]:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -687,6 +710,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _detail(record: dict[str, Any], key: str) -> str:
+    """Return the detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -695,6 +719,7 @@ def _detail(record: dict[str, Any], key: str) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 
@@ -702,7 +727,8 @@ def _contrast_aggregate(records: list[dict[str, Any]], contrast: str) -> dict[st
     """One headline contrast (own vs ``contrast``) over one
     candidate's records: eligibility accounting, the paired
     classification inputs, the decomposition, the ungated
-    sensitivity, and the id-divergence readout."""
+    sensitivity, and the id-divergence readout.
+    """
     n_render_identical = 0
     n_ids_identical = 0
     n_same_ids_flips = 0
@@ -809,7 +835,8 @@ def _verbatim_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
     inapplicable -- counted, never pooled, never a BOS share
     of zero. When applicable, the discordance between
     ``foreign_chatml`` and ``verbatim_chatml`` over paired
-    completed fixtures is the BOS-substitution share."""
+    completed fixtures is the BOS-substitution share.
+    """
     applicable = all(
         verbatim_applicable(record.get("own_bos_digest"), record.get("donor_bos_digest"))
         for record in records
@@ -843,7 +870,8 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     contrasts, and the descriptive verbatim readout. Every
     count carries its denominator; discordance is never
     pooled across candidates -- this function sees one
-    candidate's records only."""
+    candidate's records only.
+    """
     arms: dict[str, Any] = {}
     for key in ARM_KEYS:
         n_completed = 0
@@ -882,7 +910,8 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
 def shared_fixtures(records_by_candidate: dict[str, list[dict[str, Any]]]) -> frozenset[str]:
     """Fixture ids recorded for every candidate: the
     selection conditions' population (canonical-form
-    discipline)."""
+    discipline).
+    """
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in records))
@@ -894,7 +923,8 @@ def shared_fixtures(records_by_candidate: dict[str, list[dict[str, Any]]]) -> fr
 def _verdict(record: dict[str, Any], key: str) -> bool:
     """One record's verdict for one arm; False when the cell
     did not complete. (On a completed-restricted set this is
-    exactly the cell's verdict.)"""
+    exactly the cell's verdict.)
+    """
     cell = _cell(record, key)
     return bool(cell is not None and cell["verdict"])
 
@@ -908,7 +938,8 @@ def _selection_over(
     ``fixtures``: None when any candidate's completed set on
     that restriction is empty or the restricted completed
     sets differ across candidates (canonical-form's
-    ``_selection_over``, mirrored)."""
+    ``_selection_over``, mirrored).
+    """
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():
@@ -939,7 +970,8 @@ def arm_selection(
 ) -> dict[str, Any]:
     """Per-arm selection readout over the shared population
     (canonical-form discipline): withheld when the restricted
-    completed sets differ across candidates or are empty."""
+    completed sets differ across candidates or are empty.
+    """
     shared = shared_fixtures(records_by_candidate)
     own = _selection_over(records_by_candidate, arm, shared) if shared else None
     if own is None:
@@ -958,7 +990,8 @@ def winner_headline(baseline: Any, other: Any) -> dict[str, Any]:
     semantics): selection-vs-abstention is NEVER a winner
     change; ``winner_changed`` is True only for a genuine
     winner change, and None when either selection was
-    withheld (the comparison is then undefined, not stable)."""
+    withheld (the comparison is then undefined, not stable).
+    """
     if not isinstance(baseline, dict) or not isinstance(other, dict):
         return {
             "headline": "winner_undefined",
@@ -990,7 +1023,8 @@ def primary_flips(
     decisions map onto the selection vocabulary, other
     outcomes compare verbatim; withheld arms never flip.
     These flips pool history presence with frame and are
-    printed separately, never as the headline."""
+    printed separately, never as the headline.
+    """
     if not isinstance(primary, dict):
         return []
     decision = primary.get("decision")

@@ -102,7 +102,8 @@ def _search_run(name, observations, rate, passes, planned, boundary_ids, fingerp
 
 def _result_full():
     """Every section populated. Search order is deliberately non-alphabetical
-    (gamma, alpha, aardvark, beta) so ordering bugs surface."""
+    (gamma, alpha, aardvark, beta) so ordering bugs surface.
+    """
     search = [
         _search_run(
             "gamma",
@@ -1131,7 +1132,9 @@ _FRESH_COUNTER = 0
 def _fresh(tag):
     """A fresh (not yet existing) directory path under the PID-scoped scratch
     root. save_report refuses existing leaves (O_EXCL), so the path must not
-    exist until save_report creates it."""
+    exist until save_report creates it.
+    """
+    # skipcq: PYL-W0603 - module-level mutable test state is the fixture mechanism
     global _FRESH_COUNTER
     _SCRATCH.mkdir(parents=True, exist_ok=True)
     _FRESH_COUNTER += 1
@@ -1160,7 +1163,7 @@ class TestInProcessDeterminism(unittest.TestCase):
         result = _result_huge()
         triples = [_save_triple(reporting, result, self.tmpdir, f"huge_{i}") for i in range(2)]
         self.assertEqual(triples[1], triples[0])
-        html, noev, ev = triples[0]
+        html, _noev, _ev = triples[0]
         # Sanity: the bulk report is substantive but bounded.
         self.assertGreater(len(html), 100_000)
         self.assertLess(len(html), 60_000_000)

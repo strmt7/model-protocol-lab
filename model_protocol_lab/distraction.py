@@ -399,6 +399,7 @@ def span_candidates(
                 triples.append((whole, suffix, prefix_chars + suffix))
 
     def _closeness(triple: tuple[int, int, int]) -> tuple[float, int, int, int]:
+        """Return the closeness."""
         estimate = triple[2] / chars_per_token if chars_per_token > 0 else float(triple[2])
         return (abs(estimate - target), triple[0], triple[1], triple[2])
 
@@ -590,6 +591,7 @@ def curves_for() -> tuple[tuple[str, str, tuple[int, ...]], ...]:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None

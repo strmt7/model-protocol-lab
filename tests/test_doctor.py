@@ -306,6 +306,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["tokenizer_deep"]["status"], "failed")
 
     def test_dataset_examination_reports_counts(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab.doctor import examine_dataset

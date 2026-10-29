@@ -346,7 +346,7 @@ class DiagnosticsWiringTests(unittest.TestCase):
         enriched = attach_diagnostics(result)
         html = render_html(enriched)
         with TemporaryDirectory() as tmp:
-            json_path, html_path = save_report(enriched, Path(tmp) / "report")
+            json_path, _html_path = save_report(enriched, Path(tmp) / "report")
             saved = json.loads(json_path.read_text(encoding="utf-8"))
         self.assertEqual((result["decision"], result["selected_candidate"]), decision_before)
         self.assertEqual([entry["summary"] for entry in result["search"]], summary_before)

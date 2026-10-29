@@ -433,7 +433,8 @@ class Nanbeige42RenderTests(unittest.TestCase):
 
 
 class Cycle15MutateTests(unittest.TestCase):
-    def _variants(self, family: str) -> dict[str, Format]:
+    @staticmethod
+    def _variants(family: str) -> dict[str, Format]:
         return {variant.name: variant for variant in candidates(family, mutate=True)}
 
     def _check_branch(

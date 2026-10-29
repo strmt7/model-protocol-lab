@@ -119,10 +119,12 @@ class ScriptedBackend:
         self.plan = plan
         self.calls = 0
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(ord(c) for c in text)
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return "".join(chr(t) for t in token_ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
@@ -147,7 +149,8 @@ class ScriptedBackend:
 def oracle_resolve_boundaries(formats, boundary, boundary_map):
     """Per _resolve_boundaries docstring: default boundary for every candidate,
     boundary_map overrides for named candidates; unknown names, non-dict maps
-    and empty/non-tuple boundaries raise ValueError."""
+    and empty/non-tuple boundaries raise ValueError.
+    """
     if boundary_map is None:
         return {fmt.name: boundary for fmt in formats}
     if type(boundary_map) is not dict:
@@ -196,7 +199,8 @@ def _oracle_obs(
 
 def oracle_boundary_text_match(backend, output_ids, cut, boundary):
     """Per _boundary_text_match docstring: diagnostic only, never part of the
-    pass criterion; any backend failure degrades to None."""
+    pass criterion; any backend failure degrades to None.
+    """
     try:
         boundary_text = backend.decode(boundary)
     except Exception:  # noqa: BLE001 -- mirrors _boundary_text_match: diagnostic degrades to None
@@ -218,7 +222,8 @@ def oracle_evaluate(
 ):
     """Replicates evaluate's documented loop: per-fixture render -> encode ->
     generate -> boundary cut -> decode, with cancellation checks at each
-    checkpoint, retaining incomplete-run evidence. Returns (records, status)."""
+    checkpoint, retaining incomplete-run evidence. Returns (records, status).
+    """
     records = []
     status = None
     for case in cases:
@@ -320,7 +325,8 @@ def oracle_evaluate(
 
 def oracle_fingerprint(fmt):
     """Per candidate_fingerprint docstring: sha256 over the normalized asdict
-    payload (repeat_bos normalized to False when bos is empty)."""
+    payload (repeat_bos normalized to False when bos is empty).
+    """
     payload = asdict(fmt)
     if not payload["bos"]:
         payload["repeat_bos"] = False
@@ -339,7 +345,8 @@ def oracle_configuration_digest(
     imported from the implementation, so the oracle independently pins
     the field (cycle 207: the digest is a new run_experiment output
     key, and the oracle diff must carry it or every oracle case
-    fails on the extra key)."""
+    fails on the extra key).
+    """
 
     def fixture_payload(case):
         return {
@@ -370,7 +377,8 @@ def oracle_configuration_digest(
 
 def oracle_failure_code(records):
     """Per _failure_code docstring: scan observations from the end for the
-    first fixed-vocabulary error code; None when nothing failed."""
+    first fixed-vocabulary error code; None when nothing failed.
+    """
     for obs in reversed(records):
         error = obs.error
         if type(error) is str and error:
@@ -399,7 +407,8 @@ def oracle_classify(obs, eos_id):
     """Per classify_observation docstring: closed taxonomy; backend failures
     first (cancelled groups with backend-error), then the tokenization-mismatch
     diagnostic, then EOS-without-boundary, then no-boundary-in-N. A wrong
-    answer with a found boundary is no-boundary-in-N."""
+    answer with a found boundary is no-boundary-in-N.
+    """
     if type(obs) is not dict:
         raise ValueError("observation must be a dict")
     if obs.get("exact_match") and obs.get("boundary_found"):
@@ -421,7 +430,8 @@ def oracle_failure_taxonomy(result, eos_id):
     """Per failure_taxonomy docstring: per-candidate classification of search
     observations; held-out classified only when the decision is
     held_out_failed, counting every non-passing held-out observation as
-    held-out-divergence."""
+    held-out-divergence.
+    """
     per_candidate = {}
     for entry in result.get("search") or []:
         if type(entry) is not dict:
@@ -462,7 +472,8 @@ def oracle_run_experiment(
     inline comments and helper docstrings: search every candidate, select iff
     exactly one candidate passes every search fixture (ties/failures abstain),
     run held-out for the winner, attach the failure taxonomy, assemble the
-    result dict with config echoes."""
+    result dict with config echoes.
+    """
     boundaries = oracle_resolve_boundaries(formats, boundary, boundary_map)
     event = Event()
     counter = [0]
@@ -1011,7 +1022,8 @@ class RunExperimentValidation(unittest.TestCase):
 
     def test_empty_held_out_split_rejected(self):
         """Documents the brief discrepancy: 0 held-out fixtures cannot be
-        constructed -- Split requires both splits nonempty."""
+        constructed -- Split requires both splits nonempty.
+        """
         with self.assertRaises(ValueError):
             Split(search=(make_fixture("s", 0),), held_out=())
 
@@ -1138,7 +1150,8 @@ def build_scenario(name):
 
 def run_scenario(name):
     """Build a scenario and diff the (possibly mutated) run_experiment against
-    the oracle. Returns the mismatch list; non-empty means caught."""
+    the oracle. Returns the mismatch list; non-empty means caught.
+    """
     diffs, _ = check_case(build_scenario(name))
     return diffs
 
@@ -1189,7 +1202,8 @@ print(json.dumps(t.run_scenario({scenario!r})))
 
 def run_mutated(mutation_name=None, scenario="majority"):
     """Copy the package to a temp dir, optionally apply one mutation, run the
-    scenario driver in a subprocess, return the mismatch list."""
+    scenario driver in a subprocess, return the mismatch list.
+    """
     with TemporaryDirectory(prefix="mpl_mut_") as tmp:
         mutdir = Path(tmp) / "mutpkg"
         shutil.copytree(REPO_ROOT / "model_protocol_lab", mutdir / "model_protocol_lab")
@@ -1213,6 +1227,7 @@ def run_mutated(mutation_name=None, scenario="majority"):
             text=True,
             timeout=120,
             cwd=str(REPO_ROOT),
+            check=False,
         )
         if proc.returncode != 0:
             raise AssertionError(

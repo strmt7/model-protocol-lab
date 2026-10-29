@@ -160,9 +160,9 @@ def is_grammar_line(line: str) -> bool:
 
 
 def _final_line(answer: str) -> str:
-    """The answer's final line under the parser's line convention.
+    r"""The answer's final line under the parser's line convention.
 
-    Lines come from split("\\n") with exactly one trailing empty
+    Lines come from split("\n") with exactly one trailing empty
     element dropped (the text ended with exactly one trailing
     newline). splitlines() is never used: it also splits on U+2028,
     U+0085 and friends, which would manufacture a final line the
@@ -267,6 +267,7 @@ def treated_fixture(case: Fixture) -> Fixture:
 
 
 def _derive(seed: int, tag: str, index: int, attempt: int = 0) -> str:
+    """Return the derive."""
     material = f"{seed}\0confidence-{tag}\0{index}\0{attempt}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -411,6 +412,7 @@ def cell_verdict(cell: dict[str, Any], expected_digest: str) -> bool:
 
 
 def _mean(values: list[int]) -> float | None:
+    """Return the mean."""
     return (sum(values) / len(values)) if values else None
 
 
@@ -480,6 +482,7 @@ def _candidate_block(
     own = [r for r in records if r["candidate"] == candidate]
     elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
     operator = _population_block(elicited, n_operator_population)
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
     for record in own:
         cell = record["elicited"]

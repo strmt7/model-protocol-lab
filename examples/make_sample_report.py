@@ -12,20 +12,34 @@ import re
 import sys
 from pathlib import Path
 from threading import Event
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.catalog import candidates
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.core import Generation
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.datasets import load_dataset
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.experiments import run_experiment
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.reporting import save_report
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.structured import (
     STRUCTURED_SPECS,
     build_structured_fixtures,
     schema_map,
     validate_structured_specs,
 )
+
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.toolcall import (
     TOOLCALL_QUERIES,
     build_toolcall_fixtures,
@@ -53,15 +67,18 @@ class DemoBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return "".join(map(chr, token_ids))
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         is_winner = (
             prompt.startswith(WINNER_PREFIX)
@@ -97,7 +114,11 @@ class HierarchyDemoBackend(DemoBackend):
     positions and candidates, exactly the signal the probe measures.
     """
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
+        # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
         import re
 
         from model_protocol_lab.hierarchy import PRIVILEGE_CLOSE, PRIVILEGE_OPEN
@@ -136,7 +157,10 @@ class ConfidentialityDemoBackend(DemoBackend):
     per-template gap variation, exactly the signal the probe measures.
     """
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         from model_protocol_lab.confidentiality import MARKER
         from model_protocol_lab.hierarchy import PRIVILEGE_OPEN
 
@@ -163,9 +187,13 @@ class PrefillDemoBackend(DemoBackend):
     """
 
     def __init__(self, prefill_text: str) -> None:
+        """Initialise the prefill demo backend."""
         self._prefill_text = prefill_text
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         if prompt.endswith(self._prefill_text):
             prompt = prompt[: -len(self._prefill_text)]
@@ -205,7 +233,10 @@ class SynthhistoryDemoBackend(DemoBackend):
     under history_6.
     """
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         from model_protocol_lab.synthhistory import SYNTHETIC_TURNS
 
         prompt = self.decode(input_ids)
@@ -235,7 +266,10 @@ class ToolcallDemoBackend(DemoBackend):
 
     _WRONG_CALL = 'CALL search_docs {"query": "wrong", "top_k": 1}'
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         match = re.search(r"\(ref: toolcall/([a-z-]+)\)", prompt)
         if match is None:
@@ -277,7 +311,10 @@ class VerbosityDemoBackend(DemoBackend):
 
     fingerprint = "synthetic-verbosity-demo-v1-not-a-model"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         text = "A".ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
@@ -293,7 +330,15 @@ class BatchDemoBackend(DemoBackend):
     measures). Deterministic.
     """
 
-    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+    def generate_batch(
+        self,
+        prompts: tuple[tuple[int, ...], ...],
+        *,
+        max_new_tokens: int,
+        seed: int,
+        cancel: Event,
+    ) -> tuple[tuple[int, ...], ...]:
+        """Return the generate batch."""
         outputs = []
         for index, ids in enumerate(prompts):
             solo = self.generate(ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
@@ -318,7 +363,11 @@ class PositionDemoBackend(DemoBackend):
     -1.0) and genuine winner flips under repositioning.
     """
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
+        # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
         import re
 
         prompt = self.decode(input_ids)
@@ -346,7 +395,10 @@ class WsDemoBackend(DemoBackend):
     verdict flips alongside identical-id controls. Deterministic.
     """
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         keyword = None
         for marker in ("GREEN", "BLUE", "numeral 7", "SOUTH"):
@@ -373,7 +425,10 @@ class StructuredDemoBackend(DemoBackend):
     _EXPECTED = {fixture.id: fixture.expected for fixture in build_structured_fixtures(_SPECS)}
     _ORDERED_IDS = tuple(sorted(_EXPECTED))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         is_base = (
             prompt.startswith(WINNER_PREFIX)
@@ -414,7 +469,10 @@ class StopDemoBackend(DemoBackend):
 
     eos_token_id = 0x10FFFF  # chr-safe distinctive id, never a real token
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         is_winner = (
             prompt.startswith(WINNER_PREFIX)
@@ -460,6 +518,7 @@ class DeliDemoBackend(DemoBackend):
 
     @classmethod
     def encode(cls, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         ids: list[int] = []
         i = 0
         while i < len(text):
@@ -475,9 +534,12 @@ class DeliDemoBackend(DemoBackend):
 
     @classmethod
     def decode(cls, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return "".join(cls._ID_TO_MARKER.get(t, chr(t)) for t in token_ids)
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
         # Forged-marker authority policy: the forged payload always
         # carries exactly two marker-text occurrences
         # (build_forged_fixtures pins this). The reserved arm encodes
@@ -487,6 +549,7 @@ class DeliDemoBackend(DemoBackend):
         # forged arm is exactly the one where the reserved-id count
         # exceeds the marker-text count minus two -- a presence-only
         # policy would misfire on the template's genuine markers.
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         if "(ref: deliforge/" in prompt:
             n_ids = sum(tuple(input_ids).count(mid) for mid in self._MARKER_IDS.values())
@@ -523,7 +586,10 @@ class FakeTurnDemoBackend(DemoBackend):
         "<|start_header_id|>",
     )
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         if "(ref: faketurn/" in prompt:
             match = re.search(r"\(ref: faketurn/[^/]+/(\d+)/", prompt)
@@ -555,7 +621,10 @@ class FewshotDemoBackend(DemoBackend):
 
     fingerprint = "synthetic-fewshot-demo-v1-not-a-model"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    def generate(
+        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         prompt = self.decode(input_ids)
         if "Example 1 of 2:" not in prompt:
             return super().generate(
@@ -577,7 +646,9 @@ class FewshotDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
-def build_sample_report(output_dir: Path) -> dict:
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
+def build_sample_report(output_dir: Path) -> dict[str, Any]:
+    """Build sample report."""
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")
     result = run_experiment(
         DemoBackend(),
@@ -678,6 +749,7 @@ def build_sample_report(output_dir: Path) -> dict:
         _SPEC_IDS = frozenset(1000 + k for k in range(len(HOSTILE_MARKER_STRINGS)))
 
         def _demo_marker_encode(text: str) -> tuple[int, ...]:
+            """Return the demo marker encode."""
             ids: list[int] = []
             i = 0
             while i < len(text):
@@ -691,10 +763,15 @@ def build_sample_report(output_dir: Path) -> dict:
                     i += 1
             return tuple(ids)
 
-        _probes: list[dict] = []
+        _probes: list[dict[str, Any]] = []
         for _fmt in candidates("llama3", mutate=True):
             for _case in split.search:
-                _pf = probe_format(_fmt.render, _demo_marker_encode, _SPEC_IDS, _case.messages)
+                _pf = probe_format(
+                    lambda messages, _render=_fmt.render: _render(tuple(messages)),
+                    _demo_marker_encode,
+                    _SPEC_IDS,
+                    _case.messages,
+                )
                 for _p in _pf["probes"]:
                     _probes.append(
                         {
@@ -996,7 +1073,9 @@ def build_sample_report(output_dir: Path) -> dict:
     try:
         from model_protocol_lab.experiments import position_sensitivity, position_stage
         from model_protocol_lab.position import (
-            CONDITIONS,
+            CONDITIONS as POSITION_CONDITIONS,
+        )
+        from model_protocol_lab.position import (
             POSITION_SPECS,
             build_position_fixtures,
             validate_position_specs,
@@ -1005,7 +1084,7 @@ def build_sample_report(output_dir: Path) -> dict:
         _pos_fmts = candidates("llama3", mutate=True)
         _pos_specs = validate_position_specs(POSITION_SPECS)
         _pos_stages = {}
-        for _pos_condition in CONDITIONS:
+        for _pos_condition in POSITION_CONDITIONS:
             _pos_fixtures = build_position_fixtures(
                 _pos_specs, condition=_pos_condition, seed=20261012
             )
@@ -1292,7 +1371,7 @@ def build_sample_report(output_dir: Path) -> dict:
         _v_fmts = candidates("llama3", mutate=True)
         _v_names = tuple(f.name for f in _v_fmts)
         _v_expected = {f.id: f.expected for f in split.search}
-        _v_observations: list = []
+        _v_observations: list[Any] = []
         # Per-candidate budgets synthesize the length variation the
         # probe measures: the base candidate runs under a 4-token
         # budget (terse), the mutated variants under the 16-token

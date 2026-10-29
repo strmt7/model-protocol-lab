@@ -44,17 +44,20 @@ _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
 
 def _toc_hrefs(html):
+    """Toc hrefs."""
     nav = re.search(r'<nav class="toc".*?</nav>', html, re.S)
     assert nav is not None, "rendered report has no TOC nav"
     return re.findall(r'href="#([^"]+)"', nav.group(0))
 
 
 def _body_section_ids(html):
+    """Body section ids."""
     body = html.split("</nav>", 1)[1]
     return _SECTION_ID_RE.findall(body)
 
 
 def _populated_result():
+    """Populated result."""
     result = _full_result()
     result["canonical_form"] = _canonical_payload()
     result["negation"] = _negation_payload(_WordBackend("negation_drop"))
@@ -66,7 +69,10 @@ def _populated_result():
 
 
 class CanonicalFormBodyTests(unittest.TestCase):
+    """Canonical form body tests."""
+
     def test_canonical_form_body_present_in_rendered_report(self):
+        """Canonical form body present in rendered report."""
         html = reporting_mod.render_html(_populated_result())
         # The TOC link alone is not the section: pre-fix it rendered
         # while the body below was absent.
@@ -80,7 +86,10 @@ class CanonicalFormBodyTests(unittest.TestCase):
 
 
 class InstructionDistanceBodyTests(unittest.TestCase):
+    """Instruction distance body tests."""
+
     def test_instruction_distance_body_present_in_rendered_report(self):
+        """Instruction distance body present in rendered report."""
         html = reporting_mod.render_html(_populated_result())
         self.assertIn('href="#instruction-distance"', html)
         self.assertIn('<section class="card" id="instruction-distance">', html)
@@ -90,7 +99,10 @@ class InstructionDistanceBodyTests(unittest.TestCase):
 
 
 class HistoryFrameBodyTests(unittest.TestCase):
+    """History frame body tests."""
+
     def test_history_frame_body_present_in_rendered_report(self):
+        """History frame body present in rendered report."""
         html = reporting_mod.render_html(_populated_result())
         self.assertIn('href="#history-frame"', html)
         self.assertIn('<section class="card" id="history-frame">', html)
@@ -100,7 +112,10 @@ class HistoryFrameBodyTests(unittest.TestCase):
 
 
 class PruneSweepBodyTests(unittest.TestCase):
+    """Prune sweep body tests."""
+
     def test_prune_sweep_body_present_in_rendered_report(self):
+        """Prune sweep body present in rendered report."""
         html = reporting_mod.render_html(_populated_result())
         self.assertIn('href="#prune-sweep"', html)
         self.assertIn('<section class="card" id="prune-sweep">', html)
@@ -110,7 +125,10 @@ class PruneSweepBodyTests(unittest.TestCase):
 
 
 class RecordNotationBodyTests(unittest.TestCase):
+    """Record notation body tests."""
+
     def test_record_notation_body_present_in_rendered_report(self):
+        """Record notation body present in rendered report."""
         html = reporting_mod.render_html(_populated_result())
         self.assertIn('href="#record-notation"', html)
         self.assertIn('<section class="card" id="record-notation">', html)
@@ -120,7 +138,10 @@ class RecordNotationBodyTests(unittest.TestCase):
 
 
 class TocBodyCorrespondenceTests(unittest.TestCase):
+    """Toc body correspondence tests."""
+
     def test_populated_sections_match_toc_exactly(self):
+        """Populated sections match toc exactly."""
         html = reporting_mod.render_html(_populated_result())
         hrefs = _toc_hrefs(html)
         body_ids = _body_section_ids(html)
@@ -139,9 +160,12 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
 class RenderHtmlSourceGuardTests(unittest.TestCase):
     """Every _toc entry's variable must reach the returned document."""
 
-    def _render_html_parts(self):
+    @staticmethod
+    def _render_html_parts():
+        """Render html parts."""
         source = Path(reporting_mod.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         render = next(
             node
             for node in ast.walk(tree)
@@ -177,6 +201,7 @@ class RenderHtmlSourceGuardTests(unittest.TestCase):
         return section_vars, toc_vars, return_names
 
     def test_every_toc_section_is_concatenated(self):
+        """Every toc section is concatenated."""
         section_vars, toc_vars, return_names = self._render_html_parts()
         self.assertTrue(toc_vars, "no TOC entries extracted from render_html")
         for var in toc_vars:

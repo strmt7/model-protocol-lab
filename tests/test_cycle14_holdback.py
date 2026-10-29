@@ -153,14 +153,15 @@ class ConcatBackend:
     def __init__(self, texts: dict[int, str]) -> None:
         self._texts = dict(texts)
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         raise AssertionError("encode unused in holdback differential tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return "".join(self._texts[token] for token in token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,

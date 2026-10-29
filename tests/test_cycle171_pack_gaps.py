@@ -204,7 +204,8 @@ class LoadGuardTests(unittest.TestCase):
 
 
 class PreparseGuardTests(unittest.TestCase):
-    def _patch_eocd(self, bundle: bytes, **fields) -> bytes:
+    @staticmethod
+    def _patch_eocd(bundle: bytes, **fields) -> bytes:
         raw = bytearray(bundle)
         eocd = raw.rfind(b"PK\x05\x06")
         offsets = {
@@ -316,7 +317,8 @@ class ContainerAndCapsGapTests(unittest.TestCase):
 
 
 class ManifestSchemaGapTests(unittest.TestCase):
-    def _report_for_manifest(self, manifest_obj=None, raw_manifest=None):
+    @staticmethod
+    def _report_for_manifest(manifest_obj=None, raw_manifest=None):
         entries = [("results.json", SAMPLE.read_bytes())]
         raw = raw_manifest if raw_manifest is not None else pk.manifest_bytes(manifest_obj)
         comment = b"mpl-bundle-sha256:" + pk.bundle_digest(raw).encode()
@@ -429,7 +431,8 @@ class ReadErrorGapTests(unittest.TestCase):
 
 
 class CliGapTests(unittest.TestCase):
-    def _run_main(self, argv):
+    @staticmethod
+    def _run_main(argv):
         import contextlib as _ctx
 
         out, err = io.StringIO(), io.StringIO()
@@ -445,7 +448,7 @@ class CliGapTests(unittest.TestCase):
     def test_pack_default_output(self):
         with tempfile.TemporaryDirectory(prefix="c171g_def_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
-            code, _, err = self._run_main(["pack", str(report)])
+            code, _, _err = self._run_main(["pack", str(report)])
             self.assertEqual(code, 0)
             default_out = Path(tmpdir) / "run.bundle.zip"
             self.assertTrue(default_out.is_file())
@@ -487,7 +490,7 @@ class CliGapTests(unittest.TestCase):
             bundle = Path(tmpdir) / "out.zip"
             code, _, _ = self._run_main(["pack", str(report_dir), "--output", str(bundle)])
             self.assertEqual(code, 0)
-            code, out, err = self._run_main(["verify", "--bundle", str(bundle)])
+            code, out, _err = self._run_main(["verify", "--bundle", str(bundle)])
             self.assertEqual(code, 2)
             parsed = json.loads(out)
             statuses = {c["id"]: c["status"] for c in parsed["checks"]}
@@ -496,7 +499,8 @@ class CliGapTests(unittest.TestCase):
 
 
 class SecondGapTests(unittest.TestCase):
-    def _run_main(self, argv):
+    @staticmethod
+    def _run_main(argv):
         import contextlib as _ctx
 
         out, err = io.StringIO(), io.StringIO()
@@ -504,7 +508,8 @@ class SecondGapTests(unittest.TestCase):
             code = cli.main(argv)
         return code, out.getvalue(), err.getvalue()
 
-    def _patch_local_and_cd_size(self, bundle: bytes, target: str, delta: int) -> bytes:
+    @staticmethod
+    def _patch_local_and_cd_size(bundle: bytes, target: str, delta: int) -> bytes:
         raw = bytearray(bundle)
         # local header
         pos = 0
@@ -687,7 +692,8 @@ class SecondGapTests(unittest.TestCase):
             def __exit__(self, *exc):
                 return False
 
-            def write(self, data):
+            @staticmethod
+            def write(data):
                 raise OSError("disk full")
 
         with tempfile.TemporaryDirectory(prefix="c171g_wf_") as tmpdir:
@@ -797,7 +803,8 @@ class SecondGapTests(unittest.TestCase):
                 return b"x" * 10 if self.n <= 2 else b""
 
         class _Archive:
-            def open(self, info, mode):
+            @staticmethod
+            def open(info, mode):
                 return _Handle()
 
         info = SimpleNamespace(file_size=5)

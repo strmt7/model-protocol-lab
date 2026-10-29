@@ -78,6 +78,7 @@ class McpServerPackagingTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
         self.assertIn("self-test: OK", proc.stderr)
@@ -89,6 +90,7 @@ class McpServerPackagingTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
         self.assertIn("self-test: OK", proc.stderr)

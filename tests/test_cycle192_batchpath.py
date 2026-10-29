@@ -99,8 +99,8 @@ class _StubBackend:
         self.fed: tuple[tuple[int, ...], ...] | None = None
         self.batch_calls = 0
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,

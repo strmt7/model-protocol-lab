@@ -72,6 +72,7 @@ def run_cli(*args: str, timeout: int = 300) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
 
 
@@ -357,6 +358,7 @@ class PipelineAdversarialTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 1, proc.stderr)
         self.assertNotIn("Traceback", proc.stderr)

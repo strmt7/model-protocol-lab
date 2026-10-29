@@ -348,7 +348,8 @@ def digest_text(text: str) -> str:
 def inventory_digest(ids: tuple[int, ...]) -> str:
     """The token-inventory digest of one render: SHA-256 over
     the sorted token ids, comma-joined (the construction
-    rule's canonical form)."""
+    rule's canonical form).
+    """
     return digest_text(",".join(str(i) for i in sorted(ids)))
 
 
@@ -359,7 +360,8 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     the distractor topics for blocks 1..4 are slots 21..24;
     the replacement topic is slot 25), and the redraw rules in
     :func:`generate_cases` are frozen together -- the diff
-    validator's mirror reproduces them exactly."""
+    validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|rotation|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -437,7 +439,8 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
 def arm_content(case: dict[str, Any], arm: str) -> str:
     """One arm's user-turn content for a case: the block span
     in the arm's order with the question pinned after it, or
-    the question alone for the closed-book screen."""
+    the question alone for the closed-book screen.
+    """
     question = str(case["question"])
     if arm == "closed_book":
         return question
@@ -461,7 +464,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -470,7 +474,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (templates, topics,
     words): the lists are bound by digest in the protocol, so
     a payload cannot quietly carry a different instrument
-    under the same version number."""
+    under the same version number.
+    """
     canonical = json.dumps(
         [FACT_TEMPLATE, QUESTION_TEMPLATE, list(TOPICS), list(WORDS)],
         separators=(",", ":"),
@@ -492,7 +497,8 @@ def screening_rule_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, case material, rule digests, floors,
-    budgets, and the seed/backend pair."""
+    budgets, and the seed/backend pair.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -531,6 +537,7 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if type(cells) is not dict:
         return None
@@ -539,6 +546,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the verdict."""
     cell = _cell(record, key)
     return bool(cell["verdict"]) if cell is not None else False
 
@@ -547,7 +555,8 @@ def arm_id_exact(record: dict[str, Any], arm: str) -> bool:
     """The derived construction classification of one span
     arm: inventory digest and token count equal to rot_0's
     (rot_0 itself is exact by definition). Derived from the
-    record's carried digests and counts, never stored."""
+    record's carried digests and counts, never stored.
+    """
     if arm == "rot_0":
         return True
     digests = record.get("arm_inventory_digests")
@@ -560,7 +569,8 @@ def arm_id_exact(record: dict[str, Any], arm: str) -> bool:
 def screened(record: dict[str, Any]) -> bool:
     """Whether the closed-book screen excludes this record for
     its candidate: the closed-book cell completed and passed,
-    so the answer was reachable without the span."""
+    so the answer was reachable without the span.
+    """
     cell = _cell(record, "closed_book")
     return cell is not None and bool(cell["verdict"])
 
@@ -569,7 +579,8 @@ def boundary_screened(record: dict[str, Any]) -> bool:
     """Whether the per-case boundary screen fired for this
     record: every cell carries the arm_screened detail (the
     stage marks the case as a unit, so the state is derivable
-    from the record)."""
+    from the record).
+    """
     details = record.get("cell_details")
     if type(details) is not dict:
         return False
@@ -578,7 +589,8 @@ def boundary_screened(record: dict[str, Any]) -> bool:
 
 def live_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Records that enter rotation populations: neither
-    closed-book-screened nor boundary-screened."""
+    closed-book-screened nor boundary-screened.
+    """
     return [r for r in records if not screened(r) and not boundary_screened(r)]
 
 
@@ -628,7 +640,8 @@ def invariance_falsified(n_headline: int, n_flip_any: int) -> bool:
     headline case flips across the five rotations. The mirror
     control does not acquit invariance -- it answers the
     separate cyclic-specificity question the classification
-    reports."""
+    reports.
+    """
     return n_headline >= MIN_HEADLINE_POPULATION and n_flip_any >= 1
 
 
@@ -639,9 +652,11 @@ def invariance_falsified(n_headline: int, n_flip_any: int) -> bool:
 
 
 def _rate(n_pass: int, n: int) -> float | None:
+    """Return the rate."""
     return (n_pass / n) if n else None
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate readouts over its ground records.
 
@@ -830,7 +845,8 @@ def shared_live_fixtures(
     candidate answered closed-book, or that was
     boundary-screened for any candidate, is not a clean shared
     measurement, so the shared readout screens by union while
-    the per-candidate blocks screen per candidate."""
+    the per-candidate blocks screen per candidate.
+    """
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in live_records(records)))
@@ -847,7 +863,8 @@ def _selection_over(
     """The conservative selection for one arm restricted to
     ``fixtures``: None when any candidate's completed set on
     that restriction is empty or the restricted completed sets
-    differ across candidates."""
+    differ across candidates.
+    """
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():
@@ -888,7 +905,8 @@ def arm_selection(
     baseline arm's own flip is False when not withheld, and a
     flip is None when either side is withheld. The flip
     compares against the rot_0 selection recomputed on the
-    same restricted completed set."""
+    same restricted completed set.
+    """
     shared = shared_live_fixtures(records_by_candidate)
     by_fixture: dict[str, dict[str, dict[str, Any]]] = {
         name: {str(record.get("fixture")): record for record in records}

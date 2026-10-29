@@ -815,7 +815,8 @@ class TestMessageValidation(unittest.TestCase):
 class TestFormatValidation(unittest.TestCase):
     """Adversarial probes of Format's constructor (D2, D5)."""
 
-    def _base(self) -> dict:
+    @staticmethod
+    def _base() -> dict:
         return {
             "name": "f",
             "bos": "<b>",
@@ -893,6 +894,7 @@ class TestFormatValidation(unittest.TestCase):
         self.assertEqual(variant.name, "f2")
         self.assertIs(variant.repeat_bos, True)
         self.assertEqual(variant.bos, "<b>")
+        # skipcq: PTC-W0050 - the duplicate is the assertion (frozen-value hash collapse)
         self.assertEqual(len({fmt, fmt}), 1)
         self.assertNotEqual(fmt, variant)
 
@@ -900,7 +902,8 @@ class TestFormatValidation(unittest.TestCase):
 class TestRenderValidation(unittest.TestCase):
     """Adversarial probes of Format.render's acceptance rules (D3, D4)."""
 
-    def _fmt(self, **kw) -> real_core.Format:
+    @staticmethod
+    def _fmt(**kw) -> real_core.Format:
         base = {
             "name": "f",
             "bos": "<b>",

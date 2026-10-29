@@ -50,7 +50,8 @@ _FAMILIES = sorted(CATALOG)
 def _oracle_segments(fmt: Format, messages: tuple[Message, ...]) -> list[tuple[str, str]]:
     """Documented assembly order: bos, per-message prefix/content/turn-end,
     optional repeated bos, open-reply suffix; per-role turn terminators fall
-    back to turn_end, open_suffix falls back to assistant_prefix."""
+    back to turn_end, open_suffix falls back to assistant_prefix.
+    """
     pieces: list[tuple[str, str]] = [("bos", fmt.bos)]
     for index, message in enumerate(messages):
         if index and fmt.repeat_bos:
@@ -89,7 +90,8 @@ def _oracle_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> in
 
 def _oracle_sanitize(value: str) -> str:
     """Strip terminal-control chars; keep tab/LF/CR (mirrors the documented
-    rule: strip everything control except \\t, \\n, \\r)."""
+    rule: strip everything control except \\t, \\n, \\r).
+    """
     return "".join(
         char
         for char in value
@@ -513,7 +515,8 @@ class SanitizeDisplayTests(unittest.TestCase):
 
 class BoundaryStepComputationTests(unittest.TestCase):
     """The pure per-step computation in _cmd_step: overhang and first_boundary
-    over successive prefixes of the recorded stream."""
+    over successive prefixes of the recorded stream.
+    """
 
     def test_fuzz_step_walk(self) -> None:
         rng = random.Random(0x57E9)  # noqa: S311 -- deterministic test seed

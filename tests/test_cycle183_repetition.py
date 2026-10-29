@@ -180,11 +180,13 @@ class _SeamBackend:
         self._passes = passes or {}
         self.generate_calls = 0
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         merged = text.replace("d\n", "\x01")
         return tuple(ord(ch) for ch in merged)
 
-    def decode(self, ids: Any) -> str:
+    @staticmethod
+    def decode(ids: Any) -> str:
         return "".join(chr(i) for i in ids)
 
     def generate(
@@ -943,7 +945,8 @@ def _cand(records: list, *, think: bool = False, signature: str | None = "sig") 
 
 
 class TestAnalysis(unittest.TestCase):
-    def _two_candidate_stage(self) -> dict[str, Any]:
+    @staticmethod
+    def _two_candidate_stage() -> dict[str, Any]:
         # Both pass x1 everywhere; under x2 only cand-a passes all.
         a_records = [_record("f1"), _record("f2")]
         b_records = [_record("f1"), _record("f2", x2=False)]
@@ -1008,7 +1011,8 @@ class TestAnalysis(unittest.TestCase):
 
 
 class TestValidatorAndDiff(unittest.TestCase):
-    def _valid_payload(self) -> dict[str, Any]:
+    @staticmethod
+    def _valid_payload() -> dict[str, Any]:
         backend = _WordBackend(
             {
                 ("markone", "x2"): True,
@@ -1139,7 +1143,8 @@ class TestValidatorAndDiff(unittest.TestCase):
 
 
 class TestReporting(unittest.TestCase):
-    def _payload(self) -> dict[str, Any]:
+    @staticmethod
+    def _payload() -> dict[str, Any]:
         backend = _WordBackend(
             {("markone", "x2"): True, ("marktwo", "x2"): True, ("markthree", "x2"): True}
         )
@@ -1196,7 +1201,8 @@ class TestReporting(unittest.TestCase):
 
 
 class TestCliDispatch(unittest.TestCase):
-    def _write_fixtures(self, directory: str) -> Path:
+    @staticmethod
+    def _write_fixtures(directory: str) -> Path:
         path = Path(directory) / "fixture.json"
         path.write_text(
             json.dumps(
@@ -1308,7 +1314,7 @@ class TestCliDispatch(unittest.TestCase):
             "search": [{"format": {"name": "llama3"}}],
             "held_out": {},
         }
-        code, captured = self._run_with_stage_recorder(result_doc, recorder)
+        _code, captured = self._run_with_stage_recorder(result_doc, recorder)
         self.assertEqual(calls, [])
         self.assertEqual(
             captured["result"]["repetition"],
@@ -1337,7 +1343,8 @@ def _exec_repetition_variant(source_text: str) -> Any:
 
 class TestRepetitionMutationGates(unittest.TestCase):
     """Tempdir gates over repetition.py (package-namespace exec:
-    the module has a relative import, cycle-169/179 pattern)."""
+    the module has a relative import, cycle-169/179 pattern).
+    """
 
     def _run_gate(self, name: str, original: str, mutant: str, scenario: Any) -> None:
         source = Path(repetition.__file__).read_text(encoding="utf-8")
@@ -1401,7 +1408,8 @@ class TestValidatorStructuralBattery(unittest.TestCase):
     early return in the recompute is exercised by a named case.
     """
 
-    def _base(self) -> dict[str, Any]:
+    @staticmethod
+    def _base() -> dict[str, Any]:
         backend = _WordBackend(
             {("markone", "x2"): True, ("marktwo", "x2"): True, ("markthree", "x2"): True}
         )

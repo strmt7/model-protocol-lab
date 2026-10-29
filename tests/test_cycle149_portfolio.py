@@ -433,7 +433,8 @@ class PortfolioMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _gap_scenario(self, mod):
+    @staticmethod
+    def _gap_scenario(mod):
         passing = mod.validate_passing({"alpha": ("f1", "f2"), "beta": ("f2", "f3")}, FIXTURES)
         rates = mod.oracle_rates(passing, FIXTURES, "alpha")
         # Oracle covers f3 which alpha misses: gap is strictly positive.
@@ -448,7 +449,8 @@ class PortfolioMutationGateTests(unittest.TestCase):
             self._gap_scenario,
         )
 
-    def _tie_scenario(self, mod):
+    @staticmethod
+    def _tie_scenario(mod):
         # alpha and beta cover the same fixtures: the lexicographically
         # smallest name must win the tie.
         passing = mod.validate_passing({"beta": ("f1",), "alpha": ("f1",)}, ("f1",))
@@ -461,16 +463,17 @@ class PortfolioMutationGateTests(unittest.TestCase):
             "broken_tiebreak",
             """        best = max(
             sorted(passing),
-            key=lambda name: len(set(passing[name]) & uncovered),
+            key=partial(_coverage_size, passing, uncovered),
         )""",
             """        best = max(
             sorted(passing, reverse=True),  # MUTANT
-            key=lambda name: len(set(passing[name]) & uncovered),
+            key=partial(_coverage_size, passing, uncovered),
         )""",
             self._tie_scenario,
         )
 
-    def _order_scenario(self, mod):
+    @staticmethod
+    def _order_scenario(mod):
         # Insertion order is beta-first; the oracle must still sort.
         passing = mod.validate_passing({"beta": ("f1",), "alpha": ("f1",)}, ("f1",))
         winners = mod.per_fixture_oracle_winners(passing, ("f1",))
@@ -485,7 +488,8 @@ class PortfolioMutationGateTests(unittest.TestCase):
             self._order_scenario,
         )
 
-    def _pass_predicate_scenario(self, mod):
+    @staticmethod
+    def _pass_predicate_scenario(mod):
         # A fixture with exact_match but no boundary_found is NOT passed:
         # the oracle must see zero solvable fixtures.
         cases = (_case("f1"),)

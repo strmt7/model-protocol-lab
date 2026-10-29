@@ -596,7 +596,8 @@ class VerbosityMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _clamp_scenario(self, mod):
+    @staticmethod
+    def _clamp_scenario(mod):
         # Under-generation must clamp to zero, never go negative.
         result = mod.excess_tokens(3, 10)
         assert result == 0, result
@@ -610,7 +611,8 @@ class VerbosityMutationGateTests(unittest.TestCase):
             self._clamp_scenario,
         )
 
-    def _quantile_scenario(self, mod):
+    @staticmethod
+    def _quantile_scenario(mod):
         # Even-n median must interpolate, not snap to the lower value.
         dist = mod.length_distribution([0, 10])
         assert dist["median_excess"] == 5.0, dist
@@ -624,7 +626,8 @@ class VerbosityMutationGateTests(unittest.TestCase):
             self._quantile_scenario,
         )
 
-    def _capped_boundary_scenario(self, mod):
+    @staticmethod
+    def _capped_boundary_scenario(mod):
         backend = VerbosityScriptedBackend()
         stage = mod.verbosity_stage(
             observations=[_obs("a", "f-blue", 16)],
@@ -645,7 +648,8 @@ class VerbosityMutationGateTests(unittest.TestCase):
             self._capped_boundary_scenario,
         )
 
-    def _iqr_drift_scenario(self, mod):
+    @staticmethod
+    def _iqr_drift_scenario(mod):
         old = _vb_diff_payload()
         new = _vb_diff_payload()
         # IQR widens within valid quartile ordering: only iqr_drift fires.
@@ -789,7 +793,8 @@ class DiffVerbosityTests(unittest.TestCase):
 
 
 class VerbositySanitizationTests(unittest.TestCase):
-    def _result_with_evil_name(self):
+    @staticmethod
+    def _result_with_evil_name():
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("evil<script>", "f-blue", 16)],
@@ -828,7 +833,8 @@ class VerbositySanitizationTests(unittest.TestCase):
 
 
 class VerbosityCliTests(unittest.TestCase):
-    def _search_entries(self, names=("a",)):
+    @staticmethod
+    def _search_entries(names=("a",)):
         return [
             {
                 "format": {"name": name},
@@ -1052,6 +1058,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertFalse(_verbosity_cell_valid(partial))
 
     def test_profile_stage_invalid_branches(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
         base = {
@@ -1076,6 +1083,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
             self.assertEqual(prof["detail"], "stage_invalid")
 
     def test_profile_non_dict_entry_is_stage_invalid(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
         stage = {
@@ -1089,6 +1097,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertEqual(prof["detail"], "stage_invalid")
 
     def test_diff_valid_verbosity_rejections(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import diffreports
 
         base = _vb_diff_payload()

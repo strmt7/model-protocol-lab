@@ -213,7 +213,8 @@ class FamilyOfTests(unittest.TestCase):
 
 
 class SummarizeProbesTests(unittest.TestCase):
-    def _probes(self):
+    @staticmethod
+    def _probes():
         return [
             {"format": "chatml", "marker": "a", "status": "ok", "isolated": True},
             {"format": "chatml", "marker": "b", "status": "ok", "isolated": False},
@@ -249,7 +250,8 @@ def _write_marker_tokenizer(root: Path, specials: tuple[str, ...]) -> None:
 
 
 class DoctorMarkerIsolationTests(unittest.TestCase):
-    def _checkpoint(self, specials):
+    @staticmethod
+    def _checkpoint(specials):
         root = Path(tempfile.mkdtemp(prefix="mpl_marker_"))
         _write_marker_tokenizer(root, specials)
         return root
@@ -311,7 +313,8 @@ class DoctorMarkerIsolationTests(unittest.TestCase):
 
 
 class MarkerIsolationHtmlTests(unittest.TestCase):
-    def _result(self, family="chatml"):
+    @staticmethod
+    def _result(family="chatml"):
         return {
             "decision": "compatible_on_fixture_set",
             "selected_candidate": "chatml",
@@ -458,6 +461,7 @@ class MarkerIsolationMutationGateTests(unittest.TestCase):
                     cwd=str(Path(__file__).resolve().parent.parent),
                     capture_output=True,
                     timeout=300,
+                    check=False,
                 )
             finally:
                 src.write_text(original, encoding="utf-8")

@@ -98,6 +98,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class LeakAsserts(unittest.TestCase):
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
@@ -152,8 +153,9 @@ class _CanaryBackend:
     def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(map(chr, token_ids))
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
@@ -283,13 +285,15 @@ def _walk_keys(value: object, seen: set[str]) -> None:
 def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run the CLI; the cwd defaults to the repo root but the mutation gate
     overrides it via MPL_TEST_CWD so CLI subprocesses import the mutated
-    package copy through PYTHONPATH shadowing."""
+    package copy through PYTHONPATH shadowing.
+    """
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
         cwd=cwd or Path(os.environ.get("MPL_TEST_CWD", REPO_ROOT)),
         capture_output=True,
         text=True,
         timeout=300,
+        check=False,
     )
 
 
@@ -364,7 +368,8 @@ class PublicViewBarrier48(LeakAsserts):
 
     def test_save_report_true_path_html_still_withholds(self) -> None:
         """The HTML view withholds raw evidence even in evidence mode: the
-        flag only affects the JSON."""
+        flag only affects the JSON.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             json_path, html_path = save_report(
                 _hostile_result(), Path(tmp) / "report", include_evidence=True
@@ -502,7 +507,8 @@ class DiffReportsSweep48(LeakAsserts):
     only), so there is no diff-reports HTML surface to sweep.
     """
 
-    def _evidence_reports(self, tmp: Path) -> tuple[dict, dict, Path, Path]:
+    @staticmethod
+    def _evidence_reports(tmp: Path) -> tuple[dict, dict, Path, Path]:
         reports = []
         dirs = []
         for name in ("old", "new"):
@@ -569,7 +575,8 @@ class DebugTranscriptSweep48(LeakAsserts):
     transcripts into public issues).
     """
 
-    def _session(self, commands: list[str]) -> str:
+    @staticmethod
+    def _session(commands: list[str]) -> str:
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(
@@ -598,7 +605,8 @@ class DebugTranscriptSweep48(LeakAsserts):
     def test_save_after_render_contains_canary_by_design(self) -> None:
         """Control: ``.save`` is a faithful echo -- after an explicit
         ``.render`` the canary IS in the transcript (operator's own
-        content, shown on their explicit request)."""
+        content, shown on their explicit request).
+        """
         with tempfile.TemporaryDirectory() as tmp:
             target = str(Path(tmp) / "transcript.txt")
             self._session([".render", f".save {target}", ".quit"])

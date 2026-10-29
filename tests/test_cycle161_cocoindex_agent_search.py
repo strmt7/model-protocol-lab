@@ -28,7 +28,8 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
     def test_successful_search_records_real_use_without_query_text(self):
         """Purpose: Prove routing receipt semantics.
         Inputs: fresh source/real wrapper/mock package.
-        Outputs: deduplicated use record."""
+        Outputs: deduplicated use record.
+        """
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             source = base / "source.py"
@@ -106,7 +107,8 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             def mutate_source(*args, **kwargs):
                 """Purpose: Inject source drift
                 Inputs: package argv
-                Outputs: successful stale search data."""
+                Outputs: successful stale search data.
+                """
                 source.write_text("changed\n", encoding="utf-8")
                 return subprocess.CompletedProcess(
                     [], 0, stdout=json.dumps({"success": True, "results": []})

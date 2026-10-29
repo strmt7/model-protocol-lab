@@ -172,6 +172,7 @@ from model_protocol_lab.core import Fixture, Format, Generation, Message
 
 
 def _obs(fixture: str, exact: bool = True, boundary: bool = True) -> dict[str, Any]:
+    """Obs."""
     return {"fixture": fixture, "exact_match": exact, "boundary_found": boundary}
 
 
@@ -184,6 +185,7 @@ def _entry(
     boundary_ids: Any = None,
     summary: Any = "auto",
 ) -> dict[str, Any]:
+    """Entry."""
     entry: dict[str, Any] = {"format": {"name": name}}
     if summary == "auto":
         entry["summary"] = {
@@ -434,6 +436,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
 
 
 def _o_verdict(summary: Any) -> str:
+    """O verdict."""
     if type(summary) is not dict:
         return "unknown"
     planned = summary.get("planned")
@@ -447,6 +450,7 @@ def _o_verdict(summary: Any) -> str:
 
 
 def _o_name(entry: Any) -> str | None:
+    """O name."""
     if type(entry) is not dict:
         return None
     fmt = entry.get("format")
@@ -455,10 +459,12 @@ def _o_name(entry: Any) -> str | None:
 
 
 def _o_base_family(name: str) -> str:
+    """O base family."""
     return name.split("/", 1)[0]
 
 
 def _o_outcomes(observations: Any) -> tuple[dict[str, str], int]:
+    """O outcomes."""
     found: dict[str, str] = {}
     skipped = 0
     if type(observations) is not list:
@@ -481,6 +487,7 @@ def _o_outcomes(observations: Any) -> tuple[dict[str, str], int]:
 
 
 def _o_search_profile(result: dict[str, Any]) -> tuple[dict[str, str], dict[str, int | None]]:
+    """O search profile."""
     verdicts: dict[str, str] = {}
     planned: dict[str, int | None] = {}
     for entry in result.get("search") or []:
@@ -495,6 +502,7 @@ def _o_search_profile(result: dict[str, Any]) -> tuple[dict[str, str], dict[str,
 
 
 def _o_held_profile(result: dict[str, Any]) -> tuple[str | None, str]:
+    """O held profile."""
     winner = result.get("selected_candidate")
     if type(winner) is not str or not winner:
         return None, "absent"
@@ -504,6 +512,7 @@ def _o_held_profile(result: dict[str, Any]) -> tuple[str | None, str]:
 
 
 def _o_evidence(result: dict[str, Any], stage: str) -> tuple[dict[str, dict[str, str]], int, bool]:
+    """O evidence."""
     per_candidate: dict[str, dict[str, str]] = {}
     skipped = 0
     if stage == "search":
@@ -527,6 +536,7 @@ def _o_evidence(result: dict[str, Any], stage: str) -> tuple[dict[str, dict[str,
 
 
 def _o_snapshot(result: dict[str, Any]) -> dict[str, Any]:
+    """O snapshot."""
     names = sorted({_o_name(e) for e in result.get("search") or []} - {None})
     bounds: dict[str, list[int]] = {}
     for entry in result.get("search") or []:
@@ -546,6 +556,7 @@ def _o_snapshot(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _o_drift(old_snap: dict[str, Any], new_snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """O drift."""
     fields = ("families", "candidates", "max_new_tokens", "boundaries", "backend_fingerprint")
     return [
         {"field": field, "old": old_snap[field], "new": new_snap[field]}
@@ -831,6 +842,7 @@ def _o_healing(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _triplet(payload: Any) -> tuple[Any, Any, Any]:
+        """Triplet."""
         if type(payload) is not dict:
             return (None, None, None)
         return (
@@ -982,6 +994,7 @@ def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         }
 
     def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        """Flip key."""
         if type(flips) is not list:
             return []
         keys = []
@@ -1002,6 +1015,7 @@ def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
 
     def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        """Candidate rates."""
         rates: dict[str, dict[str, tuple[Any, Any]]] = {}
         per_condition = payload.get("per_condition") or {}
         for position in sorted(per_condition):
@@ -1036,6 +1050,7 @@ def _o_hierarchy(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
                 )
 
     def _group_means(payload: Any) -> dict[str, Any]:
+        """Group means."""
         groups = payload.get("group_adherence") or {}
         return {
             label: (group or {}).get("mean_system_rate")
@@ -1161,6 +1176,7 @@ def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         }
 
     def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        """Flip key."""
         if type(flips) is not list:
             return []
         keys = []
@@ -1181,6 +1197,7 @@ def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
 
     def _candidate_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        """Candidate rates."""
         rates: dict[str, dict[str, Any]] = {}
         per_condition = payload.get("per_condition") or {}
         for condition in sorted(per_condition):
@@ -1210,6 +1227,7 @@ def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
                 )
 
     def _index_map(payload: Any) -> dict[str, Any]:
+        """Index map."""
         primacy = payload.get("primacy_index") or {}
         return {k: v for k, v in primacy.items() if type(k) is str}
 
@@ -1227,6 +1245,7 @@ def _o_position(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
             )
 
     def _mean_index(payload: Any) -> Any:
+        """Mean index."""
         effect = payload.get("condition_effect") or {}
         return effect.get("mean_index")
 
@@ -1343,6 +1362,7 @@ def _o_verbosity(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         # Mirrors the implementation: a None cell (candidate missing
         # from the stage) counts as excluded, exactly like the
         # profile's excluded_candidates semantics.
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             if entry is None:
@@ -1540,6 +1560,7 @@ def _o_refusals(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     )
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             name = entry.get("candidate")
@@ -1565,6 +1586,7 @@ def _o_refusals(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     candidates_removed = sorted(set(old_view) - set(new_view))
 
     def _hit_rows(names: Any, source: Any, other: Any) -> list[dict[str, Any]]:
+        """Hit rows."""
         rows: list[dict[str, Any]] = []
         for cand in names:
             delta = source[cand]["hits"] - other[cand]["hits"]
@@ -1723,6 +1745,7 @@ def _o_scorerlens_valid(value: Any) -> bool:
         evaluable_sets.append(frozenset(r["fixture"] for r in evaluable))
 
         def _matches(r: Any, rung: int) -> bool:
+            """Matches."""
             return r["exact_match"] is True or (
                 r["first_flip_rung"] is not None and r["first_flip_rung"] <= rung
             )
@@ -1859,6 +1882,7 @@ def _o_scorerlens(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     comparable = not protocol_drift and not fixture_set_drift
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             name = entry.get("candidate")
@@ -1959,6 +1983,7 @@ def _o_aliasing_recompute(value: dict) -> dict | None:
         return None
 
     def _hex(v: Any) -> bool:
+        """Hex."""
         return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
     available: list = []
@@ -2038,6 +2063,7 @@ def _o_aliasing_recompute(value: dict) -> dict | None:
         return None
 
     def _fx(entry: Any) -> frozenset:
+        """Fx."""
         return frozenset(r["fixture"] for r in entry["records"] if r["evaluable"])
 
     mismatch = len({_fx(e) for e in available}) > 1
@@ -2058,6 +2084,7 @@ def _o_aliasing_recompute(value: dict) -> dict | None:
     fixtures_sorted = sorted(_fx(primary[0])) if primary else []
 
     def _classes(with_boundary: bool) -> list:
+        """Classes."""
         grouped: dict = {}
         for entry in primary:
             cells = {r["fixture"]: r for r in entry["records"] if r["evaluable"]}
@@ -2286,6 +2313,7 @@ def _o_aliasing(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     comparable = not protocol_drift and not fixture_set_drift and not backend_drift
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             name = entry.get("candidate")
@@ -2523,10 +2551,12 @@ def _o_repetition_recompute(value: dict) -> dict | None:
         return None
 
     def verdict(record: dict, arm: str) -> bool | None:
+        """Verdict."""
         cell = record["arms"][arm]
         return None if cell is None else bool(cell["verdict"])
 
     def contrast(recs: list, arm_a: str, arm_b: str, effect: str) -> dict:
+        """Contrast."""
         paired = [
             r
             for r in recs
@@ -2822,18 +2852,23 @@ _O_DISTRACTION_HEX = frozenset("0123456789abcdef")
 
 
 def _o_dst_digest(value: Any) -> bool:
+    """O dst digest."""
     return value is None or (
         type(value) is str and len(value) == 64 and all(c in _O_DISTRACTION_HEX for c in value)
     )
 
 
 def _o_dst_int(value: Any) -> bool:
+    """O dst int."""
     return type(value) is int and not isinstance(value, bool) and value >= 0
 
 
 def _o_distraction_recompute(value: dict) -> dict | None:
     """Oracle distraction recompute: aggregates/conditions from records."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _h
+
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _j
 
     protocol = value.get("protocol")
@@ -3338,16 +3373,20 @@ _O_LEAD_HEX = frozenset("0123456789abcdef")
 
 
 def _o_lead_digest(item: Any) -> bool:
+    """O lead digest."""
     return item is None or (
         type(item) is str and len(item) == 64 and all(c in _O_LEAD_HEX for c in item)
     )
 
 
 def _o_lead_int(item: Any) -> bool:
+    """O lead int."""
     return type(item) is int and not isinstance(item, bool) and item >= 0
 
 
 def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
+    """O lead mcnemar."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
 
     n = ctrl_only + treat_only
@@ -3359,6 +3398,7 @@ def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
 
 
 def _o_lead_classify(n_paired: int, wrong_only: int, right_only: int) -> str:
+    """O lead classify."""
     if n_paired < 6:
         return "insufficient"
     if wrong_only == 0 and right_only == 0:
@@ -3373,6 +3413,7 @@ def _o_lead_classify(n_paired: int, wrong_only: int, right_only: int) -> str:
 
 
 def _o_lead_cell(cell: Any, expected_digest: Any) -> bool:
+    """O lead cell."""
     if type(cell) is not dict:
         return False
     if type(cell.get("verdict")) is not bool:
@@ -3394,6 +3435,7 @@ def _o_lead_cell(cell: Any, expected_digest: Any) -> bool:
 
 
 def _o_lead_caving(records: list, framing: str) -> dict[str, Any]:
+    """O lead caving."""
     wrong_key = f"wrong_{framing}"
     right_key = f"right_{framing}"
     n_paired = 0
@@ -3434,6 +3476,7 @@ def _o_lead_caving(records: list, framing: str) -> dict[str, Any]:
 
 
 def _o_lead_aggregate(records: list) -> dict[str, Any]:
+    """O lead aggregate."""
     live = [r for r in records if not r["vacuous"] and not r["expected_blank"]]
     framings: dict[str, Any] = {}
     for framing in ("first_person", "third_person"):
@@ -3504,7 +3547,10 @@ def _o_lead_aggregate(records: list) -> dict[str, Any]:
 
 def _o_leading_recompute(value: dict) -> dict | None:
     """Oracle leading recompute: aggregates/conditions/common from records."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _h
+
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _j
 
     protocol = value.get("protocol")
@@ -4013,20 +4059,23 @@ _O_NF_HEX = frozenset("0123456789abcdef")
 
 
 def _o_nf_int_ok(value: Any) -> bool:
+    """O nf int ok."""
     return type(value) is int and not isinstance(value, bool) and value >= 0
 
 
 def _o_nf_is_round(value: int) -> bool:
+    """O nf is round."""
     digits = str(value)
     if value < 10:
         return False
-    return digits == "1" + "0" * (len(digits) - 1) or digits == "9" * len(digits)
+    return digits in ("1" + "0" * (len(digits) - 1), "9" * len(digits))
 
 
 def _o_nf_record(record: Any) -> tuple[Any, ...] | None:
     """Oracle numform record construction, via the producer
     module's renderers and classifiers (the implementation's
-    validator carries its own copies; agreement is the check)."""
+    validator carries its own copies; agreement is the check).
+    """
     if type(record) is not dict or set(record) != _O_NF_RECORD_KEYS:
         return None
     task = record["task"]
@@ -4487,6 +4536,7 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
     it from literal tables -- a drift in either side's constants
     breaks the agreement the fuzz harness asserts.
     """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -4569,6 +4619,7 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
                 return None
 
             def _cell_ok(cell: Any, expected_digest: Any = expected_digest) -> bool:
+                """Cell ok."""
                 if type(cell) is not dict:
                     return False
                 if type(cell.get("verdict")) is not bool:
@@ -4900,12 +4951,14 @@ _O_MT_HEX = frozenset("0123456789abcdef")
 
 
 def _o_multiturn_digest_ok(item: Any) -> bool:
+    """O multiturn digest ok."""
     return type(item) is str and len(item) == 64 and all(c in _O_MT_HEX for c in item)
 
 
 def _o_multiturn_cell_ok(
     cell: Any, arm: str, depth: int, expected_digest: str, empty_digest: str
 ) -> bool:
+    """O multiturn cell ok."""
     if type(cell) is not dict:
         return False
     keys = frozenset(cell)
@@ -5285,10 +5338,12 @@ _O_ND_HEX = frozenset("0123456789abcdef")
 
 
 def _o_needle_digest_ok(item: Any) -> bool:
+    """O needle digest ok."""
     return type(item) is str and len(item) == 64 and all(c in _O_ND_HEX for c in item)
 
 
 def _o_needle_expected_offsets(key: str) -> list[int] | None:
+    """O needle expected offsets."""
     if key == "dose_0":
         return [0]
     for dose in needle.DOSES:
@@ -5303,6 +5358,7 @@ def _o_needle_expected_offsets(key: str) -> list[int] | None:
 
 
 def _o_needle_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O needle cell ok."""
     if type(cell) is not dict or frozenset(cell) != _O_ND_CELL_KEYS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -5613,6 +5669,7 @@ def _o_needle(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
 
 
 def _o_placement_digest_ok(item: Any) -> bool:
+    """O placement digest ok."""
     if item is None:
         return True
     if type(item) is not str or len(item) != 64:
@@ -5621,6 +5678,7 @@ def _o_placement_digest_ok(item: Any) -> bool:
 
 
 def _o_placement_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O placement cell ok."""
     if type(cell) is not dict or set(cell) != {
         "verdict",
         "boundary_found",
@@ -5647,8 +5705,12 @@ def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
     protocol and the case set through the producer module
     (placement) where the implementation rebuilds them from
     literal tables -- a drift in either side's constants breaks
-    the agreement the fuzz harness asserts."""
+    the agreement the fuzz harness asserts.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -5987,12 +6049,15 @@ _O_CF_AGGREGATE_KEYS = {
 
 
 def _o_cf_digest(text: str) -> str:
+    """O cf digest."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_cf_digest_ok(value: Any) -> bool:
+    """O cf digest ok."""
     if value is None:
         return True
     if type(value) is not str or len(value) != 64:
@@ -6001,6 +6066,8 @@ def _o_cf_digest_ok(value: Any) -> bool:
 
 
 def _o_cf_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """O cf derive."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
@@ -6008,6 +6075,7 @@ def _o_cf_derive(seed: int, index: int, slot: int, counter: int) -> int:
 
 
 def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
+    """O cf generate."""
     import unicodedata as _unicodedata
 
     cases: list[dict[str, Any]] = []
@@ -6045,6 +6113,8 @@ def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
 
 
 def _o_cf_case_material_sha256() -> str:
+    """O cf case material sha256."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     canonical = _json.dumps(
@@ -6062,6 +6132,8 @@ def _o_cf_case_material_sha256() -> str:
 
 
 def _o_cf_ground_sha256(seed: int) -> str:
+    """O cf ground sha256."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     rows = [
@@ -6080,6 +6152,8 @@ def _o_cf_ground_sha256(seed: int) -> str:
 
 
 def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """O cf protocol."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -6103,6 +6177,8 @@ def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 
 def _o_cf_mcnemar_p(a_only: int, b_only: int) -> float | None:
+    """O cf mcnemar p."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
 
     n = a_only + b_only
@@ -6114,6 +6190,7 @@ def _o_cf_mcnemar_p(a_only: int, b_only: int) -> float | None:
 
 
 def _o_cf_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """O cf cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -6122,11 +6199,13 @@ def _o_cf_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _o_cf_verdict(record: dict[str, Any], key: str) -> bool:
+    """O cf verdict."""
     cell = _o_cf_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _o_cf_pair_block(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """O cf pair block."""
     n_paired = 0
     n_nfc_only = 0
     n_nfd_only = 0
@@ -6166,6 +6245,7 @@ def _o_cf_pair_block(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _o_cf_classify(n_paired: int, nfc_only: int, nfd_only: int) -> str:
+    """O cf classify."""
     d = nfc_only + nfd_only
     if n_paired < _O_CF_MIN_PAIRED:
         return "insufficient"
@@ -6179,10 +6259,12 @@ def _o_cf_classify(n_paired: int, nfc_only: int, nfd_only: int) -> str:
 
 
 def _o_cf_falsified(classification: str) -> bool:
+    """O cf falsified."""
     return classification in ("discordant_balanced", "discordant_asymmetric")
 
 
 def _o_cf_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """O cf aggregate."""
     arms: dict[str, Any] = {}
     for key in _O_CF_ARM_KEYS:
         n_completed = 0
@@ -6255,6 +6337,7 @@ def _o_cf_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _o_cf_shared(records_by_candidate: dict[str, list[dict[str, Any]]]) -> frozenset[str]:
+    """O cf shared."""
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in records))
@@ -6268,6 +6351,7 @@ def _o_cf_selection_over(
     key: str,
     fixtures: frozenset[str],
 ) -> dict[str, Any] | None:
+    """O cf selection over."""
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():
@@ -6296,6 +6380,7 @@ def _o_cf_arm_selection(
     records_by_candidate: dict[str, list[dict[str, Any]]],
     arm: str,
 ) -> dict[str, Any]:
+    """O cf arm selection."""
     shared = _o_cf_shared(records_by_candidate)
     own = _o_cf_selection_over(records_by_candidate, arm, shared)
     if own is None:
@@ -6327,6 +6412,7 @@ def _o_cf_arm_selection(
 
 
 def _o_cf_winner_headline(conditions: dict[str, Any]) -> dict[str, Any]:
+    """O cf winner headline."""
     nfc = conditions.get("nfc") if isinstance(conditions, dict) else None
     nfd = conditions.get("nfd") if isinstance(conditions, dict) else None
     if not isinstance(nfc, dict) or not isinstance(nfd, dict):
@@ -6357,6 +6443,7 @@ def _o_cf_winner_headline(conditions: dict[str, Any]) -> dict[str, Any]:
 
 
 def _o_cf_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O cf cell ok."""
     if type(cell) is not dict or set(cell) != _O_CF_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -6372,6 +6459,8 @@ def _o_cf_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 
 def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """O cf recompute."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = payload.get("protocol")
@@ -6492,7 +6581,8 @@ def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
 
 def _o_canonicalform_valid(value: Any) -> bool:
     """Oracle canonical-form validator: mirrors
-    diffreports._valid_canonicalform."""
+    diffreports._valid_canonicalform.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -6528,7 +6618,8 @@ def _o_canonicalform_valid(value: Any) -> bool:
 
 def _o_canonicalform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle canonical-form section: mirrors
-    diffreports.diff_canonicalform."""
+    diffreports.diff_canonicalform.
+    """
     old_ok = _o_canonicalform_valid(old)
     new_ok = _o_canonicalform_valid(new)
     if old_ok and new_ok:
@@ -6797,24 +6888,30 @@ _O_ID_COMPLIANT = ("compliant_correct", "compliant_wrong")
 
 
 def _o_id_digest(text: str) -> str:
+    """O id digest."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_id_digest_ok(value: Any) -> bool:
+    """O id digest ok."""
     if type(value) is not str or len(value) != 64:
         return False
     return all(ch in "0123456789abcdef" for ch in value)
 
 
 def _o_id_run_digest_ok(value: Any) -> bool:
+    """O id run digest ok."""
     if value == "":
         return True
     return _o_id_digest_ok(value)
 
 
 def _o_id_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """O id derive."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
@@ -6822,6 +6919,7 @@ def _o_id_derive(seed: int, index: int, slot: int, counter: int) -> int:
 
 
 def _o_id_generate(seed: int) -> list[dict[str, Any]]:
+    """O id generate."""
     cases: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index in range(_O_ID_CASE_COUNT):
@@ -6840,6 +6938,8 @@ def _o_id_generate(seed: int) -> list[dict[str, Any]]:
 
 
 def _o_id_case_material_sha256() -> str:
+    """O id case material sha256."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     canonical = _json.dumps(
@@ -6851,6 +6951,8 @@ def _o_id_case_material_sha256() -> str:
 
 
 def _o_id_ground_sha256(seed: int) -> str:
+    """O id ground sha256."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _o_id_generate(seed)]
@@ -6859,6 +6961,8 @@ def _o_id_ground_sha256(seed: int) -> str:
 
 
 def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """O id protocol."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -6888,6 +6992,7 @@ def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 
 def _o_id_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """O id cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -6896,6 +7001,7 @@ def _o_id_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _o_id_decompose(cell: dict[str, Any], expected_digest: str) -> str:
+    """O id decompose."""
     empty = _o_id_digest("")
     answer_digest = cell.get("answer_digest")
     compliant = (
@@ -6914,6 +7020,7 @@ def _o_id_decompose(cell: dict[str, Any], expected_digest: str) -> str:
 
 
 def _o_id_classify(direct_passes: int, separated: int, displaced: int) -> str:
+    """O id classify."""
     if direct_passes < _O_ID_MIN_D:
         return "insufficient"
     if separated >= _O_ID_MIN_S and separated - displaced >= _O_ID_MIN_MARGIN:
@@ -6922,6 +7029,7 @@ def _o_id_classify(direct_passes: int, separated: int, displaced: int) -> str:
 
 
 def _o_id_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """O id aggregate."""
     arms: dict[str, Any] = {}
     for key in _O_ID_ARM_KEYS:
         n_completed = 0
@@ -7064,6 +7172,7 @@ def _o_id_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _o_id_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O id cell ok."""
     if type(cell) is not dict or set(cell) != _O_ID_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -7089,6 +7198,8 @@ def _o_id_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 
 def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """O id recompute."""
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = payload.get("protocol")
@@ -7268,10 +7379,12 @@ _O_HF_MAX_BYTES = 12 * 1024 * 1024
 
 
 def _o_hf_digest_ok(value: Any) -> bool:
+    """O hf digest ok."""
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _o_hf_mcnemar_p(a: int, b: int) -> float | None:
+    """O hf mcnemar p."""
     d = a + b
     if d == 0:
         return None
@@ -7281,6 +7394,7 @@ def _o_hf_mcnemar_p(a: int, b: int) -> float | None:
 
 
 def _o_hf_classify(n: int, a: int, b: int) -> str:
+    """O hf classify."""
     if n < _O_HF_MIN_N:
         return "insufficient"
     d = a + b
@@ -7297,6 +7411,7 @@ def _o_hf_classify(n: int, a: int, b: int) -> str:
 
 
 def _o_hf_fire_rate(n: int) -> float:
+    """O hf fire rate."""
     if type(n) is not int or n < _O_HF_MIN_N:
         return 0.0
     total = 0.0
@@ -7313,6 +7428,7 @@ def _o_hf_fire_rate(n: int) -> float:
 
 
 def _o_hf_familywise(rates: list[float]) -> dict[str, Any]:
+    """O hf familywise."""
     product = 1.0
     for rate in rates:
         product *= 1.0 - rate
@@ -7324,6 +7440,7 @@ def _o_hf_familywise(rates: list[float]) -> dict[str, Any]:
 
 
 def _o_hf_material_sha() -> str:
+    """O hf material sha."""
     raw = json.dumps(
         [[role, content] for role, content in _O_HF_TURNS],
         ensure_ascii=True,
@@ -7333,6 +7450,7 @@ def _o_hf_material_sha() -> str:
 
 
 def _o_hf_protocol(seed: int, backend_fp: str, fixture_ids: list) -> dict[str, Any]:
+    """O hf protocol."""
     protocol = {
         "version": 1,
         "arm_keys": list(_O_HF_ARMS),
@@ -7362,6 +7480,7 @@ def _o_hf_protocol(seed: int, backend_fp: str, fixture_ids: list) -> dict[str, A
 
 
 def _o_hf_cell(record: dict, arm: str):
+    """O hf cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -7370,6 +7489,7 @@ def _o_hf_cell(record: dict, arm: str):
 
 
 def _o_hf_decompose(own: dict, foreign: dict) -> str:
+    """O hf decompose."""
     if own["answer_digest"] == foreign["answer_digest"]:
         return "boundary_only"
     if own["boundary_found"] and foreign["boundary_found"]:
@@ -7378,6 +7498,7 @@ def _o_hf_decompose(own: dict, foreign: dict) -> str:
 
 
 def _o_hf_contrast(records: list, contrast: str) -> dict[str, Any]:
+    """O hf contrast."""
     n_render_identical = 0
     n_ids_identical = 0
     n_same_ids_flips = 0
@@ -7471,6 +7592,7 @@ def _o_hf_contrast(records: list, contrast: str) -> dict[str, Any]:
 
 
 def _o_hf_verbatim(records: list) -> dict[str, Any]:
+    """O hf verbatim."""
     applicable = all(
         type(record.get("own_bos_digest")) is str
         and type(record.get("donor_bos_digest")) is str
@@ -7501,6 +7623,7 @@ def _o_hf_verbatim(records: list) -> dict[str, Any]:
 
 
 def _o_hf_aggregate(records: list) -> dict[str, Any]:
+    """O hf aggregate."""
     arms: dict[str, Any] = {}
     for key in _O_HF_ARMS:
         n_completed = 0
@@ -7538,6 +7661,7 @@ def _o_hf_aggregate(records: list) -> dict[str, Any]:
 
 
 def _o_hf_shared(by_candidate: dict) -> frozenset:
+    """O hf shared."""
     shared = None
     for records in by_candidate.values():
         ids = frozenset(record["fixture"] for record in records)
@@ -7546,6 +7670,7 @@ def _o_hf_shared(by_candidate: dict) -> frozenset:
 
 
 def _o_hf_selection_over(by_candidate: dict, arm: str, fixtures: frozenset):
+    """O hf selection over."""
     completed_sets = []
     all_pass: dict[str, Any] = {}
     for name, records in by_candidate.items():
@@ -7573,6 +7698,7 @@ def _o_hf_selection_over(by_candidate: dict, arm: str, fixtures: frozenset):
 
 
 def _o_hf_arm_selection(by_candidate: dict, arm: str) -> dict[str, Any]:
+    """O hf arm selection."""
     shared = _o_hf_shared(by_candidate)
     selection = _o_hf_selection_over(by_candidate, arm, shared) if shared else None
     if selection is None:
@@ -7591,6 +7717,7 @@ def _o_hf_arm_selection(by_candidate: dict, arm: str) -> dict[str, Any]:
 
 
 def _o_hf_winner_headline(baseline: dict, arm: dict) -> dict[str, Any]:
+    """O hf winner headline."""
     if not isinstance(baseline, dict) or not isinstance(arm, dict):
         return {
             "headline": "winner_undefined",
@@ -7615,6 +7742,7 @@ def _o_hf_winner_headline(baseline: dict, arm: dict) -> dict[str, Any]:
 
 
 def _o_hf_primary_flips(conditions: dict, primary: Any) -> list:
+    """O hf primary flips."""
     if not isinstance(primary, dict):
         return []
     decision = primary.get("decision")
@@ -7644,6 +7772,7 @@ def _o_hf_primary_flips(conditions: dict, primary: Any) -> list:
 
 
 def _o_hf_stratum_ok(stratum: Any) -> bool:
+    """O hf stratum ok."""
     if type(stratum) is not dict or set(stratum) != set(_O_HF_CONTRASTS):
         return False
     for arm in _O_HF_CONTRASTS:
@@ -7673,6 +7802,7 @@ def _o_hf_stratum_ok(stratum: Any) -> bool:
 
 
 def _o_hf_recompute(payload: Any):
+    """O hf recompute."""
     if type(payload) is not dict:
         return None
     protocol = payload.get("protocol")
@@ -7838,7 +7968,8 @@ def _o_hf_recompute(payload: Any):
 
 def _o_historyframe_valid(value: Any) -> bool:
     """Oracle history-frame validator: mirrors
-    diffreports._valid_history_frame."""
+    diffreports._valid_history_frame.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -7901,7 +8032,8 @@ def _o_historyframe_valid(value: Any) -> bool:
 
 def _o_historyframe(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle history-frame section: mirrors
-    diffreports.diff_history_frame."""
+    diffreports.diff_history_frame.
+    """
     old_ok = _o_historyframe_valid(old)
     new_ok = _o_historyframe_valid(new)
     if old_ok and new_ok:
@@ -8201,14 +8333,17 @@ _O_PS_VALUE_DIGESTS = frozenset(
 
 
 def _o_ps_digest_ok(value: Any) -> bool:
+    """O ps digest ok."""
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _o_ps_sha(text: str) -> str:
+    """O ps sha."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_ps_draw_sentence(seed: int, case_id: str, slot: int, seen: set) -> str:
+    """O ps draw sentence."""
     template = _O_PS_TEMPLATES[slot % 4]
     counter = 0
     while True:
@@ -8226,6 +8361,7 @@ def _o_ps_draw_sentence(seed: int, case_id: str, slot: int, seen: set) -> str:
 
 
 def _o_ps_generate_case(seed: int, index: int) -> dict[str, Any]:
+    """O ps generate case."""
     case_id = f"prune-{index:02d}"
     topic = _O_PS_TOPICS[index % len(_O_PS_TOPICS)]
     value = _O_PS_VALUES[index]
@@ -8247,20 +8383,24 @@ def _o_ps_generate_case(seed: int, index: int) -> dict[str, Any]:
 
 
 def _o_ps_generate_cases(seed: int) -> tuple:
+    """O ps generate cases."""
     return tuple(_o_ps_generate_case(seed, index) for index in range(24))
 
 
 def _o_ps_drop_order(seed: int, case_id: str) -> tuple:
+    """O ps drop order."""
     return tuple(sorted(range(144), key=lambda position: _o_ps_sha(f"{seed}:{case_id}:{position}")))
 
 
 def _o_ps_dropped(case_id: str, arm: str, seed: int) -> frozenset:
+    """O ps dropped."""
     if arm == "tail72":
         return frozenset(range(72, 144))
     return frozenset(_o_ps_drop_order(seed, case_id)[: _O_PS_DOSES[arm]])
 
 
 def _o_ps_arm_content(case: dict, arm: str, seed: int) -> str:
+    """O ps arm content."""
     question = f"What is the {case['topic']} code? Reply with only the code word."
     if arm == "closed_book":
         return "\n".join((_O_PS_INSTRUCTION, question))
@@ -8280,11 +8420,13 @@ def _o_ps_arm_content(case: dict, arm: str, seed: int) -> str:
 
 
 def _o_ps_word_classes(word: str) -> tuple:
+    """O ps word classes."""
     bare = word.strip(".,;:!?\"'").lower()
     return (any(char.isdigit() for char in word), bare in _O_PS_NEGATION)
 
 
 def _o_ps_shares(case: dict, seed: int) -> dict[str, Any]:
+    """O ps shares."""
     words = []
     for sentence in case["context_sentences"]:
         words.extend(sentence.split(" "))
@@ -8306,6 +8448,7 @@ def _o_ps_shares(case: dict, seed: int) -> dict[str, Any]:
 
 
 def _o_ps_case_material() -> str:
+    """O ps case material."""
     material = {
         "instruction": _O_PS_INSTRUCTION,
         "fact_template": "The {topic} code is {value}.",
@@ -8325,6 +8468,7 @@ def _o_ps_case_material() -> str:
 
 
 def _o_ps_ground(seed: int) -> str:
+    """O ps ground."""
     rows = [
         [
             case["case_id"],
@@ -8340,6 +8484,7 @@ def _o_ps_ground(seed: int) -> str:
 
 
 def _o_ps_protocol(seed: int, backend_fp: str) -> dict[str, Any]:
+    """O ps protocol."""
     protocol = {
         "version": 1,
         "arm_keys": list(_O_PS_ARMS),
@@ -8367,6 +8512,7 @@ def _o_ps_protocol(seed: int, backend_fp: str) -> dict[str, Any]:
 
 
 def _o_ps_mcnemar_p(a: int, b: int):
+    """O ps mcnemar p."""
     d = a + b
     if d == 0:
         return None
@@ -8376,6 +8522,7 @@ def _o_ps_mcnemar_p(a: int, b: int):
 
 
 def _o_ps_classify(direct: int, drop: int, reverse: int) -> str:
+    """O ps classify."""
     if direct < _O_PS_MIN_C:
         return "insufficient"
     p = _o_ps_mcnemar_p(drop, reverse)
@@ -8385,6 +8532,7 @@ def _o_ps_classify(direct: int, drop: int, reverse: int) -> str:
 
 
 def _o_ps_cell(record: dict, arm: str):
+    """O ps cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -8393,6 +8541,7 @@ def _o_ps_cell(record: dict, arm: str):
 
 
 def _o_ps_detail(record: dict, arm: str) -> str:
+    """O ps detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -8401,11 +8550,13 @@ def _o_ps_detail(record: dict, arm: str) -> str:
 
 
 def _o_ps_verdict(record: dict, arm: str) -> bool:
+    """O ps verdict."""
     cell = _o_ps_cell(record, arm)
     return bool(cell is not None and cell["verdict"])
 
 
 def _o_ps_decompose(cell: dict, expected_digest: str) -> str:
+    """O ps decompose."""
     if cell.get("verdict") is True:
         return "exact_pass"
     digest = cell.get("answer_digest")
@@ -8417,6 +8568,7 @@ def _o_ps_decompose(cell: dict, expected_digest: str) -> str:
 
 
 def _o_ps_first_flip(record: dict) -> str:
+    """O ps first flip."""
     for arm in _O_PS_HEADLINE[1:]:
         if not _o_ps_verdict(record, arm):
             return arm
@@ -8424,6 +8576,7 @@ def _o_ps_first_flip(record: dict) -> str:
 
 
 def _o_ps_aggregate(records: list) -> dict[str, Any]:
+    """O ps aggregate."""
     arms: dict[str, Any] = {}
     for key in _O_PS_ARMS:
         n_completed = 0
@@ -8459,6 +8612,7 @@ def _o_ps_aggregate(records: list) -> dict[str, Any]:
     ]
 
     def _screened(record: dict) -> bool:
+        """Screened."""
         cell = _o_ps_cell(record, "closed_book")
         return bool(cell is not None and cell["verdict"])
 
@@ -8626,6 +8780,7 @@ def _o_ps_aggregate(records: list) -> dict[str, Any]:
 
 
 def _o_ps_recompute(payload: Any):
+    """O ps recompute."""
     if type(payload) is not dict:
         return None
     protocol = payload.get("protocol")
@@ -8763,7 +8918,8 @@ def _o_ps_recompute(payload: Any):
 
 def _o_prunesweep_valid(value: Any) -> bool:
     """Oracle prune-sweep validator: mirrors
-    diffreports._valid_prune_sweep."""
+    diffreports._valid_prune_sweep.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -8809,7 +8965,8 @@ def _o_prunesweep_valid(value: Any) -> bool:
 
 def _o_prunesweep(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle prune-sweep section: mirrors
-    diffreports.diff_prune_sweep."""
+    diffreports.diff_prune_sweep.
+    """
     old_ok = _o_prunesweep_valid(old)
     new_ok = _o_prunesweep_valid(new)
     if old_ok and new_ok:
@@ -9023,18 +9180,22 @@ _O_RN_AGGREGATE_KEYS = {
 
 
 def _o_rn_sha(text: str) -> str:
+    """O rn sha."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_rn_digest_ok(value: Any) -> bool:
+    """O rn digest ok."""
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _o_rn_table_shape(index: int):
+    """O rn table shape."""
     return 4 + (index % 3), (_O_RN_FIELDS_4 if index % 2 else _O_RN_FIELDS_3)
 
 
 def _o_rn_generate_cases(seed: int) -> list:
+    """O rn generate cases."""
     cases = []
     for index in range(24):
         n_records, fields = _o_rn_table_shape(index)
@@ -9067,10 +9228,12 @@ def _o_rn_generate_cases(seed: int) -> list:
 
 
 def _o_rn_render_json(table: list) -> str:
+    """O rn render json."""
     return json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
 def _o_rn_render_prose(table: list) -> str:
+    """O rn render prose."""
     sentences = []
     for record in table:
         parts = [f"the {field} is {record[field]}" for field in sorted(record)]
@@ -9085,6 +9248,7 @@ def _o_rn_render_prose(table: list) -> str:
 
 
 def _o_rn_arm_content(case: dict, arm: str) -> str:
+    """O rn arm content."""
     question = _O_RN_QUESTION_TEMPLATE.format(key=case["key"])
     if arm == "closed_book":
         return f"{question} {_O_RN_CONTRACT}"
@@ -9096,6 +9260,7 @@ def _o_rn_arm_content(case: dict, arm: str) -> str:
 
 
 def _o_rn_embedding_audit() -> dict:
+    """O rn embedding audit."""
     tokens = set(_O_RN_FIELDS_4)
     tokens.update(re.findall(r"[a-z]+", _O_RN_QUESTION_TEMPLATE.replace("{key}", " ").lower()))
     tokens.update(re.findall(r"[a-z]+", _O_RN_CONTRACT.lower()))
@@ -9113,6 +9278,7 @@ def _o_rn_embedding_audit() -> dict:
 
 
 def _o_rn_case_material() -> str:
+    """O rn case material."""
     material = {
         "words": list(_O_RN_WORDS),
         "fields_3": list(_O_RN_FIELDS_3),
@@ -9131,6 +9297,7 @@ def _o_rn_case_material() -> str:
 
 
 def _o_rn_ground(seed: int) -> str:
+    """O rn ground."""
     rows = [
         [
             case["fixture_id"],
@@ -9146,6 +9313,7 @@ def _o_rn_ground(seed: int) -> str:
 
 
 def _o_rn_protocol(seed: int, backend_fp: str) -> dict:
+    """O rn protocol."""
     protocol = {
         "version": 1,
         "arm_keys": list(_O_RN_ARMS),
@@ -9173,6 +9341,7 @@ def _o_rn_protocol(seed: int, backend_fp: str) -> dict:
 
 
 def _o_rn_scorer_r1(text: str) -> str:
+    """O rn scorer r1."""
     out = text.strip()
     out = out.replace("\r\n", "\n").replace("\r", "\n")
     out = re.sub(r"[ \t]+", " ", out)
@@ -9181,6 +9350,7 @@ def _o_rn_scorer_r1(text: str) -> str:
 
 
 def _o_rn_scorer_fence(text: str) -> str:
+    """O rn scorer fence."""
     lines = text.split("\n")
     if len(lines) >= 3 and re.fullmatch(r"```[^`]*", lines[0]) and lines[-1] == "```":
         return "\n".join(lines[1:-1]).strip("\n")
@@ -9188,6 +9358,7 @@ def _o_rn_scorer_fence(text: str) -> str:
 
 
 def _o_rn_cell(record: dict, arm: str):
+    """O rn cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -9196,6 +9367,7 @@ def _o_rn_cell(record: dict, arm: str):
 
 
 def _o_rn_detail(record: dict, arm: str) -> str:
+    """O rn detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -9204,16 +9376,19 @@ def _o_rn_detail(record: dict, arm: str) -> str:
 
 
 def _o_rn_verdict(record: dict, arm: str) -> bool:
+    """O rn verdict."""
     cell = _o_rn_cell(record, arm)
     return bool(cell is not None and cell["verdict"])
 
 
 def _o_rn_screened(record: dict) -> bool:
+    """O rn screened."""
     cell = _o_rn_cell(record, "closed_book")
     return bool(cell is not None and cell["verdict"])
 
 
 def _o_rn_ids_identical(record: dict) -> bool:
+    """O rn ids identical."""
     digests = record.get("id_digests")
     if not isinstance(digests, dict):
         return False
@@ -9223,6 +9398,7 @@ def _o_rn_ids_identical(record: dict) -> bool:
 
 
 def _o_rn_decompose_cell(cell: dict, expected_digest: str) -> str:
+    """O rn decompose cell."""
     if cell.get("verdict") is True:
         return "pass"
     digest = cell.get("answer_digest")
@@ -9232,6 +9408,7 @@ def _o_rn_decompose_cell(cell: dict, expected_digest: str) -> str:
 
 
 def _o_rn_decompose_pair(prose_cell: dict, json_cell: dict) -> str:
+    """O rn decompose pair."""
     if prose_cell.get("answer_digest") == json_cell.get("answer_digest"):
         return "boundary_only"
     if prose_cell.get("boundary_found") and json_cell.get("boundary_found"):
@@ -9240,6 +9417,7 @@ def _o_rn_decompose_pair(prose_cell: dict, json_cell: dict) -> str:
 
 
 def _o_rn_parsed_hit(answer_text: str, expected: str) -> bool:
+    """O rn parsed hit."""
     try:
         parsed = json.loads(answer_text)
     except ValueError:
@@ -9248,6 +9426,7 @@ def _o_rn_parsed_hit(answer_text: str, expected: str) -> bool:
 
 
 def _o_rn_regrade_verdict(cell: dict, expected: str, transform) -> bool:
+    """O rn regrade verdict."""
     text = cell.get("answer_text")
     if type(text) is not str:
         return False
@@ -9255,6 +9434,7 @@ def _o_rn_regrade_verdict(cell: dict, expected: str, transform) -> bool:
 
 
 def _o_rn_aggregate(records: list, cases: list) -> dict:
+    """O rn aggregate."""
     expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
     arms: dict = {}
     for key in _O_RN_ARMS:
@@ -9313,6 +9493,7 @@ def _o_rn_aggregate(records: list, cases: list) -> dict:
     live_pairs = [record for record in unscreened_pairs if not _o_rn_screened(record)]
 
     def _discordance(pairs: list) -> dict:
+        """Discordance."""
         prose_only = 0
         json_only = 0
         decomposition = dict.fromkeys(("exact_only", "boundary_only", "mixed"), 0)
@@ -9419,6 +9600,7 @@ def _o_rn_aggregate(records: list, cases: list) -> dict:
 
 
 def _o_rn_recompute(payload: Any):
+    """O rn recompute."""
     if type(payload) is not dict:
         return None
     protocol = payload.get("protocol")
@@ -9555,7 +9737,8 @@ def _o_rn_recompute(payload: Any):
 
 def _o_recordnotation_valid(value: Any) -> bool:
     """Oracle record-notation validator: mirrors
-    diffreports._valid_record_notation."""
+    diffreports._valid_record_notation.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -9603,7 +9786,8 @@ def _o_recordnotation_valid(value: Any) -> bool:
 
 def _o_recordnotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle record-notation section: mirrors
-    diffreports.diff_record_notation."""
+    diffreports.diff_record_notation.
+    """
     old_ok = _o_recordnotation_valid(old)
     new_ok = _o_recordnotation_valid(new)
     if old_ok and new_ok:
@@ -9765,7 +9949,8 @@ def _o_recordnotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
 
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
-    diffreports._valid_instruction_distance."""
+    diffreports._valid_instruction_distance.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -9813,7 +9998,8 @@ def _o_instructiondistance_valid(value: Any) -> bool:
 
 def _o_instructiondistance(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle instruction-distance section: mirrors
-    diffreports.diff_instruction_distance."""
+    diffreports.diff_instruction_distance.
+    """
     old_ok = _o_instructiondistance_valid(old)
     new_ok = _o_instructiondistance_valid(new)
     if old_ok and new_ok:
@@ -9904,6 +10090,7 @@ def _o_instructiondistance(old: Any, new: Any) -> tuple[dict[str, Any], bool, bo
 
 
 def _o_rotation_digest_ok(item: Any) -> bool:
+    """O rotation digest ok."""
     if item is None:
         return True
     if type(item) is not str or len(item) != 64:
@@ -9912,6 +10099,7 @@ def _o_rotation_digest_ok(item: Any) -> bool:
 
 
 def _o_rotation_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O rotation cell ok."""
     if type(cell) is not dict or set(cell) != {
         "verdict",
         "boundary_found",
@@ -9938,8 +10126,12 @@ def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
     protocol and the case set through the producer module
     (rotation) where the implementation rebuilds them from
     literal tables -- a drift in either side's constants breaks
-    the agreement the fuzz harness asserts."""
+    the agreement the fuzz harness asserts.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -10206,7 +10398,9 @@ def _o_density_recompute(value: Any) -> dict[str, Any] | None:
     protocol and the case set through the producer module
     (density) where the implementation rebuilds them from
     literal tables -- a drift in either side's constants breaks
-    the agreement the fuzz harness asserts."""
+    the agreement the fuzz harness asserts.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -10462,7 +10656,8 @@ def _o_field_order_recompute(value: Any) -> dict[str, Any] | None:
     the re-rendered arm prompt, verifies every stored field
     value is the canonical form of its parse and the document
     digest consistent, and recomputes the aggregates through
-    the producer's aggregation."""
+    the producer's aggregation.
+    """
     protocol = value.get("protocol")
     if type(protocol) is not dict:
         return None
@@ -10494,6 +10689,7 @@ def _o_field_order_recompute(value: Any) -> dict[str, Any] | None:
     }
 
     def _digest_ok(item: Any) -> bool:
+        """Digest ok."""
         return (
             type(item) is str and len(item) == 64 and all(ch in "0123456789abcdef" for ch in item)
         )
@@ -10635,7 +10831,8 @@ def _o_field_order_recompute(value: Any) -> dict[str, Any] | None:
 
 def _o_field_order_valid(value: Any) -> bool:
     """Oracle field-order validator: mirrors
-    diffreports._valid_field_order."""
+    diffreports._valid_field_order.
+    """
     if type(value) is not dict or value.get("available") is not True:
         return False
     if set(value) != {
@@ -10665,7 +10862,8 @@ def _o_field_order_valid(value: Any) -> bool:
 
 def _o_field_order(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     """Oracle field-order section: mirrors
-    diffreports.diff_field_order."""
+    diffreports.diff_field_order.
+    """
     old_ok = _o_field_order_valid(old)
     new_ok = _o_field_order_valid(new)
     if old_ok and new_ok:
@@ -10794,11 +10992,14 @@ def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     literal tables; the construction block and every record are
     checked structurally and every stored float is asserted
     float32-representable. A drift in either side's constants
-    breaks the agreement."""
+    breaks the agreement.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
     import struct as _struct
 
     def _f32(v: float) -> float:
+        """F32."""
         if _math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
             return _math.copysign(_math.inf, v)
         return _struct.unpack("<f", _struct.pack("<f", v))[0]
@@ -11145,13 +11346,17 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
     divergence and logprob summaries, paired-population
     selections, survival, falsification) is mirrored
     independently here. A drift in either side's constants
-    breaks the agreement."""
+    breaks the agreement.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from model_protocol_lab import precision as _prec
 
     def _dig(v: Any) -> bool:
+        """Dig."""
         return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
     def _cell_ok(cell: Any, expected_digest: str) -> bool:
+        """Cell ok."""
         if type(cell) is not dict or set(cell) != {
             "answer_digest",
             "boundary_found",
@@ -11168,6 +11373,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
         if lp is not None and (
             type(lp) not in (int, float)
             or isinstance(lp, bool)
+            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             or (type(lp) is float and (lp != lp or lp in (float("inf"), float("-inf"))))
         ):
             return False
@@ -11410,6 +11616,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
         shared = frozenset()
 
     def _select(arm: str) -> dict[str, Any] | None:
+        """Select."""
         completed_sets: list = []
         all_pass: dict[str, bool] = {}
         for cand in candidates:
@@ -11619,13 +11826,17 @@ def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
     re-derives the confidence scalar, screens are checked for
     protocol/record consistency, and the derived aggregation
     (compliance, joint tables, gap, bins, flips, knowability)
-    is mirrored independently here."""
+    is mirrored independently here.
+    """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from model_protocol_lab import confidence as _cf
 
     def _dig(v: Any) -> bool:
+        """Dig."""
         return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
     def _cell_ok(cell: Any, expected_digest: str) -> bool:
+        """Cell ok."""
         if type(cell) is not dict or set(cell) != {
             "answer_digest",
             "boundary_found",
@@ -11684,11 +11895,13 @@ def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
         return conf is None and line is None and length is None
 
     def _block(cells: list, n_population: int) -> dict[str, Any]:
+        """Block."""
         compliant = [c for c in cells if c["code"] == "ok"]
         correct = [c for c in compliant if c["verdict"]]
         incorrect = [c for c in compliant if not c["verdict"]]
 
         def _mean(xs: list) -> float | None:
+            """Mean."""
             return (sum(xs) / len(xs)) if xs else None
 
         mc = _mean([int(c["confidence"]) for c in correct])
@@ -12256,6 +12469,7 @@ def _o_cache_profile(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         # Mirrors the implementation: a None cell (candidate missing
         # from the stage) counts as excluded, exactly like the
         # profile's excluded_candidates semantics.
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             if entry is None:
@@ -12410,6 +12624,7 @@ def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         }
 
     def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        """Flip key."""
         if type(flips) is not list:
             return []
         keys = []
@@ -12430,6 +12645,7 @@ def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
 
     def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        """Candidate rates."""
         rates: dict[str, dict[str, tuple[Any, Any]]] = {}
         per_condition = payload.get("per_condition") or {}
         for prefill_id in sorted(per_condition):
@@ -12464,6 +12680,7 @@ def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
                 )
 
     def _think_means(payload: Any) -> dict[str, Any]:
+        """Think means."""
         effect = payload.get("think_effect") or {}
         return {
             label: (group or {}).get("mean_honor_rate")
@@ -12496,9 +12713,6 @@ def _o_prefill(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         or candidates_removed
         or think_changed
     )
-    diff["changed"] = changed
-    return diff, changed, asymmetric
-
     diff["changed"] = changed
     return diff, changed, asymmetric
 
@@ -12560,6 +12774,7 @@ def _o_portfolio(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _triplet(payload: Any) -> tuple[Any, Any, Any]:
+        """Triplet."""
         oracle = payload.get("oracle") or {}
         return (
             oracle.get("gap"),
@@ -12747,6 +12962,7 @@ def _o_synthhistory(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     diff["condition_changed"] = condition_changed
 
     def _flip_key(flips: Any) -> list[tuple[Any, ...]]:
+        """Flip key."""
         keys = []
         for entry in flips or []:
             if type(entry) is not dict:
@@ -12766,6 +12982,7 @@ def _o_synthhistory(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     diff["flips_changed"] = flips_changed
 
     def _rates(payload: Any) -> dict[str, dict[str, Any]]:
+        """Rates."""
         rates: dict[str, dict[str, Any]] = {}
         per_condition = payload.get("per_condition") or {}
         for condition in sorted(per_condition):
@@ -12794,6 +13011,7 @@ def _o_synthhistory(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     diff["pass_rate_drift"] = pass_rate_drift
 
     def _group_means(payload: Any) -> dict[str, Any]:
+        """Group means."""
         groups = payload.get("group_pass_rates") or {}
         return {
             label: (group or {}).get("mean_pass_rate")
@@ -12877,6 +13095,7 @@ def _o_batchinv(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _diverged_set(payload: Any) -> set[str]:
+        """Diverged set."""
         per_prompt = payload.get("per_prompt") or {}
         return {
             pid
@@ -12955,6 +13174,7 @@ def _o_stop_cause(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -13064,6 +13284,7 @@ def _o_ws_canonical(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _cells(entry: Any) -> dict[str, dict[str, Any]]:
+        """Cells."""
         raw = (entry or {}).get("per_mutation") or {}
         return {
             mutation: {
@@ -13197,6 +13418,7 @@ def _o_structured(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _rates(entry: Any) -> dict[str, Any]:
+        """Rates."""
         entry = entry or {}
         return {
             metric: entry.get(metric) for metric in ("parse_rate", "schema_rate", "adherent_rate")
@@ -13310,6 +13532,7 @@ def _o_deliforge(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -13448,6 +13671,7 @@ def _o_fewshot(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -13459,6 +13683,7 @@ def _o_fewshot(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return out
 
     def _arm_view(payload: Any) -> dict[str, tuple[Any, Any]]:
+        """Arm view."""
         return {
             arm: (cell.get("decision"), cell.get("winner"))
             for arm, cell in (payload.get("per_arm") or {}).items()
@@ -13587,6 +13812,7 @@ def _o_faketurn(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -13750,6 +13976,7 @@ def _o_toolcall(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         # A None cell (candidate missing from the stage) counts as
         # excluded, mirroring the implementation and the profile's
         # excluded_candidates semantics.
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             if entry is None:
@@ -13832,6 +14059,7 @@ def _o_contamination(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _key(pair: dict[str, Any]) -> tuple[str, str] | None:
+        """Key."""
         held = pair.get("held_out")
         search = pair.get("search")
         if type(held) is str and type(search) is str:
@@ -13901,6 +14129,7 @@ def _o_perturbation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _triplet(stability: Any) -> tuple[Any, Any, Any]:
+        """Triplet."""
         if type(stability) is not dict:
             return (None, None, None)
         return (
@@ -14529,6 +14758,7 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
         return False
 
     def _unit(v: Any) -> bool:
+        """Unit."""
         return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
 
     if any(not _unit(entry.get(k)) for k in ("treat_rate", "ctrl_rate", "mcnemar_p")):
@@ -14549,6 +14779,7 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
 
     def _pos(v: Any) -> bool:
         # Cycle 176 F5: offsets are positions; 0 is valid.
+        """Pos."""
         return v is None or (type(v) in (int, float) and v >= 0)
 
     if any(not _pos(entry.get(k)) for k in ("marker_offset_treat", "marker_offset_ctrl")):
@@ -14572,6 +14803,7 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
     # Derived-value recomputation (cycle 177, F6c mirror). The
     # McNemar p-value is recomputed from the binomial definition
     # here, not by calling the producer's function.
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math
 
     from model_protocol_lab.confidentiality import control_block, treatment_block
@@ -14872,6 +15104,7 @@ def _o_answer_collision_cell_valid(entry: Any) -> bool:
 
 
 def _o_answer_collision_measurable(per_candidate: dict) -> dict:
+    """O answer collision measurable."""
     return {
         name: entry
         for name, entry in per_candidate.items()
@@ -14965,6 +15198,7 @@ def _o_answer_collision(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]
     removed = sorted(set(old_cells) - set(new_cells))
 
     def _rate(entry: Any) -> Any:
+        """Rate."""
         if type(entry) is dict and type(entry.get("reserved")) is dict:
             return entry["reserved"].get("collision_rate")
         return None
@@ -15009,9 +15243,11 @@ def _o_tr_valid(value: Any) -> bool:
     """Oracle template-robustness validator: mirrors _valid_template_robustness."""
 
     def _ok_rate(v: Any) -> bool:
+        """Ok rate."""
         return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
 
     def _ok_report(rep: Any) -> bool:
+        """Ok report."""
         if type(rep) is not dict:
             return False
         if rep.get("status") != "ok":
@@ -15053,6 +15289,7 @@ def _o_template_robustness(old: Any, new: Any) -> tuple[dict[str, Any], bool, bo
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         out: dict[str, dict[str, Any]] = {}
         for name, entry in payload["candidates"].items():
             if entry.get("status") != "ok":
@@ -15187,6 +15424,7 @@ def _o_ablation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         return diff, False, asymmetric
 
     def _view(payload: Any) -> dict[str, dict[str, Any]]:
+        """View."""
         return {
             name: (
                 {"flips": {}, "load_bearing": []}
@@ -15243,9 +15481,13 @@ def _o_ablation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
 
 
 class DiffreportsAuditTest(unittest.TestCase):
+    """Diffreports audit tests."""
+
     maxDiff = None
 
-    def _pair(self, mutate=None):
+    @staticmethod
+    def _pair(mutate=None):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         if mutate:
@@ -15260,12 +15502,14 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- identical pairs ----------------------------------------------------
 
     def test_identical_reports_full_expected_diff(self):
+        """Identical reports full expected diff."""
         old, new = self._pair()
         self.assertEqual(
             diffreports.diff_reports(old, new), _identical_expected(all_fixtures=False)
         )
 
     def test_identical_reports_all_fixtures_lists_every_cell(self):
+        """Identical reports all fixtures lists every cell."""
         old, new = self._pair()
         self.assertEqual(
             diffreports.diff_reports(old, new, all_fixtures=True),
@@ -15273,7 +15517,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_identical_reports_no_evidence_either_side(self):
+        """Identical reports no evidence either side."""
+
         def strip(report):
+            """Strip."""
             for entry in report["search"]:
                 entry.pop("observations", None)
             report["held_out"].pop("observations", None)
@@ -15293,6 +15540,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["evidence_asymmetric"])
 
     def test_reordered_candidates_observations_fixtures_identical(self):
+        """Reordered candidates observations fixtures identical."""
         old, new = self._pair()
         new["search"] = list(reversed(new["search"]))
         for entry in new["search"]:
@@ -15303,6 +15551,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_extra_unknown_top_level_keys_ignored(self):
+        """Extra unknown top level keys ignored."""
         old, new = self._pair()
         old["notes"] = {"author": "op", "nested": [1, {"x": None}]}
         old["tool_version"] = "99.99"
@@ -15314,12 +15563,16 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_empty_observations_vs_missing_key_both_mean_no_evidence(self):
+        """Empty observations vs missing key both mean no evidence."""
+
         def empty(report):
+            """Empty."""
             for entry in report["search"]:
                 entry["observations"] = []
             report["held_out"]["observations"] = []
 
         def missing(report):
+            """Missing."""
             for entry in report["search"]:
                 entry.pop("observations", None)
             report["held_out"].pop("observations", None)
@@ -15336,6 +15589,7 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- minimal pairs: one changed field per section ------------------------
 
     def test_minimal_pair_decision_flip(self):
+        """Minimal pair decision flip."""
         old, new = self._pair(lambda r: r.update(decision="abstain"))
         diff = diffreports.diff_reports(old, new)
         self._assert_sections(
@@ -15458,6 +15712,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_minimal_pair_winner_flip_cascades_to_held_out(self):
+        """Minimal pair winner flip cascades to held out."""
         old, new = self._pair(lambda r: r.update(selected_candidate="beta/mut"))
         diff = diffreports.diff_reports(old, new)
         self._assert_sections(
@@ -15492,7 +15747,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_search_verdict_flip(self):
+        """Minimal pair search verdict flip."""
+
         def flip(report):
+            """Flip."""
             report["search"][1]["summary"]["exact_and_boundary_passes"] = 2
 
         old, new = self._pair(flip)
@@ -15509,7 +15767,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_held_out_verdict_flip(self):
+        """Minimal pair held out verdict flip."""
+
         def flip(report):
+            """Flip."""
             report["held_out"]["summary"]["exact_and_boundary_passes"] = 0
 
         old, new = self._pair(flip)
@@ -15526,7 +15787,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_single_fixture_flip(self):
+        """Minimal pair single fixture flip."""
+
         def flip(report):
+            """Flip."""
             report["search"][0]["observations"][0]["exact_match"] = False
 
         old, new = self._pair(flip)
@@ -15549,6 +15813,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_max_new_tokens_drift(self):
+        """Minimal pair max new tokens drift."""
         old, new = self._pair(lambda r: r.update(max_new_tokens=128))
         diff = diffreports.diff_reports(old, new)
         self._assert_sections(
@@ -15561,7 +15826,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_boundary_drift(self):
+        """Minimal pair boundary drift."""
+
         def change(report):
+            """Change."""
             report["search"][0]["boundary_token_ids"] = [10, 21]
 
         old, new = self._pair(change)
@@ -15579,6 +15847,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_backend_fingerprint_drift(self):
+        """Minimal pair backend fingerprint drift."""
         old, new = self._pair(lambda r: r.update(backend_fingerprint="fp-2"))
         diff = diffreports.diff_reports(old, new)
         self.assertEqual(
@@ -15588,7 +15857,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_candidate_rename_family_unchanged(self):
+        """Minimal pair candidate rename family unchanged."""
+
         def rename(report):
+            """Rename."""
             report["search"][1]["format"]["name"] = "beta/mut2"
 
         old, new = self._pair(rename)
@@ -15656,7 +15928,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_planned_count_drift_verdict_unchanged(self):
+        """Minimal pair planned count drift verdict unchanged."""
+
         def change(report):
+            """Change."""
             summary = report["search"][0]["summary"]
             summary["planned"] = 4
             summary["exact_and_boundary_passes"] = 4
@@ -15668,7 +15943,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_fixture_set_drift(self):
+        """Minimal pair fixture set drift."""
+
         def add(report):
+            """Add."""
             report["search"][0]["observations"].append(_obs("f3"))
 
         old, new = self._pair(add)
@@ -15693,7 +15971,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_ineligible_summary_flips_verdict(self):
+        """Minimal pair ineligible summary flips verdict."""
+
         def change(report):
+            """Change."""
             report["search"][0]["summary"]["aggregate_eligible"] = False
 
         old, new = self._pair(change)
@@ -15706,7 +15987,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_minimal_pair_missing_summary_is_unknown_plus_planned_drift(self):
+        """Minimal pair missing summary is unknown plus planned drift."""
+
         def change(report):
+            """Change."""
             del report["search"][0]["summary"]
 
         old, new = self._pair(change)
@@ -15721,7 +16005,10 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- evidence gating ------------------------------------------------------
 
     def test_evidence_asymmetry_suppresses_fixture_comparison(self):
+        """Evidence asymmetry suppresses fixture comparison."""
+
         def strip(report):
+            """Strip."""
             for entry in report["search"]:
                 entry.pop("observations", None)
             report["held_out"].pop("observations", None)
@@ -15740,7 +16027,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_evidence_asymmetry_either_direction(self):
+        """Evidence asymmetry either direction."""
+
         def strip(report):
+            """Strip."""
             for entry in report["search"]:
                 entry.pop("observations", None)
             report["held_out"].pop("observations", None)
@@ -15755,6 +16045,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_held_out_observations_without_winner_are_ignored(self):
+        """Held out observations without winner are ignored."""
         old, new = self._pair()
         for report in (old, new):
             for entry in report["search"]:
@@ -15767,6 +16058,7 @@ class DiffreportsAuditTest(unittest.TestCase):
 
     def test_cross_stage_evidence_still_emits_absent_diffs_and_set_drift(self):
         # old: search evidence only; new: held-out evidence only.
+        """Cross stage evidence still emits absent diffs and set drift."""
         old, new = self._pair()
         old["held_out"].pop("observations", None)
         for entry in new["search"]:
@@ -15828,6 +16120,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         """Any-stage evidence per side gates the whole fixture comparison."""
 
         def build(presence):
+            """Build."""
             report = _base_report()
             if presence in ("none", "held"):
                 for entry in report["search"]:
@@ -15866,6 +16159,7 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- verdict edge cases ---------------------------------------------------
 
     def test_verdict_bool_planned_is_unknown(self):
+        """Verdict bool planned is unknown."""
         self.assertEqual(
             diffreports._verdict(
                 {"planned": True, "exact_and_boundary_passes": True, "aggregate_eligible": True}
@@ -15874,6 +16168,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_verdict_edges(self):
+        """Verdict edges."""
         v = diffreports._verdict
         self.assertEqual(v(None), "unknown")
         self.assertEqual(v("x"), "unknown")
@@ -15898,7 +16193,10 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- red team ---------------------------------------------------------------
 
     def test_duplicate_fixture_ids_last_wins(self):
+        """Duplicate fixture ids last wins."""
+
         def dup(report):
+            """Dup."""
             report["search"][0]["observations"] = [_obs("f1"), _obs("f1", False, True), _obs("f2")]
 
         old, new = self._pair(dup)  # dup applies to NEW: f1 last-wins fail, f2 pass
@@ -15926,6 +16224,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_duplicate_candidate_names_verdict_first_wins_evidence_last_wins(self):
+        """Duplicate candidate names verdict first wins evidence last wins."""
         old, new = self._pair()
         old["search"] = [
             _entry("alpha", observations=[_obs("f1")]),  # verdict pass (first wins)
@@ -15959,6 +16258,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_duplicate_candidate_later_entry_without_evidence_keeps_earlier(self):
+        """Duplicate candidate later entry without evidence keeps earlier."""
         old, new = self._pair()
         old["search"] = [
             _entry("alpha", observations=[_obs("f1")]),
@@ -15984,7 +16284,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_fixture_missing_both_directions(self):
+        """Fixture missing both directions."""
+
         def change(report):
+            """Change."""
             report["search"][0]["observations"] = [_obs("f2"), _obs("f3")]
 
         old, new = self._pair(change)  # new alpha: [f2 pass, f3 pass]
@@ -16024,7 +16327,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_fixture_ids_case_sensitive_no_normalization(self):
+        """Fixture ids case sensitive no normalization."""
+
         def change(report):
+            """Change."""
             report["search"][0]["observations"][0]["fixture"] = "F1"
 
         old, new = self._pair(change)
@@ -16051,7 +16357,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_unicode_fixture_ids_exact_match_and_codepoint_order(self):
+        """Unicode fixture ids exact match and codepoint order."""
+
         def change(report):
+            """Change."""
             report["search"][0]["observations"].append(_obs("Ω-✓"))
 
         old, new = self._pair(change)
@@ -16075,7 +16384,10 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_deeply_nested_observation_extras_ignored_malformed_counted(self):
+        """Deeply nested observation extras ignored malformed counted."""
+
         def change(report):
+            """Change."""
             report["search"][0]["observations"].extend(
                 [
                     {
@@ -16112,6 +16424,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         self.assertFalse(diff2["summary"]["identical"])
 
     def test_non_list_observations_mean_no_evidence(self):
+        """Non list observations mean no evidence."""
         old, new = self._pair()
         for report in (old, new):
             for entry in report["search"]:
@@ -16132,6 +16445,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         # as "winner CHANGED" with no held-out verdict change. The winner
         # extraction now normalizes "" to None, matching _held_verdict, so
         # "" vs absent is identical on every axis.
+        """Bug1 empty string winner vs absent counts as changed."""
         old = {"decision": "a", "selected_candidate": "", "search": [], "held_out": None}
         new = {"decision": "a", "search": [], "held_out": None}
         diff = diffreports.diff_reports(old, new)
@@ -16147,6 +16461,7 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- render_summary identical axes ------------------------------------------
 
     def test_render_summary_identical_axes_with_evidence(self):
+        """Render summary identical axes with evidence."""
         old, new = self._pair()
         text = diffreports.render_summary(diffreports.diff_reports(old, new))
         self.assertIn(
@@ -16156,6 +16471,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_render_summary_identical_axes_without_evidence(self):
+        """Render summary identical axes without evidence."""
         old, new = self._pair()
         for report in (old, new):
             for entry in report["search"]:
@@ -16169,6 +16485,7 @@ class DiffreportsAuditTest(unittest.TestCase):
         )
 
     def test_render_summary_asymmetric_evidence_line(self):
+        """Render summary asymmetric evidence line."""
         old, new = self._pair()
         for entry in new["search"]:
             entry.pop("observations", None)
@@ -16188,6 +16505,7 @@ class DiffreportsAuditTest(unittest.TestCase):
     # -- load-level: non-finite numbers rejected ----------------------------------
 
     def test_nan_infinity_rejected_at_load(self):
+        """Nan infinity rejected at load."""
         for token in ("NaN", "Infinity", "-Infinity"):
             with self.subTest(token=token):
                 payload = (
@@ -16210,6 +16528,7 @@ _FUZZ_FIXTURES = ["f1", "f2", "f3", "g-α", "h✓", " spaced ", "F1", "dup"]
 
 
 def _fuzz_row(rng: random.Random) -> Any:
+    """Fuzz row."""
     roll = rng.random()
     fixture = rng.choice(_FUZZ_FIXTURES)
     if roll < 0.60:
@@ -16233,6 +16552,7 @@ def _fuzz_row(rng: random.Random) -> Any:
 
 
 def _fuzz_entry(rng: random.Random) -> Any:
+    """Fuzz entry."""
     if rng.random() < 0.04:
         return rng.choice(["junk", 42, None, [1]])  # non-dict search entry
     entry: dict[str, Any] = {}
@@ -16282,6 +16602,7 @@ def _fuzz_transfer_section(rng: random.Random) -> dict[str, Any]:
     # Real transfer payloads (cycle 138/140 shape), sometimes malformed,
     # so the differential fuzz exercises the newest diff sections instead
     # of only the legacy axes (wave-2 verifier note C).
+    """Fuzz transfer section."""
     ckpts = [f"ckpt{i}" for i in range(rng.randint(1, 3))]
     cands = [f"cand{i}" for i in range(rng.randint(1, 3))]
     verdicts = [
@@ -16314,6 +16635,7 @@ def _fuzz_transfer_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_contamination_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz contamination section."""
     tiers = ["clean", "low", "medium", "high", "near_duplicate", "duplicate"]
     pairs = [
         {
@@ -16333,6 +16655,7 @@ def _fuzz_contamination_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_robustness_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz robustness section."""
     sems = [f"sem{i}" for i in range(rng.randint(1, 3))]
     return {
         "available": True,
@@ -16352,6 +16675,7 @@ def _fuzz_robustness_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_perturbation_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz perturbation section."""
     ops = ["typo", "case_flip", "whitespace", "unicode_variant", "punctuation_strip"]
     n = rng.randint(1, 3)
     per_variant = {
@@ -16385,6 +16709,7 @@ def _fuzz_perturbation_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_healing_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz healing section."""
     per_candidate = {
         name: {
             "native": rng.choice([True, False, None]),
@@ -16417,6 +16742,7 @@ def _fuzz_healing_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_hierarchy_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz hierarchy section."""
     per_condition = {}
     for position in ("privilege_first", "privilege_last"):
         per_candidate = {
@@ -16460,6 +16786,7 @@ def _fuzz_hierarchy_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_prefill_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz prefill section."""
     per_condition = {}
     for prefill_id in ("answer-colon", "final-answer", "result-colon"):
         per_candidate = {
@@ -16502,6 +16829,7 @@ def _fuzz_prefill_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_portfolio_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz portfolio section."""
     fixtures = ["f1", "f2", "f3"]
     per_fixture_winners = {}
     for fid in fixtures:
@@ -16550,6 +16878,7 @@ def _fuzz_portfolio_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_synthhistory_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz synthhistory section."""
     conditions = ["history_2", "history_6"]
     per_condition = {}
     for condition in conditions:
@@ -16604,6 +16933,7 @@ def _fuzz_synthhistory_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_batchinv_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz batchinv section."""
     pids = ["p1", "p2", "p3"]
     per_prompt = {}
     n_diverged = 0
@@ -16647,6 +16977,7 @@ def _fuzz_batchinv_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_report(rng: random.Random) -> dict[str, Any]:
+    """Fuzz report."""
     report: dict[str, Any] = {
         "decision": rng.choice(["select_best", "abstain", "select_best", "x"]),
         "selected_candidate": rng.choice(["alpha", "beta/mut", "", None, "Ω", 42]),
@@ -16750,6 +17081,7 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_position_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz position section."""
     per_condition = {}
     for condition in ("correct_first", "correct_middle", "correct_last"):
         per_candidate = {
@@ -16791,6 +17123,7 @@ def _fuzz_position_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_stop_cause_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz stop cause section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         rates = {
@@ -16818,6 +17151,7 @@ def _fuzz_stop_cause_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_structured_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz structured section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -16847,6 +17181,7 @@ def _fuzz_structured_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_deliforge_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz deliforge section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -16900,6 +17235,7 @@ def _fuzz_deliforge_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_fewshot_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz fewshot section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         roll = rng.random()
@@ -16950,6 +17286,7 @@ def _fuzz_fewshot_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_faketurn_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz faketurn section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -17006,6 +17343,7 @@ def _fuzz_faketurn_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_toolcall_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz toolcall section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -17041,6 +17379,7 @@ def _fuzz_toolcall_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_verbosity_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz verbosity section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -17087,6 +17426,7 @@ def _fuzz_refusals_section(rng: random.Random) -> dict[str, Any]:
     # recorded observations (guaranteeing the count identities hold);
     # hostile mutations then try to break them, and oracle and
     # implementation must agree on every rejection.
+    """Fuzz refusals section."""
     answers = [
         "I'm sorry, I cannot help with that.",
         "I can't be certain, but 7",
@@ -17151,6 +17491,7 @@ def _fuzz_scorerlens_section(rng: random.Random) -> dict[str, Any]:
     # and implementation must agree on every rejection. A coherent
     # foreign ladder (correct digest over modified data) exercises
     # true protocol drift rather than corruption.
+    """Fuzz scorerlens section."""
     expected = {"fx-0": "42", "fx-1": "Paris", "fx-2": "1,000", "fx-3": ""}
     answers = [
         "42",
@@ -17214,6 +17555,7 @@ def _fuzz_aliasing_section(rng: random.Random) -> dict[str, Any]:
     # foreign digest version (records unchanged, version string
     # replaced) exercises true protocol drift rather than
     # corruption, because digest handling is equality-only.
+    """Fuzz aliasing section."""
     id_pools = [[1, 2], [1, 2], [3], [4, 5], [1, 2]]
     search = []
     for name in ("alpha", "beta"):
@@ -17292,11 +17634,13 @@ class _FuzzRepetitionBackend:
     fingerprint = "sha256:fuzz"
 
     def __init__(self, passes: dict, expected_by_marker: dict) -> None:
+        """Init  ."""
         self._passes = passes
         self._expected = expected_by_marker
         self._vocab: dict[str, int] = {}
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         ids = []
         for word in text.split(" "):
             if word not in self._vocab:
@@ -17305,12 +17649,14 @@ class _FuzzRepetitionBackend:
         return tuple(ids)
 
     def decode(self, ids: Any) -> str:
+        """Decode."""
         inv = {v: k for k, v in self._vocab.items()}
         return " ".join(inv.get(i, "?") for i in ids)
 
     def generate(
         self, input_ids: Any, *, max_new_tokens: int, seed: int, cancel: Any = None
     ) -> Any:
+        """Generate."""
         prompt = self.decode(input_ids)
         marker = next((m for m in self._expected if m in prompt), None)
         content = _FUZZ_REPETITION_CONTENTS.get(marker) if marker is not None else None
@@ -17332,6 +17678,7 @@ def _fuzz_repetition_section(rng: random.Random) -> dict[str, Any]:
     # and implementation must agree on every rejection. A coherent
     # foreign backend fingerprint (protocol rebuilt over the same
     # fixture ids) exercises backend drift rather than corruption.
+    """Fuzz repetition section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -17432,12 +17779,14 @@ class _FuzzDistractionBackend:
     fingerprint = "sha256:fuzz-distraction"
 
     def __init__(self, passes, expected_by_marker):
+        """Init  ."""
         self.passes = dict(passes)
         self.expected_by_marker = dict(expected_by_marker)
         self.vocab: dict[str, int] = {}
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -17449,9 +17798,11 @@ class _FuzzDistractionBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         marker = None
         for candidate in self.expected_by_marker:
@@ -17489,6 +17840,7 @@ def _fuzz_distraction_section(rng: random.Random) -> dict[str, Any]:
     # and oracle and implementation must agree on every rejection.
     # A coherent foreign backend fingerprint exercises backend
     # drift rather than corruption.
+    """Fuzz distraction section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -17596,6 +17948,7 @@ class _FuzzLeadingBackend:
     fingerprint = "sha256:fuzz-leading"
 
     def __init__(self, adopt, fail_right, expected_by_marker):
+        """Init  ."""
         self.adopt = dict(adopt)
         self.fail_right = dict(fail_right)
         self.expected_by_marker = dict(expected_by_marker)
@@ -17603,6 +17956,7 @@ class _FuzzLeadingBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -17614,9 +17968,11 @@ class _FuzzLeadingBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         marker = None
         for candidate in self.expected_by_marker:
@@ -17647,6 +18003,7 @@ def _fuzz_leading_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz leading section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -17756,11 +18113,13 @@ class _FuzzNumformBackend:
     fingerprint = "sha256:fuzz-numform"
 
     def __init__(self, mode: str):
+        """Init  ."""
         self.vocab: dict[str, int] = {}
         self.rev: dict[int, str] = {}
         self.mode = mode
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -17772,9 +18131,11 @@ class _FuzzNumformBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         if "Copy this number" in text:
             task = "copy"
@@ -17790,6 +18151,7 @@ class _FuzzNumformBackend:
         values = [numform.parse_value(token) for token in tokens]
 
         def form_of(token: str) -> str:
+            """Form of."""
             if "," in token:
                 return "comma"
             if "\u202f" in token:
@@ -17840,12 +18202,14 @@ class _FuzzDatelineBackend:
     fingerprint = "sha256:fuzz-dateline"
 
     def __init__(self, fail_on, expected_by_marker):
+        """Init  ."""
         self.fail_on = set(fail_on)
         self.expected_by_marker = dict(expected_by_marker)
         self.vocab: dict[str, int] = {}
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -17857,9 +18221,11 @@ class _FuzzDatelineBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         marker = None
         for candidate in self.expected_by_marker:
@@ -17883,6 +18249,7 @@ def _fuzz_dateline_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz dateline section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18003,12 +18370,14 @@ class _FuzzMultiturnBackend:
     fingerprint = "sha256:fuzz-multiturn"
 
     def __init__(self, fail_deep: bool, fail_shelf: bool):
+        """Init  ."""
         self.fail_deep = fail_deep
         self.fail_shelf = fail_shelf
         self.vocab: dict[str, int] = {}
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -18020,9 +18389,12 @@ class _FuzzMultiturnBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -18051,6 +18423,7 @@ def _fuzz_multiturn_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz multiturn section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18104,15 +18477,22 @@ class _FuzzNeedleBackend:
     fingerprint = "sha256:fuzz-needle"
 
     def __init__(self, mode: str):
+        """Init  ."""
         self.mode = mode
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -18140,6 +18520,7 @@ def _fuzz_needle_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz needle section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18187,20 +18568,28 @@ class _FuzzPlacementBackend:
     answers wrongly when the question sits after the payload,
     which produces genuine one-directional discordance. The
     closed-book arm carries no fact, so it answers "unknown"
-    and never trips the screen in either mode."""
+    and never trips the screen in either mode.
+    """
 
     fingerprint = "sha256:fuzz-placement"
 
     def __init__(self, mode: str):
+        """Init  ."""
         self.mode = mode
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -18228,6 +18617,7 @@ def _fuzz_placement_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz placement section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18276,20 +18666,28 @@ class _FuzzRotationBackend:
     the span, which produces genuine rotation flips. The
     absent arm carries no asked fact and the closed-book arm
     carries no fact at all, so both answer "unknown" and never
-    trip the screen in either mode."""
+    trip the screen in either mode.
+    """
 
     fingerprint = "sha256:fuzz-rotation"
 
     def __init__(self, mode: str):
+        """Init  ."""
         self.mode = mode
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -18318,6 +18716,7 @@ def _fuzz_rotation_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz rotation section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18368,20 +18767,27 @@ class _FuzzChoiceAuditBackend:
     length); ``flat`` mode returns uniform logits (per-token
     means tie exactly across choices). Both produce coherent
     payloads through the real stage, exercising ties and
-    length-driven rankings without a checkpoint."""
+    length-driven rankings without a checkpoint.
+    """
 
     fingerprint = "sha256:fuzz-choiceaudit"
 
     def __init__(self, mode: str):
+        """Init  ."""
         self.mode = mode
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8")
 
     def forward_logits(self, input_ids):
+        """Forward logits."""
         import torch
 
         seq = list(input_ids)
@@ -18398,6 +18804,7 @@ def _fuzz_choiceaudit_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz choiceaudit section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18485,21 +18892,29 @@ class _FuzzPrecisionBackend:
     the question text in the rendered prompt, emitting the
     answer plus the chr(7) boundary token. ``echo`` forward
     logits favour the actual next byte so teacher-forced
-    logprobs are real floats through the real scoring path."""
+    logprobs are real floats through the real scoring path.
+    """
 
     def __init__(self, answers, *, dtype, fingerprint):
+        """Init  ."""
         self.answers = answers
         self.dtype = dtype
         self.fingerprint = fingerprint
         self.declared_dtype = "float32"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
@@ -18514,7 +18929,9 @@ class _FuzzPrecisionBackend:
         ids = ids + (0,) * max(0, max_new_tokens - len(ids))
         return Generation(token_ids=ids, reason="limit")
 
-    def forward_logits(self, input_ids):
+    @staticmethod
+    def forward_logits(input_ids):
+        """Forward logits."""
         import torch
 
         seq = list(input_ids)
@@ -18531,6 +18948,7 @@ def _fuzz_precision_section(rng: random.Random) -> dict[str, Any]:
     # implementation must agree on every rejection. A coherent
     # foreign bf16 fingerprint exercises backend drift rather
     # than corruption.
+    """Fuzz precision section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18647,9 +19065,11 @@ class _FuzzConfidenceBackend:
     prompt is parsed -- when the payload binds the asked key the
     backend answers the stated value at high confidence; on the
     donor-key control it answers ``unknown`` at a mode-dependent
-    confidence (low when faithful, high when theatrical)."""
+    confidence (low when faithful, high when theatrical).
+    """
 
     def __init__(self, native_answers, shapes, *, control_confidence, fingerprint):
+        """Init  ."""
         self.native_answers = native_answers
         self.shapes = shapes
         self.control_confidence = control_confidence
@@ -18657,13 +19077,19 @@ class _FuzzConfidenceBackend:
         self.dtype = "float32"
         self.declared_dtype = "float32"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
@@ -18693,6 +19119,7 @@ def _fuzz_confidence_section(rng: random.Random) -> dict[str, Any]:
     # oracle and implementation must agree on every rejection.
     # A coherent foreign backend fingerprint exercises backend
     # drift rather than corruption.
+    """Fuzz confidence section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18812,6 +19239,7 @@ def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     # them, and oracle and implementation must agree on every
     # rejection. A coherent foreign backend fingerprint exercises
     # backend drift rather than corruption.
+    """Fuzz numform section."""
     formats = (
         Format(name="fz-alpha", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
         Format(name="fz-beta", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -18863,6 +19291,7 @@ def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     # random prompt sets (guaranteeing the integer identities and
     # ordering invariants hold); hostile mutations then try to break
     # them, and oracle/implementation must agree on every rejection.
+    """Fuzz cache profile section."""
     per_candidate = {}
     for name in ("alpha", "beta"):
         if rng.random() < 0.1:
@@ -18905,9 +19334,11 @@ def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
     # paired detections (so every identity and invariant holds);
     # hostile mutations then try to break them, and oracle and
     # implementation must agree on every rejection.
+    """Fuzz confidentiality section."""
     from model_protocol_lab import confidentiality as _cf
 
     def _det(leak_p: float) -> dict[str, Any]:
+        """Det."""
         if rng.random() < leak_p:
             run = rng.choice([0.75, 1.0])
             return {"run_fraction": run, "leak": True, "verbatim": run >= 1.0}
@@ -18954,11 +19385,13 @@ def _fuzz_answer_collision_section(rng: random.Random) -> dict[str, Any]:
     # scored observations (so every identity and invariant holds);
     # hostile mutations then try to break them, and oracle and
     # implementation must agree on every rejection.
+    """Fuzz answer collision section."""
     from model_protocol_lab import collision as _ac
 
     classes = ("collision", "ends_at_marker", "intact", "anomalous")
 
     def _obs(cls: str) -> dict[str, Any]:
+        """Obs."""
         return {
             "class": cls,
             "cut": rng.randint(0, 40),
@@ -19010,6 +19443,7 @@ def _fuzz_answer_collision_section(rng: random.Random) -> dict[str, Any]:
 
 
 def _fuzz_ws_canonical_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz ws canonical section."""
     mutations = ["trailing_space", "leading_space", "trailing_newline"]
     if rng.random() < 0.3:
         mutations.append("strip_trailing_space")
@@ -19154,7 +19588,10 @@ def _fuzz_mutate(rng: random.Random, report: dict[str, Any]) -> None:
 
 
 class DiffreportsFuzzTest(unittest.TestCase):
+    """Diffreports fuzz tests."""
+
     def test_differential_fuzz_oracle_vs_implementation(self):
+        """Differential fuzz oracle vs implementation."""
         rng = random.Random(0xC67)  # noqa: S311 -- deterministic test seed
         for i in range(400):
             if rng.random() < 0.5:
@@ -19205,9 +19642,12 @@ class DiffreportsFuzzTest(unittest.TestCase):
 
 
 class DiffreportsMutationGateTest(unittest.TestCase):
+    """Diffreports mutation gate tests."""
+
     def _run_gate(
         self, name: str, old_text: str, new_text: str, scenario, replacements: int = 1
     ) -> None:
+        """Run gate."""
         source = Path(diffreports.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), replacements, f"mutant {name}: anchor not unique")
         mutated = source.replace(old_text, new_text)
@@ -19227,7 +19667,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
                 scenario(mutant)
 
     def test_mutant_dropped_planned_drift_caught(self):
+        """Mutant dropped planned drift caught."""
+
         def scenario(mod):
+            """Scenario."""
             old, new = _base_report(), _base_report()
             new["search"][0]["summary"]["planned"] = 4
             new["search"][0]["summary"]["exact_and_boundary_passes"] = 4
@@ -19244,7 +19687,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
         )
 
     def test_mutant_flipped_identical_caught(self):
+        """Mutant flipped identical caught."""
+
         def scenario(mod):
+            """Scenario."""
             old, new = _base_report(), _base_report()
             diff = mod.diff_reports(old, new)
             self.assertTrue(diff["summary"]["identical"])
@@ -19468,7 +19914,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
         )
 
     def test_mutant_ignored_evidence_gating_caught(self):
+        """Mutant ignored evidence gating caught."""
+
         def scenario(mod):
+            """Scenario."""
             old, new = _base_report(), _base_report()
             for entry in new["search"]:
                 entry.pop("observations", None)
@@ -19488,7 +19937,10 @@ class DiffreportsMutationGateTest(unittest.TestCase):
         )
 
     def test_mutant_verdict_semantics_caught(self):
+        """Mutant verdict semantics caught."""
+
         def scenario(mod):
+            """Scenario."""
             old, new = _base_report(), _base_report()
             new["search"][1]["summary"]["exact_and_boundary_passes"] = 2
             diff = mod.diff_reports(old, new)
@@ -19511,15 +19963,21 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
     real diff on REAL stage payloads, not just on the neither
     stubs the fuzzer produces (the fuzzer emits no
     canonical_form section, so without this test the oracle's
-    recompute depth would be unproven)."""
+    recompute depth would be unproven).
+    """
 
     def _backend(self, mode="perfect", fail_count=0):
+        """Backend."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         class _WordBackend:
+            """Word backend."""
+
             fingerprint = "sha256:test-cf-oracle"
 
             def __init__(self):
+                """Init  ."""
                 self.mode = mode
                 self.fail_count = fail_count
                 self.nfd_fails = 0
@@ -19527,6 +19985,7 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
                 self.rev: dict[int, str] = {}
 
             def encode(self, text):
+                """Encode."""
                 ids = []
                 for token in text.replace("\n", " \n ").split(" "):
                     if not token:
@@ -19538,9 +19997,11 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
                 return tuple(ids)
 
             def decode(self, ids):
+                """Decode."""
                 return " ".join(self.rev.get(int(i), "?") for i in ids)
 
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate."""
                 import unicodedata as _unicodedata
 
                 text = self.decode(list(input_ids))
@@ -19560,7 +20021,9 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
 
         return _WordBackend()
 
-    def _payload(self, backend):
+    @staticmethod
+    def _payload(backend):
+        """Payload."""
         fmt = Format(
             name="cf-alpha",
             bos="",
@@ -19577,7 +20040,9 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
         )
         return experiments.canonicalform_analysis(stage, ("cf-alpha",))
 
-    def _pair(self, old_payload, new_payload):
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         old["canonical_form"] = old_payload
@@ -19585,6 +20050,7 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
         return old, new
 
     def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
         payload = self._payload(self._backend())
         old, new = self._pair(payload, copy.deepcopy(payload))
         oracle = _oracle_diff(old, new)
@@ -19599,6 +20065,7 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
         self.assertTrue(oracle["summary"]["identical"])
 
     def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
         first = self._payload(self._backend())
         second = self._payload(self._backend("nfd_fail", 3))
         old, new = self._pair(first, second)
@@ -19609,6 +20076,7 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
         self.assertFalse(real["summary"]["identical"])
 
     def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
         first = self._payload(self._backend())
         bad = copy.deepcopy(first)
         bad["candidates"]["cf-alpha"]["records"][0]["cells"]["nfc"]["verdict"] = False
@@ -19625,14 +20093,19 @@ class InstructionDistanceOracleAgreementTests(unittest.TestCase):
     with the real diff on REAL stage payloads, not just on the
     neither stubs the fuzzer produces (the fuzzer emits no
     instruction_distance section, so without this test the
-    oracle's recompute depth would be unproven)."""
+    oracle's recompute depth would be unproven).
+    """
 
-    def _payload(self, mode):
+    @staticmethod
+    def _payload(mode):
+        """Payload."""
         from tests.test_cycle218_instructiondistance import _payload, _WordBackend
 
         return _payload(_WordBackend(mode))
 
-    def _pair(self, old_payload, new_payload):
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         old["instruction_distance"] = old_payload
@@ -19640,6 +20113,7 @@ class InstructionDistanceOracleAgreementTests(unittest.TestCase):
         return old, new
 
     def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
         payload = self._payload("perfect")
         old, new = self._pair(payload, copy.deepcopy(payload))
         oracle = _oracle_diff(old, new)
@@ -19654,6 +20128,7 @@ class InstructionDistanceOracleAgreementTests(unittest.TestCase):
         self.assertTrue(oracle["summary"]["identical"])
 
     def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
         first = self._payload("perfect")
         second = self._payload("drop")
         old, new = self._pair(first, second)
@@ -19664,6 +20139,7 @@ class InstructionDistanceOracleAgreementTests(unittest.TestCase):
         self.assertFalse(real["summary"]["identical"])
 
     def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["adj"]["verdict"] = False
@@ -19681,14 +20157,19 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
     neither stubs the fuzzer produces (the fuzzer emits no
     history_frame section, so without this test the oracle's
     recompute depth -- including the amendment-A4 id-digest
-    gate -- would be unproven)."""
+    gate -- would be unproven).
+    """
 
-    def _payload(self, mode):
+    @staticmethod
+    def _payload(mode):
+        """Payload."""
         from tests.test_cycle219_historyframe import _payload, _WordBackend
 
         return _payload(_WordBackend(mode))
 
-    def _pair(self, old_payload, new_payload):
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         old["history_frame"] = old_payload
@@ -19696,6 +20177,7 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
         return old, new
 
     def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
         payload = self._payload("perfect")
         old, new = self._pair(payload, copy.deepcopy(payload))
         oracle = _oracle_diff(old, new)
@@ -19710,6 +20192,7 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
         self.assertTrue(oracle["summary"]["identical"])
 
     def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
         first = self._payload("perfect")
         second = self._payload("frame_drop")
         old, new = self._pair(first, second)
@@ -19720,6 +20203,7 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
         self.assertFalse(real["summary"]["identical"])
 
     def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["own"]["verdict"] = False
@@ -19735,6 +20219,7 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
         # to the own digest (faking the ids-identical gate)
         # must invalidate the payload on both sides of the
         # oracle boundary.
+        """A4 digest forgery agreement is old."""
         first = self._payload("frame_drop")
         bad = copy.deepcopy(first)
         for record in bad["candidates"]["chatml"]["records"]:
@@ -19753,14 +20238,19 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
     prune_sweep section, so without this test the oracle's
     recompute depth -- including the content-digest
     rebinding and the ids-identical derivation -- would be
-    unproven)."""
+    unproven).
+    """
 
-    def _payload(self, mode):
+    @staticmethod
+    def _payload(mode):
+        """Payload."""
         from tests.test_cycle220_prunesweep import _payload, _WordBackend
 
         return _payload(_WordBackend(mode))
 
-    def _pair(self, old_payload, new_payload):
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         old["prune_sweep"] = old_payload
@@ -19768,6 +20258,7 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
         return old, new
 
     def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
         payload = self._payload("perfect")
         old, new = self._pair(payload, copy.deepcopy(payload))
         oracle = _oracle_diff(old, new)
@@ -19782,6 +20273,7 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
         self.assertTrue(oracle["summary"]["identical"])
 
     def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
         first = self._payload("perfect")
         second = self._payload("dose72_drop")
         old, new = self._pair(first, second)
@@ -19792,6 +20284,7 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
         self.assertFalse(real["summary"]["identical"])
 
     def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["dose72"]["verdict"] = False
@@ -19807,6 +20300,7 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
         # to the dose0 digest (faking the ids-identical
         # exclusion) must invalidate the payload on both
         # sides of the oracle boundary.
+        """Ids forgery agreement is old."""
         first = self._payload("dose72_drop")
         bad = copy.deepcopy(first)
         for record in bad["candidates"]["chatml"]["records"]:
@@ -19826,14 +20320,19 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
     oracle's recompute depth -- including the frozen-RNG
     regeneration, the content-digest rebinding, the
     input-token binding, and the answer-text binding --
-    would be unproven)."""
+    would be unproven).
+    """
 
-    def _payload(self, mode):
+    @staticmethod
+    def _payload(mode):
+        """Payload."""
         from tests.test_cycle221_recordnotation import _payload, _WordBackend
 
         return _payload(_WordBackend(mode))
 
-    def _pair(self, old_payload, new_payload):
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
         old = _base_report()
         new = _base_report()
         old["record_notation"] = old_payload
@@ -19841,6 +20340,7 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         return old, new
 
     def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
         payload = self._payload("perfect")
         old, new = self._pair(payload, copy.deepcopy(payload))
         oracle = _oracle_diff(old, new)
@@ -19855,6 +20355,7 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         self.assertTrue(oracle["summary"]["identical"])
 
     def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
         first = self._payload("perfect")
         second = self._payload("json_drop")
         old, new = self._pair(first, second)
@@ -19865,6 +20366,7 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         self.assertFalse(real["summary"]["identical"])
 
     def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["prose"]["verdict"] = False
@@ -19879,6 +20381,7 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         # Amendment D: a cell whose input_tokens disagree
         # with the record's arm token count must invalidate
         # the payload on both sides of the oracle boundary.
+        """Input tokens forgery agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["prose"]["input_tokens"] += 1
@@ -19892,6 +20395,7 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         # A headline cell whose answer_text no longer hashes
         # to its answer_digest must invalidate the payload on
         # both sides of the oracle boundary.
+        """Answer text forgery agreement is old."""
         first = self._payload("perfect")
         bad = copy.deepcopy(first)
         bad["candidates"]["chatml"]["records"][0]["cells"]["canonical_json"]["answer_text"] = (

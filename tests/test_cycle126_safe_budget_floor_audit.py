@@ -119,7 +119,8 @@ class TestSafeBudgetFloorDerivation(unittest.TestCase):
 
 
 class TestRecordedField(unittest.TestCase):
-    def _recorded(self):
+    @staticmethod
+    def _recorded():
         boundary = (9,)
         search = [
             _search_entry("A", [([1, 2, 9], True), ([9], True)]),
@@ -184,7 +185,8 @@ class TestRecordedField(unittest.TestCase):
 
 
 class TestFrontierSectionCallout(unittest.TestCase):
-    def _section(self, frontier):
+    @staticmethod
+    def _section(frontier):
         from model_protocol_lab.reporting import _frontier_section
 
         return _frontier_section({"budget_frontier": frontier})

@@ -86,7 +86,8 @@ class _WordBackend:
     def decode(self, ids):
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
-    def _is_nfd(self, text: str) -> bool:
+    @staticmethod
+    def _is_nfd(text: str) -> bool:
         return unicodedata.normalize("NFC", text) != text
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
@@ -120,7 +121,8 @@ class _NormalizingBackend(_WordBackend):
     """Word backend whose encode NFC-normalizes first, so the
     NFC and NFD arms produce identical ids on every case: the
     instrument-inapplicable shape (SentencePiece-family
-    checkpoint with a normalizer in the pipeline)."""
+    checkpoint with a normalizer in the pipeline).
+    """
 
     fingerprint = "sha256:test-canonicalform-normalizing"
 
@@ -134,7 +136,8 @@ class _AlternatingBackend(_NormalizingBackend):
     nondeterminism, which the aggregates must record as a
     determinism finding, never as headline discordance. The
     alternation counter is separate from the base call count,
-    which the parent generate also increments."""
+    which the parent generate also increments.
+    """
 
     fingerprint = "sha256:test-canonicalform-alternating"
 
@@ -162,7 +165,8 @@ class _BalancedBackend(_WordBackend):
     arm on the next two: balanced discordance (2 NFC-only, 2
     NFD-only). A backend that failed both arms on the SAME
     cases would produce concordant "neither" cases, not
-    discordance -- the arm windows must not overlap."""
+    discordance -- the arm windows must not overlap.
+    """
 
     fingerprint = "sha256:test-canonicalform-balanced"
 
@@ -189,11 +193,11 @@ class _BalancedBackend(_WordBackend):
             return Generation(token_ids=tuple(out), reason="limit")
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
 
-    """Fails the first generation of a configured (format, arm)
-    pair, so two candidates' pass sets can be made to swap
-    across arms (the winner-change shape) or to differ on one
-    arm only (the abstention-asymmetric shape). Format
-    detection is by the format's user prefix in the render."""
+    # Fails the first generation of a configured (format, arm)
+    # pair, so two candidates' pass sets can be made to swap
+    # across arms (the winner-change shape) or to differ on one
+    # arm only (the abstention-asymmetric shape). Format
+    # detection is by the format's user prefix in the render.
 
 
 class _PerFormatBackend(_WordBackend):
@@ -201,7 +205,8 @@ class _PerFormatBackend(_WordBackend):
     pair, so two candidates' pass sets can be made to swap
     across arms (the winner-change shape) or to differ on one
     arm only (the abstention-asymmetric shape). Format
-    detection is by the format's user prefix in the render."""
+    detection is by the format's user prefix in the render.
+    """
 
     fingerprint = "sha256:test-canonicalform-performat"
 
@@ -379,16 +384,19 @@ class ScorerPinTests(unittest.TestCase):
     on scorer bytes alone when the expected value carries
     accents, and never flips when values are ASCII. This is why
     the generator's ASCII-value rule exists; the test pins the
-    mechanism, and GeneratorTests pins the rule."""
+    mechanism, and GeneratorTests pins the rule.
+    """
 
     def _echo_evaluate(self, topic, value, form, expected):
         class EchoBackend:
             fingerprint = "sha256:test-cf-echo"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return tuple(ord(c) for c in text)
 
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 return "".join(chr(int(i)) for i in ids)
 
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
@@ -649,7 +657,8 @@ class StageTests(unittest.TestCase):
 
     def test_error_reason_backend_yields_failed_cells_not_a_crash(self):
         class _ErrorBackend(_WordBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed=None, cancel=None):
                 return Generation(token_ids=(), reason="error")
 
         backend = _ErrorBackend()
@@ -866,7 +875,8 @@ class CliDispatchTests(unittest.TestCase):
 def _load_mutant(source_path, name):
     """Exec a mutated canonicalform copy under the package
     namespace (the cycle-169 pattern: the module's relative
-    import of .confidentiality resolves through sys.modules)."""
+    import of .confidentiality resolves through sys.modules).
+    """
     import importlib.util
     import sys
 
@@ -987,7 +997,8 @@ class MutationGateTests(unittest.TestCase):
     killed by a NAMED scenario that passes on the real module
     and raises on the mutant. A gate that passes vacuously is
     not a gate: the scenario is first run against the real
-    module in the same test."""
+    module in the same test.
+    """
 
     def test_gates_kill_every_mutant(self):
         import tempfile
@@ -1014,7 +1025,8 @@ class GapCoverageTests(unittest.TestCase):
     and branch the scoped run showed unhit in canonicalform.py
     gets a test that executes it, not a coverage-percentage
     argument. A guard proven unreachable would be removed
-    instead (cycle-171); each guard below is reachable."""
+    instead (cycle-171); each guard below is reachable.
+    """
 
     def test_generate_cases_rejects_non_int_seed(self):
         with self.assertRaises(ValueError):
@@ -1152,9 +1164,11 @@ class FullRunGapTests(unittest.TestCase):
     construction (equal digests after two passing digest
     checks; the audit screen on token-shape-free frozen
     texts) are proven by stubs, not left as decoration
-    (cycle-171)."""
+    (cycle-171).
+    """
 
-    def _mirror_cell(self, verdict, tokens, digest):
+    @staticmethod
+    def _mirror_cell(verdict, tokens, digest):
         return {
             "verdict": verdict,
             "boundary_found": True,
@@ -1163,7 +1177,8 @@ class FullRunGapTests(unittest.TestCase):
             "answer_digest": digest,
         }
 
-    def _mirror_record(self, case, tokens=(10, 12)):
+    @staticmethod
+    def _mirror_record(case, tokens=(10, 12)):
         return {
             "fixture": case["fixture_id"],
             "topic": case["topic"],
@@ -1178,7 +1193,8 @@ class FullRunGapTests(unittest.TestCase):
             "cell_details": {"nfc": "arm_context_exceeded", "nfd": "arm_context_exceeded"},
         }
 
-    def _recompute_entry(self, records):
+    @staticmethod
+    def _recompute_entry(records):
         entry = dict.fromkeys(diffreports._CANONICALFORM_AGGREGATE_KEYS)
         entry.update({"status": "available", "detail": "", "records": records})
         return entry
@@ -1551,7 +1567,8 @@ class FullRunGapTests(unittest.TestCase):
 
     # -- diff availability / status drift ---------------------------------
 
-    def _mixed_payload(self):
+    @staticmethod
+    def _mixed_payload():
         # A valid payload with one available and one
         # unavailable candidate, built through the real
         # analysis path (not hand-assembled).

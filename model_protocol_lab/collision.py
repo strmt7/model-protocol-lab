@@ -421,7 +421,8 @@ def collision_cell(
 
 def protocol_fingerprint() -> str:
     """sha256 over the canonical frozen protocol (templates, positions,
-    hostile set, classification rule, arms)."""
+    hostile set, classification rule, arms).
+    """
     payload = {
         "version": PROTOCOL_VERSION,
         "own_templates": [list(t) for t in _OWN_TEMPLATES],

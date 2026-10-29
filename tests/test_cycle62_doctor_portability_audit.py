@@ -171,6 +171,7 @@ class _FakePreTrainedTokenizerFast:
         if spec.drop_encode:
             self.encode = None  # present but unusable -> TypeError on call
 
+    # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def encode(self, text: str, add_special_tokens: bool = False) -> Any:
         return self._spec.encode(text)
 
@@ -585,8 +586,11 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
         import tempfile
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         # tmp_path fixture
@@ -609,6 +613,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         self.check_dirs = {"good": good, "nofile": nofile, "bad": bad, "base": base}
 
     def tearDown(self) -> None:
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
 
         # Undo fake module installation (monkeypatch.setitem equivalent)
@@ -1001,6 +1006,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "unregistered"
             assert row["detail"] == f"unregistered on {lit!r}"
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["registered"] is False
             assert token_row["registered_id"] is None
@@ -1021,6 +1027,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "fragments"
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["single_token"] is False
             assert token_row["id_match"] is None
@@ -1039,6 +1046,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "id_mismatch"
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["id_match"] is False
             assert token_row["encoded_id"] == ids[lit] + 1
@@ -1079,6 +1087,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
         assert hits
         for row in hits:
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["registered"] is False  # suppressed exception -> skipped
             assert row["reason"] == "unregistered"
@@ -1132,7 +1141,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         by_path = portability_matrix(Path(target))
         assert by_str == by_path
 
-    def test_registered_first_wins_and_zero_id(self):
+    @staticmethod
+    def test_registered_first_wins_and_zero_id():
         doc = {
             "added_tokens": [
                 {"content": "<a>", "id": 1},
@@ -1142,7 +1152,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         }
         assert _secondary_registered(_AttrFake({}), doc) == {"<a>": 1, "<b>": 0}
 
-    def test_registered_rejects_malformed_entries(self):
+    @staticmethod
+    def test_registered_rejects_malformed_entries():
         doc = {
             "added_tokens": [
                 {"content": "<bool>", "id": True},
@@ -1160,11 +1171,13 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         }
         assert _secondary_registered(_AttrFake({}), doc) == {"<ok>": 11}
 
-    def test_registered_ignores_non_list_section(self):
+    @staticmethod
+    def test_registered_ignores_non_list_section():
         assert _secondary_registered(_AttrFake({}), {"added_tokens": {"<a>": 1}}) == {}
         assert _secondary_registered(_AttrFake({}), {}) == {}
 
-    def test_registered_attr_gap_fill_and_doc_wins(self):
+    @staticmethod
+    def test_registered_attr_gap_fill_and_doc_wins():
         doc = {"added_tokens": [{"content": "<d>", "id": 1}]}
         seen: list[str] = []
 
@@ -1176,19 +1189,22 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         assert _secondary_registered(tok, doc) == {"<d>": 1, "<a>": 2}
         assert seen == ["<a>"]  # doc-covered literal never consults convert
 
-    def test_registered_convert_failures_suppressed(self):
+    @staticmethod
+    def test_registered_convert_failures_suppressed():
         def convert(token: str) -> Any:
             raise RuntimeError("convert boom")
 
         tok = _AttrFake({"bos_token": "<a>"}, convert)
         assert _secondary_registered(tok, {"added_tokens": []}) == {}
 
-    def test_registered_convert_bad_values_skipped(self):
+    @staticmethod
+    def test_registered_convert_bad_values_skipped():
         for bad in (True, -1, "12", None):
             tok = _AttrFake({"bos_token": "<a>"}, lambda token, b=bad: b)
             assert _secondary_registered(tok, {"added_tokens": []}) == {}, bad
 
-    def test_registered_non_string_attrs_skipped(self):
+    @staticmethod
+    def test_registered_non_string_attrs_skipped():
         tok = _AttrFake(
             {"bos_token": 123, "eos_token": "", "pad_token": None},
             lambda token: (_ for _ in ()).throw(AssertionError("must not be called")),
@@ -1219,7 +1235,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             f"\n... {len(failures)} of {_MATRIX_FUZZ_CASES} fuzz cases failed" if failures else ""
         )
 
-    def test_row_oracle_matches_core_on_fuzz_corpus(self):
+    @staticmethod
+    def test_row_oracle_matches_core_on_fuzz_corpus():
         """The hand-rolled row oracle agrees with the real core implementation.
 
         Guards against an oracle bug masquerading as implementation

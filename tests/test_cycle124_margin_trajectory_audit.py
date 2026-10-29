@@ -258,6 +258,7 @@ class TestMutationGate(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     cwd=_REPO_ROOT,
+                    check=False,
                 )
             finally:
                 self.SOURCE.write_text(source)

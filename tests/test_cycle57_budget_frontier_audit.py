@@ -632,42 +632,54 @@ def run_audit_checks(bf, fuzz_seeds=N_FUZZ_SEEDS):
 
 
 class StepFunctionFrontierTests(unittest.TestCase):
-    def test_step_function_exact_points(self):
+    @staticmethod
+    def test_step_function_exact_points():
         _case_a(budget_frontier)
 
-    def test_flat_region_no_flips(self):
+    @staticmethod
+    def test_flat_region_no_flips():
         _case_b(budget_frontier)
 
-    def test_flip_at_budget_one_is_initial_point(self):
+    @staticmethod
+    def test_flip_at_budget_one_is_initial_point():
         _case_c(budget_frontier)
 
-    def test_multiple_flips_non_monotonic_decision(self):
+    @staticmethod
+    def test_multiple_flips_non_monotonic_decision():
         _case_d(budget_frontier)
 
-    def test_singleton_budget_range(self):
+    @staticmethod
+    def test_singleton_budget_range():
         _case_e(budget_frontier)
 
-    def test_min_budget_beyond_max_recorded_without_step(self):
+    @staticmethod
+    def test_min_budget_beyond_max_recorded_without_step():
         _case_f(budget_frontier)
 
-    def test_first_boundary_occurrence_counts(self):
+    @staticmethod
+    def test_first_boundary_occurrence_counts():
         _case_g(budget_frontier)
 
-    def test_flag_lies_and_malformed_outputs_never_pass(self):
+    @staticmethod
+    def test_flag_lies_and_malformed_outputs_never_pass():
         _case_h(budget_frontier)
 
-    def test_per_candidate_boundary_override(self):
+    @staticmethod
+    def test_per_candidate_boundary_override():
         _case_i(budget_frontier)
 
-    def test_flip_flip_back_ranges_merged(self):
+    @staticmethod
+    def test_flip_flip_back_ranges_merged():
         _case_j(budget_frontier)
 
-    def test_held_out_failed_native_winner_comparison(self):
+    @staticmethod
+    def test_held_out_failed_native_winner_comparison():
         _case_k(budget_frontier)
 
 
 class FrontierFuzzTests(unittest.TestCase):
-    def test_reference_agreement_and_invariants_on_fuzz(self):
+    @staticmethod
+    def test_reference_agreement_and_invariants_on_fuzz():
         _check_fuzz(budget_frontier, N_FUZZ_SEEDS)
 
 

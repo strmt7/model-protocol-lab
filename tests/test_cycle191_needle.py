@@ -113,10 +113,12 @@ class _ByteBackend:
 
     fingerprint = "sha256:test-needle-byte"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
@@ -141,7 +143,8 @@ class _MergeBackend:
     which the marker-derived head anchor returned None or a
     biased offset; the stage's ``D`` measurement must still
     place needles exactly, or degrade cells to unmatchable --
-    never accept a wrong offset."""
+    never accept a wrong offset.
+    """
 
     fingerprint = "sha256:test-needle-merge"
 
@@ -310,7 +313,8 @@ class TestProtocol(unittest.TestCase):
 class TestAggregatesPure(unittest.TestCase):
     """Hand-built records against the pure readouts."""
 
-    def _record(self, fixture, verdicts):
+    @staticmethod
+    def _record(fixture, verdicts):
         expected = f"{fixture}-value"
         digest = hashlib.sha256(expected.encode("utf-8")).hexdigest()
         wrong = hashlib.sha256(b"wrong").hexdigest()
@@ -351,7 +355,8 @@ class TestAggregatesPure(unittest.TestCase):
             "cell_details": details,
         }
 
-    def _all(self, verdict=True):
+    @staticmethod
+    def _all(verdict=True):
         return dict.fromkeys(needle.CELL_KEYS, verdict)
 
     def test_generation_collision_redraws_both_slots(self):
@@ -544,7 +549,8 @@ class TestStageWordBackend(unittest.TestCase):
 
     def test_degenerate_tokenizer_all_unmatchable(self):
         class _OneTokenBackend(_WordBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return (1,)
 
         backend = _OneTokenBackend()
@@ -806,7 +812,8 @@ class TestReportingAndCli(unittest.TestCase):
         class _Boom:
             fingerprint = "sha256:boom"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("boom")
 
         result: dict = {}

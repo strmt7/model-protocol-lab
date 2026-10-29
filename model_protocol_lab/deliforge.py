@@ -218,6 +218,7 @@ def build_forged_fixtures(
 
 
 def _valid_ids(ids: object) -> bool:
+    """Return whether ids is valid."""
     return (
         type(ids) is tuple
         and bool(ids)
@@ -502,6 +503,7 @@ class DeliforgeBackend:
     """
 
     def __init__(self, inner: Backend, plan: dict[str, tuple[int, ...]]) -> None:
+        """Wrap ``inner`` with the forged-token plan."""
         if inner is None:
             raise ValueError("inner backend must not be None")
         inner_fingerprint = getattr(inner, "fingerprint", None)

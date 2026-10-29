@@ -54,7 +54,8 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
         config_path.write_text(json.dumps(config), encoding="utf-8")
         return root
 
-    def _doctor(self, model_path):
+    @staticmethod
+    def _doctor(model_path):
         from model_protocol_lab.doctor import doctor
 
         return doctor(str(model_path), str(FIXTURES), boundary_ids=(62,))
@@ -99,7 +100,8 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
 
 
 class NextCommandDegradationTests(unittest.TestCase):
-    def _report(self):
+    @staticmethod
+    def _report():
         return {"verdict": "ok", "model": {"context_window": 64}}
 
     def test_no_tokenizer_keeps_default_budget(self):

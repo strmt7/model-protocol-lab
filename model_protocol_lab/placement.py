@@ -212,7 +212,8 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     meanings (0 = code word, 1 = number, 2 = first neutral
     sentence, 3 = second neutral sentence), and the redraw
     rules in :func:`generate_cases` are frozen together -- the
-    diff validator's mirror reproduces them exactly."""
+    diff validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|placement|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -268,7 +269,8 @@ def arm_content(case: dict[str, Any], arm: str) -> str:
     """One arm's user-turn content for a case: the same texts,
     differing only in where the question sits (and, for the
     sandwich, its deliberate verbatim repeat; for closed-book,
-    the payload's absence)."""
+    the payload's absence).
+    """
     question = str(case["question"])
     payload = str(case["payload"])
     if arm == "question_first":
@@ -298,7 +300,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -307,7 +310,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (templates, topics,
     words, pool): the lists are bound by digest in the
     protocol, so a payload cannot quietly carry a different
-    instrument under the same version number."""
+    instrument under the same version number.
+    """
     canonical = json.dumps(
         [FACT_TEMPLATE, QUESTION_TEMPLATE, list(TOPICS), list(WORDS), list(NEUTRAL_POOL)],
         separators=(",", ":"),
@@ -319,7 +323,8 @@ def case_material_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, case material, floors, budgets, and the
-    seed/backend pair that generated the set."""
+    seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -355,6 +360,7 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -363,6 +369,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the verdict."""
     cell = _cell(record, key)
     return bool(cell is not None and cell["verdict"])
 
@@ -370,14 +377,16 @@ def _verdict(record: dict[str, Any], key: str) -> bool:
 def screened(record: dict[str, Any]) -> bool:
     """Whether the closed-book screen excludes this record for
     its candidate: the closed-book cell completed and passed,
-    so the answer was reachable without the payload."""
+    so the answer was reachable without the payload.
+    """
     cell = _cell(record, "closed_book")
     return cell is not None and bool(cell["verdict"])
 
 
 def live_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Records that enter placement populations: not
-    closed-book-screened."""
+    closed-book-screened.
+    """
     return [r for r in records if not screened(r)]
 
 
@@ -389,7 +398,8 @@ def _pair_block(
 ) -> dict[str, Any]:
     """Discordant counts for one arm pair over the paired
     population (both cells completed, optionally restricted to
-    a fixture set)."""
+    a fixture set).
+    """
     n_paired = 0
     n_a_only = 0
     n_b_only = 0
@@ -433,7 +443,8 @@ def both_fail_dominant(n_qf_only: int, n_pf_only: int, n_neither: int) -> bool:
     cases at least as often as either direction flips, and at
     or above the discordance floor. A candidate in this state
     has a capability story, not a placement story, and never
-    counts as falsified."""
+    counts as falsified.
+    """
     return n_neither >= max(n_qf_only, n_pf_only) and n_neither >= MIN_DISCORDANT
 
 
@@ -599,7 +610,8 @@ def shared_live_fixtures(
     for none of them: the conditions population. A case any
     candidate answered closed-book is not a clean shared
     measurement, so the shared readout screens by union while
-    the per-candidate blocks screen per candidate."""
+    the per-candidate blocks screen per candidate.
+    """
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in records if not screened(r)))
@@ -616,7 +628,8 @@ def _selection_over(
     """The conservative selection for one arm restricted to
     ``fixtures``: None when any candidate's completed set on
     that restriction is empty or the restricted completed sets
-    differ across candidates."""
+    differ across candidates.
+    """
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():
@@ -652,7 +665,8 @@ def arm_selection(
     differences into the flip). Withheld when the restricted
     completed sets differ across candidates or are empty; the
     baseline arm's own flip is False when not withheld, and a
-    flip is None when either side is withheld."""
+    flip is None when either side is withheld.
+    """
     shared = shared_live_fixtures(records_by_candidate)
     own = _selection_over(records_by_candidate, arm, shared)
     if own is None:

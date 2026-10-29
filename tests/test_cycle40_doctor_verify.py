@@ -134,6 +134,7 @@ def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]
     )
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _TmpTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -670,7 +671,8 @@ class PortabilityCheckUnitTests(_TmpTestCase):
 
     def test_decode_failure_degrades(self) -> None:
         class ExplodingTokenizer:
-            def decode(self, ids):  # noqa: ANN001, ANN202
+            @staticmethod
+            def decode(ids):  # noqa: ANN001, ANN202
                 raise RuntimeError("boom")
 
         check = doctor_mod._portability_check(self.tmpdir, (1,), ExplodingTokenizer())
@@ -746,7 +748,8 @@ class PortabilityCheckUnitTests(_TmpTestCase):
 
 
 class SecondaryRegisteredTests(unittest.TestCase):
-    def _registered(self, doc: dict, **attrs) -> dict:
+    @staticmethod
+    def _registered(doc: dict, **attrs) -> dict:
         fake = SimpleNamespace(convert_tokens_to_ids=lambda tok: {"[BOS]": 25}.get(tok, 0), **attrs)
         return doctor_mod._secondary_registered(fake, doc)
 
@@ -793,7 +796,8 @@ class SecondaryRegisteredTests(unittest.TestCase):
             cls_token = None
             mask_token = None
 
-            def convert_tokens_to_ids(self, token):  # noqa: ANN001, ANN202
+            @staticmethod
+            def convert_tokens_to_ids(token):  # noqa: ANN001, ANN202
                 raise RuntimeError("hostile")
 
         registered = doctor_mod._secondary_registered(HostileTokenizer(), {"added_tokens": []})
@@ -918,6 +922,7 @@ class PortabilityMatrixTests(_TmpTestCase):
     def test_compatible_row_when_inventory_registered(self) -> None:
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         row = next(r for r in section["rows"] if r["format"] == "chatml")
         self.assertEqual(row["verdict"], "compatible")
         self.assertTrue(row["bos_skipped"])
@@ -925,6 +930,7 @@ class PortabilityMatrixTests(_TmpTestCase):
     def test_incompatible_row_when_inventory_missing(self) -> None:
         root = self._second_ckpt()
         section = doctor_mod.portability_matrix(root)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         row = next(r for r in section["rows"] if r["format"] == "chatml")
         self.assertEqual(row["verdict"], "incompatible")
 
@@ -955,13 +961,16 @@ class RenderPortabilityTableTests(_TmpTestCase):
             lines[0].startswith("portability matrix vs ")
             and lines[0].endswith(": 118 candidates (tokenizer-only; no weights loaded)")
         )
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         header = next(line for line in lines if line.startswith("format"))
         self.assertIn("verdict", header)
         self.assertIn("reason", header)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         chatml_line = next(line for line in lines if line.startswith("chatml "))
         self.assertIn("compatible", chatml_line)
         self.assertTrue(chatml_line.rstrip().endswith("bos-skipped"))
         # A bos-carrying format has no bos-skipped suffix.
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         deepseek_line = next(line for line in lines if line.startswith("deepseek "))
         self.assertFalse(deepseek_line.rstrip().endswith("bos-skipped"))
         self.assertIn(doctor_mod._PORTABILITY_ASYMMETRY, text)
@@ -1058,7 +1067,8 @@ class ExamineDatasetTests(_TmpTestCase):
 
 
 class TemplateConformanceTests(_TmpTestCase):
-    def _formats_cases(self) -> tuple[tuple[Format, ...], tuple[Fixture, ...]]:
+    @staticmethod
+    def _formats_cases() -> tuple[tuple[Format, ...], tuple[Fixture, ...]]:
         fmt = candidates("chatml", mutate=False)[0]
         case = Fixture(
             id="c0", messages=(Message(role="user", content="w0 w1"),), expected="e", group="g"

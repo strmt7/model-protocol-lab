@@ -86,12 +86,14 @@ class _WordBackend:
     fingerprint = "sha256:test-record-notation"
 
     def __init__(self, mode: str = "perfect") -> None:
+        """Init  ."""
         self.mode = mode
         self.calls = 0
         self.vocab: dict[str, int] = {}
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -103,9 +105,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -140,6 +144,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=(_CHATML, _LLAMA3), seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.record_notation_stage(
@@ -153,6 +158,7 @@ def _payload(backend=None, formats=(_CHATML, _LLAMA3), seed=0, **stage_kwargs):
 
 
 def _cell(verdict, digest, boundary=True, tokens=100, text=None, headline=True):
+    """Cell."""
     cell = {
         "verdict": verdict,
         "boundary_found": boundary,
@@ -166,6 +172,7 @@ def _cell(verdict, digest, boundary=True, tokens=100, text=None, headline=True):
 
 
 def _record(case, prose_cell, json_cell, screen_cell, *, same_ids=False, details=None):
+    """Record."""
     expected_digest = rn.digest_text(str(case["expected"]))
     id_prose = rn.digest_text(f"ids-prose-{case['fixture_id']}")
     id_json = id_prose if same_ids else rn.digest_text(f"ids-json-{case['fixture_id']}")
@@ -193,15 +200,20 @@ def _record(case, prose_cell, json_cell, screen_cell, *, same_ids=False, details
 
 
 def _pass_cell(case, tokens=100):
+    """Pass cell."""
     return _cell(True, rn.digest_text(str(case["expected"])), True, tokens, str(case["expected"]))
 
 
 def _screen_fail(case):
+    """Screen fail."""
     return _cell(False, rn.digest_text("unknownword"), True, 20, headline=False)
 
 
 class FrozenMaterialTests(unittest.TestCase):
+    """Frozen material tests."""
+
     def test_words_fields_and_templates_frozen(self):
+        """Words fields and templates frozen."""
         self.assertEqual(len(rn.WORDS), 24)
         self.assertEqual(rn.WORDS[0], "amber")
         self.assertEqual(rn.WORDS[-1], "willow")
@@ -224,11 +236,13 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(rn.MAX_RECORDS_BYTES, 12 * 1024 * 1024)
 
     def test_table_shapes_cycle(self):
+        """Table shapes cycle."""
         shapes = [rn.table_shape(i) for i in range(24)]
         self.assertEqual([n for n, _ in shapes], [4, 5, 6] * 8)
         self.assertEqual([len(fields) for _, fields in shapes], [3, 4, 3, 4, 3, 4] * 4)
 
     def test_values_match_grammar_and_are_distinct(self):
+        """Values match grammar and are distinct."""
         pattern = re.compile(r"^[a-z]+-[0-9]{4}$")
         for case in rn.generate_cases(3):
             values = [record[field] for record in case["table"] for field in sorted(record)]
@@ -239,6 +253,7 @@ class FrozenMaterialTests(unittest.TestCase):
                 self.assertTrue(1000 <= int(value.split("-")[1]) <= 9999)
 
     def test_generation_is_deterministic_and_seed_sensitive(self):
+        """Generation is deterministic and seed sensitive."""
         self.assertEqual(rn.generate_cases(5), rn.generate_cases(5))
         self.assertNotEqual(rn.generate_cases(5), rn.generate_cases(6))
         ids = [case["fixture_id"] for case in rn.generate_cases(5)]
@@ -252,6 +267,7 @@ class FrozenMaterialTests(unittest.TestCase):
         # index is the next draw after the table is complete.
         # Re-executed literally here and compared table for
         # table against the generator.
+        """Rng call sequence is the frozen one."""
         import random
 
         for seed in (0, 1, 7):
@@ -287,6 +303,7 @@ class FrozenMaterialTests(unittest.TestCase):
     def test_worked_example_byte_identical(self):
         # The candidate's section 3.3 worked example, byte for
         # byte (four 3-field records).
+        """Worked example byte identical."""
         table = [
             {"code": "amber-1001", "label": "birch-2002", "zone": "cedar-3003"},
             {"code": "copper-4004", "label": "falcon-5005", "zone": "garnet-6006"},
@@ -316,6 +333,7 @@ class FrozenMaterialTests(unittest.TestCase):
     def test_worst_case_lengths_match_design(self):
         # Section 3.4: a 6-record 4-field table of longest
         # values measures prose 653 / canonical JSON 594.
+        """Worst case lengths match design."""
         words = ["saffron", "juniper"]
         table = [
             {field: f"{words[(r + j) % 2]}-9999" for j, field in enumerate(rn.FIELDS_4)}
@@ -329,6 +347,7 @@ class FrozenMaterialTests(unittest.TestCase):
     def test_parse_inverts_render_on_generated_panel(self):
         # Injectivity, executed: parse after render is the
         # identity on every generated table.
+        """Parse inverts render on generated panel."""
         for seed in (0, 1, 2, 3):
             for case in rn.generate_cases(seed):
                 self.assertEqual(rn.parse_prose(rn.render_prose(case["table"])), case["table"])
@@ -338,6 +357,7 @@ class FrozenMaterialTests(unittest.TestCase):
         # about 1/24 of cases by construction; the population
         # is NOT redrawn -- an overlapping case must be present
         # in the generated panel exactly as drawn.
+        """Answer key overlap exists and is not redrawn."""
         overlaps = 0
         total = 0
         for seed in range(20):
@@ -352,6 +372,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertAlmostEqual(audit["answer_key_same_word_rate"], 0.0417, places=3)
 
     def test_embedding_audit_values(self):
+        """Embedding audit values."""
         audit = rn.audit_answer_embedding()
         self.assertEqual(audit["template_violations"], 0)
         self.assertEqual(audit["key_word_prefix_cases"], 24)
@@ -360,6 +381,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(protocol["embedding_audit"], audit)
 
     def test_protocol_object_and_fingerprints(self):
+        """Protocol object and fingerprints."""
         protocol = rn.protocol_object(0, "fp-a")
         self.assertEqual(protocol["seed"], 0)
         self.assertEqual(protocol["backend_fingerprint"], "fp-a")
@@ -378,6 +400,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(protocol["max_records_bytes"], 12 * 1024 * 1024)
 
     def test_validate_case_accepts_generated_and_rejects_tampering(self):
+        """Validate case accepts generated and rejects tampering."""
         for case in rn.generate_cases(2):
             self.assertTrue(rn.validate_case(case, 2))
         case = rn.generate_cases(2)[0]
@@ -400,9 +423,11 @@ class FrozenMaterialTests(unittest.TestCase):
         # below 4.0x; non-ASCII-stressed answer texts exceed
         # the cap outright (the stage then fails closed with
         # the frozen budget detail).
+        """Records bytes budget relationships."""
         base = _payload()["candidates"]["chatml"]["records"]
 
         def stressed(fill):
+            """Stressed."""
             records = []
             for record in base:
                 clone = copy.deepcopy(record)
@@ -424,7 +449,10 @@ class FrozenMaterialTests(unittest.TestCase):
 
 
 class ConstructionTests(unittest.TestCase):
+    """Construction tests."""
+
     def test_arm_contents(self):
+        """Arm contents."""
         case = rn.generate_cases(0)[0]
         question = rn.QUESTION_TEMPLATE.format(key=case["key"])
         screen = rn.arm_content(case, "closed_book")
@@ -437,13 +465,17 @@ class ConstructionTests(unittest.TestCase):
         self.assertTrue(canonical.endswith(f"\n\n{question} {rn.CONTRACT}"))
 
     def test_content_digests_distinct_across_arms(self):
+        """Content digests distinct across arms."""
         case = rn.generate_cases(1)[5]
         digests = {rn.digest_text(rn.arm_content(case, arm)) for arm in rn.ARM_KEYS}
         self.assertEqual(len(digests), 3)
 
 
 class DecompositionTests(unittest.TestCase):
+    """Decomposition tests."""
+
     def test_decompose_cell_classes(self):
+        """Decompose cell classes."""
         expected_digest = rn.digest_text("amber-1001")
         passing = _cell(True, expected_digest, True, 100, "amber-1001")
         self.assertEqual(rn.decompose_cell(passing, expected_digest), "pass")
@@ -455,6 +487,7 @@ class DecompositionTests(unittest.TestCase):
         self.assertEqual(rn.decompose_cell(empty, expected_digest), "other_failure")
 
     def test_decompose_pair_classes(self):
+        """Decompose pair classes."""
         digest_a = rn.digest_text("amber-1001")
         digest_b = rn.digest_text("birch-2002")
         same_digest = (
@@ -482,6 +515,7 @@ class DecompositionTests(unittest.TestCase):
         # parses to the expected value while the raw text does
         # not contain it; a prose answer containing the value
         # echoes without parsing.
+        """Echo and parsed are independent."""
         expected = "amber-1001"
         escaped = '{"code": "amber\\u002d1001"}'
         self.assertNotIn(expected, escaped)
@@ -495,6 +529,7 @@ class DecompositionTests(unittest.TestCase):
 
 
 def _sign_p(i: int, j: int) -> Fraction:
+    """Sign p."""
     d = i + j
     if d == 0:
         return Fraction(1)
@@ -505,7 +540,8 @@ def _sign_p(i: int, j: int) -> Fraction:
 
 def _fire_rates(n, p_both, p_prose, p_json):
     """Exact multinomial enumeration of the rejected rules,
-    following the candidate's oc_tables.py method."""
+    following the candidate's oc_tables.py method.
+    """
     p_neither = 1 - p_both - p_prose - p_json
     rules = {
         "rcf": Fraction(0),
@@ -536,15 +572,18 @@ def _fire_rates(n, p_both, p_prose, p_json):
 
 
 def _indep(pa, pb):
+    """Indep."""
     return (pa * pb, pa * (1 - pb), (1 - pa) * pb)
 
 
 def _paired(p, phi):
+    """Paired."""
     disc = p * (1 - p) * (1 - phi)
     return (p * p + phi * p * (1 - p), disc, disc)
 
 
 def _delta(delta):
+    """Delta."""
     return ((1 - delta) * Fraction(9, 10), delta / 2, delta / 2)
 
 
@@ -552,7 +591,8 @@ def _mcnemar_power(p_high, p_low, n, alpha):
     """The same McNemar rule by conditional enumeration (the
     d >= 6 floor is redundant: a two-sided sign p <= 0.05 first
     occurs at d = 6). Used for the N = 96 panel, where the
-    multinomial loop is needlessly wide."""
+    multinomial loop is needlessly wide.
+    """
     a = p_high * (1 - p_low)
     b = (1 - p_high) * p_low
     pd = a + b
@@ -573,14 +613,17 @@ def _mcnemar_power(p_high, p_low, n, alpha):
 
 class OperatingCharacteristicsTests(unittest.TestCase):
     """Amendment E: every printed figure re-derived by exact
-    enumeration at its stated marginal basis."""
+    enumeration at its stated marginal basis.
+    """
 
     OC = rn.OPERATING_CHARACTERISTICS
 
     def assertFigure(self, key, derived):
+        """AssertFigure."""
         self.assertEqual(round(float(derived), 4), self.OC[key], key)
 
     def test_transplant_and_rule_a_worlds(self):
+        """Transplant and rule a worlds."""
         competent = _fire_rates(24, *_indep(Fraction(9, 10), Fraction(9, 10)))
         self.assertFigure("transplant_fire_competent_independent", competent["rcf"])
         self.assertFigure("rule_a_fire_competent_independent", competent["rule_a"])
@@ -614,6 +657,7 @@ class OperatingCharacteristicsTests(unittest.TestCase):
         # marginals .85/.60 and the 20-point column on .90/.70;
         # at the table's own .90 base the 25-point power is
         # 0.4000. All three are stated, none is interchangeable.
+        """Mcnemar powers carry their marginal bases."""
         gap25 = _fire_rates(24, *_indep(Fraction(85, 100), Fraction(60, 100)))
         self.assertFigure("mcnemar_power_gap25_marginals_85_60", gap25["mcnemar"])
         self.assertFigure("sign_bonferroni_power_gap25_marginals_85_60", gap25["sign_bonf"])
@@ -629,6 +673,7 @@ class OperatingCharacteristicsTests(unittest.TestCase):
         )
 
     def test_panel96_figures(self):
+        """Panel96 figures."""
         alpha = Fraction(1, 480)
         self.assertFigure(
             "panel96_bonferroni_power_gap25_marginals_85_60",
@@ -649,6 +694,7 @@ class OperatingCharacteristicsTests(unittest.TestCase):
         )
 
     def test_winner_and_screen_figures(self):
+        """Winner and screen figures."""
         self.assertEqual(
             round(float(Fraction(95, 100) ** 24), 3), self.OC["winner_pass_probability_95"]
         )
@@ -664,13 +710,18 @@ class OperatingCharacteristicsTests(unittest.TestCase):
 
 
 class AggregateTests(unittest.TestCase):
+    """Aggregate tests."""
+
     def setUp(self):
+        """SetUp."""
         self.cases = rn.generate_cases(0)
 
     def aggregate(self, records):
+        """Aggregate."""
         return rn.aggregate_candidate(records, self.cases)
 
     def test_discordance_direction_decomposition_and_resolution(self):
+        """Discordance direction decomposition and resolution."""
         c = self.cases
         records = [
             _record(
@@ -707,6 +758,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["n_incomplete"], 0)
 
     def test_screened_and_ids_identical_excluded_from_headline(self):
+        """Screened and ids identical excluded from headline."""
         c = self.cases
         screened = _record(
             c[0],
@@ -736,6 +788,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(unscreened["discordant"], 0)
 
     def test_resolution_none_when_no_pairs(self):
+        """Resolution none when no pairs."""
         c = self.cases
         screened = _record(
             c[0],
@@ -751,6 +804,7 @@ class AggregateTests(unittest.TestCase):
         self.assertIsNone(head["canonical_json_rate"])
 
     def test_echo_and_parsed_rates_over_failures_only(self):
+        """Echo and parsed rates over failures only."""
         c = self.cases
         expected = str(c[0]["expected"])
         echo_fail = _record(
@@ -786,6 +840,7 @@ class AggregateTests(unittest.TestCase):
         self.assertIsNone(screen["parsed_rate"])
 
     def test_regrade_sensitivities(self):
+        """Regrade sensitivities."""
         c = self.cases
         expected = str(c[0]["expected"])
         fenced = _record(
@@ -800,6 +855,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["sensitivities"]["regrade_r1_discordant"], 1)
 
     def test_arm_attrition_counts(self):
+        """Arm attrition counts."""
         c = self.cases
         details = {"prose": "arm_context_exceeded", "canonical_json": "", "closed_book": ""}
         record = _record(c[0], None, _pass_cell(c[0], 90), _screen_fail(c[0]), details=details)
@@ -813,7 +869,10 @@ class AggregateTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    """Stage tests."""
+
     def test_perfect_payload(self):
+        """Perfect payload."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertEqual(payload["detail"], "")
@@ -834,6 +893,7 @@ class StageTests(unittest.TestCase):
         )
 
     def test_headline_cells_carry_text_screen_cells_do_not(self):
+        """Headline cells carry text screen cells do not."""
         payload = _payload()
         record = payload["candidates"]["chatml"]["records"][0]
         prose = record["cells"]["prose"]
@@ -865,6 +925,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(prose["input_tokens"], record["arm_tokens"]["prose"])
 
     def test_json_drop_payload(self):
+        """Json drop payload."""
         payload = _payload(_WordBackend("json_drop"))
         entry = payload["candidates"]["chatml"]
         head = entry["headline"]
@@ -875,6 +936,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(head["canonical_json_rate"], 0.0)
 
     def test_closed_book_leak_screens_exactly_one(self):
+        """Closed book leak screens exactly one."""
         payload = _payload(_WordBackend("closed_book_leak"))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["audit"]["n_screened"], 1)
@@ -883,6 +945,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["sensitivities"]["unscreened"]["n_paired"], 24)
 
     def test_no_boundary_payload(self):
+        """No boundary payload."""
         payload = _payload(_WordBackend("no_boundary"))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["headline"]["discordant"], 0)
@@ -893,6 +956,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["arms"]["prose"]["rate"], 0.0)
 
     def test_exploding_backend_yields_evaluation_failed_cells(self):
+        """Exploding backend yields evaluation failed cells."""
         payload = _payload(_WordBackend("explode"))
         self.assertTrue(payload["available"])
         entry = payload["candidates"]["chatml"]
@@ -902,6 +966,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["n_incomplete"], 24)
 
     def test_context_exceeded_cells(self):
+        """Context exceeded cells."""
         payload = _payload(max_context=1)
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["arms"]["prose"]["n_context_exceeded"], 24)
@@ -909,12 +974,14 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["headline"]["n_paired"], 0)
 
     def test_candidate_budget_detail(self):
+        """Candidate budget detail."""
         formats = tuple(Format(f"f{i:02d}", "", "u", "a", "e") for i in range(25))
         payload = _payload(formats=formats)
         self.assertFalse(payload["available"])
         self.assertEqual(payload["detail"], "record_notation_record_budget_exceeded")
 
     def test_cancelled_stage(self):
+        """Cancelled stage."""
         event = threading.Event()
         event.set()
         payload = _payload(cancel=event)
@@ -922,6 +989,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_boundary_containment_screen_fails_closed(self):
+        """Boundary containment screen fails closed."""
         backend = _WordBackend()
         stage = experiments.record_notation_stage(
             backend,
@@ -934,6 +1002,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "record_notation_screen_failed")
 
     def test_case_invariant_screen_fails_closed(self):
+        """Case invariant screen fails closed."""
         with mock.patch.object(rn, "validate_case", return_value=False):
             payload = _payload()
         self.assertFalse(payload["available"])
@@ -941,6 +1010,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["audit"]["by_reason"], {"case_invariant": 24})
 
     def test_special_token_screen_fails_closed(self):
+        """Special token screen fails closed."""
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals",
             return_value=["<|im_end|>"],
@@ -953,10 +1023,14 @@ class StageTests(unittest.TestCase):
 
 
 class ValidatorTests(unittest.TestCase):
+    """Validator tests."""
+
     def setUp(self):
+        """SetUp."""
         self.payload = _payload()
 
     def test_real_payload_validates(self):
+        """Real payload validates."""
         self.assertTrue(diffreports._valid_record_notation(self.payload))
         diff = diffreports.diff_record_notation(self.payload, _payload())
         self.assertEqual(diff["available"], "both")
@@ -964,66 +1038,85 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_tamper_battery(self):
+        """Tamper battery."""
+
         def protocol_fingerprint(payload):
+            """Protocol fingerprint."""
             payload["protocol"]["fingerprint"] = "0" * 64
 
         def ground_digest(payload):
+            """Ground digest."""
             payload["protocol"]["ground_sha256"] = "0" * 64
 
         def content_digest(payload):
+            """Content digest."""
             payload["candidates"]["chatml"]["records"][0]["content_digests"]["prose"] = "0" * 64
 
         def arm_tokens(payload):
+            """Arm tokens."""
             payload["candidates"]["chatml"]["records"][0]["arm_tokens"]["prose"] += 1
 
         def cell_input_tokens(payload):
             # Amendment D: the cell's input_tokens are bound to
             # the record's arm token count; a payload whose
             # token fields were fabricated fails the mirror.
+            """Cell input tokens."""
             payload["candidates"]["chatml"]["records"][0]["cells"]["prose"]["input_tokens"] += 1
 
         def id_length_delta(payload):
+            """Id length delta."""
             payload["candidates"]["chatml"]["records"][0]["id_length_delta"] += 1
 
         def ids_identical_flip(payload):
+            """Ids identical flip."""
             payload["candidates"]["chatml"]["records"][0]["ids_identical"] = True
 
         def answer_text_swap(payload):
+            """Answer text swap."""
             payload["candidates"]["chatml"]["records"][0]["cells"]["prose"]["answer_text"] = (
                 "tampered-0000"
             )
 
         def screen_cell_with_text(payload):
+            """Screen cell with text."""
             payload["candidates"]["chatml"]["records"][0]["cells"]["closed_book"]["answer_text"] = (
                 "tampered-0000"
             )
 
         def verdict_flip(payload):
+            """Verdict flip."""
             payload["candidates"]["chatml"]["records"][0]["cells"]["prose"]["verdict"] = False
 
         def aggregate_discordant(payload):
+            """Aggregate discordant."""
             payload["candidates"]["chatml"]["headline"]["discordant"] += 1
 
         def candidate_audit_screened(payload):
+            """Candidate audit screened."""
             payload["candidates"]["chatml"]["audit"]["n_screened"] += 1
 
         def records_truncated(payload):
+            """Records truncated."""
             payload["candidates"]["chatml"]["records"] = payload["candidates"]["chatml"]["records"][
                 :23
             ]
 
         def extra_top_level_key(payload):
+            """Extra top level key."""
             payload["surprise"] = True
 
         def n_cases_tamper(payload):
+            """N cases tamper."""
             payload["n_cases"] = 23
 
         def expected_digest(payload):
+            """Expected digest."""
             payload["candidates"]["chatml"]["records"][0]["expected_digest"] = "0" * 64
 
         for mutate in (
@@ -1054,6 +1147,7 @@ class ValidatorTests(unittest.TestCase):
         # payload: rebuild the aggregates through the producer
         # and the mirror must accept (the pair decomposition
         # reads it as boundary_only, never as a value failure).
+        """Boundary only cell validates in a real record set."""
         payload = _payload()
         entry = payload["candidates"]["chatml"]
         record = entry["records"][0]
@@ -1069,6 +1163,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(aggregates["headline"]["discordant"], 1)
 
     def test_mirror_regrades_match_scorerlens(self):
+        """Mirror regrades match scorerlens."""
         samples = [
             "amber-1001",
             "  amber-1001 \n",
@@ -1090,6 +1185,7 @@ class ValidatorTests(unittest.TestCase):
             )
 
     def test_diff_drift_and_comparability(self):
+        """Diff drift and comparability."""
         dropped = _payload(_WordBackend("json_drop"))
         diff = diffreports.diff_record_notation(self.payload, dropped)
         self.assertTrue(diff["changed"])
@@ -1105,6 +1201,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_availability(self):
+        """Diff availability."""
         unavailable = {"available": False, "detail": "record_notation_unavailable"}
         diff = diffreports.diff_record_notation(unavailable, self.payload)
         self.assertEqual(diff["available"], "new")
@@ -1120,7 +1217,10 @@ class ValidatorTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
+    """Reporting tests."""
+
     def test_section_empty_without_payload(self):
+        """Section empty without payload."""
         self.assertEqual(reporting._record_notation_section({}), "")
         self.assertEqual(
             reporting._record_notation_section(
@@ -1130,6 +1230,7 @@ class ReportingTests(unittest.TestCase):
         )
 
     def test_section_renders_readouts(self):
+        """Section renders readouts."""
         section = reporting._record_notation_section({"record_notation": _payload()})
         self.assertIn('<section class="card" id="record-notation">', section)
         self.assertIn("Headline over 24 paired cases", section)
@@ -1149,6 +1250,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("no winner", section)
 
     def test_section_escapes_candidate_names(self):
+        """Section escapes candidate names."""
         fmt = Format("a<b", "", "u", "a", "e")
         payload = _payload(formats=(fmt,))
         section = reporting._record_notation_section({"record_notation": payload})
@@ -1157,7 +1259,10 @@ class ReportingTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    """Cli tests."""
+
     def test_flag_registered(self):
+        """Flag registered."""
         parser = cli.build_parser()
         texts = []
         for action in parser._subparsers._group_actions[0].choices["run"]._actions:
@@ -1165,6 +1270,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("--record-notation", texts)
 
     def test_wrapper_fallback(self):
+        """Wrapper fallback."""
         result: dict = {}
         with mock.patch.object(
             experiments, "record_notation_stage", side_effect=RuntimeError("boom")
@@ -1186,6 +1292,7 @@ class CliTests(unittest.TestCase):
         )
 
     def test_wrapper_populates_result(self):
+        """Wrapper populates result."""
         result: dict = {}
         backend = _WordBackend()
         cli._run_record_notation_probe(
@@ -1209,9 +1316,11 @@ class RenderParseGapTests(unittest.TestCase):
     inverse parser's three rejection raises, the unknown-arm
     raise, and the embedding audit's counting line (the frozen
     lists yield 0 by construction; a patched word list proves
-    the zero is counted, not hardcoded)."""
+    the zero is counted, not hardcoded).
+    """
 
     def test_one_and_two_field_sentences(self):
+        """One and two field sentences."""
         one = [{"code": "amber-1001"}]
         self.assertEqual(rn.render_prose(one), "The code is amber-1001.")
         self.assertEqual(rn.parse_prose(rn.render_prose(one)), one)
@@ -1222,6 +1331,7 @@ class RenderParseGapTests(unittest.TestCase):
         self.assertEqual(rn.parse_prose(rn.render_prose(two)), two)
 
     def test_parse_prose_rejects_non_renderings(self):
+        """Parse prose rejects non renderings."""
         with self.assertRaises(ValueError):
             rn.parse_prose("The code is amber-1001")  # no final period
         with self.assertRaises(ValueError):
@@ -1230,11 +1340,13 @@ class RenderParseGapTests(unittest.TestCase):
             rn.parse_prose("The code amber-1001.")  # segment without ' is '
 
     def test_arm_content_unknown_arm(self):
+        """Arm content unknown arm."""
         case = rn.generate_case(0, 0)
         with self.assertRaises(ValueError):
             rn.arm_content(case, "yaml")
 
     def test_embedding_audit_counts_collisions(self):
+        """Embedding audit counts collisions."""
         with mock.patch.object(rn, "WORDS", ["code"]):
             audit = rn.audit_answer_embedding()
         self.assertGreaterEqual(audit["template_violations"], 1)
@@ -1249,16 +1361,22 @@ class ValidateCaseGapTests(unittest.TestCase):
     one that fires). The key-uniqueness branch is NOT here: it
     is subsumed by the value-distinctness branch (a duplicated
     zone is a duplicated value) and is documented as
-    provably unreachable in VALIDATION.md."""
+    provably unreachable in VALIDATION.md.
+    """
 
-    def _patched(self, case):
+    @staticmethod
+    def _patched(case):
+        """Patched."""
         with mock.patch.object(rn, "generate_case", return_value=case):
             return rn.validate_case(case, 0)
 
-    def _case(self, index=0):
+    @staticmethod
+    def _case(index=0):
+        """Case."""
         return copy.deepcopy(rn.generate_case(0, index))
 
     def test_index_out_of_range_and_malformed(self):
+        """Index out of range and malformed."""
         case = self._case()
         case["fixture_id"] = "record-24"
         self.assertFalse(rn.validate_case(case, 0))
@@ -1266,59 +1384,70 @@ class ValidateCaseGapTests(unittest.TestCase):
         self.assertFalse(rn.validate_case({"fixture_id": "record-0x"}, 0))
 
     def test_regeneration_mismatch(self):
+        """Regeneration mismatch."""
         case = self._case()
         case["table"][0]["label"] = "zebra-1234"
         self.assertFalse(rn.validate_case(case, 0))
 
     def test_table_length(self):
+        """Table length."""
         case = self._case()
         case["table"] = case["table"][:-1]
         self.assertFalse(self._patched(case))
 
     def test_field_set(self):
+        """Field set."""
         case = self._case()
         case["table"][0]["zones"] = case["table"][0].pop("zone")
         self.assertFalse(self._patched(case))
 
     def test_duplicate_value(self):
+        """Duplicate value."""
         case = self._case()
         case["table"][1]["label"] = case["table"][0]["label"]
         self.assertFalse(self._patched(case))
 
     def test_value_shape(self):
+        """Value shape."""
         case = self._case()
         case["table"][0]["code"] = "amber-999"
         self.assertFalse(self._patched(case))
 
     def test_value_word_not_in_list(self):
+        """Value word not in list."""
         case = self._case()
         case["table"][0]["code"] = "zebra-1234"
         self.assertFalse(self._patched(case))
 
     def test_expected_absent(self):
+        """Expected absent."""
         case = self._case()
         case["expected"] = case["table"][0]["label"]
         self.assertFalse(self._patched(case))
 
     def test_query_out_of_range(self):
+        """Query out of range."""
         case = self._case()
         case["query_index"] = len(case["table"])
         self.assertFalse(self._patched(case))
 
     def test_query_binding(self):
+        """Query binding."""
         case = self._case()
         case["query_index"] = (case["query_index"] + 1) % len(case["table"])
         self.assertFalse(self._patched(case))
 
     def test_renderings_must_diverge(self):
+        """Renderings must diverge."""
         case = self._case()
         with (
             mock.patch.object(rn, "generate_case", return_value=case),
-            mock.patch.object(rn, "render_json", side_effect=lambda table: rn.render_prose(table)),
+            mock.patch.object(rn, "render_json", side_effect=rn.render_prose),
         ):
             self.assertFalse(rn.validate_case(case, 0))
 
     def test_parse_inverse_must_hold(self):
+        """Parse inverse must hold."""
         case = self._case()
         with (
             mock.patch.object(rn, "generate_case", return_value=case),
@@ -1327,11 +1456,13 @@ class ValidateCaseGapTests(unittest.TestCase):
             self.assertFalse(rn.validate_case(case, 0))
 
     def test_arm_content_bindings(self):
+        """Arm content bindings."""
         real = rn.arm_content
         for bad_arm in ("prose", rn.SCREEN_ARM):
             case = self._case()
 
             def fake(case_, arm, _bad=bad_arm):
+                """Fake."""
                 return "junk" if arm == _bad else real(case_, arm)
 
             with (
@@ -1344,9 +1475,11 @@ class ValidateCaseGapTests(unittest.TestCase):
 class AggregateGapTests(unittest.TestCase):
     """Gap pass: the aggregate's tolerance of malformed records
     (non-dict cells/details/digests maps), the non-integer token
-    delta fallback, and the regrade's missing-answer-text path."""
+    delta fallback, and the regrade's missing-answer-text path.
+    """
 
     def test_malformed_records_are_inert(self):
+        """Malformed records are inert."""
         good = copy.deepcopy(_payload()["candidates"]["chatml"]["records"][0])
         del good["cells"]["prose"]["answer_text"]
         malformed = {
@@ -1366,9 +1499,12 @@ class AggregateGapTests(unittest.TestCase):
 class CellCancelGapTests(unittest.TestCase):
     """Gap pass: the cell's cancel raises before and after the
     evaluation (the stage-level cancel test trips the stage's
-    own check first)."""
+    own check first).
+    """
 
-    def _args(self):
+    @staticmethod
+    def _args():
+        """Args."""
         backend = _WordBackend()
         case = rn.generate_case(0, 0)
         content = rn.arm_content(case, "prose")
@@ -1381,7 +1517,9 @@ class CellCancelGapTests(unittest.TestCase):
         ids = tuple(backend.encode(_CHATML.render(fixture.messages)))
         return backend, fixture, ids
 
-    def _call(self, backend, fixture, ids, event):
+    @staticmethod
+    def _call(backend, fixture, ids, event):
+        """Call."""
         return experiments._record_notation_cell(
             backend,
             _CHATML,
@@ -1396,6 +1534,7 @@ class CellCancelGapTests(unittest.TestCase):
         )
 
     def test_cancel_before_evaluate(self):
+        """Cancel before evaluate."""
         backend, fixture, ids = self._args()
         event = threading.Event()
         event.set()
@@ -1403,10 +1542,15 @@ class CellCancelGapTests(unittest.TestCase):
             self._call(backend, fixture, ids, event)
 
     def test_cancel_after_evaluate(self):
+        """Cancel after evaluate."""
         event = threading.Event()
 
         class CancellingBackend(_WordBackend):
+            """Cancelling backend."""
+
+            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def generate(self, *args, **kwargs):
+                """Generate."""
                 event.set()
                 return super().generate(*args, **kwargs)
 
@@ -1417,6 +1561,7 @@ class CellCancelGapTests(unittest.TestCase):
 
 
 def _stage(backend=None, formats=(_CHATML, _LLAMA3), seed=0):
+    """Stage."""
     backend = backend if backend is not None else _WordBackend()
     return experiments.record_notation_stage(
         backend,
@@ -1428,6 +1573,7 @@ def _stage(backend=None, formats=(_CHATML, _LLAMA3), seed=0):
 
 
 def _unavailable_stage():
+    """Unavailable stage."""
     stage = _stage()
     stage["candidates"] = {
         "gemma": {"status": "unavailable", "detail": "candidate_load_failed", "records": []}
@@ -1437,9 +1583,11 @@ def _unavailable_stage():
 
 class AnalysisGapTests(unittest.TestCase):
     """Gap pass: the analysis's unavailable-candidate branch,
-    and the same entry carried through the mirror."""
+    and the same entry carried through the mirror.
+    """
 
     def test_analysis_marks_unavailable_candidate(self):
+        """Analysis marks unavailable candidate."""
         stage = _stage()
         stage["candidates"]["gemma"] = {
             "status": "unavailable",
@@ -1460,22 +1608,27 @@ class RecomputeGapTests(unittest.TestCase):
     total-records cap branch is NOT here: the per-candidate
     record count and the candidate cap bound the total first,
     and it is documented as provably unreachable in
-    VALIDATION.md."""
+    VALIDATION.md.
+    """
 
     def setUp(self):
+        """SetUp."""
         self.payload = _payload()
 
     def _recomputed(self, mutate):
+        """Recomputed."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return diffreports._recordnotation_recompute(payload)
 
     def test_protocol_branches(self):
+        """Protocol branches."""
         self.assertIsNone(self._recomputed(lambda p: p.update(protocol=[])))
         self.assertIsNone(self._recomputed(lambda p: p["protocol"].update(seed="0")))
         self.assertIsNone(self._recomputed(lambda p: p["protocol"].update(seed=1)))
 
     def test_candidate_set_branches(self):
+        """Candidate set branches."""
         self.assertIsNone(self._recomputed(lambda p: p.update(candidates={})))
         many = {f"c{i}": {"status": "unavailable", "detail": "x", "records": []} for i in range(25)}
         self.assertIsNone(self._recomputed(lambda p: p.update(candidates=many)))
@@ -1494,6 +1647,7 @@ class RecomputeGapTests(unittest.TestCase):
         )
 
     def test_unavailable_entry_branches(self):
+        """Unavailable entry branches."""
         stage = _stage()
         stage["candidates"]["gemma"] = {
             "status": "unavailable",
@@ -1514,12 +1668,16 @@ class RecomputeGapTests(unittest.TestCase):
         # The byte cap is enforced on the serialised records
         # before any per-record validation, so structurally
         # unexamined padding trips it.
+        """Records bytes cap."""
         payload = copy.deepcopy(self.payload)
         payload["candidates"]["chatml"]["records"] = [{"pad": "x" * 600_000}] * 24
         self.assertIsNone(diffreports._recordnotation_recompute(payload))
 
     def test_record_branches(self):
+        """Record branches."""
+
         def rec(p):
+            """Rec."""
             return p["candidates"]["chatml"]["records"][0]
 
         self.assertIsNone(self._recomputed(lambda p: rec(p).pop("cells")))
@@ -1547,6 +1705,7 @@ class RecomputeGapTests(unittest.TestCase):
         )
 
     def test_cell_none_with_detail_continues(self):
+        """Cell none with detail continues."""
         payload = copy.deepcopy(self.payload)
         record = payload["candidates"]["chatml"]["records"][0]
         record["cells"]["closed_book"] = None
@@ -1559,6 +1718,7 @@ class RecomputeGapTests(unittest.TestCase):
         self.assertFalse(diffreports._valid_record_notation(payload))
 
     def test_ids_identical_flip_is_recomputed(self):
+        """Ids identical flip is recomputed."""
         stage = _stage()
         record = stage["candidates"]["chatml"]["records"][0]
         cell = record["cells"]["canonical_json"]
@@ -1581,13 +1741,16 @@ class ReportingGapTests(unittest.TestCase):
     """Gap pass: the report section's guard returns (non-dict
     candidates, non-dict entries, unavailable rows, non-dict
     arms, None rates, and a missing operating-characteristics
-    block)."""
+    block).
+    """
 
     def test_candidates_not_a_dict(self):
+        """Candidates not a dict."""
         result = {"record_notation": {"available": True, "candidates": []}}
         self.assertEqual(reporting._record_notation_section(result), "")
 
     def test_unavailable_and_nondict_entries(self):
+        """Unavailable and nondict entries."""
         result = {
             "record_notation": {
                 "available": True,
@@ -1603,6 +1766,7 @@ class ReportingGapTests(unittest.TestCase):
         self.assertIn("unavailable", section)
 
     def test_none_rates_and_missing_arm(self):
+        """None rates and missing arm."""
         payload = copy.deepcopy(_payload())
         entry = payload["candidates"]["chatml"]
         entry["arms"]["prose"] = None
@@ -1612,6 +1776,7 @@ class ReportingGapTests(unittest.TestCase):
         self.assertIn("n/a", section)
 
     def test_missing_operating_characteristics(self):
+        """Missing operating characteristics."""
         payload = copy.deepcopy(_payload())
         payload["operating_characteristics"] = {}
         section = reporting._record_notation_section({"record_notation": payload})
@@ -1630,10 +1795,12 @@ class CliE2ETests(unittest.TestCase):
     driven end to end against the tiny locally generated GPT-2
     (the test_e2e harness shape, with the tree's 64-token
     context so headline cells resolve as context-exceeded and
-    the screen cells generate)."""
+    the screen cells generate).
+    """
 
     @classmethod
     def setUpClass(cls):
+        """SetUpClass."""
         from tests.test_adapter_integration import build_tiny_gpt2
 
         cls._tmp = TemporaryDirectory()
@@ -1644,6 +1811,7 @@ class CliE2ETests(unittest.TestCase):
         cls.dataset = Path(__file__).resolve().parent.parent / "examples" / "fixtures.json"
 
     def test_run_with_record_notation_flag(self):
+        """Run with record notation flag."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         output = Path(tmp.name) / "report"

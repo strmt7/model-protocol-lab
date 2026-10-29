@@ -124,6 +124,7 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
             start = time.perf_counter()
             margin_trajectory(frontier)
             timings.append(time.perf_counter() - start)
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         small, large = timings
         if small < 1e-3:
             self.skipTest(f"timer resolution too coarse ({small:.2e}s)")
@@ -199,7 +200,8 @@ def _hostile_decision_payload(decision: Any) -> dict[str, Any]:
 
 
 class TestDecisionSanitization(unittest.TestCase):
-    def _render(self, diff: dict[str, Any]) -> str:
+    @staticmethod
+    def _render(diff: dict[str, Any]) -> str:
         return "\n".join(diffreports._render_transfer_summary(diff))
 
     def test_transfer_decision_escapes_stripped(self) -> None:
@@ -332,8 +334,8 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         self.assertEqual(len(diff["tier_changes"]), 1)
         self.assertTrue(diff["changed"])
 
+    @staticmethod
     def _perturbation_payload(
-        self,
         stability: dict[str, Any] | None = None,
         per_variant: dict[str, Any] | None = None,
     ) -> dict[str, Any]:

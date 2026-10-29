@@ -79,7 +79,7 @@ class _ExactVersionVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
-        # self.assertEqual(a, b) / self.assertNotEqual(a, b)
+        # The assertEqual / assertNotEqual spellings, as attribute calls.
         func = node.func
         if (
             isinstance(func, ast.Attribute)
@@ -230,6 +230,7 @@ class TestDualRunnerContribution(unittest.TestCase):
     _UNITTEST_EXEMPT: dict[str, str] = {}
 
     def test_every_test_file_collected_by_unittest(self) -> None:
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import unittest
 
         loader = unittest.TestLoader()

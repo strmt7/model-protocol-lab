@@ -57,7 +57,8 @@ class _ScriptedBackend:
     chr(7) boundary token, padded to the generation cap (the
     ``limit`` reason contract). Echo forward logits make
     teacher-forced logprobs real floats through the real
-    scoring path."""
+    scoring path.
+    """
 
     def __init__(self, table, *, dtype="float32", fingerprint="sha256:native-fp"):
         self.table = table
@@ -65,10 +66,12 @@ class _ScriptedBackend:
         self.fingerprint = fingerprint
         self.declared_dtype = "float32"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
@@ -83,7 +86,8 @@ class _ScriptedBackend:
         ids = ids + (0,) * max(0, max_new_tokens - len(ids))
         return Generation(token_ids=ids, reason="limit")
 
-    def forward_logits(self, input_ids):
+    @staticmethod
+    def forward_logits(input_ids):
         import torch
 
         seq = list(input_ids)
@@ -258,7 +262,8 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "native_search_incomplete")
         self.assertEqual(payload["records"], [])
 
-    def _result(self):
+    @staticmethod
+    def _result():
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
     def test_native_dtype_gate(self):
@@ -333,7 +338,8 @@ class TestPrecisionValidator(unittest.TestCase):
     def setUp(self):
         self.payload = _valid_payload()
 
-    def _result(self):
+    @staticmethod
+    def _result():
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
     def _tampered(self, mutate):
@@ -445,10 +451,12 @@ class TestPrecisionReporting(unittest.TestCase):
 
 
 class TestPrecisionCliWrapper(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
-    def _probe(self, result, bf16_backend):
+    @staticmethod
+    def _probe(result, bf16_backend):
         cli._run_precision_probe(
             _ScriptedBackend(_full_table()),
             _FORMATS,
@@ -567,7 +575,8 @@ class TestPrecisionPureModule(unittest.TestCase):
 
 class TestBackendDtype(unittest.TestCase):
     """Real tiny-checkpoint dtype contract (checkpoints build in
-    seconds; the loads dominate and are shared per class)."""
+    seconds; the loads dominate and are shared per class).
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -647,6 +656,7 @@ class TestBackendDtype(unittest.TestCase):
 
 
 def _event():
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from threading import Event
 
     return Event()

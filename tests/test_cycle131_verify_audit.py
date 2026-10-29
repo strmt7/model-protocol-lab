@@ -135,6 +135,7 @@ def _artifact(
         "raw_evidence_included": True,
     }
     if selected is not None:
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         entry = next(e for e in entries if e["format"]["name"] == selected)
         data["selected_boundary_token_ids"] = list(entry["boundary_token_ids"])
     if decision in (
@@ -374,25 +375,29 @@ class TestTamperDetection(unittest.TestCase):
         report = verify.verify_results(data)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(_check_status(report, "candidates_unique"), "failed")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         detail = next(c["detail"] for c in report["checks"] if c["id"] == "candidates_unique")
         self.assertNotIn("\x1b", detail)
         self.assertIn("alpha", detail)
 
 
 class TestCli(unittest.TestCase):
-    def _write(self, directory: Path, data: dict) -> Path:
+    @staticmethod
+    def _write(directory: Path, data: dict) -> Path:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "results.json"
         path.write_text(json.dumps(data, ensure_ascii=True), encoding="utf-8")
         return directory
 
-    def _run(self, *args: str) -> subprocess.CompletedProcess:
+    @staticmethod
+    def _run(*args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", *args],
             cwd=_REPO_ROOT,
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
 
     def test_verify_ok_exit_0(self) -> None:
@@ -455,7 +460,8 @@ class TestHostilePayloadRobustness(unittest.TestCase):
     crashed `diff_frontiers` with an uncaught TypeError.
     """
 
-    def _foreign_frontier(self, n_points: int, max_tokens: int = 10**9) -> dict:
+    @staticmethod
+    def _foreign_frontier(n_points: int, max_tokens: int = 10**9) -> dict:
         pts = [[i + 1, (i * 7) % 3] for i in range(n_points)]
         return {
             "max_new_tokens": max_tokens,
@@ -540,7 +546,8 @@ class TestHostilePayloadRobustness(unittest.TestCase):
 
 class TestDefensiveBranches(unittest.TestCase):
     """Cover verify's fail-closed branches: every malformed shape must
-    produce a failed/unavailable check, never an exception."""
+    produce a failed/unavailable check, never an exception.
+    """
 
     def test_schema_rejects_each_bad_field(self) -> None:
         for field, bad in (
@@ -668,7 +675,8 @@ class TestDefensiveBranches(unittest.TestCase):
         report = verify.verify_results(data)  # must not raise
         self.assertEqual(report["verdict"], "failed")
 
-    def _run_in_process(self, target) -> tuple:
+    @staticmethod
+    def _run_in_process(target) -> tuple:
         import argparse
         import io
         from contextlib import redirect_stderr, redirect_stdout
@@ -713,7 +721,7 @@ class TestDefensiveBranches(unittest.TestCase):
         self.assertIn("FAILED: selection_decision", err)
 
     def test_run_verify_in_process_unreadable(self) -> None:
-        code, payload, err = self._run_in_process("/nonexistent/x.json")
+        code, _payload, err = self._run_in_process("/nonexistent/x.json")
         self.assertEqual(code, 1)
         self.assertIn("verify:", err)
 
@@ -727,7 +735,7 @@ class TestDefensiveBranches(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "results.json"
             path.write_text(json.dumps(data), encoding="utf-8")
-            code, payload, err = self._run_in_process(path)
+            code, _payload, err = self._run_in_process(path)
         self.assertEqual(code, 0)
         self.assertIn("unavailable: budget_frontier_replay", err)
 
@@ -834,6 +842,7 @@ class TestMutationGate(unittest.TestCase):
                     text=True,
                     cwd=_REPO_ROOT,
                     timeout=600,
+                    check=False,
                 )
             finally:
                 self.SOURCE.write_text(source, encoding="utf-8")

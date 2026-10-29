@@ -62,7 +62,8 @@ _INCOMPLETE = "observation_incomplete"
 
 def _f32(value: float) -> float:
     """Independent float32 rounding via struct (cf. the documented
-    float32-rounded reporting in scoring.py)."""
+    float32-rounded reporting in scoring.py).
+    """
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
@@ -106,7 +107,8 @@ def _oracle_provider_code(exc: BaseException) -> str:
 
 def _ref_encode(text: str) -> tuple[int, ...]:
     """Reference codec for the scripted backend: char <-> ord bijection, so
-    the documented alignment checks always hold."""
+    the documented alignment checks always hold.
+    """
     return tuple(ord(c) for c in text)
 
 
@@ -181,7 +183,8 @@ def _logits_for_mode(input_ids: tuple[int, ...], mode: object, vocab: int) -> "t
 
 class ScriptedBackend:
     """Deterministic scripted backend: bijective char<->ord codec (alignment
-    always holds) plus a per-sequence logit plan. A pure test fixture."""
+    always holds) plus a per-sequence logit plan. A pure test fixture.
+    """
 
     fingerprint = "cycle18-scripted-backend"
 
@@ -204,7 +207,8 @@ class ScriptedBackend:
         ids = _ref_encode(text)
         return list(ids) if self._encode_as_list else ids  # type: ignore[return-value]
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return _ref_decode(tuple(token_ids))
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> "torch.Tensor":
@@ -214,7 +218,8 @@ class ScriptedBackend:
 
 class MergeBackend:
     """Backend whose tokenizer merges across the prompt/answer boundary, so
-    the documented alignment check refuses with boundary_merge_mismatch."""
+    the documented alignment check refuses with boundary_merge_mismatch.
+    """
 
     fingerprint = "cycle18-merge-backend"
     vocab_size = 5
@@ -252,7 +257,8 @@ def _oracle_score_expected(
     ref_decode=_ref_decode,
 ) -> TargetScore:
     """Independent reimplementation of the documented scoring decision tree
-    (``_score_expected_answer`` + ``score_target_logprobs`` docstrings)."""
+    (``_score_expected_answer`` + ``score_target_logprobs`` docstrings).
+    """
     # _score_expected_answer: encode problems become encode_failed.
     if expected in encode_raises or encode_as_list:
         return TargetScore(
@@ -454,7 +460,8 @@ def _oracle_interpret_kind(fixture_scores: list[dict]) -> str:
     """Independent reimplementation of the band interpretation, from the
     ``_interpret_logprob_candidate`` docstring: mean >= DERAILED reads
     "greedy derailed"; mean < UNKNOWN reads "weights don't know"; between
-    the bands the diagnostic withholds judgment; highs+lows is mixed."""
+    the bands the diagnostic withholds judgment; highs+lows is mixed.
+    """
     failures = [s for s in fixture_scores if not s["native_pass"]]
     scored = [s for s in failures if s["status"] == "ok" and type(s["mean_logprob"]) is float]
     if not failures:
@@ -607,7 +614,8 @@ def _score_dict(
 
 def _interpretation_mean(fixture_scores: list[dict]) -> float | None:
     """Recompute the token-weighted mean the implementation reports in its
-    interpretation text (same selection rules as the implementation)."""
+    interpretation text (same selection rules as the implementation).
+    """
     failures = [s for s in fixture_scores if not s["native_pass"]]
     scored = [s for s in failures if s["status"] == "ok" and type(s["mean_logprob"]) is float]
     total = sum(s["total_logprob"] for s in scored if type(s["total_logprob"]) is float)
@@ -615,6 +623,7 @@ def _interpretation_mean(fixture_scores: list[dict]) -> float | None:
     return total / tokens if tokens else None
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class DiagnosticCase(unittest.TestCase):
     """Shared differential assertion: implementation vs independent oracle."""
 
@@ -965,7 +974,8 @@ class ObservationOracleTests(unittest.TestCase):
 
 class InterpretationBoundaryTests(unittest.TestCase):
     """Direct differential tests of ``_interpret_logprob_candidate`` with
-    hand-built fixture-score dicts -- the exact boundary semantics."""
+    hand-built fixture-score dicts -- the exact boundary semantics.
+    """
 
     # (mean_logprob, expected kind): the brief's boundary rules are
     #   highs: mean >= -2.0 ; lows: mean < -5.0 ; between: indeterminate.
@@ -1066,7 +1076,8 @@ class InterpretationBoundaryTests(unittest.TestCase):
 class EngineeredBoundaryEndToEndTests(DiagnosticCase):
     """Boundary semantics through the whole stack: scripted logits place a
     fixture's engine-reported mean logprob exactly on (or just off) a
-    threshold, and the diagnostic must read the band correctly."""
+    threshold, and the diagnostic must read the band correctly.
+    """
 
     PLACEMENTS = [
         (-2.0, "greedy_derailed"),  # exactly ON the derailed edge: >= counts
@@ -1099,6 +1110,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "c")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
+                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (cand,) = diag["candidates"]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
@@ -1112,6 +1124,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "dcd")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
+                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (cand,) = diag["candidates"]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
@@ -1193,6 +1206,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
         diag = self.assert_diagnostic_matches(
             backend, result, (_make_fixture("f1", "c"),), vocab_size=128
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         self.assertEqual(cand["interpretation"]["kind"], "no_failures")
         self.assertEqual(cand["aggregate"]["scored_fixtures"], 0)
@@ -1210,7 +1224,8 @@ class InterpretationEndToEndTests(DiagnosticCase):
 
 class EndToEndFuzzTests(DiagnosticCase):
     """Seeded differential fuzz: random candidates x fixtures x observation
-    shapes x logit modes, full payload compared against the oracle."""
+    shapes x logit modes, full payload compared against the oracle.
+    """
 
     N_SEEDS = 25
     EXPECTED_POOL = ["c", "cd", "dcd", "e", "", "UNENCODABLE"]

@@ -99,7 +99,8 @@ _ORACLE_PARTITIONS = ("search", "held_out")
 
 def _oracle_header_columns(count: int) -> tuple[str, ...]:
     """Docstring: message columns must form 'user_1,assistant_1,user_2,...'
-    pairs in order, starting with 'user_1'."""
+    pairs in order, starting with 'user_1'.
+    """
     names: list[str] = []
     turn = 1
     while len(names) < count:
@@ -126,7 +127,8 @@ def _oracle_conversation_key(messages: tuple[Message, ...]) -> tuple[tuple[str, 
 def _oracle_check_discipline(search: list[Fixture], held_out: list[Fixture]) -> None:
     """Docstring: ID uniqueness, group non-overlap across partitions, no
     identical message sequences across partitions, NFC-normalized; both
-    partitions nonempty; at most 100 fixtures per partition."""
+    partitions nonempty; at most 100 fixtures per partition.
+    """
     if not search or not held_out:
         raise _OracleRejected("empty partition")
     if len(search) > MAX_CASES_PER_SPLIT or len(held_out) > MAX_CASES_PER_SPLIT:
@@ -149,7 +151,8 @@ def _oracle_parse_fixture_csv(text: str) -> tuple[list[Fixture], list[Fixture], 
     RFC 4180 (the documented CSV layout: header row required, quoted cells
     may contain newlines) via the stdlib csv module in both oracle and
     implementation -- that is the format definition, not implementation
-    logic; every validation rule below is re-derived independently."""
+    logic; every validation rule below is re-derived independently.
+    """
     if type(text) is not str:
         raise _OracleRejected("not text")
     if len(text.encode("utf-8")) > MAX_BYTES:
@@ -231,7 +234,8 @@ def _oracle_token_inventory(fmt: Format) -> tuple[str, ...]:
     """Docstring: inventory derived from the format's framing fields (bos,
     user_prefix, assistant_prefix, turn_end, plus non-None per-role turn
     terminators and open suffix); token-shaped substrings only, deduped,
-    first-seen order."""
+    first-seen order.
+    """
     found: list[str] = []
     for field in (
         fmt.bos,
@@ -257,7 +261,8 @@ def _oracle_audit_targets(
 ) -> tuple[tuple[str, str, str], ...]:
     """Docstring: (fixture_id, field, text) triples; field is '<role>_<n>'
     per fixture message ('user_1', 'assistant_1', 'user_2', ...), 'text'
-    for a raw string, 'text_<n>' per item of a raw-string tuple."""
+    for a raw string, 'text_<n>' per item of a raw-string tuple.
+    """
     triples: list[tuple[str, str, str]] = []
 
     def _one(case: Fixture) -> None:
@@ -293,7 +298,8 @@ def _oracle_audit(
     Docstring order: fixtures/messages in input order, then formats in the
     given order, then each format's inventory order, then ascending offsets;
     exact case-sensitive substring matches; overlapping occurrences of one
-    literal each get a finding."""
+    literal each get a finding.
+    """
     if type(formats) is not tuple or not formats:
         raise _OracleRejected("formats must be a nonempty tuple")
     if any(type(f) is not Format for f in formats):
@@ -314,7 +320,8 @@ def _oracle_audit(
 
 def _oracle_audit_json(findings: tuple[tuple[str, str, str, str, int], ...], source: str) -> str:
     """Docstring: sidecar document; findings cannot live in the fixture
-    JSON because the strict schema rejects extra top-level keys."""
+    JSON because the strict schema rejects extra top-level keys.
+    """
     payload = {
         "schema": "model-protocol-lab.audit/v1",
         "source": source,
@@ -350,7 +357,8 @@ def _rng_word(rng: random.Random) -> str:
 def _make_csv_text(rng: random.Random, n_cols: int, n_rows: int) -> str:
     """Build a syntactically valid authoring CSV (validity of the *content*
     rules is left to chance: ids/groups/partitions/messages are randomized,
-    so outputs span valid files, discipline violations and row errors)."""
+    so outputs span valid files, discipline violations and row errors).
+    """
     header = ["id", "group", "partition", "expected"] + [
         f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}" for i in range(n_cols)
     ]
@@ -474,13 +482,15 @@ def _two_row_csv() -> str:
 
 
 class TestPinnedBehavior(unittest.TestCase):
-    def test_empty_expected_ids_reported(self):
+    @staticmethod
+    def test_empty_expected_ids_reported():
         split, empty = fx.parse_fixture_csv(_two_row_csv())
         assert empty == ["b1"]
         assert split.search[0].expected == "yes"
         assert split.held_out[0].expected == ""
 
-    def test_verbatim_cells_no_stripping(self):
+    @staticmethod
+    def test_verbatim_cells_no_stripping():
         text = _simple_csv(
             [
                 ["  a1  ", "  g1  ", "search", " e ", "  hi  ", "", ""],
@@ -494,7 +504,8 @@ class TestPinnedBehavior(unittest.TestCase):
         assert case.expected == " e "
         assert case.messages[0].content == "  hi  "
 
-    def test_quoted_newline_cell(self):
+    @staticmethod
+    def test_quoted_newline_cell():
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "e", "line1\nline2", "", ""],
@@ -504,7 +515,8 @@ class TestPinnedBehavior(unittest.TestCase):
         split, _ = fx.parse_fixture_csv(text)
         assert split.search[0].messages[0].content == "line1\nline2"
 
-    def test_blank_lines_ignored(self):
+    @staticmethod
+    def test_blank_lines_ignored():
         text = "\n\n" + _two_row_csv().replace("\n", "\n\n", 1) + "\n\n"
         split, _ = fx.parse_fixture_csv(text)
         assert len(split.search) == 1 and len(split.held_out) == 1
@@ -579,7 +591,8 @@ class TestPinnedBehavior(unittest.TestCase):
         with self.assertRaises(ValueError):
             fx.split_to_json_text(SubSplit(split.search, split.held_out))  # type: ignore[arg-type]
 
-    def test_serializer_keeps_non_ascii_verbatim(self):
+    @staticmethod
+    def test_serializer_keeps_non_ascii_verbatim():
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "café", "naïve", "", ""],
@@ -641,7 +654,8 @@ class TestPinnedBehavior(unittest.TestCase):
 
 def _discipline_csv(rng: random.Random) -> str:
     """Generate CSVs aimed at the discipline checks: near-duplicate ids,
-    NFC-confusable ids/groups/messages, group overlap, message leakage."""
+    NFC-confusable ids/groups/messages, group overlap, message leakage.
+    """
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(["id", "group", "partition", "expected", "user_1", "assistant_1"])
@@ -711,7 +725,8 @@ class TestSplitDiscipline(unittest.TestCase):
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(text)
 
-    def test_same_group_within_one_partition_ok(self):
+    @staticmethod
+    def test_same_group_within_one_partition_ok():
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "", "hi", "", ""],
@@ -737,7 +752,8 @@ class TestSplitDiscipline(unittest.TestCase):
 
 def _fuzz_format(rng: random.Random, name: str) -> Format:
     """Build a Format with random framing fields, sometimes containing
-    token-shaped substrings, full-width tokens, brackets and noise."""
+    token-shaped substrings, full-width tokens, brackets and noise.
+    """
     pieces = [
         "",
         "\n",
@@ -825,7 +841,8 @@ class TestTokenInventory(unittest.TestCase):
                         f"trial {trial}: {fmt!r}"
                     )
 
-    def test_none_optionals_add_nothing(self):
+    @staticmethod
+    def test_none_optionals_add_nothing():
         base = Format(
             name="b", bos="<s>", user_prefix="[INST] ", assistant_prefix="", turn_end="</s>"
         )
@@ -843,7 +860,8 @@ class TestTokenInventory(unittest.TestCase):
         toks = set(fx._extract_special_tokens(base))
         assert toks == {"<s>", "[INST]", "</s>"}  # </s> matches the <...> shape
 
-    def test_open_suffix_only_token_is_found(self):
+    @staticmethod
+    def test_open_suffix_only_token_is_found():
         fmt = Format(
             name="g",
             bos="",
@@ -854,13 +872,15 @@ class TestTokenInventory(unittest.TestCase):
         )
         assert fx._extract_special_tokens(fmt) == ("<|open|>",)
 
-    def test_plain_words_are_not_tokens(self):
+    @staticmethod
+    def test_plain_words_are_not_tokens():
         fmt = Format(
             name="p", bos="hello", user_prefix="user: ", assistant_prefix="asst: ", turn_end="\n"
         )
         assert fx._extract_special_tokens(fmt) == ()
 
-    def test_full_width_shape(self):
+    @staticmethod
+    def test_full_width_shape():
         fmt = Format(
             name="d",
             bos="＜｜begin▁of▁sentence｜＞",
@@ -917,7 +937,8 @@ class TestAuditDifferential(unittest.TestCase):
                     oracle = _oracle_audit(target, formats)
                     assert tuple(_finding_tuple(f) for f in impl) == oracle, f"trial {trial}"
 
-    def test_audit_differential_on_split(self):
+    @staticmethod
+    def test_audit_differential_on_split():
         rng = random.Random("cycle29-audit-split")  # noqa: S311 -- deterministic test seed
         formats = tuple(_fuzz_format(rng, f"F{k}") for k in range(2))
         # Deterministic valid split (distinct ids/groups/messages).
@@ -941,7 +962,8 @@ class TestAuditDifferential(unittest.TestCase):
         with self.assertRaises(ValueError):
             fx.audit_special_token_literals(("ok", 123), (fmt,))  # type: ignore[arg-type]
 
-    def test_field_naming_user1_assistant1_user2(self):
+    @staticmethod
+    def test_field_naming_user1_assistant1_user2():
         fmt = Format(name="f", bos="", user_prefix="<|u|>", assistant_prefix="", turn_end="")
         case = Fixture(
             id="c",
@@ -956,16 +978,19 @@ class TestAuditDifferential(unittest.TestCase):
         findings = fx.audit_special_token_literals(case, (fmt,))
         assert [(f.field, f.offset) for f in findings] == [("user_1", 2), ("user_2", 2)]
 
-    def test_overlapping_occurrences_each_get_a_finding(self):
+    @staticmethod
+    def test_overlapping_occurrences_each_get_a_finding():
         fmt = Format(name="f", bos="", user_prefix="[INST]", assistant_prefix="", turn_end="")
         findings = fx.audit_special_token_literals("[INST][INST]", (fmt,))
         assert [f.offset for f in findings] == [0, 6]
 
-    def test_case_sensitive(self):
+    @staticmethod
+    def test_case_sensitive():
         fmt = Format(name="f", bos="", user_prefix="[INST]", assistant_prefix="", turn_end="")
         assert fx.audit_special_token_literals("[inst]", (fmt,)) == ()
 
-    def test_deterministic_ordering(self):
+    @staticmethod
+    def test_deterministic_ordering():
         f1 = Format(name="first", bos="<a><b>", user_prefix="", assistant_prefix="", turn_end="")
         f2 = Format(name="second", bos="<b><a>", user_prefix="", assistant_prefix="", turn_end="")
         findings = fx.audit_special_token_literals("<a> <b>", (f1, f2))
@@ -976,7 +1001,8 @@ class TestAuditDifferential(unittest.TestCase):
             ("second", "<a>", 0),
         ]
 
-    def test_real_catalog_spot_check(self):
+    @staticmethod
+    def test_real_catalog_spot_check():
         fmts = tuple(CATALOG[name] for name in list(CATALOG)[:5])
         texts = (
             "plain text with no tokens",
@@ -1011,7 +1037,8 @@ class TestAuditDifferential(unittest.TestCase):
 
 
 class TestAuditFindingsJson(unittest.TestCase):
-    def test_sidecar_shape_and_roundtrip(self):
+    @staticmethod
+    def test_sidecar_shape_and_roundtrip():
         rng = random.Random("cycle29-sidecar")  # noqa: S311 -- deterministic test seed
         formats = tuple(_fuzz_format(rng, f"F{k}") for k in range(2))
         # Deterministic format guaranteeing at least one finding, so the
@@ -1043,7 +1070,8 @@ class TestAuditFindingsJson(unittest.TestCase):
         for item in doc["findings"]:
             assert set(item) == {"fixture_id", "field", "literal", "format_name", "offset"}
 
-    def test_offset_fidelity(self):
+    @staticmethod
+    def test_offset_fidelity():
         finding = fx.AuditFinding(
             fixture_id="c", field="user_1", literal="<|u|>", format_name="f", offset=7
         )
@@ -1058,7 +1086,8 @@ class TestAuditFindingsJson(unittest.TestCase):
             }
         ]
 
-    def test_empty_findings(self):
+    @staticmethod
+    def test_empty_findings():
         text = fx.audit_findings_json((), source="x.json")
         assert json.loads(text)["findings"] == []
 
@@ -1139,7 +1168,8 @@ class TestReadAuthoringFile(unittest.TestCase):
 
 
 class TestWriteFixtureFile(unittest.TestCase):
-    def _built_text(self) -> str:
+    @staticmethod
+    def _built_text() -> str:
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         return fx.split_to_json_text(split)
 
@@ -1229,7 +1259,8 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(buf.getvalue())
 
-    def test_short_row_padded_with_empties(self):
+    @staticmethod
+    def test_short_row_padded_with_empties():
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["id", "group", "partition", "expected", "user_1", "assistant_1", "user_2"])
@@ -1248,7 +1279,8 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "partition"):
             fx.parse_fixture_csv(text)
 
-    def test_crlf_line_endings(self):
+    @staticmethod
+    def test_crlf_line_endings():
         text = _two_row_csv().replace("\n", "\r\n")
         split, _ = fx.parse_fixture_csv(text)
         assert len(split.search) == 1 and len(split.held_out) == 1
@@ -1290,7 +1322,8 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(buf2.getvalue())
 
-    def test_cell_exactly_max_text_ok(self):
+    @staticmethod
+    def test_cell_exactly_max_text_ok():
         cell = "x" * MAX_TEXT
         text = _simple_csv(
             [
@@ -1333,27 +1366,31 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "user_1"):
             fx.parse_fixture_csv(text)
 
-    def test_many_messages_alternation_roles(self):
+    @staticmethod
+    def test_many_messages_alternation_roles():
         text = _simple_csv([["a1", "g1", "search", "", "u1", "a1", "u2"]])
         text += _simple_csv([["b1", "g2", "held_out", "", "v1", "", ""]]).split("\n", 1)[1]
         split, _ = fx.parse_fixture_csv(text)
         assert [m.role for m in split.search[0].messages] == ["user", "assistant", "user"]
 
-    def test_json_keys_exact(self):
+    @staticmethod
+    def test_json_keys_exact():
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         doc = json.loads(fx.split_to_json_text(split))
         assert set(doc) == {"search", "held_out"}
         assert set(doc["search"][0]) == {"id", "group", "messages", "expected"}
         assert set(doc["search"][0]["messages"][0]) == {"role", "content"}
 
-    def test_split_order_preserved(self):
+    @staticmethod
+    def test_split_order_preserved():
         rows = [[f"s{i}", f"gs{i}", "search", "", f"q{i}", "", ""] for i in range(5)]
         rows += [[f"h{i}", f"gh{i}", "held_out", "", f"r{i}", "", ""] for i in range(3)]
         split, _ = fx.parse_fixture_csv(_simple_csv(rows))
         assert [c.id for c in split.search] == [f"s{i}" for i in range(5)]
         assert [c.id for c in split.held_out] == [f"h{i}" for i in range(3)]
 
-    def test_single_fixture_per_partition(self):
+    @staticmethod
+    def test_single_fixture_per_partition():
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         assert len(split.search) == 1 and len(split.held_out) == 1
 

@@ -30,6 +30,7 @@ def _run_warnfree(code: str) -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=300,
         cwd=str(REPO_ROOT),
+        check=False,
     )
 
 
@@ -87,6 +88,7 @@ class WarningCleanlinessTests(unittest.TestCase):
             text=True,
             timeout=120,
             cwd=str(REPO_ROOT),
+            check=False,
         )
         self.assertEqual(
             proc.returncode,

@@ -76,6 +76,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode text as word ids over the frozen test vocabulary."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -87,9 +88,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode word ids back to text, rendering unknown ids as '?'."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Scripted generate: answer from the decoded prompt per the mode; 'explode' raises."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -109,6 +112,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
+    """Run the instruction-distance stage over the scripted formats and return the payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.instruction_distance_stage(
@@ -123,7 +127,8 @@ def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
 
 def _cell(span, expected, boundary=True):
     """A completed cell built from a span, exactly as the
-    stage builds it (digest-bound primitives, amendment C)."""
+    stage builds it (digest-bound primitives, amendment C).
+    """
     return {
         "verdict": (span == expected) and boundary,
         "boundary_found": boundary,
@@ -138,6 +143,7 @@ def _cell(span, expected, boundary=True):
 
 
 def _record(cells, details=None, expected="417"):
+    """Build one synthetic record dict with the given cells and token digests."""
     tokens = {
         "adj": 20,
         "sep_256": 276,
@@ -158,6 +164,7 @@ def _record(cells, details=None, expected="417"):
 
 
 def _full_cells(adj="417", sep="417", disp="417", expected="417", **boundary):
+    """Build a complete six-arm cell map for a synthetic record."""
     cells = {
         "adj": _cell(adj, expected, boundary.get("adj", True)),
         "sep_256": _cell(sep, expected, boundary.get("sep", True)),
@@ -175,6 +182,7 @@ class FrozenMaterialTests(unittest.TestCase):
     def test_constraint_byte_exact_and_64_chars(self):
         # Amendment A: the candidate printed "(61 chars)"; the
         # executed length is 64 and the build freezes 64.
+        """The frozen constraint text is byte-exact and exactly 64 characters long."""
         self.assertEqual(
             idm.CONSTRAINT,
             "Reply with only the number: no units, no sentence, nothing else.",
@@ -182,6 +190,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(len(idm.CONSTRAINT), 64)
 
     def test_counts_floors_and_budgets(self):
+        """Panel counts, doses, arm count and budget constants equal the frozen design values."""
         self.assertEqual(idm.CASE_COUNT, 24)
         self.assertEqual(idm.DOSES, (256, 1024))
         self.assertEqual(len(idm.ARM_KEYS), 6)
@@ -195,6 +204,7 @@ class FrozenMaterialTests(unittest.TestCase):
         # case-folded substrings. The first candidate list had
         # four collisions (meadow/orchard/timber/hazel),
         # replaced before freezing.
+        """None of the 24 frozen topics appears in the neutral corpus."""
         corpus = " ".join(NEUTRAL_CORPUS).casefold()
         self.assertEqual(len(idm.TOPICS), 24)
         for topic in idm.TOPICS:
@@ -203,11 +213,13 @@ class FrozenMaterialTests(unittest.TestCase):
     def test_neutral_corpus_carries_no_digits(self):
         # The sizing/closed-book premise (adjudication side
         # finding 3): 71 sentences, zero digits of any kind.
+        """The 71-sentence neutral corpus contains no digit characters."""
         self.assertEqual(len(NEUTRAL_CORPUS), 71)
         joined = "".join(NEUTRAL_CORPUS)
         self.assertFalse(any(ch.isdigit() for ch in joined))
 
     def test_generated_cases_shape(self):
+        """generate_cases yields 24 cases with 24 distinct values."""
         cases = idm.generate_cases(0)
         self.assertEqual(len(cases), 24)
         self.assertEqual(len({case["value"] for case in cases}), 24)
@@ -223,6 +235,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(idm.generate_cases(0), cases)
 
     def test_arm_layouts(self):
+        """Arm layouts place the constraint and the block per the frozen arrangement."""
         case = idm.generate_cases(0)[0]
         block = case["block"]
         self.assertEqual(idm.arm_content(case, "adj"), idm.CONSTRAINT + "\n" + block)
@@ -237,6 +250,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(idm.arm_content(case, "adj_after"), block + "\n" + idm.CONSTRAINT)
 
     def test_protocol_binds_rules_and_material(self):
+        """protocol_object binds the sizing-rule digest and the frozen material."""
         protocol = idm.protocol_object(0, "fp")
         self.assertEqual(protocol["sizing_rule_sha256"], idm.digest_text(idm.SIZING_RULE_TEXT))
         self.assertEqual(
@@ -254,7 +268,8 @@ class FrozenMaterialTests(unittest.TestCase):
 class GrammarTests(unittest.TestCase):
     """Design section 5.2 + amendments B2/B3/C: the
     adjudication's 15 executed decidability spans classify
-    identically from the span and from the recorded digests."""
+    identically from the span and from the recorded digests.
+    """
 
     SPANS = [
         ("417", "compliant_correct"),
@@ -275,6 +290,7 @@ class GrammarTests(unittest.TestCase):
     ]
 
     def test_fifteen_decidability_spans_agree(self):
+        """All fifteen decidability spans decompose to their expected classes."""
         for span, expected_class in self.SPANS:
             with self.subTest(span=span):
                 self.assertEqual(idm.decompose_span(span, "417", True), expected_class)
@@ -286,6 +302,7 @@ class GrammarTests(unittest.TestCase):
         # in Python ($ matches before a trailing newline); the
         # frozen grammar is fullmatch, so the span is
         # noncompliant (its first run still keeps the value).
+        """The span grammar is a fullmatch: a trailing newline or an empty span is not compliant."""
         self.assertFalse(idm.span_compliant("417\n"))
         self.assertTrue(idm.span_compliant("417"))
         self.assertFalse(idm.span_compliant(""))
@@ -294,6 +311,7 @@ class GrammarTests(unittest.TestCase):
         # Amendment B3: str.isdigit() and \\d disagree on
         # "4²7" (superscript two); the pinned alphabet counts
         # ASCII only, and Unicode digits form no run.
+        """The digit alphabet is ASCII only: superscripts and Arabic-Indic digits do not count."""
         self.assertEqual(idm.digit_count("4²7"), 2)
         self.assertEqual(idm.first_digit_run("4²7"), "4")
         self.assertEqual(idm.digit_count("٤١٧"), 0)
@@ -304,6 +322,7 @@ class GrammarTests(unittest.TestCase):
         # Frozen rulings (section 5.2): grouping's first run is
         # not the value; a value inside a longer digit string
         # is compliant-wrong, never correct-value.
+        """First-run and decomposition rulings for grouped and over-long digit runs."""
         self.assertEqual(idm.first_digit_run("1,417"), "1")
         self.assertEqual(idm.decompose_span("14170", "417", True), "compliant_wrong")
 
@@ -314,6 +333,7 @@ class GrammarTests(unittest.TestCase):
         # noncompliant_correct_value <-> compliant_wrong
         # undetectably. Here the class rides on digests, so
         # the tampered integers change nothing.
+        """Forgery integers embedded in a span cannot move its decomposition class."""
         span = "ab 417 cd"
         self.assertEqual(len(span), 9)
         cell = _cell(span, "417")
@@ -336,9 +356,11 @@ class BoundaryDispositionTests(unittest.TestCase):
     """Amendment B1: the adjudication's item 6 -- three
     readings of boundary-missing membership gave three
     different labels on identical generations; the shipped
-    disposition is negation section 4.2's."""
+    disposition is negation section 4.2's.
+    """
 
     def test_boundary_missing_classes(self):
+        """With no boundary, spans decompose to boundary_only or compliant_wrong as ruled."""
         self.assertEqual(idm.decompose_span("417", "417", False), "boundary_only")
         self.assertEqual(idm.decompose_span("418", "417", False), "compliant_wrong")
         self.assertEqual(
@@ -351,6 +373,7 @@ class BoundaryDispositionTests(unittest.TestCase):
         # 12 cases in D whose separated span is the correct
         # digits with the boundary missed: count-as-loss would
         # fire (S = 12); the shipped disposition reads S = 0.
+        """A boundary-only separated cell is not counted as a loss in the aggregate."""
         records = [_record(_full_cells()) for _ in range(12)]
         for record in records:
             record["cells"]["sep_256"] = _cell("417", "417", boundary=False)
@@ -363,6 +386,7 @@ class BoundaryDispositionTests(unittest.TestCase):
         self.assertEqual(agg["arms"]["sep_256"]["decomposition"]["boundary_only"], 12)
 
     def test_boundary_only_adj_never_enters_d(self):
+        """A boundary-only adjacent cell never enters the D count."""
         records = [_record(_full_cells(adj="417")) for _ in range(12)]
         for record in records:
             record["cells"]["adj"] = _cell("417", "417", boundary=False)
@@ -376,6 +400,7 @@ class ClassifyTests(unittest.TestCase):
     """Design section 6: the (10, 6, 5) rule's edges."""
 
     def test_rule_boundaries(self):
+        """classify_instruction_distance reproduces the frozen rule boundaries."""
         self.assertEqual(idm.classify_instruction_distance(9, 9, 0), "insufficient")
         self.assertEqual(
             idm.classify_instruction_distance(10, 6, 1), "instruction_distance_drop_observed"
@@ -393,7 +418,10 @@ class ClassifyTests(unittest.TestCase):
 
 
 class AggregateTests(unittest.TestCase):
+    """Aggregate recomputation tests over synthetic instruction-distance records."""
+
     def test_d_s_t_and_value_split(self):
+        """The aggregate splits D into S and T and separates value-kept from value-lost losses."""
         records = []
         # 10 D cases: 6 sep losses (4 value-kept, 2 lost), 1 disp loss.
         for i in range(10):
@@ -416,6 +444,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(dose["decision"], "instruction_distance_drop_observed")
 
     def test_population_requires_three_arm_completion(self):
+        """A record enters the population only when the three compared arms completed."""
         cells = _full_cells()
         cells["disp_256"] = None
         details = dict.fromkeys(idm.ARM_KEYS, "")
@@ -426,6 +455,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["n_incomplete"], 1)
 
     def test_reverse_discordants_counted_not_pooled(self):
+        """Reverse discordants are counted in n_reverse, never pooled into the losses."""
         cells = _full_cells(adj="The answer is 417.", sep="417")
         agg = idm.aggregate_candidate([_record(cells)])
         self.assertEqual(agg["doses"]["256"]["n_reverse"], 1)
@@ -434,6 +464,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["doses"]["256"]["direct_passes"], 0)
 
     def test_ids_block_and_same_ids_flip(self):
+        """The ids block flips when a record's separated ids coincide with the adjacent arm's."""
         record = _record(_full_cells(sep="The answer is 417."))
         record["id_digests"]["sep_256"] = record["id_digests"]["adj"]
         agg = idm.aggregate_candidate([record])
@@ -445,7 +476,10 @@ class AggregateTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    """Stage tests over scripted backends for the instruction-distance probe."""
+
     def test_perfect_backend_below_threshold(self):
+        """A perfect backend yields an available payload classified below_threshold."""
         payload = _payload(_WordBackend("perfect"))
         self.assertTrue(payload["available"])
         cand = payload["candidates"]["chatml"]
@@ -468,6 +502,7 @@ class StageTests(unittest.TestCase):
             self.assertEqual(tokens[arm] - tokens["adj"], dose)
 
     def test_drop_backend_fires_with_value_kept(self):
+        """A drop backend fires the decision at both doses with the value kept."""
         payload = _payload(_WordBackend("drop"))
         cand = payload["candidates"]["chatml"]
         for dose in ("256", "1024"):
@@ -479,6 +514,7 @@ class StageTests(unittest.TestCase):
             self.assertEqual(block["decision"], "instruction_distance_drop_observed")
 
     def test_explode_backend_scores_failed_never_crashes(self):
+        """An exploding backend scores failed cells; the stage never crashes."""
         payload = _payload(_WordBackend("explode"))
         self.assertTrue(payload["available"])
         cand = payload["candidates"]["chatml"]
@@ -488,6 +524,7 @@ class StageTests(unittest.TestCase):
     def test_context_exceeded_sized_arms_carry_no_construction(self):
         # adj renders ~23 word tokens; a 200-token context fits
         # adj + generation but never adj + 256 + generation.
+        """Context-exceeded sized arms carry no construction in their records."""
         payload = _payload(_WordBackend("perfect"), max_context=200)
         cand = payload["candidates"]["chatml"]
         record = cand["records"][0]
@@ -499,6 +536,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(cand["arms"]["sep_256"]["n_context_exceeded"], 24)
 
     def test_cancel_fails_closed(self):
+        """A pre-set cancel event fails the stage closed as cancelled."""
         event = threading.Event()
         event.set()
         payload = _payload(_WordBackend("perfect"), cancel=event)
@@ -509,6 +547,7 @@ class StageTests(unittest.TestCase):
         # The decoded boundary text "The" occurs in the frozen
         # fact template: the whole stage screens closed before
         # any generation (screening rule, stage level).
+        """Boundary text inside generated text fails the stage screen."""
         backend = _WordBackend("perfect")
         stage = experiments.instruction_distance_stage(
             backend,
@@ -524,6 +563,7 @@ class StageTests(unittest.TestCase):
         # Amendment D: with the span screen forced on, sized
         # cells land arm_screened (counted per arm), the stage
         # itself stays available, and unsized arms still run.
+        """Filler screening applies per cell across the sized arms."""
         with mock.patch.object(idm, "filler_screened", return_value=True):
             payload = _payload(_WordBackend("perfect"))
         cand = payload["candidates"]["chatml"]
@@ -536,26 +576,32 @@ class StageTests(unittest.TestCase):
 
 class ValidatorTests(unittest.TestCase):
     """The diff validator recomputes the decomposition from
-    records (cycle-190 digest-binding discipline)."""
+    records (cycle-190 digest-binding discipline).
+    """
 
     @classmethod
     def setUpClass(cls):
+        """Build the shared drop payload for the validator tests."""
         cls.payload = _payload(_WordBackend("drop"))
 
     def test_real_payload_is_valid(self):
+        """A real payload validates under the diff mirror."""
         self.assertTrue(diffreports._valid_instruction_distance(self.payload))
 
     def test_tampered_aggregate_is_invalid(self):
+        """A tampered aggregate count is rejected by the mirror."""
         bad = copy.deepcopy(self.payload)
         bad["candidates"]["chatml"]["doses"]["256"]["separated_losses"] = 0
         self.assertFalse(diffreports._valid_instruction_distance(bad))
 
     def test_tampered_protocol_is_invalid(self):
+        """A tampered protocol field is rejected by the mirror."""
         bad = copy.deepcopy(self.payload)
         bad["protocol"]["min_s"] = 2
         self.assertFalse(diffreports._valid_instruction_distance(bad))
 
     def test_tampered_record_topic_is_invalid(self):
+        """A record topic outside the frozen topics is rejected by the mirror."""
         bad = copy.deepcopy(self.payload)
         bad["candidates"]["chatml"]["records"][0]["topic"] = "quartz"
         self.assertFalse(diffreports._valid_instruction_distance(bad))
@@ -564,11 +610,13 @@ class ValidatorTests(unittest.TestCase):
         # The sizing acceptance identity is checked on the
         # stored counts: one token added to a separated arm
         # breaks the exact delta and fails validation.
+        """A tampered sized-arm token delta is rejected by the mirror."""
         bad = copy.deepcopy(self.payload)
         bad["candidates"]["chatml"]["records"][0]["arm_tokens"]["sep_256"] += 1
         self.assertFalse(diffreports._valid_instruction_distance(bad))
 
     def test_tampered_cell_verdict_is_invalid(self):
+        """A flipped cell verdict is rejected by the mirror."""
         bad = copy.deepcopy(self.payload)
         cell = bad["candidates"]["chatml"]["records"][0]["cells"]["adj"]
         cell["verdict"] = not cell["verdict"]
@@ -580,6 +628,7 @@ class ValidatorTests(unittest.TestCase):
         # and therefore the whole diff -- untouched, where the
         # candidate's bare-integer derivation would have
         # flipped the class undetectably.
+        """A forged digit count cannot move the diff verdict."""
         forged = copy.deepcopy(self.payload)
         cell = forged["candidates"]["chatml"]["records"][0]["cells"]["sep_256"]
         self.assertEqual(cell["digit_count"], 3)
@@ -589,6 +638,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_diff_decision_drift(self):
+        """Diffing perfect against drop payloads reports the decision drift."""
         perfect = _payload(_WordBackend("perfect"))
         diff = diffreports.diff_instruction_distance(perfect, self.payload)
         self.assertEqual(diff["available"], "both")
@@ -600,6 +650,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(same["changed"])
 
     def test_diff_reports_wiring(self):
+        """The instruction-distance section is wired into the top-level diff_reports."""
         old = {"decision": "abstain", "instruction_distance": _payload(_WordBackend("perfect"))}
         new = {"decision": "abstain", "instruction_distance": self.payload}
         diff = diffreports.diff_reports(old, new)
@@ -612,7 +663,10 @@ class ValidatorTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
+    """Report-section tests for the instruction-distance probe."""
+
     def test_section_renders_decision_and_oc(self):
+        """The section renders the decision and the operating-characteristics paragraph."""
         payload = _payload(_WordBackend("drop"))
         html = reporting_mod.render_html(
             {"instruction_distance": payload, "decision": "x", "search": [], "held_out": []}
@@ -633,6 +687,7 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("curve", section)
 
     def test_section_absent_without_payload(self):
+        """The section is absent when the payload is missing."""
         html = reporting_mod.render_html({"decision": "x", "search": [], "held_out": []})
         self.assertNotIn('id="instruction-distance"', html)
 
@@ -640,13 +695,16 @@ class ReportingTests(unittest.TestCase):
 class GapModuleTests(unittest.TestCase):
     """Cycle-218 gap pass (cycle-174 rule): the full-suite
     coverage misses inside instructiondistance.py, closed with
-    targeted cases."""
+    targeted cases.
+    """
 
     def test_generate_cases_rejects_non_int_seed(self):
+        """generate_cases rejects a non-int seed with ValueError."""
         with self.assertRaises(ValueError):
             idm.generate_cases("0")
 
     def test_unknown_arm_raises(self):
+        """Unknown arm names raise ValueError in the module helpers."""
         case = idm.generate_cases(0)[0]
         with self.assertRaises(ValueError):
             idm.arm_content(case, "bogus", "")
@@ -656,14 +714,17 @@ class GapModuleTests(unittest.TestCase):
     def test_filler_screened_boundary_text_path(self):
         # The value path is stage-tested; the boundary-text
         # path is the second disjunct of the screen.
+        """filler_screened flags filler containing the boundary text and passes plain filler."""
         self.assertTrue(idm.filler_screened("the endmark sits here", "zzz", "endmark"))
         self.assertFalse(idm.filler_screened("plain filler", "zzz", "endmark"))
 
     def test_decompose_cell_requires_a_cell(self):
+        """decompose_cell rejects a missing cell with ValueError."""
         with self.assertRaises(ValueError):
             idm.decompose_cell(None, idm.digest_text("417"))
 
     def test_aggregate_attrition_per_detail(self):
+        """The aggregate reports attrition per cell detail across the sized arms."""
         cells = _full_cells()
         record = _record(
             cells,
@@ -686,6 +747,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(arms["disp_1024"]["n_evaluation_failed"], 1)
 
     def test_aggregate_tolerates_non_dict_cells_and_details(self):
+        """The aggregate tolerates non-dict cells and details without raising."""
         record = _record(_full_cells())
         record["cells"] = []
         record["cell_details"] = []
@@ -694,6 +756,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(agg["doses"]["256"]["n_population"], 0)
 
     def test_same_ids_flip_counted(self):
+        """A same-ids flip between the adjacent and separated arms is counted in the aggregate."""
         record = _record(_full_cells(adj="417", sep="The answer is 417."))
         record["id_digests"]["sep_256"] = record["id_digests"]["adj"]
         agg = idm.aggregate_candidate([record])
@@ -704,9 +767,11 @@ class GapModuleTests(unittest.TestCase):
 
 class GapStageTests(unittest.TestCase):
     """Cycle-218 gap pass: stage fail-closed branches the
-    happy-path stage tests never reach."""
+    happy-path stage tests never reach.
+    """
 
     def test_formats_must_be_a_nonempty_tuple(self):
+        """Formats must be a non-empty tuple; anything else raises ValueError."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.instruction_distance_stage(
@@ -718,6 +783,7 @@ class GapStageTests(unittest.TestCase):
             )
 
     def test_duplicate_format_names_raise(self):
+        """Duplicate format names raise ValueError."""
         with self.assertRaises(ValueError):
             experiments.instruction_distance_stage(
                 _WordBackend(),
@@ -728,6 +794,7 @@ class GapStageTests(unittest.TestCase):
             )
 
     def test_record_budget_exceeded_fails_closed(self):
+        """Exceeding the ground-record budget fails the stage closed with the budget detail."""
         with mock.patch.object(idm, "MAX_GROUND_RECORDS", 10):
             stage = experiments.instruction_distance_stage(
                 _WordBackend(), (_CHATML,), boundary=(1,), seed=0, max_context=8192
@@ -736,6 +803,7 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "instruction_distance_record_budget_exceeded")
 
     def test_special_token_finding_fails_the_stage_closed(self):
+        """A special-token finding fails the stage closed with the screen detail."""
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals",
             return_value=[{"literal": "<|x|>"}],
@@ -748,8 +816,15 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(stage["audit"]["special_token_findings"], 1)
 
     def test_undecodable_boundary_screens_nothing(self):
+        """An undecodable boundary decode screens nothing and the payload stays available."""
+
         class _BadBoundaryDecode(_WordBackend):
+            """Word backend whose decode raises on the boundary ids."""
+
             def decode(self, ids):
+                """Decode that raises RuntimeError on the boundary (endmark) ids, delegating
+                otherwise.
+                """
                 if tuple(ids) == tuple(self.encode("endmark")):
                     raise RuntimeError("undecodable")
                 return super().decode(ids)
@@ -758,6 +833,9 @@ class GapStageTests(unittest.TestCase):
         self.assertTrue(payload["available"])
 
     def test_sizing_budget_zero_makes_sized_cells_unmatchable(self):
+        """A zero sizing-encode budget leaves the sized cells unmatchable; the payload stays
+        available.
+        """
         with mock.patch.object(idm, "SIZING_ENCODE_BUDGET", 0):
             payload = _payload(_WordBackend())
         self.assertTrue(payload["available"])
@@ -768,6 +846,7 @@ class GapStageTests(unittest.TestCase):
         self.assertIsNone(record["id_digests"]["sep_256"])
 
     def test_sizing_exhaustion_makes_sized_cells_unmatchable(self):
+        """Sizing-encode exhaustion leaves the sized cells unmatchable."""
         with mock.patch(
             "model_protocol_lab.distraction.span_candidates",
             lambda stream, target, chars_per_token: [(0, "", 0)],
@@ -778,10 +857,14 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(arms["sep_1024"]["n_unmatchable"], 24)
 
     def test_midflight_cancel_unwinds_to_cancelled(self):
+        """A cancel event set mid-generation unwinds the stage to cancelled."""
         event = threading.Event()
 
         class _CancellingBackend(_WordBackend):
+            """Word backend whose generate sets the cancel event before delegating."""
+
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate that sets the cancel event, then delegates to the scripted backend."""
                 event.set()
                 return super().generate(
                     input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
@@ -792,6 +875,7 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_cell_cancel_checks_and_ineligible_report(self):
+        """Per-cell cancel checks fire and the ineligible report is produced."""
         from model_protocol_lab.core import Fixture, Message
 
         backend = _WordBackend()
@@ -821,7 +905,10 @@ class GapStageTests(unittest.TestCase):
         fired = threading.Event()
 
         class _TripBackend(_WordBackend):
+            """Word backend whose generate sets a trip event after delegating."""
+
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate via the scripted backend, then set the trip event."""
                 out = super().generate(
                     input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
                 )
@@ -858,6 +945,7 @@ class GapStageTests(unittest.TestCase):
         self.assertIsNone(cell)
 
     def test_analysis_unavailable_stage_and_candidate(self):
+        """The analysis passes an unavailable stage and candidate through, detail intact."""
         out = experiments.instruction_distance_analysis(
             {"available": False, "detail": "cancelled", "protocol": None, "audit": None},
             ("chatml",),
@@ -882,18 +970,22 @@ class GapStageTests(unittest.TestCase):
 class GapValidatorTests(unittest.TestCase):
     """Cycle-218 gap pass: one-broken-identity-at-a-time
     battery over the diff validator's reject branches
-    (cycle-174 fix pattern)."""
+    (cycle-174 fix pattern).
+    """
 
     @classmethod
     def setUpClass(cls):
+        """Build the shared drop payload for the gap validator battery."""
         cls.payload = _payload(_WordBackend("drop"))
 
     def _bad(self, mutate):
+        """Assert the mirror rejects the shared payload after the given forgery."""
         bad = copy.deepcopy(self.payload)
         mutate(bad)
         self.assertFalse(diffreports._valid_instruction_distance(bad))
 
     def test_validator_battery(self):
+        """Every forgery in the battery makes the mirror reject the payload."""
         cand = lambda p: p["candidates"]["chatml"]  # noqa: E731
         rec = lambda p: cand(p)["records"][0]  # noqa: E731
         cell = lambda p: rec(p)["cells"]["adj"]  # noqa: E731
@@ -940,6 +1032,7 @@ class GapValidatorTests(unittest.TestCase):
                 self._bad(mutate)
 
     def test_diff_with_insufficient_payload(self):
+        """Diffing against an insufficient (exploded) payload reports both-available."""
         exploded = _payload(_WordBackend("explode"))
         diff = diffreports.diff_instruction_distance(self.payload, exploded)
         self.assertEqual(diff["available"], "both")
@@ -947,6 +1040,7 @@ class GapValidatorTests(unittest.TestCase):
         self.assertEqual(metrics["decision_256"]["new"], "insufficient")
 
     def test_diff_asymmetric_availability(self):
+        """Diffing with an unavailable side reports the asymmetric availability."""
         unavailable = {"available": False, "detail": "instruction_distance_unavailable"}
         self.assertEqual(
             diffreports.diff_instruction_distance(self.payload, unavailable)["available"],
@@ -964,9 +1058,11 @@ class GapValidatorTests(unittest.TestCase):
 
 class GapReportingTests(unittest.TestCase):
     """Cycle-218 gap pass: the section's defensive branches
-    over hostile payload shapes."""
+    over hostile payload shapes.
+    """
 
     def test_section_hostile_payload(self):
+        """The section renderer tolerates a hostile candidate payload without raising."""
         payload = _payload(_WordBackend("drop"))
         hostile = copy.deepcopy(payload)
         entry = hostile["candidates"]["chatml"]
@@ -986,6 +1082,7 @@ class GapReportingTests(unittest.TestCase):
         self.assertIn("unavailable", html)
 
     def test_section_candidates_not_a_dict(self):
+        """A non-dict candidates payload renders no instruction-distance section."""
         html = reporting_mod.render_html(
             {
                 "instruction_distance": {

@@ -103,7 +103,8 @@ _PAD_MOD = 26
 
 def _request_seed(seed, case_id):
     """Mirror of core.evaluate's per-request seed derivation (backend
-    contract mechanics, not audited logic): request-local and stable."""
+    contract mechanics, not audited logic): request-local and stable.
+    """
     material = f"{seed}\0{case_id}".encode("utf-8", errors="surrogatepass")
     return int.from_bytes(sha256(material).digest()[:4], "big")
 
@@ -142,7 +143,8 @@ def _random_format(rng, index):
 
 class World:
     """Everything both the backend and the oracle read: fixtures, formats,
-    per-candidate boundaries, and the scripted (candidate, fixture) plan."""
+    per-candidate boundaries, and the scripted (candidate, fixture) plan.
+    """
 
     def __init__(
         self,
@@ -192,7 +194,8 @@ class World:
 
     def _make_fixture(self, rng, tag, j, nonce):
         """Adversarial-friendly fixtures: ids carry a nonce, expected answers
-        may collide across the split, messages stay unique per fixture."""
+        may collide across the split, messages stay unique per fixture.
+        """
         fid = f"fx-{tag}-{j}-{nonce:04x}"
         question = "".join(rng.choice("abcdefghij") for _ in range(rng.randint(1, 8)))
         return Fixture(
@@ -244,7 +247,8 @@ class World:
 
         Returns (body, pad_token); the error path uses the body unpadded.
         Shared fixture logic (the backend IS the fixture here); the
-        audited orchestration logic lives in the oracle below."""
+        audited orchestration logic lives in the oracle below.
+        """
         spec = self.script[(cand_name, fixture.id)]
         kind = spec["kind"]
         text = fixture.expected if kind in ("pass", "noboundary") else "WRONG"
@@ -279,7 +283,8 @@ class World:
         else:
             self.cap = max(1, need + rng.choice([0, 1, 2, 5]))
 
-    def tag_of(self, fid):
+    @staticmethod
+    def tag_of(fid):
         return "search" if "-s-" in fid else "held"
 
 
@@ -292,10 +297,12 @@ class TableBackend:
         self.world = world
         self.calls = []  # (cand_name, fixture_id, cap, request_seed)
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(ord(c) for c in text)
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return "".join(chr(t) for t in token_ids)
 
     def _locate(self, input_ids):
@@ -417,7 +424,8 @@ def oracle_evaluate(world, backend, fmt, cases, cand_boundary, cap, seed):
     A wrong-boundary mutant (M4 in the gate) does leak them and the real
     implementation records "decode_failed" -- surfacing as an
     implementation/oracle divergence, which is exactly what the gate
-    checks for."""
+    checks for.
+    """
     records = []
     for case in cases:
         prompt = fmt.render(case.messages)
@@ -490,7 +498,8 @@ def oracle_configuration_digest(
     imported from the implementation, so the oracle independently pins
     the field (cycle 207: the digest is a new run_experiment output
     key, and the oracle diff must carry it or every oracle case
-    fails on the extra key)."""
+    fails on the extra key).
+    """
 
     def fixture_payload(case):
         return {
@@ -688,7 +697,8 @@ def check_properties(actual, backend, world, cap, seed, eos_id):
     """Direct audits of the real result that do not go through the oracle:
 
     budget accounting, generate-call ordering, search/held-out discipline,
-    token sums, and config echoes. Returns a list of problem strings."""
+    token sums, and config echoes. Returns a list of problem strings.
+    """
     problems = []
 
     def problem(text):
@@ -877,7 +887,8 @@ def differential_fuzz(n_iter=48, master_seed=20261015):
     """Fuzz implementation vs oracle; returns (mismatches, problems, coverage).
 
     Pure function of (n_iter, master_seed); raises nothing -- findings are
-    returned so the mutation-gate driver can run this without pytest."""
+    returned so the mutation-gate driver can run this without pytest.
+    """
     rng = random.Random(master_seed)  # noqa: S311 -- deterministic seeded fuzz, not crypto
     mismatches = []
     problems = []
@@ -1037,7 +1048,8 @@ class RunExperimentDirectedAudit(unittest.TestCase):
 
     def test_selection_invariance_under_heldout_flip(self):
         """Held-out outcomes must never change the selection: the search
-        stage alone decides the winner."""
+        stage alone decides the winner.
+        """
         world = make_world(8, n_cand=3, n_search=3, n_held=2, n_winners=1, held_ok=True)
         result1, backend1 = run_actual(world)
         assert_oracle_full(self, world, result1, backend1, "pre-flip")
@@ -1083,7 +1095,8 @@ class RunExperimentDirectedAudit(unittest.TestCase):
 
     def test_budget_edge_cap_one(self):
         """Token budget of exactly 1: boundary of length 1 still fits, and
-        every generate call and observation honors the cap exactly."""
+        every generate call and observation honors the cap exactly.
+        """
         world = make_world(
             31,
             n_cand=1,
@@ -1106,7 +1119,8 @@ class RunExperimentDirectedAudit(unittest.TestCase):
 
     def test_small_boundary_diagnostic_paths(self):
         """boundary_text_match True/False via a chr-decodable boundary, and
-        the classify_observation taxonomy unit contract."""
+        the classify_observation taxonomy unit contract.
+        """
         world = make_world(
             41,
             n_cand=1,
@@ -1232,7 +1246,8 @@ class RunExperimentDirectedAudit(unittest.TestCase):
 
     def test_adversarial_split_layouts(self):
         """Every fixture expects the same answer text and messages are
-        near-identical: the split must still hold and the oracle must agree."""
+        near-identical: the split must still hold and the oracle must agree.
+        """
         world = make_world(
             21,
             n_cand=2,

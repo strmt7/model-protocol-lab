@@ -218,6 +218,7 @@ def build_donor_map(cases: tuple[Fixture, ...]) -> dict[str, dict[str, Any]]:
                 and _eligible_plant(other.expected, group_expecteds)
             )
             if donors:
+                # skipcq: PTC-W0063 - donors derive from cases; the match exists by construction
                 donor = next(other for other in cases if other.id == donors[0])
                 entry = {
                     "donor_fixture": donor.id,
@@ -371,6 +372,7 @@ def classify_discordance(n_paired: int, wrong_only: int, right_only: int) -> str
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None

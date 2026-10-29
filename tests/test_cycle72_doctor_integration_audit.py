@@ -126,6 +126,7 @@ def _write_dataset(path: Path, *, special_literal: bool = False) -> None:
     path.write_text(json.dumps(split), encoding="utf-8")
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Base(unittest.TestCase):
     def mkroot(self) -> Path:
         tmp = Path(tempfile.mkdtemp(prefix=f"mpl-c72-{os.getpid()}-"))
@@ -135,7 +136,8 @@ class _Base(unittest.TestCase):
     def healthy(self, **kwargs) -> Path:
         return _healthy(self.mkroot(), **kwargs)
 
-    def checks(self, report: dict) -> dict:
+    @staticmethod
+    def checks(report: dict) -> dict:
         return report["model"]["checks"]
 
 
@@ -684,7 +686,8 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["asset_manifest"]["detail"], "missing_or_unsafe_asset")
 
-    def _denying_open(self, name: str, skip_first: int = 0):
+    @staticmethod
+    def _denying_open(name: str, skip_first: int = 0):
         """os.open replacement raising PermissionError for one file name.
 
         ``skip_first`` allows the first N opens to succeed: the manifest
@@ -754,7 +757,8 @@ class AdversarialEdgeTests(_Base):
         """Same OSError hole class in the tokenizer.json try-block
         (mocked open error -> ValueError conversion path; the raw
         ``except OSError`` branch is covered by
-        test_cycle102_oserror_branches.py)."""
+        test_cycle102_oserror_branches.py).
+        """
         root = self.healthy()
         with patch("os.open", self._denying_open("tokenizer.json")):
             report = examine_model(root)
@@ -764,7 +768,8 @@ class AdversarialEdgeTests(_Base):
     def test_unreadable_weight_during_manifest_fails_closed_without_root(self):
         """Same OSError hole class in the _manifest try-block (mocked open
         error -> ValueError conversion path; the raw ``except OSError``
-        branch is covered by test_cycle102_oserror_branches.py)."""
+        branch is covered by test_cycle102_oserror_branches.py).
+        """
         root = self.healthy()
         with patch("os.open", self._denying_open("model.safetensors")):
             report = examine_model(root)

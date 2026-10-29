@@ -678,7 +678,9 @@ _MUTANT_PATH_READY = False
 
 def _build_mutant(package_name, replacements):
     """Copy the package under a fresh top-level name, apply textual mutations
-    to its experiments.py, and import the mutated module."""
+    to its experiments.py, and import the mutated module.
+    """
+    # skipcq: PYL-W0603 - module-level mutable test state is the fixture mechanism
     global _MUTANT_PATH_READY
     src = Path(real.__file__).resolve().parent
     dest = _MUTANT_ROOT / package_name

@@ -305,7 +305,8 @@ class CacheProfilePureTests(unittest.TestCase):
 
 
 class CacheProfileStageTests(unittest.TestCase):
-    def _obs(self, candidate, fixture, status, input_ids):
+    @staticmethod
+    def _obs(candidate, fixture, status, input_ids):
         return {
             "candidate": candidate,
             "fixture": fixture,
@@ -373,7 +374,8 @@ class CacheProfileStageTests(unittest.TestCase):
 
 
 class CacheProfileProfileTests(unittest.TestCase):
-    def _obs_pair(self, a_prompts, b_prompts):
+    @staticmethod
+    def _obs_pair(a_prompts, b_prompts):
         from model_protocol_lab import experiments
 
         obs = []
@@ -516,7 +518,8 @@ class CacheProfileProfileTests(unittest.TestCase):
 
 
 class CacheProfileCellValidTests(unittest.TestCase):
-    def _good_cell(self):
+    @staticmethod
+    def _good_cell():
         return candidate_cache_profile([[1, 2, 3], [1, 2, 4]])
 
     def test_valid_cell(self):
@@ -575,7 +578,8 @@ class _Fmt:
 
 
 class CacheProfileCliTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         from dataclasses import asdict
 
         from model_protocol_lab.core import Observation
@@ -676,7 +680,8 @@ class CacheProfileCliTests(unittest.TestCase):
 
 
 class CacheProfileReportingTests(unittest.TestCase):
-    def _result(self, per_candidate, **overrides):
+    @staticmethod
+    def _result(per_candidate, **overrides):
         payload = {
             "available": True,
             "block_size": 16,
@@ -692,7 +697,8 @@ class CacheProfileReportingTests(unittest.TestCase):
         payload.update(overrides)
         return {"cache_profile": payload}
 
-    def _cell(self):
+    @staticmethod
+    def _cell():
         return candidate_cache_profile([[1] * 32, [1] * 31 + [2]], block_size=16)
 
     def test_section_renders_sharability(self):
@@ -1068,7 +1074,8 @@ class CacheProfileMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _r1_scenario(self, mod):
+    @staticmethod
+    def _r1_scenario(mod):
         # The exactness core: achievable tokens must drop the one
         # unavoidable first miss per shared prefix (R1).
         a = [[0] * 100 + [1] * 10, [0] * 100 + [2] * 10, [3] * 100 + [4] * 10, [3] * 100 + [5] * 10]
@@ -1085,7 +1092,8 @@ class CacheProfileMutationGateTests(unittest.TestCase):
             self._r1_scenario,
         )
 
-    def _r1_block_scenario(self, mod):
+    @staticmethod
+    def _r1_block_scenario(mod):
         b = [[7] * 80 + [100 + i] * 32 for i in range(1, 5)]
         cell = mod.candidate_cache_profile(b, block_size=16)
         assert cell["achievable_blocks"] == 15, cell
@@ -1100,7 +1108,8 @@ class CacheProfileMutationGateTests(unittest.TestCase):
             self._r1_block_scenario,
         )
 
-    def _predicate_scenario(self, mod):
+    @staticmethod
+    def _predicate_scenario(mod):
         # Empty prompts must be excluded (R5/D1), not counted.
         assert mod.is_evaluable_prompt([1]) is True
         assert mod.is_evaluable_prompt([]) is False
@@ -1120,7 +1129,8 @@ class CacheProfileMutationGateTests(unittest.TestCase):
             self._predicate_scenario,
         )
 
-    def _partial_block_scenario(self, mod):
+    @staticmethod
+    def _partial_block_scenario(mod):
         # S2: partial trailing blocks never count, even when the full
         # shared prefix is longer.
         cell = mod.candidate_cache_profile([[1] * 20, [1] * 20], block_size=16)

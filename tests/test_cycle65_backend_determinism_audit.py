@@ -115,7 +115,8 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         cls.ids_b = cls.backend_a.encode("w10 w11 w12 w13")
         assert cls.ids_a != cls.ids_b
 
-    def _generate(self, backend, input_ids, seed, cap=8):
+    @staticmethod
+    def _generate(backend, input_ids, seed, cap=8):
         return backend.generate(input_ids, max_new_tokens=cap, seed=seed, cancel=Event())
 
     # -- 1. byte-identical outputs --------------------------------------
@@ -344,7 +345,8 @@ class BackendDeterminismAuditTests(unittest.TestCase):
 
     # -- 5. full evaluate path -------------------------------------------
 
-    def _fixtures(self):
+    @staticmethod
+    def _fixtures():
         from model_protocol_lab.core import Fixture, Message
 
         return (

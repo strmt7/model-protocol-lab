@@ -129,6 +129,7 @@ def apply_mutation(text: str, mutation: str) -> str:
 
 
 def _valid_token_ids(value: object) -> bool:
+    """Return whether token ids is valid."""
     return type(value) is tuple and all(type(token) is int and token >= 0 for token in value)
 
 
@@ -245,6 +246,7 @@ class WsScanBackend:
     """
 
     def __init__(self, inner: Backend, mutation: str) -> None:
+        """Wrap ``inner`` with a whitespace mutation."""
         if inner is None:
             raise ValueError("inner backend must not be None")
         if type(mutation) is not str or mutation not in MUTATIONS:
@@ -260,12 +262,15 @@ class WsScanBackend:
 
     @property
     def mutation(self) -> str:
+        """Return the mutation."""
         return self._mutation
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         return self._inner.encode(apply_mutation(text, self._mutation))
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._inner.decode(token_ids)
 
     def generate(
@@ -276,6 +281,7 @@ class WsScanBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         return self._inner.generate(
             input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
         )

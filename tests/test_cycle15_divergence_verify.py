@@ -189,7 +189,8 @@ class _DivergenceOracle:
 
     # -- input validation (the lab's fixed-code contract, re-derived) --
 
-    def _checked_ids(self, value: object, name: str, cap: int) -> tuple[int, ...]:
+    @staticmethod
+    def _checked_ids(value: object, name: str, cap: int) -> tuple[int, ...]:
         if type(value) is not tuple or any(
             type(token) is not int or not 0 <= token < 2**31 for token in value
         ):
@@ -198,7 +199,8 @@ class _DivergenceOracle:
             raise ValueError(f"{name}_too_long")
         return value
 
-    def _checked_stop_texts(self, value: object) -> tuple[str, ...]:
+    @staticmethod
+    def _checked_stop_texts(value: object) -> tuple[str, ...]:
         if type(value) is tuple:
             items: tuple[object, ...] = value
         elif type(value) is list:
@@ -325,8 +327,8 @@ class _DivergenceOracle:
         kept_text = self._cell_text(backend, hf)
         return kept_text is not None and kept_text != strip.returned_text
 
+    @staticmethod
     def _ungated_strip_fires(
-        self,
         backend: Any,
         output_ids: tuple[int, ...],
         stop_text: str,
@@ -334,7 +336,8 @@ class _DivergenceOracle:
         strip: _OracleCell,
     ) -> bool:
         """The diagnostic re-run: the stop fires with min_tokens=0, so the
-        given min_tokens is what silenced the strip cell (vLLM PR #22014)."""
+        given min_tokens is what silenced the strip cell (vLLM PR #22014).
+        """
         if not (min_tokens > 0 and strip.available and not strip.fired):
             return False
         ungated = emulate_vllm_holdback(backend, output_ids, stop_text, min_tokens=0)
@@ -355,7 +358,8 @@ class _DivergenceOracle:
         """Stop string and EOS fire in the same step: precedence, not firing
         order, decides the outcome -- and the engines disagree (SGLang's
         shipped #28802 fix: stop wins; TGI's documented precedence: EOS
-        wins)."""
+        wins).
+        """
         return (
             sglang.available
             and sglang.fired
@@ -692,8 +696,9 @@ class DivergenceClassificationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.oracle = _DivergenceOracle()
 
+    @staticmethod
     def _backend(
-        self, texts: list[str], prompt_texts: list[str] | tuple[str, ...] = ()
+        texts: list[str], prompt_texts: list[str] | tuple[str, ...] = ()
     ) -> tuple[_ConcatBackend, tuple[int, ...], tuple[int, ...]]:
         mapping = {index + 1: text for index, text in enumerate(texts)}
         prompt_ids = tuple(1001 + index for index in range(len(prompt_texts)))
@@ -723,7 +728,8 @@ class DivergenceClassificationTests(unittest.TestCase):
         self, impl: dict[str, Any], oracle_result: dict[str, Any], label: str
     ) -> None:
         """The classification contract: (class, stop_text) multiset, cells,
-        echoed stop texts and verdict all agree; details are non-empty."""
+        echoed stop texts and verdict all agree; details are non-empty.
+        """
         impl_pairs = sorted((d["class"], d["stop_text"]) for d in impl["divergences"])
         oracle_pairs = sorted((d.kind, d.stop_text) for d in oracle_result["divergences"])
         self.assertEqual(impl_pairs, oracle_pairs, label)
@@ -1011,8 +1017,9 @@ class DivergenceSectionTests(unittest.TestCase):
                 self.assertEqual(set(finding), {"class", "stop_text", "detail", "severity"}, label)
                 self.assertTrue(finding["detail"], label)
 
+    @staticmethod
     def _section_kwargs(
-        self, observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend
+        observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend
     ) -> dict[str, Any]:
         return {
             "observations": observations,
@@ -1075,7 +1082,8 @@ class DivergenceSectionTests(unittest.TestCase):
             ["fixture_0", "fixture_1", "fixture_2"],
         )
 
-    def _random_observation(self, rng: random.Random, n_tokens: int) -> Any:
+    @staticmethod
+    def _random_observation(rng: random.Random, n_tokens: int) -> Any:
         roll = rng.random()
         if roll < 0.62:
             observation: dict[str, Any] = {

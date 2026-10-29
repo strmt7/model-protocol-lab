@@ -79,6 +79,7 @@ class FuzzCase:
     file_kind: str = "regular"
 
     def __post_init__(self) -> None:
+        """Validate the fuzz target and outcome vocabulary."""
         if self.target not in TARGETS:
             raise ValueError(f"unknown fuzz target {self.target!r}")
         if self.expected not in OUTCOMES:
@@ -232,6 +233,7 @@ def _materialize(case: FuzzCase, workdir: Path) -> Path:
 
 
 def _stored_value(split: Split, stored: tuple[str, int, str, str]) -> str | None:
+    """Return the stored value."""
     partition, index, field, _value = stored
     fixtures = split.search if partition == "search" else split.held_out
     if not 0 <= index < len(fixtures):
@@ -281,6 +283,7 @@ def _observe(
         return ("accept_warn" if warnings else "accept"), split, warnings, None
     except ValueError as exc:
         return "reject", None, [], exc
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     except Exception as exc:  # noqa: BLE001 -- deliberate: any non-ValueError escape IS the crash finding this harness exists to report; it is classified, never propagated
         return "crash", None, [], exc
 
@@ -417,6 +420,7 @@ def run_fixtures_fuzz(args: argparse.Namespace, parser: argparse.ArgumentParser)
     (the doctor/pack convention). Exit 0 when every case conforms,
     1 on any finding.
     """
+    # skipcq: PTC-W0043 - the del is a deliberate tripwire: the protocol parameter is unused
     del parser  # the subcommand takes no parser-level validation
     seed = int(args.seed)
     report = run_fuzz(seed)
@@ -445,6 +449,7 @@ _MAX_BYTES = 2_000_000  # datasets/fixtures MAX_BYTES
 
 
 def _fx(fid: str, group: str, content: str, expected: str) -> dict[str, Any]:
+    """Return the fx."""
     return {
         "id": fid,
         "group": group,
@@ -454,6 +459,7 @@ def _fx(fid: str, group: str, content: str, expected: str) -> dict[str, Any]:
 
 
 def _json_base() -> dict[str, Any]:
+    """Return the json base."""
     return {
         "search": [
             _fx("s1", "gs", "q one", "a"),
@@ -467,13 +473,16 @@ def _json_base() -> dict[str, Any]:
 
 
 def _json_text(doc: dict[str, Any]) -> str:
+    """Return the json text."""
     return json.dumps(doc, ensure_ascii=False)
 
 
 def _json_cases(seed: int) -> list[FuzzCase]:
+    """Return the json cases."""
     cases: list[FuzzCase] = []
 
     def add(name: str, payload: str, expected: str, clause: str, **kw: Any) -> None:
+        """Add."""
         cases.append(FuzzCase(f"json_{name}", "json", payload, expected, clause, **kw))
 
     base = _json_text(_json_base())
@@ -986,14 +995,17 @@ def _csv_text(
     eol: str = "\n",
     trailing: bool = True,
 ) -> str:
+    """Return the csv text."""
     text = eol.join((header, *rows))
     return text + eol if trailing else text
 
 
 def _csv_cases(seed: int) -> list[FuzzCase]:
+    """Return the csv cases."""
     cases: list[FuzzCase] = []
 
     def add(name: str, payload: str, expected: str, clause: str, **kw: Any) -> None:
+        """Add."""
         cases.append(FuzzCase(f"csv_{name}", "csv", payload, expected, clause, **kw))
 
     add(
@@ -1348,11 +1360,13 @@ def _csv_cases(seed: int) -> list[FuzzCase]:
 
 
 def _file_cases() -> list[FuzzCase]:
+    """Return the file cases."""
     cases: list[FuzzCase] = []
     json_bytes = _json_text(_json_base()).encode("utf-8")
     csv_bytes = _csv_text().encode("utf-8")
 
     def add(name: str, target: str, payload: bytes, expected: str, clause: str, **kw: Any) -> None:
+        """Add."""
         cases.append(FuzzCase(name, target, payload, expected, clause, **kw))
 
     add(

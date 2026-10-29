@@ -190,6 +190,7 @@ class LingThinkingOffTests(unittest.TestCase):
 
         base = CATALOG["ling"]
         repair_keys = {_key(variant) for variant in local_repairs(base)}
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         self.assertNotIn(_key(off), repair_keys)
         # Sanity: the same uniqueness property holds for the earlier
@@ -198,6 +199,7 @@ class LingThinkingOffTests(unittest.TestCase):
         for family in ("kolibri", "nemotron35"):
             base_f = CATALOG[family]
             repair_keys_f = {_key(variant) for variant in local_repairs(base_f)}
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             off_f = next(
                 v for v in candidates(family, mutate=True) if v.name == f"{family}/thinking-off"
             )

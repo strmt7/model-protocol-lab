@@ -68,7 +68,8 @@ class BenignTemplatesAllowedTests(unittest.TestCase):
 
 
 class SstiCorpusDeniedTests(unittest.TestCase):
-    def _rules(self, source):
+    @staticmethod
+    def _rules(source):
         return [f.rule for f in scan_template_ast(source)]
 
     def test_lipsum_globals(self):
@@ -193,7 +194,8 @@ class DoctorFirewallTests(unittest.TestCase):
 
 
 class FirewallHtmlTests(unittest.TestCase):
-    def _result(self, firewall):
+    @staticmethod
+    def _result(firewall):
         return {
             "decision": "compatible_on_fixture_set",
             "selected_candidate": "chatml",
@@ -302,6 +304,7 @@ class FirewallMutationGateTests(unittest.TestCase):
                     cwd=str(Path(__file__).resolve().parent.parent),
                     capture_output=True,
                     timeout=300,
+                    check=False,
                 )
             finally:
                 src.write_text(original, encoding="utf-8")

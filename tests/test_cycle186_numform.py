@@ -77,6 +77,7 @@ def _margin_oracle(a: int, b: int) -> str:
     da, db = _digits_of(a), _digits_of(b)
     if len(da) != len(db):
         return "different_length"
+    # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
     index = next(i for i, (x, y) in enumerate(zip(da, db, strict=True)) if x != y)
     if index == len(da) - 1:
         return "same_length_last_digit"
@@ -375,6 +376,7 @@ class TestGeneration(unittest.TestCase):
                 text=True,
                 env={"PYTHONHASHSEED": hash_seed, "PATH": "/usr/bin:/bin"},
                 cwd=".",
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             outputs.add(proc.stdout)
@@ -428,7 +430,8 @@ class TestGeneration(unittest.TestCase):
 
 
 class TestGroupingClassifier(unittest.TestCase):
-    def _evidence(self, counts):
+    @staticmethod
+    def _evidence(counts):
         probes = nf.probe_strings()
         evidence = {}
         for probe in probes:
@@ -465,7 +468,7 @@ class TestGroupingClassifier(unittest.TestCase):
 
     def test_measure_with_stub_encoders(self):
         value_set = nf.generate_value_set(0)
-        char = nf.measure_grouping(lambda text: tuple(text), value_set)
+        char = nf.measure_grouping(tuple, value_set)
         self.assertEqual(char["classification"], "single_digit")
         self.assertEqual(char["token_deltas_vs_plain"]["plain"], 0.0)
         self.assertIsNotNone(char["form_token_means"]["comma"])
@@ -500,7 +503,8 @@ class TestContrastClassification(unittest.TestCase):
             with self.subTest(n=n, a=a_only, b=b_only):
                 self.assertEqual(nf.classify_contrast(n, a_only, b_only), label)
 
-    def _contrast_records(self, verdicts_a, verdicts_b):
+    @staticmethod
+    def _contrast_records(verdicts_a, verdicts_b):
         records = []
         for form, verdicts in (("plain", verdicts_a), ("comma", verdicts_b)):
             for index, verdict in enumerate(verdicts):
@@ -545,9 +549,8 @@ class TestContrastClassification(unittest.TestCase):
 
 
 class TestDecomposition(unittest.TestCase):
-    def _record(
-        self, task, verdict, answer, expected, boundary=True, value=None, expected_value=None
-    ):
+    @staticmethod
+    def _record(task, verdict, answer, expected, boundary=True, value=None, expected_value=None):
         return {
             "task": task,
             "expected_answer": expected,
@@ -996,14 +999,17 @@ def _base_payload(mode="faithful", seed=0, fingerprint=None):
 
 class _CharBackend(_NumformBackend):
     """Char-token variant: digit probes count one token per
-    character, so the grouping classification is single_digit."""
+    character, so the grouping classification is single_digit.
+    """
 
     fingerprint = "sha256:numform-char"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(ord(ch) for ch in text)
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return "".join(chr(int(i)) for i in ids)
 
 
@@ -1028,12 +1034,14 @@ class TestValidatorBattery(unittest.TestCase):
         # it; now the full stage + validator path accepts it.
         self.assertTrue(_valid_numform(_base_payload(seed=26)))
 
-    def _rehash_from_records(self, payload):
+    @staticmethod
+    def _rehash_from_records(payload):
         """Recompute the protocol hashes the pre-cycle-187 way:
         the generated set's hash derived from the payload's own
         records, then the protocol fingerprint over that. A
         payload carrying these hashes is exactly what the old
-        validator vouched for."""
+        validator vouched for.
+        """
         first = payload["candidates"][sorted(payload["candidates"])[0]]["records"]
         by_entry = {}
         for record in first:
@@ -1063,7 +1071,8 @@ class TestValidatorBattery(unittest.TestCase):
             )
         ).hexdigest()
 
-    def _recompute_candidate(self, entry):
+    @staticmethod
+    def _recompute_candidate(entry):
         pairs = (
             ("plain", "comma"),
             ("plain", "space"),
@@ -1258,6 +1267,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     def test_record_tampers(self):
         def first(payload, task, form="plain"):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1592,7 +1602,8 @@ class TestGapCoverage(unittest.TestCase):
     intersecting the full-run coverage with the new code (the
     cycle-174 pattern): parser cap branches, generator retry
     paths, validator mirror branches, stage screen paths, and
-    the reporting section's defensive lines."""
+    the reporting section's defensive lines.
+    """
 
     # -- numform.py -------------------------------------------------
 
@@ -1769,6 +1780,7 @@ class TestGapCoverage(unittest.TestCase):
 
     def test_record_guards_round_two(self):
         def first(payload, task, form="plain"):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1776,6 +1788,7 @@ class TestGapCoverage(unittest.TestCase):
             )
 
         def middle_compare(payload):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1790,6 +1803,7 @@ class TestGapCoverage(unittest.TestCase):
         def wrong_compare_stratum(payload):
             record = first(payload, "compare")
             true_class = nf.margin_class(*record["operands"])
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record["stratum"] = next(
                 c
                 for c in (
@@ -1803,6 +1817,7 @@ class TestGapCoverage(unittest.TestCase):
         def wrong_add_stratum(payload):
             record = first(payload, "add")
             true_class = nf.carry_class(*record["operands"])
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record["stratum"] = next(c for c in ("none", "some", "full_chain") if c != true_class)
 
         tampers = [
@@ -1823,6 +1838,7 @@ class TestGapCoverage(unittest.TestCase):
             wrong_add_stratum,
             middle_compare,
             lambda p: first(p, "copy").__setitem__("form_identical", 1),
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             lambda p: next(
                 r
                 for r in p["candidates"]["nf-a"]["records"]
@@ -1933,7 +1949,8 @@ class TestGapCoverage(unittest.TestCase):
 class TestGapCoverageRoundThree(unittest.TestCase):
     """The validator guards the first two batteries still did not
     reach, mapped line-by-line from the full-run coverage
-    intersection (each tamper is aimed at one named guard)."""
+    intersection (each tamper is aimed at one named guard).
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -1946,6 +1963,7 @@ class TestGapCoverageRoundThree(unittest.TestCase):
 
     def test_construction_guards_round_three(self):
         def first(payload, task, form="plain", name="nf-a"):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"][name]["records"]
@@ -1984,6 +2002,7 @@ class TestGapCoverageRoundThree(unittest.TestCase):
             # The same (task, value, form) key carrying a
             # different -- individually consistent -- value in
             # the second candidate: construction tuples differ.
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r
                 for r in payload["candidates"]["nf-b"]["records"]

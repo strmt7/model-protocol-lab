@@ -27,7 +27,8 @@ class OrdinalBackend:
     def decode(ids):
         return "".join(map(chr, ids))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
@@ -51,7 +52,8 @@ class SpecialBackend:
     def decode(cls, ids):
         return "".join(cls.MARKER if x == 7 else chr(x) for x in ids)
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
@@ -309,7 +311,8 @@ class StageGapTests(unittest.TestCase):
 
 
 class ValidatorGapTests(unittest.TestCase):
-    def _arm(self, **over):
+    @staticmethod
+    def _arm(**over):
         arm = {
             "n_evaluable": 2,
             "n_scored": 2,

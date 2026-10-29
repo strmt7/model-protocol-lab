@@ -864,7 +864,7 @@ def _check_misc_helpers(rep):
 def _check_json_shape(rep):
     result = _minimal_result()
     with tempfile.TemporaryDirectory() as tmp:
-        json_path, html_path = rep.save_report(copy.deepcopy(result), Path(tmp) / "r")
+        json_path, _html_path = rep.save_report(copy.deepcopy(result), Path(tmp) / "r")
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         raw = json_path.read_bytes()
     # Exact top-level key order: input keys, then diagnostics, then the flag.
@@ -1173,7 +1173,8 @@ def _fuzz_string(rng, hostile_pool):
 
 
 class TestFuzzReportInternals(unittest.TestCase):
-    def _random_result(self, rng, hostile_pool):
+    @staticmethod
+    def _random_result(rng, hostile_pool):
         decisions = [
             "compatible_on_fixture_set",
             "ambiguous",

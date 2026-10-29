@@ -61,6 +61,8 @@ def _block_hf_imports():
     """
     real_import = builtins.__import__
 
+    # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
+    # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):  # noqa: ANN001, ANN202
         if name.split(".")[0] in _HF_TOP_LEVELS:
             raise ImportError(f"No module named {name!r} (simulated)")
@@ -135,7 +137,8 @@ class TestNoModuleLevelThirdPartyImports(unittest.TestCase):
 class TestMissingHfExtraFailsActionable(unittest.TestCase):
     """With the hf extra blocked, backend init must name the missing extra."""
 
-    def _healthy_root(self) -> Path:
+    @staticmethod
+    def _healthy_root() -> Path:
         root = Path(tempfile.mkdtemp(prefix="mpl_cycle105_"))
         (root / "config.json").write_text(json.dumps({"model_type": "gpt2", "n_positions": 1024}))
         (root / "tokenizer.json").write_text(json.dumps({"model": {}}))

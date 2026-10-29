@@ -47,7 +47,8 @@ def _protocol(backend=None, fixtures=None):
 
 
 class MyersDistanceTests(unittest.TestCase):
-    def _brute_force(self, a, b):
+    @staticmethod
+    def _brute_force(a, b):
         """Independent O(nm) indel-edit DP (substitution = del+ins)."""
         n, m = len(a), len(b)
         prev = list(range(m + 1))
@@ -130,6 +131,7 @@ class ValidationTests(unittest.TestCase):
         bidi_prompt = "a\u202eb"
         report = sn.probe_surface_noise(bidi_prompt, fixtures, backend, protocol, boundary=(7,))
         self.assertEqual(report["status"], "ok")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bidi = next(c for c in report["static_lint"]["checks"] if c["name"] == "no_bidi_controls")
         self.assertFalse(bidi["passed"])
 
@@ -273,7 +275,8 @@ class VerdictFunctionTests(unittest.TestCase):
         class ExplodingBackend(sn.SelfTestBackend):
             fingerprint = "exploding/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
         protocol, _, fixtures = _protocol(backend=ExplodingBackend(), fixtures=_fixtures())
@@ -326,7 +329,8 @@ class WhitespaceModeTests(unittest.TestCase):
 
 
 class ProbeEndToEndTests(unittest.TestCase):
-    def _report(self, prompt="MAGICWORD please answer now"):
+    @staticmethod
+    def _report(prompt="MAGICWORD please answer now"):
         protocol, backend, fixtures = _protocol()
         return sn.probe_surface_noise(prompt, fixtures, backend, protocol, boundary=(7,)), prompt
 
@@ -435,7 +439,8 @@ class CancellationTests(unittest.TestCase):
         class CancelledBackend(sn.SelfTestBackend):
             fingerprint = "cancelled/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 return Generation((), "cancelled")
 
         backend = CancelledBackend()
@@ -449,7 +454,8 @@ class CancellationTests(unittest.TestCase):
         class ErrorBackend(sn.SelfTestBackend):
             fingerprint = "error/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 return Generation((), "error", error="diag")
 
         backend = ErrorBackend()
@@ -576,6 +582,7 @@ class StaticLintTests(unittest.TestCase):
 
     def test_lint_flags_bidi(self):
         lint = sn.static_lint("a\u202eb")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bidi = next(c for c in lint["checks"] if c["name"] == "no_bidi_controls")
         self.assertFalse(bidi["passed"])
         self.assertIn("U+202E", bidi["detail"])
@@ -584,11 +591,13 @@ class StaticLintTests(unittest.TestCase):
         # Fully-duplicated two-sentence prompt: dup_ratio = 0.5, and the
         # predicate is < 0.5, so it flags.
         lint = sn.static_lint("Say it twice. Say it twice.")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         rep = next(c for c in lint["checks"] if c["name"] == "sentence_repetition")
         self.assertFalse(rep["passed"])
 
     def test_lint_flags_empty(self):
         lint = sn.static_lint("   ")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         nonempty = next(c for c in lint["checks"] if c["name"] == "nonempty")
         self.assertFalse(nonempty["passed"])
 
@@ -616,7 +625,8 @@ class StaticLintTests(unittest.TestCase):
 
 
 class DashboardTests(unittest.TestCase):
-    def _report(self):
+    @staticmethod
+    def _report():
         protocol, backend, fixtures = _protocol()
         return sn.probe_surface_noise(
             "MAGICWORD please answer now", fixtures, backend, protocol, boundary=(7,)
@@ -664,7 +674,8 @@ class DashboardTests(unittest.TestCase):
 
 
 class DiffSurfaceNoiseTests(unittest.TestCase):
-    def _report(self, prompt="MAGICWORD please answer now"):
+    @staticmethod
+    def _report(prompt="MAGICWORD please answer now"):
 
         protocol, backend, fixtures = _protocol()
         return sn.probe_surface_noise(prompt, fixtures, backend, protocol, boundary=(7,))
@@ -694,7 +705,7 @@ class DiffSurfaceNoiseTests(unittest.TestCase):
         from model_protocol_lab.diffreports import diff_surface_noise
 
         r1 = self._report()
-        protocol, backend, fixtures = _protocol()
+        protocol, _backend, fixtures = _protocol()
         other = sn.SelfTestBackend(marker="OTHER")
         protocol2 = sn.freeze_surface_noise_protocol(
             backend_fingerprint=other.fingerprint, fixtures=fixtures
@@ -745,7 +756,8 @@ class DiffSurfaceNoiseTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
-    def _run_cli(self, *argv):
+    @staticmethod
+    def _run_cli(*argv):
         from model_protocol_lab.cli import main
 
         return main(list(argv))
@@ -931,7 +943,8 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _distance_scenario(self, mod):
+    @staticmethod
+    def _distance_scenario(mod):
         # The rate normalizes by the combined length; a mutant that
         # inflates the denominator breaks the [0,1] unit definition.
         assert mod.token_edit_rate((1, 2), (1, 3)) == 0.5, "rate unit broken"
@@ -945,7 +958,8 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
             self._distance_scenario,
         )
 
-    def _freeze_scenario(self, mod):
+    @staticmethod
+    def _freeze_scenario(mod):
         protocol = mod.freeze_surface_noise_protocol(
             backend_fingerprint="fp/v1", fixtures=_fixtures()
         )
@@ -967,7 +981,8 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
             self._freeze_scenario,
         )
 
-    def _controls_scenario(self, mod):
+    @staticmethod
+    def _controls_scenario(mod):
         result = mod.run_surface_noise_controls(boundary=(7,))
         assert result["discriminates"] is True, result
 
@@ -980,7 +995,8 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
             self._controls_scenario,
         )
 
-    def _diff_scenario(self, mod):
+    @staticmethod
+    def _diff_scenario(mod):
         # Reports are built with the real probe; the diff itself is the
         # mutant under test.
         protocol, backend, fixtures = _protocol()
@@ -1049,7 +1065,8 @@ class CoverageGapTests(unittest.TestCase):
         class BadEncodeBackend(sn.SelfTestBackend):
             fingerprint = "badencode/v1"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("boom")
 
         backend = BadEncodeBackend()
@@ -1061,7 +1078,8 @@ class CoverageGapTests(unittest.TestCase):
         class BadGenBackend(sn.SelfTestBackend):
             fingerprint = "badgen/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
         backend = BadGenBackend()
@@ -1073,7 +1091,8 @@ class CoverageGapTests(unittest.TestCase):
         class BadIdsBackend(sn.SelfTestBackend):
             fingerprint = "badids/v1"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return (-1, -2)  # invalid token ids
 
         backend = BadIdsBackend()
@@ -1102,7 +1121,8 @@ class CoverageGapTests(unittest.TestCase):
         class BadEncodeBackend(sn.SelfTestBackend):
             fingerprint = "badencode2/v1"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("boom")
 
         backend = BadEncodeBackend()
@@ -1375,6 +1395,7 @@ class Wave5FixesTests(unittest.TestCase):
         self.assertIn("style-src 'unsafe-inline'", html)
 
     def test_finding5_fixture_content_capped(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message
 
         big_content = "x" * (sn.MAX_FIXTURE_MESSAGE_CHARS + 1)
@@ -1392,7 +1413,7 @@ class Wave5FixesTests(unittest.TestCase):
     def test_finding6_unavailable_exit_3(self):
         # Unavailable status -> exit 3 (not 0).
 
-        protocol, backend, fixtures = _protocol()
+        protocol, _backend, fixtures = _protocol()
 
         # Force unavailable by using a backend that fails to encode
         class BadEncodeBackend(sn.SelfTestBackend):
@@ -1464,7 +1485,8 @@ class CoverageGapTests2(unittest.TestCase):
         class KIbackend(sn.SelfTestBackend):
             fingerprint = "ki/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise KeyboardInterrupt()
 
         backend = KIbackend()
@@ -1476,7 +1498,8 @@ class CoverageGapTests2(unittest.TestCase):
         class BadGenIds(sn.SelfTestBackend):
             fingerprint = "badgenids/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 from model_protocol_lab.core import Generation
 
                 return Generation(("x",), "limit")
@@ -1493,7 +1516,8 @@ class CoverageGapTests2(unittest.TestCase):
         class BadAnswerDecode(sn.SelfTestBackend):
             fingerprint = "badanswerdecode/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 from model_protocol_lab.core import Generation
 
                 ids = tuple(map(ord, "BLUE" + chr(7)))
@@ -1512,7 +1536,8 @@ class CoverageGapTests2(unittest.TestCase):
         class NonStringDecode(sn.SelfTestBackend):
             fingerprint = "nonstr/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 from model_protocol_lab.core import Generation
 
                 ids = tuple(map(ord, "BLUE" + chr(7)))
@@ -1531,7 +1556,8 @@ class CoverageGapTests2(unittest.TestCase):
         class BadIdsBackend(sn.SelfTestBackend):
             fingerprint = "badids2/v1"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return (-1,)
 
         backend = BadIdsBackend()
@@ -1545,6 +1571,7 @@ class CoverageGapTests2(unittest.TestCase):
     def test_controls_handles_probe_failure(self):
         # If a control's probe is cancelled, the control reports its
         # status and mean_stability stays None.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         cancel = threading.Event()
@@ -1678,7 +1705,8 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
         class ErrorBackend(sn.SelfTestBackend):
             fingerprint = "wave6-error-all-abstain/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 return Generation((), "error", error="diag")
 
         backend = ErrorBackend()
@@ -1750,6 +1778,7 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
     def test_cancel_during_last_baseline_is_cancelled(self):
         # Wave-6 red-team A finding 4: a cancel landing during the baseline
         # must report "cancelled" (exit 2), not "unavailable" (exit 3).
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         from model_protocol_lab.core import Generation
@@ -1759,6 +1788,7 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
         class CancelOnLastBackend(sn.SelfTestBackend):
             fingerprint = "wave6-cancel-on-last/v1"
 
+            # skipcq: PYL-W0231 - base init would shadow the class fingerprint this fake carries
             def __init__(self):
                 self.calls = 0
 

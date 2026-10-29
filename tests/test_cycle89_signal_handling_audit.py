@@ -495,10 +495,12 @@ class _SignallingBackend:
     def __init__(self, model, device=None, max_context=None) -> None:
         self.calls = 0
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return (1, 2, 3)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "yo"
 
     def generate(self, input_ids, *, max_new_tokens: int, seed: int, cancel: Event) -> Generation:

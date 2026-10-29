@@ -154,7 +154,8 @@ class SpanAndEnvelopeTests(unittest.TestCase):
         self.assertIsNone(tp.find_span(f"{right} x {left}", 0))
         self.assertIsNone(tp.find_span("no sentinels", 0))
 
-    def _oracle_envelope(self, a: str, b: str):
+    @staticmethod
+    def _oracle_envelope(a: str, b: str):
         prefix = 0
         while prefix < min(len(a), len(b)) and a[prefix] == b[prefix]:
             prefix += 1
@@ -287,7 +288,8 @@ class RoleArmFactTests(unittest.TestCase):
     def setUp(self):
         self.arm = tp.ROLE_ARMS[1]  # promote_first_user, 3 messages
 
-    def _render(self, conv, drop=(), fold=None, order=None):
+    @staticmethod
+    def _render(conv, drop=(), fold=None, order=None):
         spans = []
         ids = order if order is not None else range(len(conv))
         for i in ids:
@@ -386,7 +388,8 @@ class SummarizeTests(unittest.TestCase):
 
 
 class DriverTests(unittest.TestCase):
-    def _section(self, template, **kwargs):
+    @staticmethod
+    def _section(template, **kwargs):
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp) / "ckpt", template)
             return template_probe_section(root)
@@ -730,7 +733,8 @@ class MutationGateTests(unittest.TestCase):
         )
         return namespace
 
-    def _pair_renders(self, namespace):
+    @staticmethod
+    def _pair_renders(namespace):
         spec = namespace["PAIRS"][0]
         base_conv, swap_conv = namespace["build_pair"](spec)
         return (

@@ -95,6 +95,7 @@ class TestConstruction(unittest.TestCase):
             _fx("b3", "wolf", "animal"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "a1")
         self.assertTrue(target["constructible"])
         self.assertIsNone(target["excluded"])
@@ -119,6 +120,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "frog", "wild"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d2", "d3", "d4"])
 
@@ -132,6 +134,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "Miami", "other"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d3", "d4", "d5"])
 
@@ -144,6 +147,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "Madrid", "other"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertNotIn("d1", _donor_ids(target))
         self.assertTrue(target["constructible"])
@@ -158,6 +162,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "mars", "night"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d1", "d4", "d5"])
 
@@ -168,6 +173,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d2", "three", "h"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertFalse(target["constructible"])
         # The realised (partial) choices stay on the record.
@@ -202,6 +208,7 @@ class TestConstruction(unittest.TestCase):
             _fx("d3", "delta", "h"),
         ]
         block = build_choice_sets(cases)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertNotIn("e1", _donor_ids(target))
         self.assertEqual(_donor_ids(target), ["d1", "d2", "d3"])
@@ -218,6 +225,7 @@ class TestConstruction(unittest.TestCase):
         import copy
 
         altered = copy.deepcopy(block)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in altered if e["fixture"] == "t1")
         target["choices"][1]["group"] = "elsewhere"
         self.assertNotEqual(donor_map_sha256(altered), digest_a)
@@ -408,6 +416,7 @@ class TestAggregation(unittest.TestCase):
         self.fixtures = _agg_fixtures()
 
     def _entry(self, fixture):
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         return next(e for e in self.fixtures if e["fixture"] == fixture)
 
     def test_denominators_and_discordance(self):
@@ -534,7 +543,8 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agreement["byte_vs_total"], {"agree": 0, "disagree": 1})
         self.assertEqual(agreement["mean_vs_total"], {"agree": 1, "disagree": 0})
 
-    def _method_aggs(self, verdicts_by_name):
+    @staticmethod
+    def _method_aggs(verdicts_by_name):
         return {
             name: {"_verdicts": {fid: {"total": v} for fid, v in per.items()}}
             for name, per in verdicts_by_name.items()
@@ -639,13 +649,16 @@ class _CharBackend:
         # torch 2.14.1+cu130 on Python 3.13 in CI, cycle 200).
         return f"fake-char:{self.mode}"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return bytes(int(i) for i in ids).decode("utf-8", errors="replace")
 
-    def token_bytes(self, token_id):
+    @staticmethod
+    def token_bytes(token_id):
         return bytes([int(token_id)])
 
     def forward_logits(self, input_ids):
@@ -669,13 +682,15 @@ class _KeyedBackend(_CharBackend):
     letter (prompts starting with byte 9). With the stage cases,
     the byte-1 candidate answers both numeric fixtures correctly
     and nothing else; the byte-9 candidate answers nothing
-    correctly (ties at best) -- a deterministic unique top."""
+    correctly (ties at best) -- a deterministic unique top.
+    """
 
     @property
     def fingerprint(self):
         return "fake-keyed"
 
-    def forward_logits(self, input_ids):
+    @staticmethod
+    def forward_logits(input_ids):
         seq = [int(i) for i in input_ids]
         key = seq[0] if seq else 0
         rows = []
@@ -698,18 +713,22 @@ class _NoLogitsBackend:
     def fingerprint(self):
         return "fake-nologits"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return bytes(int(i) for i in ids).decode("utf-8", errors="replace")
 
-    def token_bytes(self, token_id):
+    @staticmethod
+    def token_bytes(token_id):
         return bytes([int(token_id)])
 
 
 class _NonFiniteBackend(_CharBackend):
-    def forward_logits(self, input_ids):
+    @staticmethod
+    def forward_logits(input_ids):
         seq = [int(i) for i in input_ids]
         rows = []
         for pos in range(len(seq)):
@@ -904,7 +923,8 @@ def _valid_payload():
 def _wide_loser_tamper(payload):
     """Shift one cell's total by -0.01 where it is a wide loser on
     ALL three rankings, so no verdict can move: only the float32
-    representability check can reject the result."""
+    representability check can reject the result.
+    """
     import copy
     import struct
 
@@ -957,6 +977,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     def test_donor_digest_tamper_rejected(self):
         def mutate(p):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["digest"] = "0" * 64
 
@@ -964,6 +985,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     def test_donor_group_equals_target_group_rejected(self):
         def mutate(p):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["group"] = entry["group"]
 
@@ -971,6 +993,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     def test_duplicate_choice_digests_rejected(self):
         def mutate(p):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             digest = entry["choices"][0]["digest"]
             for choice in entry["choices"]:
@@ -1130,8 +1153,10 @@ class TestReportingAndCli(unittest.TestCase):
         import argparse
 
         parser = cli.build_parser()
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
         run_parser = subparsers.choices["run"]
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         action = next(a for a in run_parser._actions if a.dest == "choice_audit")
         self.assertIn("9,600", action.help)
         self.assertIn("acc_norm", action.help)
@@ -1272,7 +1297,8 @@ class TestValidatorGuardBattery(unittest.TestCase):
         cls.unavail = _special_payload("unavailable_candidate")
         cls.encode_fail = _special_payload("encode_fail")
 
-    def _tampered(self, payload, mutate):
+    @staticmethod
+    def _tampered(payload, mutate):
         import copy
 
         payload = copy.deepcopy(payload)
@@ -1286,6 +1312,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
     def test_excluded_payload_is_valid(self):
         self.assertTrue(diffreports._valid_choiceaudit(self.excluded))
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         entry = next(e for e in self.excluded["fixtures"] if e["fixture"] == "f8")
         self.assertEqual(entry["excluded"], "blank_expected")
 
@@ -1370,6 +1397,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
     def test_excluded_entry_constructible_guard(self):
         def mutate(p):
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["fixture"] == "f8")
             entry["constructible"] = True
 
@@ -1669,6 +1697,7 @@ class TestReportingStates(unittest.TestCase):
         stage, base = _run_stage(_KeyedBackend())
         top = base["method_comparison"]["choice_top_candidate"]
         self.assertEqual(top, "chatml")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         other = next(n for n in ("chatml", "plain") if n != top)
         agree = choiceaudit_analysis(
             stage, "compatible_on_fixture_set", top, tuple(f.name for f in _FORMATS)
@@ -1684,7 +1713,7 @@ class TestReportingStates(unittest.TestCase):
             "disagrees with the primary winner",
             reporting.render_html({"choice_audit": disagree}),
         )
-        _, flat_payload = _run_stage(_CharBackend(mode="flat"))
+        _, _flat_payload = _run_stage(_CharBackend(mode="flat"))
         tied_stage, _ = _run_stage(_CharBackend(mode="flat"))
         tied = choiceaudit_analysis(
             tied_stage,
@@ -1714,7 +1743,8 @@ class TestReportingStates(unittest.TestCase):
 
 class TestValidatorGuardBattery2(unittest.TestCase):
     """The remaining mirror branches: canonical ok_empty counting,
-    choice_tied / disagree recompute, and the diff 'new' side."""
+    choice_tied / disagree recompute, and the diff 'new' side.
+    """
 
     def test_canonical_ok_empty_cell_counted_and_rejected(self):
         # A canonically-shaped ok_empty cell passes the structural

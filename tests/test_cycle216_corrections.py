@@ -69,6 +69,7 @@ class TestPrimaryPairTotality(unittest.TestCase):
     """The pair binding itself must be total: bool out, never a raise."""
 
     def test_unhashable_decision_fails_closed(self):
+        """An unhashable primary decision makes the pair validator fail closed."""
         for bad in _UNHASHABLE_DECISIONS:
             with self.subTest(bad=bad):
                 self.assertFalse(
@@ -78,6 +79,7 @@ class TestPrimaryPairTotality(unittest.TestCase):
                 )
 
     def test_unhashable_winner_fails_closed(self):
+        """An unhashable primary winner makes the pair validator fail closed."""
         self.assertFalse(
             _valid_primary_pair(
                 {
@@ -89,6 +91,7 @@ class TestPrimaryPairTotality(unittest.TestCase):
         )
 
     def test_valid_pairs_still_bind(self):
+        """Valid primary pairs still bind; mismatched ones do not."""
         self.assertTrue(
             _valid_primary_pair(
                 {
@@ -114,6 +117,7 @@ class TestPrecisionConfidencePairGuard(unittest.TestCase):
     """The two recompute paths that reached the pair unguarded (live pre-fix)."""
 
     def test_precision_unhashable_decision_fails_closed(self):
+        """An unhashable decision fails the precision pair validator closed."""
         base = _precision_payload()
         self.assertTrue(_valid_precision(base))
         for bad in _UNHASHABLE_DECISIONS:
@@ -123,6 +127,7 @@ class TestPrecisionConfidencePairGuard(unittest.TestCase):
                 self.assertFalse(_valid_precision(hostile))
 
     def test_precision_diff_reports_hostile_side_unavailable(self):
+        """A hostile precision side diffs as unavailable."""
         base = _precision_payload()
         hostile = copy.deepcopy(base)
         hostile["primary_decision"] = []
@@ -130,6 +135,7 @@ class TestPrecisionConfidencePairGuard(unittest.TestCase):
         self.assertEqual(result["available"], "old")
 
     def test_confidence_unhashable_decision_fails_closed(self):
+        """An unhashable decision fails the confidence pair validator closed."""
         base = _confidence_payload()
         self.assertTrue(_valid_confidence(base))
         for bad in _UNHASHABLE_DECISIONS:
@@ -139,6 +145,7 @@ class TestPrecisionConfidencePairGuard(unittest.TestCase):
                 self.assertFalse(_valid_confidence(hostile))
 
     def test_confidence_diff_reports_hostile_side_unavailable(self):
+        """A hostile confidence side diffs as unavailable."""
         base = _confidence_payload()
         hostile = copy.deepcopy(base)
         hostile["primary_decision"] = {}
@@ -150,6 +157,7 @@ class TestPreGuardedPairValidators(unittest.TestCase):
     """The four callers that already pre-guard: the surface stays fail-closed."""
 
     def test_minimal_payloads_fail_closed_without_raising(self):
+        """The pre-guarded pair validators fail closed on minimal payloads without raising."""
         validators = (_valid_repetition, _valid_distraction, _valid_leading, _valid_dateline)
         for validator in validators:
             for bad in ([], {}):
@@ -162,6 +170,7 @@ class TestDatelineLiteralValidatorDrift(unittest.TestCase):
     """Item 3 evidence: producer weekday drift is caught by the literal validator."""
 
     def test_producer_weekday_drift_rejected(self):
+        """Producer weekday-name drift is rejected by the dateline literal validator."""
         self.assertTrue(_valid_dateline(_base_payload()))
         original = dateline.WEEKDAY_NAMES
         swapped = list(original)

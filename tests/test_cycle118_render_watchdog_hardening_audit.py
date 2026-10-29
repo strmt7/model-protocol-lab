@@ -25,8 +25,9 @@ import unittest
 
 
 class _OkTokenizer:
+    @staticmethod
     def apply_chat_template(
-        self, conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
+        conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
         return "<|user|>hi<|assistant|>"
 
@@ -83,14 +84,14 @@ class TestWatchdogHardening(unittest.TestCase):
             self.skipTest("requires setitimer (Unix)")
 
         def old_handler(signum: int, frame: object) -> None:
-            pass
+            """No-op stand-in for the previously installed SIGALRM handler."""
 
         prev = signal.signal(signal.SIGALRM, old_handler)
         try:
 
             class StaleAlarmTokenizer:
+                @staticmethod
                 def apply_chat_template(
-                    self,
                     conversation: object,
                     tokenize: bool = False,
                     add_generation_prompt: bool = True,

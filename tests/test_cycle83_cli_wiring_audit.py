@@ -136,6 +136,7 @@ def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Complet
         text=True,
         timeout=CALL_TIMEOUT,
         env=cmd_env,
+        check=False,
     )
 
 
@@ -756,7 +757,8 @@ class RunDecisionExitCodeTests(unittest.TestCase):
 class HelpStabilityTests(unittest.TestCase):
     """--help output is byte-stable across runs; no run-varying data leaks."""
 
-    def _help_argvs(self) -> list[list[str]]:
+    @staticmethod
+    def _help_argvs() -> list[list[str]]:
         argvs = [["--help"]]
         for sub in SUBCOMMANDS:
             argvs.append([sub, "--help"])
@@ -829,6 +831,7 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=CALL_TIMEOUT,
+            check=False,
         )
 
     def _assert_identical(self, argv: tuple[str, ...]) -> None:

@@ -288,7 +288,8 @@ class CasesTests(unittest.TestCase):
 
 
 class AggregateTests(unittest.TestCase):
-    def _joint_records(self, n_direct_pass, n_joint, larger_first_flags):
+    @staticmethod
+    def _joint_records(n_direct_pass, n_joint, larger_first_flags):
         records = []
         joint_left = n_joint
         for index in range(16):
@@ -678,10 +679,12 @@ class CliTests(unittest.TestCase):
         from model_protocol_lab import cli as cli_module
 
         class _EncodeExplodeBackend(_WordBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("no encode")
 
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 # A decode of "?" would trip the boundary-text
                 # screen (every instruction ends in "?"); the
                 # contract here is a terminator outside the

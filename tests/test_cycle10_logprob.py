@@ -42,7 +42,8 @@ from model_protocol_lab.scoring import TargetScore
 
 class ScriptTokenizer:
     """Char-piece tokenizer with controllable merge behavior (local copy of
-    the cycle-9 pattern so this module stays self-contained)."""
+    the cycle-9 pattern so this module stays self-contained).
+    """
 
     def __init__(self, pieces: dict[str, int]) -> None:
         self._pieces = dict(pieces)
@@ -92,6 +93,7 @@ class LogitStubBackend:
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return self._tokenizer.decode(token_ids)
 
+    # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def forward_logits(self, input_ids: tuple[int, ...]):
         self.forward_calls.append(tuple(input_ids))
         if self._logit_fn is None:
@@ -103,7 +105,8 @@ def peaked_fn(vocab_size: int, peak_on_target: bool):
     """Logit callback: peak 50.0 on the next token (high likelihood) or on
     id 0 (very low likelihood for the target, whose ids are 2/3 in these
     tests). Row t predicts token t+1 -- the causal shift the engine
-    gathers -- so the peak goes on input_ids[t+1]."""
+    gathers -- so the peak goes on input_ids[t+1].
+    """
 
     def fn(input_ids: tuple[int, ...]) -> torch.Tensor:
         rows = []
@@ -180,6 +183,7 @@ class DiagnosticEngineTests(unittest.TestCase):
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
         self.assertTrue(diag["available"])
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         self.assertEqual(cand["name"], "cand")
         (score,) = cand["fixture_scores"]
@@ -202,6 +206,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         diag = logprob_diagnostic(
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         (score,) = cand["fixture_scores"]
         self.assertEqual(score["status"], "unavailable")
@@ -296,7 +301,8 @@ class DiagnosticEngineTests(unittest.TestCase):
 
 
 class InterpretationTests(unittest.TestCase):
-    def _diag(self, peak_on_target: bool, exact_match: bool):
+    @staticmethod
+    def _diag(peak_on_target: bool, exact_match: bool):
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, peak_on_target))
         fixture, prompt_ids = two_token_expected_case(backend)
         obs = make_obs("f1", prompt_ids, exact_match=exact_match, boundary_found=exact_match)
@@ -369,7 +375,8 @@ class AggregateGuardTests(unittest.TestCase):
 
 
 class CliFlagTests(unittest.TestCase):
-    def _parse(self, extra=()):
+    @staticmethod
+    def _parse(extra=()):
         return build_parser().parse_args(
             [
                 "run",
@@ -402,7 +409,8 @@ class CliFlagTests(unittest.TestCase):
 
 
 class ReportSectionTests(unittest.TestCase):
-    def _render(self, diag):
+    @staticmethod
+    def _render(diag):
         result = {
             "decision": "ambiguous",
             "search": [],
@@ -410,7 +418,8 @@ class ReportSectionTests(unittest.TestCase):
         }
         return render_html(result)
 
-    def _ok_diag(self):
+    @staticmethod
+    def _ok_diag():
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture, prompt_ids = two_token_expected_case(backend)
         return logprob_diagnostic(

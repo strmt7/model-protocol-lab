@@ -1177,7 +1177,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
             max_new_tokens=len(output),
             seed=seed,
         )
-        (input_ids, cap, logged_seed, cancel_event) = backend.generate_log[0]
+        (_input_ids, cap, logged_seed, _cancel_event) = backend.generate_log[0]
         self.assertEqual(logged_seed, oracle_request_seed(seed, "s1"))
         self.assertEqual(cap, len(output))
         # Encode saw the exact oracle-rendered prompt (independent render check).

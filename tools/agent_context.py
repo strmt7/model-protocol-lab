@@ -16,6 +16,7 @@ import re
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_FILE_BYTES = 1024 * 1024
@@ -49,7 +50,8 @@ def relative_source_path(name: str) -> PurePosixPath:
 def safe_path(root: Path, name: str) -> Path:
     """Purpose: Contain local paths.
     Inputs: root/relative name.
-    Outputs: path or rejection, including reparse points."""
+    Outputs: path or rejection, including reparse points.
+    """
     relative = relative_source_path(name)
     selected = root.resolve()
     for part in relative.parts:
@@ -66,7 +68,8 @@ def safe_path(root: Path, name: str) -> Path:
 def read_source(root: Path, name: str) -> tuple[str, str]:
     """Purpose: Read bounded exact text.
     Inputs: root/path.
-    Outputs: UTF-8 text and SHA-256; rejects binary/large input."""
+    Outputs: UTF-8 text and SHA-256; rejects binary/large input.
+    """
     path = safe_path(root, name)
     with path.open("rb") as source:
         raw = source.read(MAX_FILE_BYTES + 1)
@@ -75,10 +78,11 @@ def read_source(root: Path, name: str) -> tuple[str, str]:
     return raw.decode("utf-8-sig"), hashlib.sha256(raw).hexdigest()
 
 
-def load_state(root: Path, name: str) -> dict:
+def load_state(root: Path, name: str) -> dict[str, Any]:
     """Purpose: Load optional disposable state
     Inputs: local path
-    Outputs: schema-1 object or explicit failure."""
+    Outputs: schema-1 object or explicit failure.
+    """
     path = safe_path(root, name)
     if not path.exists():
         return {"schema": 1}
@@ -89,10 +93,11 @@ def load_state(root: Path, name: str) -> dict:
     return value
 
 
-def write_state(root: Path, name: str, value: dict, *, exclusive: bool = False) -> None:
+def write_state(root: Path, name: str, value: dict[str, Any], *, exclusive: bool = False) -> None:
     """Purpose: Publish local state.
     Inputs: contained path/object.
-    Outputs: atomic file, refusing exclusive collisions."""
+    Outputs: atomic file, refusing exclusive collisions.
+    """
     path = safe_path(root, name)
     path.parent.mkdir(parents=True, exist_ok=True)
     safe_path(root, name)
@@ -119,16 +124,18 @@ def write_state(root: Path, name: str, value: dict, *, exclusive: bool = False) 
 def state_name(category: str, key: str) -> str:
     """Purpose: Scope explicit state identifiers
     Inputs: fixed category/key
-    Outputs: ignored relative JSON path."""
+    Outputs: ignored relative JSON path.
+    """
     if not KEY.fullmatch(key):
         raise ValueError("key/session must contain 1-64 lowercase letters, digits or hyphens")
     return f"out/agent-context/{category}/{key}.json"
 
 
-def headings(text: str) -> list[dict]:
+def headings(text: str) -> list[dict[str, Any]]:
     """Purpose: Map ATX sections.
     Inputs: Markdown.
-    Outputs: heading spans with descendants, ignoring fenced examples."""
+    Outputs: heading spans with descendants, ignoring fenced examples.
+    """
     result = []
     fence = None
     lines = text.splitlines(keepends=True)
@@ -160,7 +167,8 @@ def headings(text: str) -> list[dict]:
 def source_window(text: str, section: str | None, start: int, end: int | None) -> tuple[int, int]:
     """Purpose: Select exact source extent.
     Inputs: heading or line range.
-    Outputs: inclusive span; ambiguous/missing fails."""
+    Outputs: inclusive span; ambiguous/missing fails.
+    """
     length = len(text.splitlines())
     if section is not None:
         selected = [item for item in headings(text) if item["title"] == section]
@@ -175,10 +183,11 @@ def source_window(text: str, section: str | None, start: int, end: int | None) -
     return start, last
 
 
-def read_window(root: Path, args: argparse.Namespace) -> dict:
+def read_window(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     """Purpose: Reduce repeated context.
     Inputs: source/window/budget/explicit session.
-    Outputs: lines and unread extent."""
+    Outputs: lines and unread extent.
+    """
     text, digest = read_source(root, args.path)
     start, end = source_window(text, args.section, args.start, args.end)
     record = {"path": args.path, "sha256": digest, "start": start, "end": end}
@@ -223,10 +232,11 @@ def read_window(root: Path, args: argparse.Namespace) -> dict:
     return result
 
 
-def remember(root: Path, args: argparse.Namespace) -> dict:
+def remember(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     """Purpose: Persist explicit synthesis.
     Inputs: summary file/kind/source paths/TTL.
-    Outputs: new cited note, no overwrite."""
+    Outputs: new cited note, no overwrite.
+    """
     summary, _ = read_source(root, args.summary_file)
     if not summary.strip() or len(summary) > 4000:
         raise ValueError("note summary must contain 1-4000 characters")
@@ -256,10 +266,11 @@ def remember(root: Path, args: argparse.Namespace) -> dict:
     }
 
 
-def recall(root: Path, key: str) -> dict:
+def recall(root: Path, key: str) -> dict[str, Any]:
     """Purpose: Validate cited note freshness.
     Inputs: existing key.
-    Outputs: synthesis only when declared evidence/TTL match."""
+    Outputs: synthesis only when declared evidence/TTL match.
+    """
     name = state_name("notes", key)
     note = load_state(root, name)
     if not isinstance(note.get("sources"), list) or not 1 <= len(note["sources"]) <= 32:
@@ -270,7 +281,7 @@ def recall(root: Path, key: str) -> dict:
             _, current = read_source(root, source["path"])
             if current != source["sha256"]:
                 reasons.append({"path": source["path"], "reason": "source_changed"})
-        except (OSError, ValueError, UnicodeError):
+        except (OSError, ValueError):
             reasons.append({"path": source["path"], "reason": "source_unavailable"})
     expiry = datetime.fromisoformat(note["expires_at"])
     if expiry.tzinfo is None:
@@ -288,10 +299,11 @@ def recall(root: Path, key: str) -> dict:
     }
 
 
-def startup(root: Path) -> dict:
+def startup(root: Path) -> dict[str, Any]:
     """Purpose: Expose mandatory skills and the authoritative research route.
     Inputs: checkout.
-    Outputs: current instructions and source hashes; no installation or network activity."""
+    Outputs: current instructions and source hashes; no installation or network activity.
+    """
     agents, agents_hash = read_source(root, "AGENTS.md")
     if not re.search(r"caveman\s+and\s+cocoindex\s+are\s+mandatory", agents, re.IGNORECASE):
         raise ValueError("AGENTS.md must declare Caveman and CocoIndex mandatory")
@@ -332,7 +344,8 @@ def startup(root: Path) -> dict:
 def main(argv: list[str] | None = None) -> int:
     """Purpose: Dispatch bounded context operations.
     Inputs: CLI argv.
-    Outputs: JSON, explicit failures or stale exit 3."""
+    Outputs: JSON, explicit failures or stale exit 3.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("startup")

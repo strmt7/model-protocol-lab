@@ -132,7 +132,8 @@ EMPTY_DIGEST = digest_text("")
 def _derive(seed: int, family: str, depth: int, index: int, slot: int, counter: int) -> int:
     """One deterministic draw (the numform ``_derive``
     construction; depth is in the material -- depths are
-    independent task sets and no nesting is claimed)."""
+    independent task sets and no nesting is claimed).
+    """
     material = f"multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -141,7 +142,8 @@ def _ledger_values(seed: int, depth: int, index: int) -> list[int]:
     """Nonzero addends in +/-1..+/-999 whose sum equals no
     single stated entry (the entry-equality screen: a sum that
     restates one entry would be copyable from the shard text).
-    A failing fixture is redrawn whole at the next counter."""
+    A failing fixture is redrawn whole at the next counter.
+    """
     counter = 0
     while True:
         values: list[int] = []
@@ -157,7 +159,8 @@ def _ledger_values(seed: int, depth: int, index: int) -> list[int]:
 def _shelf_values(seed: int, depth: int, index: int) -> list[int]:
     """Pairwise-distinct holdings in 1..99, so the argmax is
     unique by construction. A colliding slot is redrawn at the
-    next counter; earlier slots never move."""
+    next counter; earlier slots never move.
+    """
     values: list[int] = []
     for slot in range(depth):
         counter = 0
@@ -172,7 +175,8 @@ def _shelf_values(seed: int, depth: int, index: int) -> list[int]:
 
 def _shards(family: str, values: list[int]) -> list[str]:
     """The frozen shard texts for one fixture; the question
-    rides the final shard, so depth is the entry count."""
+    rides the final shard, so depth is the entry count.
+    """
     depth = len(values)
     shards: list[str] = []
     for slot, value in enumerate(values):
@@ -190,6 +194,7 @@ def _shards(family: str, values: list[int]) -> list[str]:
 
 
 def _expected(family: str, values: list[int]) -> str:
+    """Return the expected."""
     if family == "ledger":
         return str(sum(values))
     return LABELS[max(range(len(values)), key=lambda slot: values[slot])]
@@ -199,7 +204,8 @@ def generate_fixtures(seed: int) -> list[dict[str, Any]]:
     """The frozen generated fixture set for a run seed, in
     canonical (family, depth, index) order. Pure and
     deterministic -- the same seed regenerates the identical
-    set across runs and PYTHONHASHSEED values."""
+    set across runs and PYTHONHASHSEED values.
+    """
     if type(seed) is not int:
         raise ValueError("multiturn seed must be an int")
     fixtures: list[dict[str, Any]] = []
@@ -242,7 +248,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -250,7 +257,8 @@ def ground_sha256(seed: int) -> str:
 def template_digest() -> str:
     """Digest of the frozen shard templates, questions, joiner,
     and scripted reply -- the protocol text a payload is
-    checked against."""
+    checked against.
+    """
     canonical = json.dumps(
         [list(SHARD_TEMPLATES), JOINER, SCRIPTED_REPLY],
         separators=(",", ":"),
@@ -262,7 +270,8 @@ def template_digest() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: families, depths, templates, floors, budgets, and
-    the seed/backend pair that generated the set."""
+    the seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "families": list(FAMILIES),
@@ -293,6 +302,7 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 
 def _cell(record: dict[str, Any], arm: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if type(cells) is not dict:
         return None
@@ -314,7 +324,9 @@ def _verdict(record: dict[str, Any], arm: str) -> bool:
 
 def _pair_counts(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[str, int]:
     """Discordant counts for one arm pair over the records
-    where both arms completed (a = reference arm)."""
+    where both arms completed (a = reference arm).
+    """
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     for record in records:
         cell_a = _cell(record, arm_a)
@@ -341,7 +353,8 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     2x2s, the self-history discordant pair, per-family counts,
     completion/attrition) and the pooled classification. The
     diff validator recomputes this exact function over the
-    payload's records and rejects on any disagreement."""
+    payload's records and rejects on any disagreement.
+    """
     depths_out: dict[str, Any] = {}
     for depth in DEPTHS:
         at_depth = [record for record in records if record["depth"] == depth]
@@ -376,9 +389,11 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
         # sharded and scripted disagree about a fixture the
         # single-turn arm passed.
         self_history = {
+            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "sh_only": 0,
             "sc_only": 0,
+            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "both_fail": 0,
         }
@@ -459,7 +474,8 @@ def classify_candidate(depths: dict[str, Any]) -> str:
     the strong label requires at-floor paired self-history
     evidence at a single depth; discordance in either
     direction counts (a one-directional null would acquit a
-    surface that only improves verdicts)."""
+    surface that only improves verdicts).
+    """
     evaluable = [block for block in depths.values() if block["n_paired"] >= MIN_PAIRED_EVALUABLE]
     if not evaluable:
         return "insufficient_evidence"

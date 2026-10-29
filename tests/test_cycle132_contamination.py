@@ -195,7 +195,8 @@ class TestContaminationReport(unittest.TestCase):
 class TestInspectWiring(unittest.TestCase):
     """mpl inspect warns on contamination and carries the JSON block."""
 
-    def _dataset_file(self, tmp, search_text, held_text):
+    @staticmethod
+    def _dataset_file(tmp, search_text, held_text):
         path = Path(tmp) / "ds.json"
         path.write_text(
             json.dumps(
@@ -222,13 +223,15 @@ class TestInspectWiring(unittest.TestCase):
         )
         return path
 
-    def _run_inspect(self, dataset):
+    @staticmethod
+    def _run_inspect(dataset):
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", "inspect", str(dataset)],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
             timeout=120,
+            check=False,
         )
         return proc
 
@@ -293,6 +296,7 @@ class TestFixturesBuildWiring(unittest.TestCase):
                 text=True,
                 cwd=REPO_ROOT,
                 timeout=120,
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("contamination", proc.stderr)
@@ -344,7 +348,8 @@ class TestExamineDatasetWiring(unittest.TestCase):
 class TestReportCallout(unittest.TestCase):
     """The run-configuration section carries the fixture-hygiene line."""
 
-    def _render(self, contamination):
+    @staticmethod
+    def _render(contamination):
         from model_protocol_lab.reporting import _config_section
 
         return _config_section({"contamination": contamination})
@@ -387,7 +392,7 @@ class TestReportCallout(unittest.TestCase):
 class TestMutationGate(unittest.TestCase):
     """Hand-planted mutants: each must change the verdict visibly."""
 
-    """Hand-planted mutants: each must change the verdict visibly."""
+    # Hand-planted mutants: each must change the verdict visibly.
 
     def test_flip_expected_answer_changes_tier(self):
         # Perturbing one word of a duplicate must drop the tier.

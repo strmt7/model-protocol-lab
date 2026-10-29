@@ -273,7 +273,8 @@ class AblationStageTests(unittest.TestCase):
         class ExplodingBackend(PrefixBackend):
             fingerprint = "test-exploding/v1"
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 raise RuntimeError("boom")
 
         stage = experiments.ablation_stage(
@@ -323,7 +324,8 @@ class AblationCliTests(unittest.TestCase):
 
 
 class AblationReportingTests(unittest.TestCase):
-    def _result(self, candidates):
+    @staticmethod
+    def _result(candidates):
         return {"ablation": {"available": True, "candidates": candidates}}
 
     def test_section_renders_load_bearing(self):
@@ -388,7 +390,8 @@ class AblationReportingTests(unittest.TestCase):
 
 
 class AblationDiffTests(unittest.TestCase):
-    def _payload(self, flips=0):
+    @staticmethod
+    def _payload(flips=0):
         # Producer-consistent story (cycle 176, wave-7 F6d): the
         # base passes every fixture; `flips` pass-to-fail flips
         # break the arm's selection bar, which is exactly what makes
@@ -473,6 +476,7 @@ class AblationDiffTests(unittest.TestCase):
         diff = diffreports.diff_ablation(old, new)
         self.assertEqual(diff["candidates_added"], ["t2"])
         self.assertTrue(diff["changed"])
+        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         diff2 = diffreports.diff_ablation(new, old)
         self.assertEqual(diff2["candidates_removed"], ["t2"])
 

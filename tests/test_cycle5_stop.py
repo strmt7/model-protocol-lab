@@ -41,14 +41,15 @@ class TextBackend:
     def __init__(self, texts: dict[int, str]) -> None:
         self._texts = dict(texts)
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         raise AssertionError("encode unused in stop tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return "".join(self._texts.get(token, chr(token)) for token in token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -242,6 +243,7 @@ class StopMatrixStopTextTests(unittest.TestCase):
         )
 
     def test_stop_text_field_distinguishes_hf_and_vllm(self) -> None:
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows()
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
@@ -254,11 +256,13 @@ class StopMatrixStopTextTests(unittest.TestCase):
         self.assertNotIn("stop_text", row["cells"]["eos_appended"])
 
     def test_include_stop_str_flips_vllm_disposition(self) -> None:
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows(vllm_include_stop_str_in_output=True)
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertEqual(row["cells"]["hf_stop_string"]["stop_text"], "kept")
 
     def test_min_tokens_gates_vllm_cell(self) -> None:
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows(vllm_min_tokens=9)
         vllm = row["cells"]["vllm_holdback"]
         self.assertTrue(vllm["available"])
@@ -278,6 +282,7 @@ class StopMatrixStopTextTests(unittest.TestCase):
             self._rows(vllm_min_tokens=True)
 
     def test_row_schema_is_additive(self) -> None:
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows()
         self.assertEqual(set(row.keys()), {"fixture", "native_pass", "cells", "flips"})
         for semantic, cell in row["cells"].items():

@@ -19,7 +19,8 @@ class AgentContextTests(unittest.TestCase):
     def setUp(self):
         """Purpose: Isolate state
         Inputs: temporary filesystem
-        Outputs: owned checkout with mixed Markdown fences."""
+        Outputs: owned checkout with mixed Markdown fences.
+        """
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
@@ -39,10 +40,12 @@ class AgentContextTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def read_args(self, **changes):
+    @staticmethod
+    def read_args(**changes):
         """Purpose: Select test extent
         Inputs: option overrides
-        Outputs: ordinary CLI-equivalent namespace."""
+        Outputs: ordinary CLI-equivalent namespace.
+        """
         values = {
             "path": "guide.md",
             "section": "Selected",
@@ -57,7 +60,8 @@ class AgentContextTests(unittest.TestCase):
     def note_args(self, **changes):
         """Purpose: Select cited note
         Inputs: overrides
-        Outputs: typed synthesis with explicit source and expiry."""
+        Outputs: typed synthesis with explicit source and expiry.
+        """
         values = {
             "key": "timing-decision",
             "summary_file": "summary.md",
@@ -73,7 +77,8 @@ class AgentContextTests(unittest.TestCase):
     def test_section_includes_descendants_and_ignores_fenced_heading(self):
         """Purpose: Preserve required reading.
         Inputs: nested/fenced document.
-        Outputs: exact complete section extent."""
+        Outputs: exact complete section extent.
+        """
         result = context.read_window(self.root, self.read_args())
         self.assertEqual((result["start"], result["end"]), (3, 9))
         self.assertEqual(result["status"], "complete")
@@ -87,7 +92,8 @@ class AgentContextTests(unittest.TestCase):
     def test_partial_budget_reports_unread_and_never_enters_cache(self):
         """Purpose: Prevent false read coverage.
         Inputs: too-small budget/session.
-        Outputs: unread range on every attempt."""
+        Outputs: unread range on every attempt.
+        """
         args = self.read_args(max_chars=20, session="one-context")
         first = context.read_window(self.root, args)
         second = context.read_window(self.root, args)
@@ -99,7 +105,8 @@ class AgentContextTests(unittest.TestCase):
     def test_complete_cache_requires_same_context_range_and_bytes(self):
         """Purpose: Bind cached reads to exact bytes.
         Inputs: session read then changed source.
-        Outputs: changed bytes are re-read, not served stale."""
+        Outputs: changed bytes are re-read, not served stale.
+        """
         args = self.read_args(session="one-context")
         first = context.read_window(self.root, args)
         self.assertEqual(first["status"], "complete")
@@ -115,7 +122,8 @@ class AgentContextTests(unittest.TestCase):
     def test_source_and_state_reject_escape_binary_and_large_files(self):
         """Purpose: Contain reads to the checkout.
         Inputs: escape/binary/oversize/secret paths.
-        Outputs: explicit refusal before access."""
+        Outputs: explicit refusal before access.
+        """
         for bad in (
             "../escape.md",
             "/absolute.md",
@@ -137,7 +145,8 @@ class AgentContextTests(unittest.TestCase):
     def test_note_freshness_is_not_validation_and_source_change_withholds_summary(self):
         """Purpose: Keep notes honest.
         Inputs: note then changed source.
-        Outputs: stale status withholds summary."""
+        Outputs: stale status withholds summary.
+        """
         args = self.note_args()
         created = context.remember(self.root, args)
         fresh = context.recall(self.root, args.key)
@@ -152,7 +161,8 @@ class AgentContextTests(unittest.TestCase):
     def test_expired_note_is_withheld_and_existing_note_is_never_overwritten(self):
         """Purpose: Enforce note TTL and immutability.
         Inputs: expired note and duplicate key.
-        Outputs: stale withholding and exclusive-write refusal."""
+        Outputs: stale withholding and exclusive-write refusal.
+        """
         args = self.note_args()
         context.remember(self.root, args)
         with self.assertRaises(OSError):
@@ -166,7 +176,8 @@ class AgentContextTests(unittest.TestCase):
     def test_startup_delivers_current_mandatory_skills_and_fails_if_missing(self):
         """Purpose: Check actual instruction delivery.
         Inputs: repository and missing local fixture.
-        Outputs: full skills, explicit failure."""
+        Outputs: full skills, explicit failure.
+        """
         delivered = context.startup(context.ROOT)
         self.assertEqual(len(delivered["skills"]), 2)
         for skill in delivered["skills"]:
@@ -186,7 +197,8 @@ class AgentContextTests(unittest.TestCase):
     def test_startup_rejects_removed_research_rule_and_missing_portable_launcher(self):
         """Purpose: Prevent silent research-route removal.
         Inputs: real current instructions and missing tool/rule mutations.
-        Outputs: offline startup fails; no crawler installation occurs."""
+        Outputs: offline startup fails; no crawler installation occurs.
+        """
         agents, _ = context.read_source(context.ROOT, "AGENTS.md")
         for name in context.SKILLS:
             relative = f".agents/skills/{name}/SKILL.md"
@@ -211,7 +223,8 @@ class AgentContextTests(unittest.TestCase):
     def test_startup_rejects_skill_routing_removal(self):
         """Purpose: Catch AGENTS.md that drops a skill path.
         Inputs: mandates present but skill file unlisted.
-        Outputs: explicit routing failure."""
+        Outputs: explicit routing failure.
+        """
         agents, _ = context.read_source(context.ROOT, "AGENTS.md")
         (self.root / "AGENTS.md").write_text(
             agents.replace(".agents/skills/caveman/SKILL.md", ".agents/skills/elsewhere/SKILL.md"),
@@ -223,7 +236,8 @@ class AgentContextTests(unittest.TestCase):
     def test_cli_budget_errors_and_stale_exit_remain_machine_visible(self):
         """Purpose: Verify real command dispatch.
         Inputs: valid/invalid CLI and expired note.
-        Outputs: JSON and distinct exit status."""
+        Outputs: JSON and distinct exit status.
+        """
         args = self.note_args()
         context.remember(self.root, args)
         name = context.state_name("notes", args.key)

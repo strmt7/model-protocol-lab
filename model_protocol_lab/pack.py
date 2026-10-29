@@ -78,14 +78,17 @@ _SEAL_CHECKS = (
 
 
 def _record(checks: list[dict[str, str]], check_id: str, status: str, detail: str = "") -> None:
+    """Record."""
     checks.append({"id": check_id, "status": status, "detail": detail})
 
 
 def _sha256_hex(data: bytes) -> str:
+    """Return the sha256 hex."""
     return hashlib.sha256(data).hexdigest()
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
+    """Return the canonical json bytes."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "utf-8"
     )
@@ -110,7 +113,8 @@ def _entry_type_not_regular(info: zipfile.ZipInfo) -> bool:
     docs/SEALED_BUNDLE_DESIGN.md). Entries from non-Unix creators,
     and Unix entries whose type bits were never set, make no type
     claim and are judged by the name/content checks alone; the
-    lab's own writer leaves the type bits unset."""
+    lab's own writer leaves the type bits unset.
+    """
     if info.create_system != 3:
         return False
     file_type = stat.S_IFMT(info.external_attr >> 16)
@@ -125,7 +129,8 @@ def _valid_segment(segment: str) -> bool:
     on the pack side or a JSON escape in a manifest path) is not a
     segment at all — it must fail here in the fixed vocabulary, not
     later as a raw codec error during serialisation (oversight
-    security S-10)."""
+    security S-10).
+    """
     try:
         segment.encode("utf-8")
     except UnicodeEncodeError:
@@ -150,10 +155,13 @@ def _valid_bundle_path(path: Any) -> bool:
 
 
 class _ManifestDuplicateField(ValueError):
+    """A bundle manifest carried the same field more than once."""
+
     pass
 
 
 def _unique_manifest_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Return the unique manifest object."""
     obj: dict[str, Any] = {}
     for key, value in pairs:
         if key in obj:
@@ -166,19 +174,22 @@ def _reject_manifest_constant(_value: str) -> Any:
     """``parse_constant`` hook: NaN/Infinity are not manifest JSON
     (the tree-wide nonfinite discipline; oversight lead L-C). The
     ValueError is normalised to ``manifest_unparseable`` by the
-    caller's widened catch."""
+    caller's widened catch.
+    """
     raise ValueError("manifest_nonfinite_constant")
 
 
 def build_manifest(files: list[dict[str, Any]], context: dict[str, str]) -> dict[str, Any]:
     """Assemble the manifest dict (pure; canonicalisation happens at
-    serialisation time in :func:`manifest_bytes`)."""
+    serialisation time in :func:`manifest_bytes`).
+    """
     return {"context": context, "files": files, "format": FORMAT_ID}
 
 
 def manifest_bytes(manifest: dict[str, Any]) -> bytes:
     """Serialise the manifest as canonical JSON (the exact bytes the
-    bundle digest is computed over)."""
+    bundle digest is computed over).
+    """
     return _canonical_json_bytes(manifest)
 
 
@@ -188,6 +199,7 @@ def bundle_digest(manifest_data: bytes) -> str:
 
 
 def _zip_info(name: str) -> zipfile.ZipInfo:
+    """Return the zip info."""
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_STORED
     info.create_system = 0
@@ -197,7 +209,8 @@ def _zip_info(name: str) -> zipfile.ZipInfo:
 
 def build_bundle_bytes(manifest_data: bytes, files: list[tuple[str, bytes]]) -> bytes:
     """Serialise a bundle (pure): entries sorted by name, every ZipInfo
-    normalised, the manifest digest in the archive comment."""
+    normalised, the manifest digest in the archive comment.
+    """
     entries = [(MANIFEST_NAME, manifest_data), *files]
     entries.sort(key=lambda item: item[0])
     buffer = io.BytesIO()
@@ -211,7 +224,8 @@ def build_bundle_bytes(manifest_data: bytes, files: list[tuple[str, bytes]]) -> 
 def _read_regular_file(path: Path, *, too_large_code: str, cap: int) -> bytes:
     """Open ``path`` once (O_NOFOLLOW/O_NONBLOCK), require a regular
     file, and return its bytes — at most ``cap`` of them. Mirrors the
-    single-fd discipline of ``diffreports.load_results``."""
+    single-fd discipline of ``diffreports.load_results``.
+    """
     try:
         fd = os.open(
             path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
@@ -292,6 +306,7 @@ def collect_pack_files(
 
 
 def _role_for(arcname: str) -> str:
+    """Return the bundle role of an archive member name."""
     if arcname == RESULTS_NAME:
         return "results"
     if arcname.startswith("inputs/"):
@@ -301,7 +316,8 @@ def _role_for(arcname: str) -> str:
 
 def pack_bundle(report_dir: Path, includes: list[Path]) -> tuple[bytes, dict[str, Any], str]:
     """Build the bundle bytes for a report directory (pure given the
-    directory contents): returns ``(bundle_bytes, manifest, digest)``."""
+    directory contents): returns ``(bundle_bytes, manifest, digest)``.
+    """
     entries, results_data = collect_pack_files(report_dir, includes)
     fingerprint = results_data.get("backend_fingerprint")
     if type(fingerprint) is not str or not fingerprint:
@@ -410,7 +426,8 @@ def _preparse_container(data: bytes) -> tuple[bytes, int]:
 def _valid_manifest(manifest: Any) -> str | None:
     """Return ``None`` when the manifest matches the format-1 schema,
     else a short fixed detail token. Exact types throughout; unknown
-    keys and unknown roles are accepted (forward compatibility)."""
+    keys and unknown roles are accepted (forward compatibility).
+    """
     if type(manifest) is not dict:
         return "manifest_not_an_object"
     if manifest.get("format") != FORMAT_ID:
@@ -455,7 +472,8 @@ def _valid_manifest(manifest: Any) -> str | None:
 def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[bytes, str]:
     """Stream-hash one entry in bounded chunks; returns its bytes too
     (callers keep only the entries they need). Raises ``ValueError``
-    with a fixed code on CRC/encryption/read failures."""
+    with a fixed code on CRC/encryption/read failures.
+    """
     digest = hashlib.sha256()
     chunks: list[bytes] = []
     total = 0
@@ -476,7 +494,6 @@ def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[bytes,
     except (
         zipfile.BadZipFile,
         RuntimeError,
-        NotImplementedError,
         zlib.error,
         lzma.LZMAError,
         EOFError,
@@ -494,6 +511,7 @@ def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[bytes,
     return b"".join(chunks), digest.hexdigest()
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[str, Any]:
     """Verify a bundle's seal and replay its ``results.json``.
 
@@ -584,13 +602,7 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
                 parse_constant=_reject_manifest_constant,
             )
             schema_detail = _valid_manifest(parsed) or ""
-        except (
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-            _ManifestDuplicateField,
-            RecursionError,
-            ValueError,
-        ):
+        except (RecursionError, ValueError):
             # The manifest boundary normalises EVERY parse/validation
             # escape into the documented code (oversight security
             # S-4/S-6): a deeply-nested manifest (RecursionError),
@@ -728,10 +740,11 @@ def build_pack_parser(sub: Any) -> None:
 
 
 def _default_output(report_dir: Path) -> Path:
+    """Return the default output."""
     return report_dir.with_name(report_dir.name + ".bundle.zip")
 
 
-def run_pack(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+def run_pack(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``model-protocol-lab pack``; returns the process exit code.
 
     JSON goes to stdout, the human-readable summary to stderr. Exit 0 on
@@ -795,6 +808,7 @@ def run_pack(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
 
 def _render_bundle_summary(report: dict[str, Any], label: str) -> str:
+    """Render bundle summary."""
     checks = report["checks"]
     passed = sum(1 for c in checks if c["status"] == "passed")
     failed = [c for c in checks if c["status"] == "failed"]
@@ -824,7 +838,8 @@ def _render_bundle_summary(report: dict[str, Any], label: str) -> str:
 def run_verify_bundle(args: argparse.Namespace) -> int:
     """Implement ``model-protocol-lab verify --bundle``; exit codes mirror
     ``run_verify``: 0 when seal and replay pass, 2 when either fails, 1
-    for unreadable input."""
+    for unreadable input.
+    """
     try:
         data = load_bundle_bytes(Path(args.bundle))
     except ValueError as exc:

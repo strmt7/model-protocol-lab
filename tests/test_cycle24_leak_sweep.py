@@ -109,6 +109,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class LeakAsserts(unittest.TestCase):
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
@@ -171,8 +172,9 @@ class _CanaryBackend:
     def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(map(chr, token_ids))
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
@@ -196,7 +198,8 @@ def _evidence_report(directory: Path) -> dict:
 class DiffReportsLeakSweep(LeakAsserts):
     """diff-reports must reduce observations to verdicts, never re-emit them."""
 
-    def _decoded_observation_text(self, report: dict) -> str:
+    @staticmethod
+    def _decoded_observation_text(report: dict) -> str:
         decode = _CanaryBackend.decode
         chunks = []
         for entry in report["search"]:
@@ -284,7 +287,8 @@ class DebugReplContract(LeakAsserts):
     so a future change either keeps it or updates the docs deliberately.
     """
 
-    def _session(self, commands: list[str], tokenizer=None) -> str:
+    @staticmethod
+    def _session(commands: list[str], tokenizer=None) -> str:
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(split, dataset_label="canary-fixtures", tokenizer=tokenizer, stdout=out)
@@ -349,7 +353,8 @@ class DebugReplContract(LeakAsserts):
 def _write_checkpoint(root: Path, *, real_tokenizer: bool) -> Path:
     """A minimal local checkpoint dir. The real-tokenizer variant trains a
     tiny BPE locally (no downloads) so the deep tokenizer check passes and
-    ``doctor`` reaches verdict "ok" with a ``next_command`` suggestion."""
+    ``doctor`` reaches verdict "ok" with a ``next_command`` suggestion.
+    """
     root.mkdir(parents=True, exist_ok=True)
     (root / "config.json").write_text(
         json.dumps({"model_type": "gpt2", "n_positions": 1024}), encoding="utf-8"
@@ -378,7 +383,8 @@ def _write_checkpoint(root: Path, *, real_tokenizer: bool) -> Path:
 class DoctorLeakSweep(LeakAsserts):
     """mpl doctor's report carries checks and counts, never fixture text."""
 
-    def _dataset_path(self, tmp: str, literal: str | None = None) -> Path:
+    @staticmethod
+    def _dataset_path(tmp: str, literal: str | None = None) -> Path:
         path = Path(tmp) / "dataset.json"
         path.write_text(json.dumps(_hostile_document(literal=literal)), encoding="utf-8")
         return path
@@ -423,7 +429,8 @@ class DoctorLeakSweep(LeakAsserts):
 
     def test_audit_findings_carry_catalog_literals_not_user_text(self) -> None:
         """A special-token literal in fixture text yields findings that name
-        the catalog literal (lab-owned vocabulary) -- never the message."""
+        the catalog literal (lab-owned vocabulary) -- never the message.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             report = examine_dataset(self._dataset_path(tmp, literal="<|im_start|>"))
         audit = report["dataset"]["special_token_audit"]
@@ -447,6 +454,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
 
 
@@ -479,7 +487,8 @@ class CliSurfaceSweep(LeakAsserts):
     def test_diff_backends_echoes_only_operator_supplied_inputs(self) -> None:
         """diff-backends takes no dataset input; its output derives only
         from the operator's --prompt-text/--output-text/--stops arguments,
-        which it echoes back by design (like any CLI echoing its args)."""
+        which it echoes back by design (like any CLI echoing its args).
+        """
 
         class _Backend:
             @staticmethod
@@ -536,7 +545,8 @@ class SampleReportPublicHygiene(LeakAsserts):
     def test_committed_files_contain_no_fixture_message_text(self) -> None:
         """Fixture ids may appear (outcome grid, decisive lists); message
         text and expected answers must not -- the sample fixtures are
-        synthetic, and this pins that no real user content crept in."""
+        synthetic, and this pins that no real user content crept in.
+        """
         fixtures = json.loads((REPO_ROOT / "examples" / "fixtures.json").read_text())
         contents: list[str] = []
         ids: list[str] = []

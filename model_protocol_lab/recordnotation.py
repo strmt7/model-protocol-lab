@@ -1,4 +1,4 @@
-"""Record-notation (cycle 221): the descriptive probe that
+r"""Record-notation (cycle 221): the descriptive probe that
 renders the same generated data table in two frozen notations
 -- prose sentences and canonical JSON -- inside the user
 message, and reports how often the two notations' byte-exact
@@ -80,7 +80,7 @@ parses via json.loads as an object whose value at the answer
 key equals the expected value) -- are independent diagnostics:
 neither is a subset of the other, because JSON string escapes
 break the subset relation (an answer carrying the escape
-\\u002d for the value's hyphen parses to the expected value
+\u002d for the value's hyphen parses to the expected value
 while the literal value never appears in the text --
 amendment C). Regrade sensitivities recompute pair discordance
 with each answer replaced by scorerlens' R1 normalisation
@@ -341,8 +341,11 @@ OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
@@ -357,7 +360,8 @@ def digest_text(text: str) -> str:
 
 def digest_ids(ids: tuple[int, ...]) -> str:
     """SHA-256 hex digest of a render id sequence, so records
-    carry the sequence's identity without its contents."""
+    carry the sequence's identity without its contents.
+    """
     canonical = ",".join(str(i) for i in ids)
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
@@ -366,7 +370,8 @@ def table_shape(index: int) -> tuple[int, tuple[str, ...]]:
     """The frozen shape of case ``index``: records
     4 + (index mod 3); three fields on even indices, four on
     odd. Over index mod 6 the shapes are (4,3), (5,4), (6,3),
-    (4,4), (5,3), (6,4) -- every combination exactly once."""
+    (4,4), (5,3), (6,4) -- every combination exactly once.
+    """
     return 4 + (index % 3), (FIELDS_4 if index % 2 else FIELDS_3)
 
 
@@ -417,7 +422,8 @@ def render_json(table: list[dict[str, str]]) -> str:
     (``structured._canonical_json``'s exact parameters) applied
     to the list of record objects in record sequence order.
     ``sort_keys`` orders keys inside each record object; it
-    never reorders the list."""
+    never reorders the list.
+    """
     return json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
@@ -428,7 +434,8 @@ def render_prose(table: list[dict[str, str]]) -> str:
     comma-joined with ``, and the`` before the last. Sentences
     join with a single space. The function is total over
     record sequences and injective over the legal population
-    (see parse_prose)."""
+    (see parse_prose).
+    """
     sentences: list[str] = []
     for record in table:
         parts = [f"the {field} is {record[field]}" for field in sorted(record)]
@@ -452,7 +459,8 @@ def parse_prose(text: str) -> list[dict[str, str]]:
     space, a comma, a period, or an uppercase letter, and no
     legal value or field name contains any of those
     characters. Raises ValueError on text render_prose could
-    not have produced."""
+    not have produced.
+    """
     if not text.endswith("."):
         raise ValueError("prose rendering must end with a period")
     table: list[dict[str, str]] = []
@@ -474,7 +482,8 @@ def parse_prose(text: str) -> list[dict[str, str]]:
 def arm_content(case: dict[str, Any], arm: str) -> str:
     """The full user-message content of one arm: the rendering,
     a blank line, the question, a space, and the contract;
-    the closed-book arm is the question and contract only."""
+    the closed-book arm is the question and contract only.
+    """
     question = QUESTION_TEMPLATE.format(key=case["key"])
     if arm == SCREEN_ARM:
         return f"{question} {CONTRACT}"
@@ -530,7 +539,8 @@ def case_material_sha256() -> str:
     """Digest over every frozen text and list the generator
     draws from, so the protocol binds the population's
     definition -- including the frozen RNG call sequence --
-    not just its seed."""
+    not just its seed.
+    """
     material = {
         "words": list(WORDS),
         "fields_3": list(FIELDS_3),
@@ -552,7 +562,8 @@ def ground_sha256(seed: int) -> str:
     """Digest over the seed's generated ground population
     (canonical rows binding fixture id, the table in record
     sequence, the queried index, the key, and the expected
-    answer of every case)."""
+    answer of every case).
+    """
     rows = [
         [
             case["fixture_id"],
@@ -571,7 +582,8 @@ def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, population, budgets, the case-material and
     ground digests, the embedding audit, and the seed /
-    backend identity that generated the records."""
+    backend identity that generated the records.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -609,7 +621,8 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     """Canonical JSON size of the ground records, the quantity
     the payload byte cap is enforced against (the numform
-    pattern)."""
+    pattern).
+    """
     return len(
         json.dumps(records_by_candidate, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     )
@@ -629,7 +642,8 @@ def validate_case(case: dict[str, Any], seed: int) -> bool:
     no backslash (escaping unreachable); parse_prose inverts
     render_prose and json.loads inverts render_json on this
     table; the arm contents carry the question and contract
-    exactly; the embedding audit's template side is clean."""
+    exactly; the embedding audit's template side is clean.
+    """
     try:
         fixture_id = str(case["fixture_id"])
         index = int(fixture_id.rsplit("-", 1)[1])
@@ -686,7 +700,8 @@ def decompose_cell(cell: dict[str, Any], expected_digest: str) -> str:
     expected digest; the boundary event alone failed -- a
     boundary effect, never a notation effect), else
     ``other_failure`` (counted, and characterised only through
-    the section 4.4 diagnostics; no class word is coined)."""
+    the section 4.4 diagnostics; no class word is coined).
+    """
     if cell.get("verdict") is True:
         return "pass"
     digest = cell.get("answer_digest")
@@ -703,7 +718,8 @@ def decompose_pair(prose_cell: dict[str, Any], json_cell: dict[str, Any]) -> str
     both cells found their boundary -> ``exact_only``;
     verdicts differ otherwise -> ``mixed`` (reported, never
     attributed). Callers invoke this only on discordant
-    pairs."""
+    pairs.
+    """
     if prose_cell.get("answer_digest") == json_cell.get("answer_digest"):
         return "boundary_only"
     if prose_cell.get("boundary_found") and json_cell.get("boundary_found"):
@@ -712,6 +728,7 @@ def decompose_pair(prose_cell: dict[str, Any], json_cell: dict[str, Any]) -> str
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -720,6 +737,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _detail(record: dict[str, Any], key: str) -> str:
+    """Return the detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -728,17 +746,20 @@ def _detail(record: dict[str, Any], key: str) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the verdict."""
     cell = _cell(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _screened(record: dict[str, Any]) -> bool:
     """The closed-book screen: the candidate passed the case
-    with no table at all, so the notation cannot move it."""
+    with no table at all, so the notation cannot move it.
+    """
     cell = _cell(record, SCREEN_ARM)
     return bool(cell is not None and cell["verdict"])
 
@@ -747,7 +768,8 @@ def _ids_identical(record: dict[str, Any]) -> bool:
     """The ids-identical derivation, from the recorded per-arm
     id digests alone: the two headline renders tokenise
     identically, so the pair is a rendering anomaly, not a
-    measurement."""
+    measurement.
+    """
     digests = record.get("id_digests")
     if not isinstance(digests, dict):
         return False
@@ -761,7 +783,8 @@ def _parsed_hit(answer_text: str, expected: str) -> bool:
     the answer parses via json.loads as an object whose value
     at the answer-field key equals the expected value. JSON
     string escapes are honoured by the parser, so a parsed hit
-    need not be a substring hit (amendment C)."""
+    need not be a substring hit (amendment C).
+    """
     try:
         parsed = json.loads(answer_text)
     except ValueError:
@@ -772,13 +795,15 @@ def _parsed_hit(answer_text: str, expected: str) -> bool:
 def _regrade_verdict(cell: dict[str, Any], expected: str, transform: Any) -> bool:
     """One cell's verdict under a scorer-lens regrade: the
     answer text is replaced by its transform, the boundary
-    conjunct unchanged (candidate section 4.4)."""
+    conjunct unchanged (candidate section 4.4).
+    """
     text = cell.get("answer_text")
     if type(text) is not str:
         return False
     return transform(text) == expected and bool(cell.get("boundary_found"))
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:
@@ -856,6 +881,7 @@ def aggregate_candidate(
     live_pairs = [record for record in unscreened_pairs if not _screened(record)]
 
     def _discordance(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the discordance."""
         prose_only = 0
         json_only = 0
         decomposition = dict.fromkeys(PAIR_CLASSES, 0)

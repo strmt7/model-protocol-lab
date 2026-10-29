@@ -119,14 +119,16 @@ class SlowCooperativeBackend:
 
     fingerprint = "cycle90-slow-cooperative-v1"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return (1, 2, 3)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return ""
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -161,14 +163,16 @@ class SlowLogprobBackend:
         self._cancel = cancel
         self.forward_calls = 0
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(c) for c in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(i) for i in token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -383,7 +387,8 @@ class SensitivitySweepDrainTest(unittest.TestCase):
 
 class DeliberateExclusionsTest(unittest.TestCase):
     """These run no model-compute loops, so they take no cancel event by
-    design. Pinned so any future change to that boundary is conscious."""
+    design. Pinned so any future change to that boundary is conscious.
+    """
 
     def test_no_cancel_plumbing_by_design(self) -> None:
         for func in (

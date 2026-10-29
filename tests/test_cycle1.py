@@ -188,7 +188,8 @@ class ByteMapperModeTests(unittest.TestCase):
             def backend_tokenizer(self):
                 raise RuntimeError("synthetic")
 
-            def get_vocab(self):  # pragma: no cover -- never reached
+            @staticmethod
+            def get_vocab():  # pragma: no cover -- never reached
                 return {}
 
         self.assertIsNone(_hf_byte_token_mapper(BoomTokenizer()))
@@ -266,7 +267,8 @@ class EmulationBytePathTests(unittest.TestCase):
         class BadDecode:
             fingerprint = "bad"
 
-            def decode(self, token_ids):
+            @staticmethod
+            def decode(token_ids):
                 return 42
 
         outcome = emulate_hf_stop_string(BadDecode(), (), (1,), "x", token_bytes=lambda i: None)
@@ -373,7 +375,8 @@ class ByteSpaceOracleTests(unittest.TestCase):
             class DecodeBackend:
                 fingerprint = "fragment-oracle-not-a-model"
 
-                def decode(self, token_ids):
+                @staticmethod
+                def decode(token_ids):
                     return hf_tokenizer.decode(list(token_ids))
 
             backend = DecodeBackend()
@@ -410,7 +413,8 @@ class ByteSpaceOracleTests(unittest.TestCase):
             class DecodeBackend:
                 fingerprint = "ascii-oracle-not-a-model"
 
-                def decode(self, token_ids):
+                @staticmethod
+                def decode(token_ids):
                     return hf_tokenizer.decode(list(token_ids))
 
             backend = DecodeBackend()

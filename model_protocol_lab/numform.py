@@ -182,7 +182,8 @@ _SCI_RE = re.compile(r"([0-9]+)(?:\.([0-9]+))?[eE]\+?([0-9]{1,3})")
 
 def digest_text(text: str) -> str:
     """The one digest used for answer identity in this probe:
-    SHA-256 of the UTF-8 encoding, hex-encoded."""
+    SHA-256 of the UTF-8 encoding, hex-encoded.
+    """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -192,6 +193,7 @@ def digest_text(text: str) -> str:
 
 
 def _grouped(digits: str, separator: str) -> str:
+    """Return the grouped."""
     groups: list[str] = []
     while len(digits) > 3:
         groups.append(digits[-3:])
@@ -349,11 +351,13 @@ def margin_class(a: int, b: int) -> str:
 
 
 def _derive(seed: int, task: str, band_index: int, slot: int, counter: int, stream: int) -> int:
+    """Return the derive."""
     material = f"numform-v1|{seed}|{task}|{band_index}|{slot}|{counter}|{stream}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _value_in_band(derived: int, lo: int, hi: int, *, min_length: int = 1) -> int:
+    """Return the value in band."""
     low = max(lo, min_length)
     length = low + derived % (hi - low + 1)
     rest = derived >> 16
@@ -367,7 +371,8 @@ def _round_value(band_index: int, slot: int) -> int:
     """The round stratum: a power of ten, then all-nines, at the
     band's top length. Real figures are disproportionately
     round; a uniform-random-only generator would measure a
-    distribution no invoice ever produced."""
+    distribution no invoice ever produced.
+    """
     _lo, hi = BANDS[band_index]
     if slot == 0:
         power: int = 10 ** (hi - 1)
@@ -377,6 +382,7 @@ def _round_value(band_index: int, slot: int) -> int:
 
 
 def _band_of(value: int) -> int:
+    """Return the frozen band index for a value's digit length."""
     length = len(str(value))
     for index, (lo, hi) in enumerate(BANDS):
         if lo <= length <= hi:
@@ -387,7 +393,8 @@ def _band_of(value: int) -> int:
 def _compare_partner(a: int, target: str, derived: int) -> int:
     """Construct a compare partner for ``a`` in the target
     margin class (verified by the caller against margin_class;
-    the construction is a proposal, the classifier decides)."""
+    the construction is a proposal, the classifier decides).
+    """
     digits = str(a)
     length = len(digits)
     if target == "different_length":
@@ -414,7 +421,8 @@ def _compare_partner(a: int, target: str, derived: int) -> int:
 def _add_partner(a: int, target: str, derived: int) -> int:
     """Construct an add partner for ``a`` in the target carry
     class, digit by digit from the units position (verified by
-    the caller against carry_class)."""
+    the caller against carry_class).
+    """
     digits = [int(ch) for ch in reversed(str(a))]
     partner_digits: list[int] = []
     if target == "full_chain" and digits[0] == 0:
@@ -472,15 +480,17 @@ def _is_round_value(value: int) -> bool:
     copy stratum label is defined by this property, so random
     draws exclude these values -- the label is then a property
     of the value itself, recomputable by the diff validator
-    from the record alone."""
+    from the record alone.
+    """
     if value < 10:
         return False
     digits = str(value)
-    result: bool = value == 10 ** (len(digits) - 1) or value == 10 ** len(digits) - 1
+    result: bool = value in (10 ** (len(digits) - 1), 10 ** len(digits) - 1)
     return result
 
 
 def _gen_copy(seed: int) -> list[dict[str, Any]]:
+    """Return the gen copy."""
     entries: list[dict[str, Any]] = []
     index = 0
     for band_index, (lo, hi) in enumerate(BANDS):
@@ -512,6 +522,7 @@ def _gen_copy(seed: int) -> list[dict[str, Any]]:
 
 
 def _gen_pairs(seed: int, task: str) -> list[dict[str, Any]]:
+    """Return the gen pairs."""
     entries: list[dict[str, Any]] = []
     index = 0
     targets = (
@@ -584,7 +595,8 @@ def generate_value_set(seed: int) -> dict[str, list[dict[str, Any]]]:
     value entries every form arm shares. Pure and deterministic
     -- the same seed regenerates the identical set across runs
     and PYTHONHASHSEED values (SHA-256 derivation, sorted
-    iteration only)."""
+    iteration only).
+    """
     if type(seed) is not int:
         raise ValueError("numform seed must be an int")
     return {
@@ -598,7 +610,8 @@ def expected_answer(entry: dict[str, Any], form: str) -> str:
     """The expected answer string for one entry in one form:
     the rendered operand (copy), the rendered sum (add), or the
     form-invariant label (compare -- the one arm where the
-    scorer cannot be a form confound, by construction)."""
+    scorer cannot be a form confound, by construction).
+    """
     if entry["task"] == "compare":
         return str(entry["expected_label"])
     return render_form(int(entry["expected_value"]), form)
@@ -606,7 +619,8 @@ def expected_answer(entry: dict[str, Any], form: str) -> str:
 
 def prompt_text(entry: dict[str, Any], form: str) -> str:
     """The frozen prompt for one entry in one form, operands
-    rendered in that form, one per line."""
+    rendered in that form, one per line.
+    """
     operands = [render_form(int(value), form) for value in entry["operands"]]
     template = PROMPT_TEMPLATES[str(entry["task"])]
     if entry["task"] == "copy":
@@ -617,7 +631,8 @@ def prompt_text(entry: dict[str, Any], form: str) -> str:
 def build_fixtures(seed: int) -> dict[tuple[str, str], tuple[Fixture, ...]]:
     """All fixtures for a run, keyed by (task, form). Fixture
     ids are the value ids -- identical across forms, so request
-    seeds pair the arms of one value."""
+    seeds pair the arms of one value.
+    """
     value_set = generate_value_set(seed)
     fixtures: dict[tuple[str, str], tuple[Fixture, ...]] = {}
     for task in TASKS:
@@ -639,7 +654,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
     binds: per entry, the task, value id, operand values, and
     the expected answer in every form. A payload whose
     generator drifted is a different instrument, and diff says
-    so instead of comparing across instruments."""
+    so instead of comparing across instruments.
+    """
     value_set = generate_value_set(seed)
     rows: list[list[Any]] = []
     for task in TASKS:
@@ -659,7 +675,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def generator_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -668,7 +685,8 @@ def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: tasks, forms, bands, floors, budgets, renderer
     and generator rules, prompt templates with their digest,
-    and the seed/backend pair that generated the set."""
+    and the seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "tasks": list(TASKS),
@@ -694,7 +712,8 @@ def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
     """SHA-256 over the canonical protocol object, so any
-    drift in a frozen scalar is a different fingerprint."""
+    drift in a frozen scalar is a different fingerprint.
+    """
     canonical = json.dumps(
         protocol_object(seed, backend_fingerprint),
         sort_keys=True,
@@ -720,7 +739,8 @@ PROBE_VALUE = 123456789
 def probe_strings() -> tuple[str, ...]:
     """The frozen grouping-battery strings: digit strings of
     every length 1-12 in sequential, all-ones, and zero-heavy
-    patterns, plus every form of the probe value."""
+    patterns, plus every form of the probe value.
+    """
     probes: list[str] = []
     sequential = "123456789012"
     ones = "1" * 12
@@ -735,6 +755,7 @@ def probe_strings() -> tuple[str, ...]:
 
 
 def _digit_probes() -> list[str]:
+    """Return the digit probes."""
     return [probe for probe in probe_strings() if probe.isascii() and probe.isdigit()]
 
 
@@ -864,13 +885,15 @@ def cell_decomposition(record: dict[str, Any]) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 
 def aggregate_records(records: list[dict[str, Any]], task: str, form: str) -> dict[str, Any]:
     """Aggregates for one candidate x task x form over its
     ground records. Rates are plain ratios with their
-    denominators beside them; nothing is pooled anywhere."""
+    denominators beside them; nothing is pooled anywhere.
+    """
     selected = [r for r in records if r["task"] == task and r["form"] == form]
     completed = [r for r in selected if r["cell"] is not None]
     n_exact = sum(1 for r in completed if r["cell"]["verdict"])
@@ -939,7 +962,8 @@ def paired_contrast(
     records: list[dict[str, Any]], task: str, form_a: str, form_b: str
 ) -> dict[str, Any]:
     """The paired contrast between two forms for one candidate
-    and task, over the values completed in both forms."""
+    and task, over the values completed in both forms.
+    """
     by_value: dict[str, dict[str, Any]] = {}
     for record in records:
         if record["task"] != task or record["form"] not in (form_a, form_b):
@@ -982,7 +1006,8 @@ def paired_contrast(
 
 def form_pairs() -> tuple[tuple[str, str], ...]:
     """The six unordered form pairs in FORMS order -- the
-    fixed contrast set every candidate reports."""
+    fixed contrast set every candidate reports.
+    """
     pairs: list[tuple[str, str]] = []
     for index, form_a in enumerate(FORMS):
         for form_b in FORMS[index + 1 :]:
@@ -992,7 +1017,8 @@ def form_pairs() -> tuple[tuple[str, str], ...]:
 
 def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     """Canonical JSON size of the ground records, the quantity
-    the payload byte cap is enforced against."""
+    the payload byte cap is enforced against.
+    """
     return len(
         json.dumps(records_by_candidate, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     )

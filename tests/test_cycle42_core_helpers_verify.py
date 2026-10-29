@@ -659,7 +659,8 @@ def _reconstruct_template(hand_ids: tuple[int, ...], segments) -> tuple[int, ...
 
 
 class TestTemplateDiffDifferential(unittest.TestCase):
-    def _rand_pair(self, rng: random.Random) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    @staticmethod
+    def _rand_pair(rng: random.Random) -> tuple[tuple[int, ...], tuple[int, ...]]:
         base = [rng.randint(0, 6) for _ in range(rng.randint(0, 40))]
         mutated = list(base)
         for _ in range(rng.randint(0, 3)):
@@ -766,7 +767,8 @@ class TestTemplateDiffDifferential(unittest.TestCase):
 
 
 class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
-    def _encoders(self):
+    @staticmethod
+    def _encoders():
         mapping = {"<stop>": (99,), "end": (7, 8), "x": (1,)}
 
         def enc_exact(text):

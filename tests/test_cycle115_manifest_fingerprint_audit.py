@@ -59,7 +59,8 @@ class TestManifestFingerprintEquivalence(unittest.TestCase):
 
 
 class TestVerifyManifestFingerprints(unittest.TestCase):
-    def _root(self, tmp: str) -> tuple[Path, tuple[str, ...], dict[str, tuple[int, int, int]]]:
+    @staticmethod
+    def _root(tmp: str) -> tuple[Path, tuple[str, ...], dict[str, tuple[int, int, int]]]:
         root = Path(tmp)
         _write(root / "w.safetensors", b"\x02" * 64)
         names = ("w.safetensors",)
@@ -113,7 +114,8 @@ class TestBackendSingleHash(unittest.TestCase):
     def test_backend_does_not_call_full_manifest(self) -> None:
         """The backend must hash weights once; the old double-_manifest call
         is gone. Patch _manifest to explode if the backend touches it, and
-        record the fingerprint verification calls."""
+        record the fingerprint verification calls.
+        """
         from tests.test_adapter_integration import build_tiny_gpt2
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,7 +160,8 @@ class TestBackendSingleHash(unittest.TestCase):
 
     def test_backend_fails_closed_on_changed_assets(self) -> None:
         """If the post-load fingerprint check fires, init fails closed with
-        the fixed vocabulary instead of returning a half-built backend."""
+        the fixed vocabulary instead of returning a half-built backend.
+        """
         from tests.test_adapter_integration import build_tiny_gpt2
 
         with tempfile.TemporaryDirectory() as tmp:

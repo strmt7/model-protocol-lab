@@ -492,7 +492,8 @@ class ClassifyToolCallTests(unittest.TestCase):
 
 
 class CandidateAdherenceTests(unittest.TestCase):
-    def _classify(self, text, expected):
+    @staticmethod
+    def _classify(text, expected):
         return classify_tool_call(text, expected)
 
     def test_perfect_model_scores_one_everywhere(self):
@@ -550,7 +551,8 @@ class CandidateAdherenceTests(unittest.TestCase):
 
 
 class ToolcallStageTests(unittest.TestCase):
-    def _run(self, policy, n_formats=2):
+    @staticmethod
+    def _run(policy, n_formats=2):
         queries = _queries()
         fixtures = build_toolcall_fixtures(queries)
         calls = query_calls(queries)
@@ -567,7 +569,7 @@ class ToolcallStageTests(unittest.TestCase):
         return toolcall_adherence(tuple(f.name for f in formats), stage), stage
 
     def test_perfect_policy_all_adherent(self):
-        adherence, stage = self._run(_correct_policy())
+        adherence, _stage = self._run(_correct_policy())
         self.assertTrue(adherence["available"])
         for cand, entry in adherence["per_candidate"].items():
             self.assertEqual(entry["adherent_rate"], 1.0, cand)
@@ -694,7 +696,8 @@ class ToolcallStageTests(unittest.TestCase):
 
     def test_backend_failure_cell_degrades_to_none(self):
         class BoomBackend(ToolcallScriptedBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
         queries = _queries()
@@ -1003,7 +1006,8 @@ class ToolcallMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _selection_scenario(self, mod):
+    @staticmethod
+    def _selection_scenario(mod):
         expected = {"name": "get_weather", "arguments": {"city": "Paris", "unit": "C"}}
         result = mod.classify_tool_call('CALL search_docs {"query": "x", "top_k": 1}', expected)
         assert result["outcome"] == "call_failed", result
@@ -1018,7 +1022,8 @@ class ToolcallMutationGateTests(unittest.TestCase):
             self._selection_scenario,
         )
 
-    def _args_strict_scenario(self, mod):
+    @staticmethod
+    def _args_strict_scenario(mod):
         expected = {"name": "get_weather", "arguments": {"city": "Paris", "unit": "C"}}
         result = mod.classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "C", "extra": 1}', expected
@@ -1035,7 +1040,8 @@ class ToolcallMutationGateTests(unittest.TestCase):
             self._args_strict_scenario,
         )
 
-    def _relevance_scenario(self, mod):
+    @staticmethod
+    def _relevance_scenario(mod):
         result = mod.classify_tool_call("NO_CALL", None)
         assert result["outcome"] == "adherent", result
         assert result["relevance_ok"] is True, result
@@ -1049,7 +1055,8 @@ class ToolcallMutationGateTests(unittest.TestCase):
             self._relevance_scenario,
         )
 
-    def _args_drift_scenario(self, mod):
+    @staticmethod
+    def _args_drift_scenario(mod):
         old = _tc_diff_payload()
         new = _tc_diff_payload()
         new["per_candidate"]["c"]["args_rate"] = 0.25
@@ -1223,7 +1230,8 @@ class ToolcallCliTests(unittest.TestCase):
         from model_protocol_lab import cli
 
         class BoomBackend(ToolcallScriptedBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
         result: dict = {}
@@ -1392,6 +1400,7 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
     def test_classify_never_raises_on_degenerate_answer(self):
         # One degenerate observation must not kill the stage: classify
         # degrades to parse_failed.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.toolcall import classify_tool_call
 
         evil = "CALL get_weather " + "[" * 10000 + "]" * 10000

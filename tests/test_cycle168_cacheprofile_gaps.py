@@ -57,7 +57,8 @@ class CellValidatorCoverageTests(unittest.TestCase):
 
 
 class DiffValidatorCoverageTests(unittest.TestCase):
-    def _payload(self):
+    @staticmethod
+    def _payload():
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
         return {
@@ -122,12 +123,14 @@ class DiffValidatorCoverageTests(unittest.TestCase):
 
 
 class ReportingDegradedPathsTests(unittest.TestCase):
-    def _section(self, payload):
+    @staticmethod
+    def _section(payload):
         from model_protocol_lab import reporting
 
         return reporting._cache_profile_section({"cache_profile": payload})
 
-    def _base_payload(self, per_candidate):
+    @staticmethod
+    def _base_payload(per_candidate):
         return {
             "available": True,
             "block_size": 16,

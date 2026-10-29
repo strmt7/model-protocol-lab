@@ -158,7 +158,8 @@ def family_of(candidate_name: object) -> str:
 def summarize_probes(probes: list[dict[str, Any]], special_token_count: int) -> dict[str, Any]:
     """Aggregate per-(format, fixture, marker) probe dicts into the
     ``marker_isolation`` payload shape: per-family isolation scores and the
-    overall isolation rate. Only ``"ok"`` probes feed the scores."""
+    overall isolation rate. Only ``"ok"`` probes feed the scores.
+    """
     family_scores: dict[str, dict[str, Any]] = {}
     ok = [p for p in probes if type(p) is dict and p.get("status") == "ok"]
     for family in sorted({family_of(p.get("format")) for p in ok}):

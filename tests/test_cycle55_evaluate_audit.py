@@ -683,14 +683,16 @@ def _assert_reports_equal(real: EvaluationReport, expected: EvaluationReport) ->
 class EvaluateAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
-    def test_differential_fuzz_400_trials(self):
+    @staticmethod
+    def test_differential_fuzz_400_trials():
         rng = random.Random(20261015)  # noqa: S311 -- deterministic test seed
         for _ in range(400):
             fixtures, scripts, boundary, cap, seed = _build_trial(rng)
             real, expected, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
             _assert_reports_equal(real, expected)
 
-    def test_differential_fuzz_preset_cancel(self):
+    @staticmethod
+    def test_differential_fuzz_preset_cancel():
         rng = random.Random(99)  # noqa: S311 -- deterministic test seed
         for _ in range(25):
             fixtures, scripts, boundary, cap, seed = _build_trial(rng)
@@ -701,7 +703,8 @@ class EvaluateAuditTests(unittest.TestCase):
             assert real.status == "cancelled"
             assert real.observations == ()
 
-    def test_exact_match_with_boundary_strip(self):
+    @staticmethod
+    def test_exact_match_with_boundary_strip():
         tokens = (10, 11, 1)
         expected = scripted_decode((10, 11))
         real, oracle = _one_case(tokens=tokens, boundary=(1,), expected=expected, cap=3)
@@ -716,7 +719,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.raw_reason == "limit"
         assert obs.error is None
 
-    def test_case_difference_is_not_exact_match(self):
+    @staticmethod
+    def test_case_difference_is_not_exact_match():
         tokens = (10, 11)  # decodes to "kl"
         real, oracle = _one_case(tokens=tokens, boundary=(9,), expected="KL", cap=2)
         _assert_reports_equal(real, oracle)
@@ -725,7 +729,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.exact_match is False
         assert obs.boundary_found is False
 
-    def test_boundary_at_position_zero(self):
+    @staticmethod
+    def test_boundary_at_position_zero():
         real, oracle = _one_case(tokens=(1, 10), boundary=(1,), expected="", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -733,21 +738,24 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.answer == ""
         assert obs.exact_match is True
 
-    def test_boundary_longer_than_output(self):
+    @staticmethod
+    def test_boundary_longer_than_output():
         real, oracle = _one_case(tokens=(1, 2), boundary=(1, 2, 3), expected="x", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
         assert obs.boundary_found is False
         assert obs.boundary_text_match is False
 
-    def test_overlapping_boundary(self):
+    @staticmethod
+    def test_overlapping_boundary():
         real, oracle = _one_case(tokens=(3, 3, 3), boundary=(3, 3), expected="", cap=3)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
         assert obs.boundary_found is True
         assert obs.answer == ""  # first occurrence wins: cut == 0
 
-    def test_tokenization_mismatch_flag(self):
+    @staticmethod
+    def test_tokenization_mismatch_flag():
         real, oracle = _one_case(tokens=(7, 901), boundary=(1,), expected="x", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -755,7 +763,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.boundary_text_match is True
         assert obs.answer == scripted_decode((7, 901)) == "hα"
 
-    def test_empty_generation_cancelled(self):
+    @staticmethod
+    def test_empty_generation_cancelled():
         real, oracle = _one_case(tokens=(), boundary=(1,), expected="", gen_kind="cancelled", cap=4)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -766,7 +775,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.boundary_found is False
         assert obs.raw_reason == "cancelled"
 
-    def test_unicode_roundtrip(self):
+    @staticmethod
+    def test_unicode_roundtrip():
         tokens = (1, 2, 3, 810, 811, 812)
         expected = scripted_decode(tokens)
         assert expected == "αβγ→🎉中"
@@ -776,7 +786,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.exact_match is True
         assert obs.answer == "αβγ→🎉中"
 
-    def test_decode_failure_taxonomy(self):
+    @staticmethod
+    def test_decode_failure_taxonomy():
         real, oracle = _one_case(tokens=(10, _FAIL_TOKEN, 11), boundary=(9,), expected="x", cap=3)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -786,14 +797,16 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.raw_reason == "limit"
         assert obs.output_ids == (10, _FAIL_TOKEN, 11)
 
-    def test_decode_non_str_taxonomy(self):
+    @staticmethod
+    def test_decode_non_str_taxonomy():
         real, oracle = _one_case(tokens=(_NONSTR_TOKEN,), boundary=(9,), expected="x", cap=1)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
         assert obs.status == "failed"
         assert obs.error == "decode_failed"
 
-    def test_diagnostic_decode_failure_gives_none(self):
+    @staticmethod
+    def test_diagnostic_decode_failure_gives_none():
         real, oracle = _one_case(tokens=(10, 11), boundary=(_FAIL_TOKEN,), expected="kl", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -802,7 +815,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.boundary_found is False
         assert obs.boundary_text_match is None
 
-    def test_empty_boundary_text_gives_none(self):
+    @staticmethod
+    def test_empty_boundary_text_gives_none():
         real, oracle = _one_case(tokens=(10,), boundary=(_EMPTY_TEXT_TOKEN,), expected="k", cap=1)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -810,7 +824,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.boundary_found is False
         assert obs.boundary_text_match is None
 
-    def test_error_allowlist_passthrough(self):
+    @staticmethod
+    def test_error_allowlist_passthrough():
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_allow", cap=4
         )
@@ -820,7 +835,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error == "context_limit_exceeded"
         assert obs.raw_reason == "error"
 
-    def test_error_text_sanitized(self):
+    @staticmethod
+    def test_error_text_sanitized():
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_text", cap=4
         )
@@ -830,7 +846,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error == "backend_reported_error"
         assert _PROBE_SECRET not in repr(asdict(obs))
 
-    def test_error_none_sanitized(self):
+    @staticmethod
+    def test_error_none_sanitized():
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_none", cap=4
         )
@@ -868,7 +885,8 @@ class EvaluateAuditTests(unittest.TestCase):
                 assert obs.error == want_error
                 assert obs.exact_match is False
 
-    def test_render_failed(self):
+    @staticmethod
+    def test_render_failed():
         fixture = Fixture(
             id="renderfail",
             messages=(Message(role="user", content="q"), Message(role="user", content="q2")),
@@ -884,7 +902,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.output_ids == ()
         assert obs.raw_reason is None
 
-    def test_generate_sets_event_mid_run(self):
+    @staticmethod
+    def test_generate_sets_event_mid_run():
         real, oracle = _one_case(
             tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="generate"
         )
@@ -897,7 +916,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.exact_match is False
         assert obs.error is None
 
-    def test_encode_sets_event_keeps_input_ids(self):
+    @staticmethod
+    def test_encode_sets_event_keeps_input_ids():
         real, oracle = _one_case(
             tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="encode"
         )
@@ -911,7 +931,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error is None
         assert obs.boundary_found is False
 
-    def test_decode_diag_event_then_loop_top_cancel(self):
+    @staticmethod
+    def test_decode_diag_event_then_loop_top_cancel():
         fixtures = [
             Fixture(
                 id="c0", messages=(Message(role="user", content="q"),), expected="kl", group="g"
@@ -931,7 +952,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert real.observations[0].status == "completed"
         assert real.observations[0].exact_match is True
 
-    def test_request_seed_derivation(self):
+    @staticmethod
+    def test_request_seed_derivation():
         fixtures = [
             Fixture(
                 id=f"case-{i}☃",
@@ -947,7 +969,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert backend_a.seeds == [(i, _o_request_seed(12345, f"case-{i}☃")) for i in range(3)]
         assert real.status == "completed"
 
-    def test_determinism(self):
+    @staticmethod
+    def test_determinism():
         rng = random.Random(31337)  # noqa: S311 -- deterministic test seed
         fixtures, scripts, boundary, cap, seed = _build_trial(rng)
         first, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
@@ -955,7 +978,8 @@ class EvaluateAuditTests(unittest.TestCase):
         assert [asdict(o) for o in first.observations] == [asdict(o) for o in second.observations]
         assert (first.status, first.planned_count) == (second.status, second.planned_count)
 
-    def test_no_secret_leak(self):
+    @staticmethod
+    def test_no_secret_leak():
         scenarios = [
             {"gen_kind": "error_text"},
             {"gen_kind": "raise"},
@@ -975,7 +999,8 @@ class EvaluateAuditTests(unittest.TestCase):
                 assert type(obs.input_ids) is tuple
                 assert all(type(t) is int for t in obs.output_ids)
 
-    def test_observation_field_structure(self):
+    @staticmethod
+    def test_observation_field_structure():
         tokens = (10, 11, 1)
         real, oracle = _one_case(
             tokens=tokens, boundary=(1,), expected=scripted_decode((10, 11)), cap=3

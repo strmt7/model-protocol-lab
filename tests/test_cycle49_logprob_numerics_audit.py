@@ -228,10 +228,12 @@ class _FakeBackend:
         self.vocab_size = vocab_size
         self._logits = logits
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(c) for c in text)
 
-    def decode(self, ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(ids: tuple[int, ...]) -> str:
         return "".join(chr(i) for i in ids)
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
@@ -296,7 +298,8 @@ class LogprobNumericsAuditTests(unittest.TestCase):
                     label=f"uniform V={vocab}",
                 )
 
-    def test_extreme_logits_pm30(self) -> None:
+    @staticmethod
+    def test_extreme_logits_pm30() -> None:
         """Stress float precision: +-30 logits, dynamic range 60, V=512."""
         rng = random.Random(99)  # noqa: S311 -- deterministic test seed
         vocab, prompt_len, target_len = 512, 4, 61

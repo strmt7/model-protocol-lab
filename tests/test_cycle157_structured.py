@@ -90,13 +90,15 @@ class _AdherentBackend:
 class _BrokenJsonBackend(_AdherentBackend):
     """ord codec; emits schema-violating JSON for every fixture."""
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         text = ('{"wrong": "shape"}|').ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
 
 class _RaisingBackend(_AdherentBackend):
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise RuntimeError("boom")
 
 
@@ -198,7 +200,8 @@ class ValidateStructuredSpecsTests(unittest.TestCase):
 
 
 class SchemaDefTests(unittest.TestCase):
-    def _schema(self):
+    @staticmethod
+    def _schema():
         return {
             "type": "object",
             "required": ["label"],
@@ -279,7 +282,8 @@ class SchemaDefTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_field_def("string", where="p")
 
-    def test_all_field_types_accepted(self):
+    @staticmethod
+    def test_all_field_types_accepted():
         for field_type in ("string", "integer", "number", "boolean", "null"):
             validate_field_def({"type": field_type}, where="p")
 
@@ -310,6 +314,7 @@ def _oracle_field_def_ok(field):
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 return False
+            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             if value != value or abs(value) == float("inf"):
                 return False
             if field_type == "integer" and int(value) != value:
@@ -362,6 +367,7 @@ def _oracle_field_ok(value, field):
             # Non-finite floats are not JSON numbers (RFC 8259 §6); the
             # oracle must share the implementation's rejection, not the
             # shared blind spot that let F1 through.
+            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             if value != value or abs(value) == float("inf"):
                 return False
         case "boolean":
@@ -529,7 +535,8 @@ class CheckSchemaOracleTests(unittest.TestCase):
 
 
 class ClassifyResponseTests(unittest.TestCase):
-    def _schema(self):
+    @staticmethod
+    def _schema():
         return _SCHEMAS["structured/extract-person"]
 
     def test_canonical_answer_adherent(self):
@@ -758,7 +765,8 @@ class StructuredStageTests(unittest.TestCase):
 
 
 class StructuredAdherenceTests(unittest.TestCase):
-    def _stage(self, rates):
+    @staticmethod
+    def _stage(rates):
         return {
             "n_fixtures": 9,
             "per_candidate": {
@@ -985,7 +993,8 @@ class DiffStructuredTests(unittest.TestCase):
         self.assertEqual(len(alpha_drift), 3)
         self.assertTrue(all(entry["new"] is None for entry in alpha_drift))
 
-    def _mini_report(self, structured):
+    @staticmethod
+    def _mini_report(structured):
         return {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -1067,7 +1076,8 @@ class StructuredMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _extra_key_scenario(self, mod):
+    @staticmethod
+    def _extra_key_scenario(mod):
         schema = {
             "type": "object",
             "required": ["a"],
@@ -1087,7 +1097,8 @@ class StructuredMutationGateTests(unittest.TestCase):
             self._extra_key_scenario,
         )
 
-    def _not_text_scenario(self, mod):
+    @staticmethod
+    def _not_text_scenario(mod):
         schema = {
             "type": "object",
             "required": ["a"],
@@ -1109,7 +1120,8 @@ class StructuredMutationGateTests(unittest.TestCase):
             self._not_text_scenario,
         )
 
-    def _rate_drift_scenario(self, mod):
+    @staticmethod
+    def _rate_drift_scenario(mod):
         old = _structured_payload()
         new = _structured_payload()
         new["per_candidate"]["alpha"].update(parse_rate=0.5, schema_rate=0.5, adherent_rate=0.5)
@@ -1133,7 +1145,8 @@ class StructuredMutationGateTests(unittest.TestCase):
             self._rate_drift_scenario,
         )
 
-    def _gap_drift_scenario(self, mod):
+    @staticmethod
+    def _gap_drift_scenario(mod):
         old = _structured_payload(gap=0.0)
         new = _structured_payload(gap=0.5)
         assert mod.diff_structured(old, new)["changed"] is True
@@ -1249,7 +1262,8 @@ class StructuredSectionTests(unittest.TestCase):
 
 
 class StructuredCliProbeTests(unittest.TestCase):
-    def _args(self):
+    @staticmethod
+    def _args():
         from model_protocol_lab import cli
 
         return cli, {
@@ -1326,9 +1340,12 @@ class StructuredSampleTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def _base_prompt(self, fixture_id):
+    @staticmethod
+    def _base_prompt(fixture_id):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import render_prompt
 
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         spec = next(s for s in _SPECS if s["id"] == fixture_id.split("/")[1])
         return (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
@@ -1361,6 +1378,7 @@ class StructuredSampleTests(unittest.TestCase):
         self.assertNotEqual(result["outcome"], "adherent")
 
     def test_structured_exercise_is_deterministic(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import structured_adherence, structured_stage
 
         def _run_once():
@@ -1452,6 +1470,7 @@ class StructuredCoverageGapTests(unittest.TestCase):
         self.assertFalse(_field_value_ok(True, {"type": "number"}))
 
     def test_validate_schema_def_rejects_bad_properties(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import validate_schema_def
 
         base = {
@@ -1466,6 +1485,7 @@ class StructuredCoverageGapTests(unittest.TestCase):
                 validate_schema_def(schema)
 
     def test_describe_schema_allows_additional_properties(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import describe_schema
 
         schema = {

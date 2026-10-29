@@ -160,7 +160,8 @@ class SglangEmulationTests(unittest.TestCase):
 
 class MultiStopSelectionTests(unittest.TestCase):
     """``MULTI_STOP_SELECTION``: first-listed (SGLang) vs earliest-completing
-    (vLLM PR #49391)."""
+    (vLLM PR #49391).
+    """
 
     def setUp(self) -> None:
         # One token decodes to several chars, so two stops can complete
@@ -178,7 +179,8 @@ class MultiStopSelectionTests(unittest.TestCase):
         base.update(kwargs)
         return diff_backends(**base)
 
-    def _classes(self, result: dict[str, Any]) -> list[str]:
+    @staticmethod
+    def _classes(result: dict[str, Any]) -> list[str]:
         return [finding["class"] for finding in result["divergences"]]
 
     def test_first_listed_vs_earliest_completing_diverges(self) -> None:
@@ -187,6 +189,7 @@ class MultiStopSelectionTests(unittest.TestCase):
         # divergence, mirroring the vLLM #49391 repro.
         result = self._run(("a", "is"))
         self.assertIn("MULTI_STOP_SELECTION", self._classes(result))
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]
@@ -279,7 +282,8 @@ class NoMinTokensGateTests(unittest.TestCase):
 
 class StrOverEosPrecedenceTests(unittest.TestCase):
     """``STR_OVER_EOS_PRECEDENCE``: same-step stop+EOS tie, where precedence
-    -- not firing order -- decides the outcome."""
+    -- not firing order -- decides the outcome.
+    """
 
     def test_same_step_tie_fires_with_precedence_rationale(self) -> None:
         # Token 1 decodes to "STOP" and IS the EOS id: both fire at step 1.
@@ -378,6 +382,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             stop_texts=("a", "is"),
             backend=backend,
         )
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]
@@ -414,6 +419,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             eos_id=1,
             backend=backend,
         )
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]
@@ -427,7 +433,8 @@ class NoTgiCellRationaleTests(unittest.TestCase):
 class SglangReportTests(unittest.TestCase):
     """The report's Backend divergence section: new classes render with
     severity badges, the SGLang column appears in the matrix, hostile
-    strings are escaped, rendering is byte-deterministic."""
+    strings are escaped, rendering is byte-deterministic.
+    """
 
     def setUp(self) -> None:
         self.backend = TableBackend({1: " The user", 2: " is a", 3: "STOP", 4: "x"})

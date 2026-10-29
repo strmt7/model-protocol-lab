@@ -53,7 +53,8 @@ def _display_id(value: str) -> str:
     and the R4-7 200-character preview cap applied: a hostile name
     must not be able to flood a report detail or a terminal
     (oversight security S-9b — one 60,000-character entry name
-    produced a 60,013-character seal detail before the cap)."""
+    produced a 60,013-character seal detail before the cap).
+    """
     cleaned = _CONTROL_CHARS.sub("", value)
     if len(cleaned) > 200:
         return cleaned[:200] + "..."
@@ -106,6 +107,7 @@ def oracle_select_winner(winner_names: list[str]) -> tuple[str, str | None]:
 
 
 def _record(checks: list[dict[str, str]], check_id: str, status: str, detail: str = "") -> None:
+    """Record."""
     checks.append({"id": check_id, "status": status, "detail": detail})
 
 
@@ -117,10 +119,12 @@ def _json_equal(first: Any, second: Any) -> bool:
 
 
 def _valid_token_ids(value: Any) -> bool:
+    """Return whether token ids is valid."""
     return type(value) is list and bool(value) and all(type(v) is int and v >= 0 for v in value)
 
 
 def _entry_name(entry: Any) -> str | None:
+    """Return the entry name."""
     if type(entry) is not dict:
         return None
     fmt = entry.get("format")
@@ -174,6 +178,7 @@ def _check_schema(data: Any, checks: list[dict[str, str]]) -> dict[str, Any] | N
 
 
 def _check_candidates_unique(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check candidates unique."""
     names: list[str] = []
     for entry in data["search"]:
         name = _entry_name(entry)
@@ -208,6 +213,7 @@ def _check_candidates_unique(data: dict[str, Any], checks: list[dict[str, str]])
 
 
 def _check_summaries_consistent(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check summaries consistent."""
     for entry in data["search"]:
         summary = entry.get("summary") if type(entry) is dict else None
         if type(summary) is not dict:
@@ -291,6 +297,7 @@ def _replay_selection(data: dict[str, Any]) -> tuple[str, str | None, str]:
 
 
 def _check_selection_decision(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check selection decision."""
     expected_decision, expected_winner, note = _replay_selection(data)
     if note == "cancel_unverifiable":
         _record(
@@ -324,6 +331,7 @@ def _check_selection_decision(data: dict[str, Any], checks: list[dict[str, str]]
 
 
 def _check_selected_boundary(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check selected boundary."""
     key = "selected_boundary_token_ids"
     selected = data.get("selected_candidate")
     stored = data.get(key)
@@ -365,11 +373,13 @@ def _check_selected_boundary(data: dict[str, Any], checks: list[dict[str, str]])
 
 
 def _observations_present(entry: Any) -> bool:
+    """Return the observations present."""
     observations = entry.get("observations") if type(entry) is dict else None
     return type(observations) is list and bool(observations)
 
 
 def _check_budget_frontier_replay(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check budget frontier replay."""
     stored = data.get("budget_frontier")
     if stored is None:
         _record(
@@ -424,6 +434,7 @@ def _check_budget_frontier_replay(data: dict[str, Any], checks: list[dict[str, s
 
 
 def _check_held_out_floor_replay(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check held out floor replay."""
     stored = data.get("held_out_budget_floor")
     if stored is None:
         _record(
@@ -483,6 +494,7 @@ def _check_held_out_floor_replay(data: dict[str, Any], checks: list[dict[str, st
 
 
 def _check_split_separation(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
+    """Check split separation."""
     if any(not _observations_present(entry) for entry in data["search"]):
         _record(
             checks,
@@ -567,6 +579,7 @@ def verify_results(data: Any) -> dict[str, Any]:
 
 
 def _render_summary(report: dict[str, Any], label: str) -> str:
+    """Render summary."""
     checks = report["checks"]
     passed = sum(1 for c in checks if c["status"] == _PASSED)
     failed = [c for c in checks if c["status"] == _FAILED]
@@ -637,7 +650,7 @@ def _append_determinism_check(report: dict[str, Any], audit: dict[str, Any]) -> 
     report["verdict"] = "ok" if all(c["status"] != _FAILED for c in checks) else "failed"
 
 
-def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+def run_verify(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``mpl verify``; returns the process exit code.
 
     JSON goes to stdout, the human-readable summary to stderr (mirroring
@@ -724,6 +737,7 @@ def run_verify(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
 
 def _expect_digest_type(value: str) -> str:
+    """Expect digest type."""
     if re.fullmatch(r"[0-9a-f]{64}", value or "") is None:
         raise argparse.ArgumentTypeError("expect-digest must be 64 lowercase hex characters")
     return value

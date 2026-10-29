@@ -83,7 +83,10 @@ RUN_PROBE_FLAGS = [
 
 
 class DocsCurrencyTests(unittest.TestCase):
+    """Docs currency tests."""
+
     def test_readme_names_every_run_probe_flag(self):
+        """Readme names every run probe flag."""
         for flag in RUN_PROBE_FLAGS:
             self.assertIn(
                 flag,
@@ -93,6 +96,7 @@ class DocsCurrencyTests(unittest.TestCase):
 
     def test_readme_names_pack_and_fixtures_fuzz(self):
         # Both shipped without any README mention before cycle 178.
+        """Readme names pack and fixtures fuzz."""
         self.assertIn("model-protocol-lab pack", README)
         self.assertIn("fixtures fuzz", README)
 
@@ -100,6 +104,7 @@ class DocsCurrencyTests(unittest.TestCase):
         # boundary_audit.rate is n_problem / n_usable: the fraction
         # of pairs that do NOT re-encode. The pre-178 bullet called
         # the complementary (success) fraction the PBP rate.
+        """Readme canonicality bullet not inverted."""
         self.assertIn("does *not* re-encode to the recorded ids", README)
         self.assertNotIn(
             "whose concatenated text re-encodes to the recorded ids",
@@ -108,6 +113,7 @@ class DocsCurrencyTests(unittest.TestCase):
 
     def test_changelog_backfilled_cycles(self):
         # Cycles that shipped without entries, found by the audit.
+        """Changelog backfilled cycles."""
         for cycle in (164, 166, 167, 172):
             self.assertIn(f"(cycle {cycle} ", CHANGELOG)
         # Cycle 165 had a Fixed heading but no Added heading for its
@@ -117,11 +123,13 @@ class DocsCurrencyTests(unittest.TestCase):
     def test_sealed_bundle_design_scopes_strict_claims(self):
         # F8: the pre-parse enforces disk/ZIP64 properties at the
         # EOCD record only; the design doc must say so.
+        """Sealed bundle design scopes strict claims."""
         self.assertIn("ZIP64 sentinel", SEALED)
         self.assertNotIn("and ZIP64 is rejected", SEALED)
 
     def test_usage_stage_sections_inside_section_8(self):
         # Sections 8.33-8.36 sat after section 14 until cycle 178.
+        """Usage stage sections inside section 8."""
         idx_833 = USAGE.index("### 8.33 ")
         idx_836 = USAGE.index("### 8.36 ")
         idx_sec9 = USAGE.index("## 9. ")
@@ -142,15 +150,19 @@ class DocsCurrencyTests(unittest.TestCase):
         # 213 -> 214 in cycle 214; 214 -> 215 in cycle 215;
         # 215 -> 216 in cycle 216; 216 -> 217 in cycle 217;
         # 217 -> 218 in cycle 218).
+        """Validation header covers latest cycle."""
         top = VALIDATION.split("\n## ")[1]
         self.assertIn("cycles 10–221", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):
+    """Validation ruff count pin tests."""
+
     def test_validation_ruff_count_matches_live_ci_scope(self):
         # The claim lives in VALIDATION's top evidence section only;
         # older sections are historical snapshots with their own
         # era's counts and must not be compared to the live tree.
+        """Validation ruff count matches live ci scope."""
         top = VALIDATION.split("\n## ")[1]
         match = re.search(r"\((\d+) files in that CI scope", top)
         self.assertIsNotNone(match, "VALIDATION top section lost its scoped ruff count")
@@ -170,6 +182,7 @@ class ValidationRuffCountPinTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=300,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
         live = re.search(r"(\d+) files already formatted", proc.stdout)

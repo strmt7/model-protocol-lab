@@ -624,7 +624,9 @@ class TestScoreSpanValues(unittest.TestCase):
     def test_accepts_float64_and_int_logits(self) -> None:
         for dtype in (torch.float64, torch.int64):
             logits = torch.ones(3, 4, dtype=dtype)
-            per_token, total, mean = score_span_from_logits(logits, prompt_len=1, target_ids=(0, 1))
+            per_token, total, _mean = score_span_from_logits(
+                logits, prompt_len=1, target_ids=(0, 1)
+            )
             with self.subTest(dtype=str(dtype)):
                 # Uniform rows -> logprob = -log(4) per token.
                 want = ref_f32(-math.log(4))
@@ -849,7 +851,8 @@ class TestCheckAlignment(unittest.TestCase):
 
     def test_missing_encode_method_is_encode_failed(self) -> None:
         class DecodeOnly:
-            def decode(self, token_ids):  # noqa: ANN001, ANN202
+            @staticmethod
+            def decode(token_ids):  # noqa: ANN001, ANN202
                 return "x"
 
         result = check_alignment(DecodeOnly(), (1,), (2,))
@@ -1128,12 +1131,14 @@ class TestExports(unittest.TestCase):
 
 
 class TestRequireTorch(unittest.TestCase):
-    def _hide_torch(self):
+    @staticmethod
+    def _hide_torch():
         real = sys.modules.get("torch")
         sys.modules["torch"] = None  # type: ignore[assignment]
         return real
 
-    def _restore_torch(self, real) -> None:
+    @staticmethod
+    def _restore_torch(real) -> None:
         if real is not None:
             sys.modules["torch"] = real
         else:
@@ -1160,6 +1165,7 @@ class TestRequireTorch(unittest.TestCase):
 
     def test_torch_restored_afterwards(self) -> None:
         # Sanity: the hide/restore dance above leaves torch usable.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import torch as t2
 
         self.assertTrue(hasattr(t2, "zeros"))

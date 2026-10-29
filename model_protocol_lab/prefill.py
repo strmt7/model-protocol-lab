@@ -215,6 +215,7 @@ class PrefillBackend:
     """
 
     def __init__(self, inner: Backend, prefill_ids: tuple[int, ...], prefill_id: str) -> None:
+        """Wrap ``inner``, forcing the given prefill token IDs."""
         if inner is None:
             raise ValueError("inner backend must not be None")
         if (
@@ -237,12 +238,15 @@ class PrefillBackend:
 
     @property
     def prefill_ids(self) -> tuple[int, ...]:
+        """Return the prefill ids."""
         return self._prefill_ids
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         return self._inner.encode(text) + self._prefill_ids
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._inner.decode(token_ids)
 
     def generate(
@@ -253,6 +257,7 @@ class PrefillBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         return self._inner.generate(
             input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
         )

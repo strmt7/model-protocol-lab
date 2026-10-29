@@ -16,6 +16,7 @@ import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 from tools.crawl4ai_tool import ATTRIBUTION, ROOT, VERSION, text_identity
@@ -24,10 +25,11 @@ MAX_MARKDOWN_BYTES = 2 * 1024 * 1024
 SITES = ROOT / "tools/crawl4ai_sites.json"
 
 
-def crawler():
+def crawler() -> Any:
     """Purpose: Construct the pinned upstream crawler
     Inputs: Installed package
-    Outputs: Crawler owner."""
+    Outputs: Crawler owner.
+    """
     if importlib.metadata.version("crawl4ai") != VERSION:
         raise ValueError("Crawler version does not match the reviewed integration")
     from crawl4ai import AsyncWebCrawler
@@ -35,10 +37,11 @@ def crawler():
     return AsyncWebCrawler()
 
 
-def inspect_result(result, marker: str = "") -> dict:
+def inspect_result(result: Any, marker: str = "") -> dict[str, Any]:
     """Purpose: Reject empty/error/challenge extraction
     Inputs: Native result and marker
-    Outputs: Metadata."""
+    Outputs: Metadata.
+    """
     markdown = str(result.markdown.raw_markdown) if result.markdown else ""
     lowered = markdown.casefold()
     status = int(result.status_code or 0)
@@ -63,10 +66,11 @@ def inspect_result(result, marker: str = "") -> dict:
     }
 
 
-async def fetch(owner, url: str, marker: str = "") -> dict:
+async def fetch(owner: Any, url: str, marker: str = "") -> dict[str, Any]:
     """Purpose: Crawl one page with finite lifetime
     Inputs: Owner/URL/marker
-    Outputs: Honest result metadata."""
+    Outputs: Honest result metadata.
+    """
     from crawl4ai import CacheMode, CrawlerRunConfig
 
     started = time.monotonic()
@@ -75,7 +79,7 @@ async def fetch(owner, url: str, marker: str = "") -> dict:
         config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, check_robots_txt=True)
         result = await asyncio.wait_for(owner.arun(url=url, config=config), timeout=45)
         row.update(inspect_result(result, marker))
-    except (ValueError, OSError, TimeoutError) as error:
+    except (ValueError, OSError) as error:
         row["error"] = str(error)[:500]
     row["seconds"] = round(time.monotonic() - started, 3)
     return row
@@ -84,7 +88,8 @@ async def fetch(owner, url: str, marker: str = "") -> dict:
 def source_identity() -> dict[str, str]:
     """Purpose: Bind qualification to integration bytes
     Inputs: Repository sources
-    Outputs: Exact source digests."""
+    Outputs: Exact source digests.
+    """
     paths = (
         "tools/crawl4ai_tool.py",
         "tools/crawl4ai_research.py",
@@ -94,10 +99,11 @@ def source_identity() -> dict[str, str]:
     return {path: text_identity(ROOT / path) for path in paths}
 
 
-async def execute(args) -> int:
+async def execute(args: argparse.Namespace) -> int:
     """Purpose: Run the requested local lane
     Inputs: Parsed CLI
-    Outputs: Exit status and bounded evidence."""
+    Outputs: Exit status and bounded evidence.
+    """
     if args.command == "doctor":
         from crawl4ai import CacheMode, CrawlerRunConfig
 

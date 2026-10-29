@@ -340,7 +340,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         self.assertTrue(all(entry["literal"] == "<|im_start|>" for entry in doc["findings"]))
 
     def test_build_clean_csv_writes_empty_sidecar(self):
-        code, output, stdout, stderr = self._run_build(CLEAN_CSV)
+        code, _output, stdout, stderr = self._run_build(CLEAN_CSV)
         self.assertEqual(code, 0)
         self.assertNotIn("special-token literal", stderr)
         summary = json.loads(stdout)
@@ -397,7 +397,8 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
 
 
 class DoctorAuditTests(unittest.TestCase):
-    def _write_dataset(self, tmp, *contents_per_fixture):
+    @staticmethod
+    def _write_dataset(tmp, *contents_per_fixture):
         split = Split(
             tuple(_fixture(f"s{i}", text) for i, text in enumerate(contents_per_fixture[:1])),
             tuple(_fixture(f"h{i}", text) for i, text in enumerate(contents_per_fixture[1:])),

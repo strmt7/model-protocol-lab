@@ -232,6 +232,7 @@ class BuildPositionFixturesTests(unittest.TestCase):
         specs = validate_position_specs((_spec(),))
         for condition in CONDITIONS:
             for seed in (0, 1, 20261012):
+                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (fixture,) = build_position_fixtures(specs, condition=condition, seed=seed)
                 expected_layout = _ref_layout(("w", "x", "y", "z"), "y", condition, seed)
                 self.assertEqual(
@@ -595,7 +596,8 @@ class PositionMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _index_sign_scenario(self, mod):
+    @staticmethod
+    def _index_sign_scenario(mod):
         assert mod.primacy_index(8, 8, 8, 0) == 1.0
         assert mod.primacy_index(8, 0, 8, 8) == -1.0
 
@@ -608,7 +610,8 @@ class PositionMutationGateTests(unittest.TestCase):
             self._index_sign_scenario,
         )
 
-    def _boundary_gate_scenario(self, mod):
+    @staticmethod
+    def _boundary_gate_scenario(mod):
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=20261012)
         stage = mod.position_stage(
@@ -636,7 +639,8 @@ class PositionMutationGateTests(unittest.TestCase):
             self._boundary_gate_scenario,
         )
 
-    def _index_drift_scenario(self, mod):
+    @staticmethod
+    def _index_drift_scenario(mod):
         old = _position_payload(index_alpha=1.0)
         new = _position_payload(index_alpha=-1.0)
         assert mod.diff_position(old, new)["changed"] is True
@@ -650,7 +654,8 @@ class PositionMutationGateTests(unittest.TestCase):
             self._index_drift_scenario,
         )
 
-    def _mean_drift_scenario(self, mod):
+    @staticmethod
+    def _mean_drift_scenario(mod):
         old = _position_payload(mean_index=0.5)
         new = _position_payload(mean_index=-0.5)
         assert mod.diff_position(old, new)["changed"] is True
@@ -845,7 +850,8 @@ class PositionSectionTests(unittest.TestCase):
 class PositionCoverageTests(unittest.TestCase):
     """Branch coverage for the position renderers and stage edge paths."""
 
-    def _reports(self, old_pos, new_pos):
+    @staticmethod
+    def _reports(old_pos, new_pos):
         base = {"decision": "selected", "winner": "alpha"}
         return {**base, "position": old_pos}, {**base, "position": new_pos}
 

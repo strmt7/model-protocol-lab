@@ -163,7 +163,8 @@ class TestExistingBehaviorPreserved(unittest.TestCase):
 
 class TestSanitizerParity(unittest.TestCase):
     """All four sanitizers agree on the hostile battery (modulo the
-    documented \\t\\n\\r exception for the REPL renderer)."""
+    documented \\t\\n\\r exception for the REPL renderer).
+    """
 
     def test_parity_on_bidi_battery(self) -> None:
         battery = "".join(_BIDI)

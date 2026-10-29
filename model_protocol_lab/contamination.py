@@ -72,6 +72,7 @@ def fixture_signature(fixture: Any) -> str:
 
 
 def _trigrams(text: str) -> set[tuple[str, ...]]:
+    """Return the trigrams."""
     tokens = text.split()
     if len(tokens) < 3:
         return {tuple(tokens)} if tokens else set()

@@ -172,10 +172,12 @@ class SeedSpyBackend:
         self.calls: list[dict[str, Any]] = []
 
     # -- Backend protocol -------------------------------------------------
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(c) for c in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(i) for i in token_ids)
 
     def generate(
@@ -301,7 +303,8 @@ def _search_verdicts_match_behavior(
     result: dict[str, Any], behavior: dict[tuple[str, str], str]
 ) -> None:
     """Differential check: every search observation's pass verdict equals the
-    behavior table's intent for that (candidate, fixture)."""
+    behavior table's intent for that (candidate, fixture).
+    """
     for entry in result["search"]:
         candidate = entry["format"]["name"]
         for obs in entry["observations"]:
@@ -544,19 +547,24 @@ def audit_seed_separation(exp_mod: Any, core_mod: Any) -> dict[str, Any]:
 class HeldoutSeparationAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
-    def test_ambiguous_selection_abstains_without_touching_held_out(self):
+    @staticmethod
+    def test_ambiguous_selection_abstains_without_touching_held_out():
         audit_ambiguous_abstains(real_exp, real_core)
 
-    def test_unique_winner_flow_measures_held_out_once_fresh(self):
+    @staticmethod
+    def test_unique_winner_flow_measures_held_out_once_fresh():
         audit_unique_winner_flow(real_exp, real_core)
 
-    def test_compatible_flow_when_held_out_passes(self):
+    @staticmethod
+    def test_compatible_flow_when_held_out_passes():
         audit_compatible_flow(real_exp, real_core)
 
-    def test_no_candidate_flow_never_measures_held_out(self):
+    @staticmethod
+    def test_no_candidate_flow_never_measures_held_out():
         audit_no_candidate_flow(real_exp, real_core)
 
-    def test_request_seeds_disjoint_and_runs_deterministic(self):
+    @staticmethod
+    def test_request_seeds_disjoint_and_runs_deterministic():
         audit_seed_separation(real_exp, real_core)
 
     def test_split_rejects_empty_search(self):
@@ -656,7 +664,8 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             sc.split.search[0].id = "mutated"  # type: ignore[assignment]
         assert type(sc.split.search) is tuple and type(sc.split.held_out) is tuple
 
-    def test_no_shared_mutable_state_between_runs(self):
+    @staticmethod
+    def test_no_shared_mutable_state_between_runs():
         """Mutating one run's result document cannot affect any later run."""
         kwargs = {
             "exp_seed": 7,
@@ -674,7 +683,8 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
         result3 = run_experiment_on(real_exp, make_scenario(real_core, **kwargs))
         assert json.dumps(result3, sort_keys=True) == snapshot
 
-    def test_result_documents_are_fresh_objects_per_run(self):
+    @staticmethod
+    def test_result_documents_are_fresh_objects_per_run():
         behavior = {("cand-B", "S1"): "fail_answer"}
         sc1 = make_scenario(
             real_core,

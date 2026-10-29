@@ -113,6 +113,7 @@ def run_mpl(
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
 
 
@@ -141,6 +142,7 @@ def run_mutant_cli(mutant_dir: Path, *args: str, timeout: int = 120) -> subproce
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
 
 
@@ -261,7 +263,9 @@ class TestTopLevelCLI(unittest.TestCase):
         if not script.exists():
             script = shutil.which("model-protocol-lab")
         self.assertIsNotNone(script, "console script not installed")
-        proc = subprocess.run([script, "catalog"], capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(
+            [script, "catalog"], capture_output=True, text=True, timeout=120, check=False
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn('"chatml"', proc.stdout)
 
@@ -381,7 +385,8 @@ class TestFixturesBuild(unittest.TestCase):
 
 
 class TestDebugRepl(unittest.TestCase):
-    def _script(self, commands: str) -> subprocess.CompletedProcess:
+    @staticmethod
+    def _script(commands: str) -> subprocess.CompletedProcess:
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(commands)
@@ -1132,12 +1137,14 @@ class TestSensitivityControls(unittest.TestCase):
             spec.loader.exec_module(module)
             return module
 
-    def _assert_surface(self, module) -> None:
+    @staticmethod
+    def _assert_surface(module) -> None:
         public = [n for n in dir(module) if not n.startswith("_")]
         assert public == [], f"unexpected public names: {public}"
         assert not hasattr(module, "__all__"), "__all__ must not exist"
 
-    def _assert_version(self, module) -> None:
+    @staticmethod
+    def _assert_version(module) -> None:
         match = re.search(
             r'^version\s*=\s*"([^"]+)"', (REPO_ROOT / "pyproject.toml").read_text(), re.M
         )
@@ -1248,6 +1255,7 @@ class TestSampleReportDeterminism(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=300,
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             for name in ("results.json", "report.html"):

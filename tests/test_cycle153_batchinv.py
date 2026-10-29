@@ -262,7 +262,8 @@ class BatchinvMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _diverged_predicate_scenario(self, mod):
+    @staticmethod
+    def _diverged_predicate_scenario(mod):
         assert mod.compare_outputs((1, 2), (1, 9))["diverged"] is True
         assert mod.compare_outputs((1, 2), (1, 2))["diverged"] is False
 
@@ -275,7 +276,8 @@ class BatchinvMutationGateTests(unittest.TestCase):
             self._diverged_predicate_scenario,
         )
 
-    def _key_set_scenario(self, mod):
+    @staticmethod
+    def _key_set_scenario(mod):
         try:
             mod.compare_solo_vs_batched({"a": (1,)}, {"b": (1,)})
         except ValueError:
@@ -297,7 +299,8 @@ class BatchinvMutationGateTests(unittest.TestCase):
             self._key_set_scenario,
         )
 
-    def _verdict_scenario(self, mod):
+    @staticmethod
+    def _verdict_scenario(mod):
         assert mod.audit_verdict(3, 0) == "batch_invariant"
         assert mod.audit_verdict(3, 2) == "batch_variant"
 
@@ -310,7 +313,8 @@ class BatchinvMutationGateTests(unittest.TestCase):
             self._verdict_scenario,
         )
 
-    def _nonempty_scenario(self, mod):
+    @staticmethod
+    def _nonempty_scenario(mod):
         try:
             mod.validate_prompt_ids({"a": ()})
         except ValueError:
@@ -340,7 +344,8 @@ class _SoloBackend:
     def decode(ids):
         return "".join(map(chr, ids))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         return core.Generation(tuple(range(50, 50 + max_new_tokens)), "limit")
 
 
@@ -374,17 +379,20 @@ class _DivergentBatchBackend(_SoloBackend):
 
 
 class _ShortBatchBackend(_SoloBackend):
-    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate_batch(prompts, *, max_new_tokens, seed, cancel):
         return ()
 
 
 class _GarbageBatchBackend(_SoloBackend):
-    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate_batch(prompts, *, max_new_tokens, seed, cancel):
         return tuple("nope" for _ in prompts)
 
 
 class _RaisingBatchBackend(_SoloBackend):
-    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate_batch(prompts, *, max_new_tokens, seed, cancel):
         raise RuntimeError("boom")
 
 
@@ -395,12 +403,14 @@ class _ExplodingProbeBackend(_SoloBackend):
 
 
 class _FlakySoloBackend(_SoloBackend):
+    # skipcq: PYL-R0201 - zero-arg super() requires an instance method
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
         if input_ids[0] == ord("b"):
             raise RuntimeError("solo boom")
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
 
-    def generate_batch(self, prompts, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate_batch(prompts, *, max_new_tokens, seed, cancel):
         return tuple(tuple(range(50, 50 + max_new_tokens)) for _ in prompts)
 
 
@@ -486,7 +496,8 @@ class BatchStageTests(unittest.TestCase):
 
 
 class CliProbeTests(unittest.TestCase):
-    def _formats_and_cases(self):
+    @staticmethod
+    def _formats_and_cases():
         fmt = core.Format(
             name="t",
             bos="",
@@ -530,7 +541,8 @@ class CliProbeTests(unittest.TestCase):
         from model_protocol_lab.cli import _run_batch_probe
 
         class Broken:
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("nope")
 
         formats, cases = self._formats_and_cases()
@@ -561,7 +573,8 @@ class CliProbeTests(unittest.TestCase):
 
 
 class HtmlSectionTests(unittest.TestCase):
-    def _payload(self):
+    @staticmethod
+    def _payload():
         return {
             "available": True,
             "n_prompts": 2,
@@ -822,6 +835,7 @@ class StderrSummaryTests(unittest.TestCase):
 
 class SampleDeterminismTests(unittest.TestCase):
     def test_sample_batchinv_deterministic(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import importlib.util
 
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"

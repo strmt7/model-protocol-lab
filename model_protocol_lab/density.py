@@ -339,7 +339,8 @@ NEUTRALS_PER_CASE = 15
 def kind_at(case_index: int, position: int) -> str:
     """The frozen kind of one position (1-based) of one case:
     the kind cycle rotated by the case index, so each position
-    carries each kind exactly CASE_COUNT / 4 times."""
+    carries each kind exactly CASE_COUNT / 4 times.
+    """
     return KINDS[(position - 1 + case_index) % len(KINDS)]
 
 
@@ -409,14 +410,16 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     """One deterministic draw. The material string, the slot
     meanings in GENERATION_RULE_TEXT, and the redraw rules in
     :func:`generate_cases` are frozen together -- the diff
-    validator's mirror reproduces them exactly."""
+    validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|density|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _draw_word(seed: int, index: int, slot: int, forbidden: set[str]) -> str:
     """Draw a target word at a slot, redrawing at the next
-    counter while the word is forbidden for this case."""
+    counter while the word is forbidden for this case.
+    """
     counter = 0
     while True:
         word = TARGET_WORDS[_derive(seed, index, slot, counter) % len(TARGET_WORDS)]
@@ -508,14 +511,17 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
             kind = kind_at(index, position)
             if kind == "count":
                 constraints.append(
+                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "limit": next(pools["count"])}
                 )
             elif kind == "include":
                 constraints.append(
+                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "target": next(pools["include"])}
                 )
             else:
                 constraints.append(
+                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "target": next(pools[kind])}
                 )
         cases.append(
@@ -544,16 +550,19 @@ def _render_constraint(constraint: dict[str, Any]) -> str:
 
 
 def _block_text(lines: list[str]) -> str:
+    """Return the block text."""
     return "\n".join(lines)
 
 
 def arm_block_words(case: dict[str, Any], arm: str) -> int:
     """The normalized-word count of one arm's instruction
-    block (the sham construction's length measure)."""
+    block (the sham construction's length measure).
+    """
     return len(normalize_words(_arm_block(case, arm)))
 
 
 def _arm_block(case: dict[str, Any], arm: str) -> str:
+    """Return the arm block."""
     constraints = case["constraints"]
     if arm.startswith("solo_"):
         j = int(arm.split("_")[1])
@@ -588,7 +597,8 @@ def _arm_block(case: dict[str, Any], arm: str) -> str:
 
 def arm_content(case: dict[str, Any], arm: str) -> str:
     """One arm's user-turn content for a case: the task fact,
-    the task question, and the arm's instruction block."""
+    the task question, and the arm's instruction block.
+    """
     return JOINER.join([str(case["fact"]), str(case["question"]), _arm_block(case, arm)])
 
 
@@ -614,7 +624,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -623,7 +634,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (templates, topics,
     values, targets, neutrals): the lists are bound by digest
     in the protocol, so a payload cannot quietly carry a
-    different instrument under the same version number."""
+    different instrument under the same version number.
+    """
     canonical = json.dumps(
         [
             TASK_FACT_TEMPLATE,
@@ -659,7 +671,8 @@ def checking_rule_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, case material, rule digests, floors,
-    budgets, and the seed/backend pair."""
+    budgets, and the seed/backend pair.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -703,7 +716,8 @@ def normalize_words(text: str) -> list[str]:
     alphanumeric characters, case-folded. Every other
     character is a separator, so emphasis, brackets, and
     punctuation never hide a word, and a punctuation-only
-    answer has no words."""
+    answer has no words.
+    """
     words: list[str] = []
     current: list[str] = []
     for char in text:
@@ -719,13 +733,15 @@ def normalize_words(text: str) -> list[str]:
 
 def word_hashes(text: str) -> list[str]:
     """The commitment of an answer text: the ordered list of
-    its words' SHA-256 hashes (multiplicity preserved)."""
+    its words' SHA-256 hashes (multiplicity preserved).
+    """
     return [digest_text(word) for word in normalize_words(text)]
 
 
 def commitment_digest(hashes: list[str]) -> str:
     """SHA-256 of the commitment's canonical encoding (the
-    compact-JSON hash list, frozen in the checking rule)."""
+    compact-JSON hash list, frozen in the checking rule).
+    """
     canonical = json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -734,7 +750,8 @@ def derive_from_hashes(hashes: list[str]) -> dict[str, Any]:
     """Everything satisfaction reads, derived from the
     commitment alone: the multiset, the count, and the
     first/last word hashes (None when the answer has no
-    words)."""
+    words).
+    """
     return {
         "multiset": Counter(hashes),
         "word_count": len(hashes),
@@ -747,7 +764,8 @@ def satisfied(constraint: dict[str, Any], hashes: list[str]) -> bool:
     """One constraint's verdict, derived from the commitment.
     (The zero-word exclusion for count constraints is an
     aggregation rule, applied by the caller -- a zero-word
-    record's count verdict is vacuous, not false.)"""
+    record's count verdict is vacuous, not false.)
+    """
     kind = str(constraint["kind"])
     if kind == "count":
         return len(hashes) <= int(constraint["limit"])
@@ -763,7 +781,8 @@ def satisfied(constraint: dict[str, Any], hashes: list[str]) -> bool:
 
 def task_present(case: dict[str, Any], hashes: list[str]) -> bool:
     """Whether the answer's commitment contains the case's
-    expected task word (the base task's measurable trace)."""
+    expected task word (the base task's measurable trace).
+    """
     return str(case["expected_word_digest"]) in hashes
 
 
@@ -771,7 +790,8 @@ def sign_test_p(n_pos: int, n_neg: int) -> float:
     """Exact two-sided sign-test p-value for n_pos positive
     and n_neg negative independent units under the symmetric
     null. This design's units are cases (independent
-    generations), never the case-clustered pairs."""
+    generations), never the case-clustered pairs.
+    """
     n = n_pos + n_neg
     if n == 0:
         return 1.0
@@ -788,7 +808,8 @@ def sign_test_p(n_pos: int, n_neg: int) -> float:
 def _live(record: dict[str, Any]) -> bool:
     """A record counts in readouts iff it completed, its case
     was not boundary-screened for the candidate, and its
-    generation found the boundary."""
+    generation found the boundary.
+    """
     return (
         record.get("detail") == ""
         and not record.get("case_screened")
@@ -798,7 +819,8 @@ def _live(record: dict[str, Any]) -> bool:
 
 def _rate(numerator: int, denominator: int) -> float | None:
     """A rate is None iff its denominator is 0 (the tree's
-    global rule); denominators are always printed beside it."""
+    global rule); denominators are always printed beside it.
+    """
     return numerator / denominator if denominator else None
 
 
@@ -807,17 +829,20 @@ def _eligible(constraint: dict[str, Any], hashes: list[str]) -> bool:
     denominator at all. A zero-word answer makes a count
     constraint's verdict vacuous, so those pairs are excluded
     from every count-kind denominator (design section 6);
-    every other pair is always eligible."""
+    every other pair is always eligible.
+    """
     return not (constraint["kind"] == "count" and not hashes)
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """One candidate's density block, derived entirely from
     its records and the generated cases. The diff validator
     recomputes this from the payload's records and requires
-    equality, so no field here may read anything else."""
+    equality, so no field here may read anything else.
+    """
     by_key: dict[tuple[int, str], dict[str, Any]] = {}
     for record in records:
         by_key[(int(record["case_index"]), str(record["arm"]))] = record
@@ -841,9 +866,11 @@ def aggregate_candidate(
     }
 
     def hashes_of(record: dict[str, Any]) -> list[str]:
+        """Return the word hashes recorded on a density record."""
         return list(record.get("word_hashes") or [])
 
     def case_of(record: dict[str, Any]) -> dict[str, Any]:
+        """Return the case a density record indexes."""
         return cases[int(record["case_index"])]
 
     # Satisfaction by density, with the solo composition

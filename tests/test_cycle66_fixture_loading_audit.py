@@ -110,7 +110,8 @@ def _expect_error(text: str) -> str:
 
 
 class TestParseFixtureCsvAdversarial(unittest.TestCase):
-    def test_baseline_two_rows(self):
+    @staticmethod
+    def test_baseline_two_rows():
         split, empty = parse_fixture_csv(_doc(GOOD_SEARCH, GOOD_HELD))
         assert [f.id for f in split.search] == ["a"]
         assert [f.id for f in split.held_out] == ["b"]
@@ -125,27 +126,32 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
                     f"row 2 (id 'a'): partition must be 'search' or 'held_out', got {label!r}"
                 )
 
-    def test_empty_string_id_rejected_with_row_number(self):
+    @staticmethod
+    def test_empty_string_id_rejected_with_row_number():
         assert _expect_error(_doc(",g1,search,x,hello,,", GOOD_HELD)) == (
             "row 2: fixture id is blank"
         )
 
-    def test_whitespace_only_id_rejected_with_row_number(self):
+    @staticmethod
+    def test_whitespace_only_id_rejected_with_row_number():
         assert _expect_error(_doc("  ,g1,search,x,hello,,", GOOD_HELD)) == (
             "row 2: fixture id is blank"
         )
 
-    def test_whitespace_padded_ids_are_distinct_and_verbatim(self):
+    @staticmethod
+    def test_whitespace_padded_ids_are_distinct_and_verbatim():
         split, _ = parse_fixture_csv(_doc("ab,g1,search,x,hello,,", " ab,g2,held_out,y,hi,,"))
         assert split.search[0].id == "ab"
         assert split.held_out[0].id == " ab"
 
-    def test_case_differing_ids_are_distinct(self):
+    @staticmethod
+    def test_case_differing_ids_are_distinct():
         split, _ = parse_fixture_csv(_doc("Ab,g1,search,x,hello,,", "ab,g2,held_out,y,hi,,"))
         assert [f.id for f in split.search] == ["Ab"]
         assert [f.id for f in split.held_out] == ["ab"]
 
-    def test_nfc_nfd_duplicate_ids_rejected(self):
+    @staticmethod
+    def test_nfc_nfd_duplicate_ids_rejected():
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         assert nfc != nfd
@@ -154,13 +160,15 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
             "CSV fixtures violate the split discipline: Fixture IDs must be globally unique"
         )
 
-    def test_exact_duplicate_ids_same_partition_rejected(self):
+    @staticmethod
+    def test_exact_duplicate_ids_same_partition_rejected():
         text = HDR + "\na,g1,search,x,hello,,\na,g9,search,z,hey,,\n" + GOOD_HELD + "\n"
         assert _expect_error(text) == (
             "CSV fixtures violate the split discipline: Fixture IDs must be globally unique"
         )
 
-    def test_nfd_group_overlap_rejected(self):
+    @staticmethod
+    def test_nfd_group_overlap_rejected():
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         message = _expect_error(_doc(f"a,{nfc},search,x,hello,,", f"b,{nfd},held_out,y,hi,,"))
@@ -168,7 +176,8 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
             "CSV fixtures violate the split discipline: Related fixtures cannot cross the split"
         )
 
-    def test_nfd_message_leakage_rejected(self):
+    @staticmethod
+    def test_nfd_message_leakage_rejected():
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         message = _expect_error(_doc(f"a,g1,search,x,{nfc},,", f"b,g2,held_out,y,{nfd},,"))
@@ -177,46 +186,55 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
             "Identical message inputs cannot cross the split"
         )
 
-    def test_nfd_data_kept_byte_exact(self):
+    @staticmethod
+    def test_nfd_data_kept_byte_exact():
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         split, _ = parse_fixture_csv(_doc(f"a,g1,search,x,{nfd},,", GOOD_HELD))
         assert split.search[0].messages[0].content == nfd
         assert split.search[0].messages[0].content != unicodedata.normalize("NFC", nfd)
 
-    def test_header_only_file(self):
+    @staticmethod
+    def test_header_only_file():
         assert _expect_error(HDR + "\n") == "CSV has no 'search' fixtures"
 
-    def test_header_only_held_out_reports_search_first(self):
+    @staticmethod
+    def test_header_only_held_out_reports_search_first():
         assert _expect_error(HDR + "\nb,g2,held_out,y,hi,,\n") == "CSV has no 'search' fixtures"
 
-    def test_missing_trailing_columns_pad_with_empty(self):
+    @staticmethod
+    def test_missing_trailing_columns_pad_with_empty():
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,hello", GOOD_HELD))
         assert [(m.role, m.content) for m in split.search[0].messages] == [("user", "hello")]
 
-    def test_row_shorter_than_fixed_columns_needs_user_1(self):
+    @staticmethod
+    def test_row_shorter_than_fixed_columns_needs_user_1():
         assert _expect_error(_doc("a,g1,search", GOOD_HELD)) == (
             "row 2 (id 'a'): fixture needs a user_1 message"
         )
 
-    def test_extra_cell_rejected(self):
+    @staticmethod
+    def test_extra_cell_rejected():
         assert _expect_error(_doc("a,g1,search,x,hello,,,EXTRA", GOOD_HELD)) == (
             "row 2: 8 cells, header has 7"
         )
 
-    def test_bom_prefixed_header_rejected(self):
+    @staticmethod
+    def test_bom_prefixed_header_rejected():
         message = _expect_error("\ufeff" + _doc(GOOD_SEARCH, GOOD_HELD))
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
             "got '\\ufeffid,group,partition,expected'"
         )
 
-    def test_crlf_accepted(self):
+    @staticmethod
+    def test_crlf_accepted():
         text = HDR + "\r\n" + GOOD_SEARCH + "\r\n" + GOOD_HELD + "\r\n"
         split, _ = parse_fixture_csv(text)
         assert [f.id for f in split.search] == ["a"]
         assert [f.id for f in split.held_out] == ["b"]
 
-    def test_quoted_comma_and_quote_verbatim(self):
+    @staticmethod
+    def test_quoted_comma_and_quote_verbatim():
         text = (
             HDR + "\n"
             '"a","g1","search","x","say, hi","",""\n'
@@ -226,57 +244,68 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         contents = [f.messages[0].content for f in split.search]
         assert contents == ["say, hi", 'say "yo"']
 
-    def test_quoted_newline_verbatim(self):
+    @staticmethod
+    def test_quoted_newline_verbatim():
         text = HDR + '\n"a","g1","search","x","line1\nline2","",""\n' + GOOD_HELD + "\n"
         split, _ = parse_fixture_csv(text)
         assert split.search[0].messages[0].content == "line1\nline2"
 
-    def test_multiline_record_error_reports_record_end_line(self):
+    @staticmethod
+    def test_multiline_record_error_reports_record_end_line():
         text = HDR + '\n"a","g1","search","x","ok","","after\ngap"\n' + GOOD_HELD + "\n"
         assert _expect_error(text) == (
             "row 3 (id 'a'): empty message followed by content at 'user_2'"
         )
 
-    def test_gap_then_content_rejected(self):
+    @staticmethod
+    def test_gap_then_content_rejected():
         assert _expect_error(_doc("a,g1,search,x,hello,,LATE", GOOD_HELD)) == (
             "row 2 (id 'a'): empty message followed by content at 'user_2'"
         )
 
-    def test_conversation_ending_with_assistant_rejected(self):
+    @staticmethod
+    def test_conversation_ending_with_assistant_rejected():
         assert _expect_error(_doc("a,g1,search,x,hello,resp,", GOOD_HELD)) == (
             "row 2 (id 'a'): conversation must end with a user message"
         )
 
-    def test_missing_user_1_rejected(self):
+    @staticmethod
+    def test_missing_user_1_rejected():
         assert _expect_error(_doc("a,g1,search,x,,,", GOOD_HELD)) == (
             "row 2 (id 'a'): fixture needs a user_1 message"
         )
 
-    def test_whitespace_only_user_1_kept_verbatim(self):
+    @staticmethod
+    def test_whitespace_only_user_1_kept_verbatim():
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,   ,,", GOOD_HELD))
         assert split.search[0].messages[0].content == "   "
 
-    def test_whitespace_only_line_is_not_a_blank_line(self):
+    @staticmethod
+    def test_whitespace_only_line_is_not_a_blank_line():
         message = _expect_error(HDR + "\na,g1,search,x,hello,,\n   \n" + GOOD_HELD + "\n")
         assert message == "row 3: fixture id is blank"
 
-    def test_cell_exactly_at_text_limit_accepted(self):
+    @staticmethod
+    def test_cell_exactly_at_text_limit_accepted():
         cell = "Z" * 16384
         split, _ = parse_fixture_csv(_doc(f"a,g1,search,x,{cell},,", GOOD_HELD))
         assert split.search[0].messages[0].content == cell
 
-    def test_cell_over_text_limit_rejected(self):
+    @staticmethod
+    def test_cell_over_text_limit_rejected():
         cell = "Z" * 16385
         assert _expect_error(_doc(f"a,g1,search,x,{cell},,", GOOD_HELD)) == (
             "row 2 (id 'a'): text field exceeds size limit"
         )
 
-    def test_expected_over_text_limit_rejected(self):
+    @staticmethod
+    def test_expected_over_text_limit_rejected():
         assert _expect_error(_doc(f"a,g1,search,{'E' * 16385},hello,,", GOOD_HELD)) == (
             "row 2 (id 'a'): text field exceeds size limit"
         )
 
-    def test_21_message_columns_accepted(self):
+    @staticmethod
+    def test_21_message_columns_accepted():
         cols = ",".join(
             f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}" for i in range(21)
         )
@@ -288,7 +317,8 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         assert len(split.search[0].messages) == 21
         assert split.search[0].messages[-1].role == "user"
 
-    def test_22_message_columns_rejected(self):
+    @staticmethod
+    def test_22_message_columns_rejected():
         cols = ",".join(
             f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}" for i in range(22)
         )
@@ -296,40 +326,46 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
             "CSV needs 1-21 message columns after 'expected', got 22"
         )
 
-    def test_header_without_message_columns_rejected(self):
+    @staticmethod
+    def test_header_without_message_columns_rejected():
         assert _expect_error("id,group,partition,expected\na,g1,search,x\n") == (
             "CSV needs 1-21 message columns after 'expected', got 0"
         )
 
-    def test_bad_header_column_order(self):
+    @staticmethod
+    def test_bad_header_column_order():
         message = _expect_error("id,group,expected,partition,user_1\n" + GOOD_SEARCH + "\n")
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
             "got 'id,group,expected,partition'"
         )
 
-    def test_uppercase_header_column_rejected(self):
+    @staticmethod
+    def test_uppercase_header_column_rejected():
         message = _expect_error("ID,group,partition,expected,user_1\n" + GOOD_SEARCH + "\n")
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
             "got 'ID,group,partition,expected'"
         )
 
-    def test_exactly_200_rows_accepted(self):
+    @staticmethod
+    def test_exactly_200_rows_accepted():
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(100))
         rows += "".join(f"h{i},gh{i},held_out,y,hi\n" for i in range(100))
         split, _ = parse_fixture_csv("id,group,partition,expected,user_1\n" + rows)
         assert len(split.search) == 100
         assert len(split.held_out) == 100
 
-    def test_201_rows_rejected(self):
+    @staticmethod
+    def test_201_rows_rejected():
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(101))
         rows += "".join(f"h{i},gh{i},held_out,y,hi\n" for i in range(100))
         assert _expect_error("id,group,partition,expected,user_1\n" + rows) == (
             "CSV holds more than 200 fixtures"
         )
 
-    def test_101_search_fixtures_rejected(self):
+    @staticmethod
+    def test_101_search_fixtures_rejected():
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(101))
         rows += "b,g2,held_out,y,hi\n"
         assert _expect_error("id,group,partition,expected,user_1\n" + rows) == (
@@ -346,13 +382,15 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
             parse_fixture_csv("x" * (MAX_BYTES + 1))
         assert str(exc.exception) == "CSV source exceeds size limit"
 
-    def test_source_exactly_at_size_limit_accepted(self):
+    @staticmethod
+    def test_source_exactly_at_size_limit_accepted():
         base = _doc(GOOD_SEARCH, GOOD_HELD)
         padding = "\n" * (MAX_BYTES - len(base.encode("utf-8")))
         split, _ = parse_fixture_csv(base + padding)
         assert [f.id for f in split.search] == ["a"]
 
-    def test_empty_expected_ids_reported(self):
+    @staticmethod
+    def test_empty_expected_ids_reported():
         _, empty = parse_fixture_csv(_doc("a,g1,search,,hello,,", GOOD_HELD))
         assert empty == ["a"]
 

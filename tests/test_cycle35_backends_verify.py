@@ -118,15 +118,18 @@ class ByteBackend:
     fingerprint = "fake-byte-backend-cycle35"
     vocab_size = 256
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         if type(text) is not str:
             raise ValueError("invalid_text")
         return tuple(text.encode("utf-8"))
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return bytes(b & 0xFF for b in tuple(token_ids)).decode("utf-8", errors="replace")
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise AssertionError("ByteBackend.generate is not scripted for this test")
 
 
@@ -142,12 +145,14 @@ class SeededFakeBackend:
     vocab_size = 256
     cap = 64
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         if type(text) is not str:
             raise ValueError("invalid_text")
         return tuple(text.encode("utf-8"))
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         if type(token_ids) is not tuple:
             raise ValueError("invalid_decode_ids")
         return bytes(b & 0xFF for b in token_ids).decode("utf-8", errors="replace")
@@ -533,6 +538,7 @@ def _write_json(path, value):
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class AssetHelpers(unittest.TestCase):
     """Temp-dir scaffolding shared by the loading tests."""
 
@@ -545,8 +551,8 @@ class AssetHelpers(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
         return root
 
+    @staticmethod
     def write_layout(
-        self,
         root,
         *,
         model_type="gpt2",
@@ -1621,7 +1627,7 @@ class TestEmulateHfStopString(unittest.TestCase):
 
         def token_bytes(tid):
             calls.append(tid)
-            return None  # unmappable: fall back to decode
+            # Unmappable: implicit None return; the caller falls back to decode.
 
         output = _ids_for(self.backend, "say stop")
         outcome = emulate_hf_stop_string(self.backend, (), output, "stop", token_bytes=token_bytes)

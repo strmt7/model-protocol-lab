@@ -171,7 +171,8 @@ def digest_text(text: str) -> str:
 
 def digest_ids(ids: tuple[int, ...]) -> str:
     """SHA-256 hex digest of a render id sequence, so records
-    carry the sequence's identity without its contents."""
+    carry the sequence's identity without its contents.
+    """
     canonical = ",".join(str(i) for i in ids)
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
@@ -204,7 +205,8 @@ def arm_content(arm: str, first: int, second: int) -> str:
     """One arm's user-turn content: the frozen instruction with
     the plain-form operands appended one per line, in
     presentation order. Only the instruction sentence changes
-    across the arms of one case."""
+    across the arms of one case.
+    """
     if arm not in INSTRUCTIONS:
         raise ValueError("unknown negation arm")
     return f"{INSTRUCTIONS[arm]}\n{first}\n{second}"
@@ -215,7 +217,8 @@ def echo_answers(expected: str) -> tuple[str, str]:
     label: exactly "not " + other label and "not the " + other
     label, byte-for-byte. Any other negated form is
     ``non_label`` (other), never echo -- the set is frozen, and
-    enlarging it voids the design verdict."""
+    enlarging it voids the design verdict.
+    """
     other = other_label(expected)
     return ("not " + other, "not the " + other)
 
@@ -227,7 +230,8 @@ def cases_for(seed: int) -> list[dict[str, Any]]:
     re-expressed as negation cases. A case carries its
     presentation operands, its larger-first flag, its margin
     stratum, and its band; per-arm contents and expected
-    labels are derived from those, never stored as text."""
+    labels are derived from those, never stored as text.
+    """
     from .numform import generate_value_set
 
     if type(seed) is not int:
@@ -261,7 +265,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
     """The canonical generated set the ground digest binds,
     including every arm's content digest and expected label,
     so the ground digest binds the treatment, not just the
-    case skeleton."""
+    case skeleton.
+    """
     rows: list[list[Any]] = []
     for case in cases_for(seed):
         rows.append(
@@ -281,7 +286,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated set: two runs share
     an instrument only when this matches, because the
-    generated set is the treatment."""
+    generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -290,7 +296,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (the four
     instruction strings, bound by digest in the protocol, so
     a payload cannot quietly carry a different instrument
-    under the same version number)."""
+    under the same version number).
+    """
     canonical = json.dumps(
         [INSTRUCTIONS[arm] for arm in ARM_KEYS],
         separators=(",", ":"),
@@ -302,7 +309,8 @@ def case_material_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, case material, floors, budgets, and the
-    seed/backend pair that generated the set."""
+    seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -389,6 +397,7 @@ def classify_negation(direct_passes: int, joint: int) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -397,6 +406,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _expected(record: dict[str, Any], arm: str) -> str:
+    """Return the expected."""
     larger = "first" if record.get("larger_first") is True else "second"
     if arm == "flipped":
         return other_label(larger)
@@ -404,6 +414,7 @@ def _expected(record: dict[str, Any], arm: str) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 
@@ -513,9 +524,7 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     negated_decomp = negated_arm["decomposition"]
     echo_dominant_numerator = negated_decomp["negation_echo"]
     echo_dominant_denominator = negated_arm["n_completed"] - negated_decomp["exact_pass"]
-    echo_dominant = echo_dominant_denominator > 0 and (
-        echo_dominant_numerator * 2 > echo_dominant_denominator
-    )
+    echo_dominant = echo_dominant_numerator * 2 > echo_dominant_denominator > 0
     order_concentrated = joint > 0 and (
         j_by_order["larger_first"] == 0 or j_by_order["larger_second"] == 0
     )

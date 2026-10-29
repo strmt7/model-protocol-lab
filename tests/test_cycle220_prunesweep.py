@@ -69,6 +69,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode text as word ids over the frozen test vocabulary."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -80,9 +81,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode word ids back to text, rendering unknown ids as '?'."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Scripted generate: answer from the decoded prompt per the mode; 'explode' raises."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -117,6 +120,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=(_CHATML, _LLAMA3), seed=0, **stage_kwargs):
+    """Run the prune-sweep stage over the scripted formats and return the payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.prune_sweep_stage(
@@ -130,6 +134,7 @@ def _payload(backend=None, formats=(_CHATML, _LLAMA3), seed=0, **stage_kwargs):
 
 
 def _cell(verdict: bool, digest: str | None, boundary: bool = True, tokens: int = 40):
+    """Build one record cell dict for the synthetic aggregate fixtures."""
     return {
         "verdict": verdict,
         "boundary_found": boundary,
@@ -203,6 +208,9 @@ def _record(
 
 
 def _pass_verdicts(**overrides):
+    """Per-arm verdict map for a synthetic record: all arms pass except closed_book, with overrides
+    applied.
+    """
     verdicts = dict.fromkeys(ps.ARM_KEYS, True)
     verdicts["closed_book"] = False
     verdicts.update(overrides)
@@ -211,9 +219,11 @@ def _pass_verdicts(**overrides):
 
 class FrozenMaterialTests(unittest.TestCase):
     """Design Part I sections 3.2-3.4 + amendments C/D/H:
-    the frozen lists, texts, budgets, and vocabulary."""
+    the frozen lists, texts, budgets, and vocabulary.
+    """
 
     def test_vocabulary_is_frozen(self):
+        """The decision, cell-detail and arm vocabularies equal the frozen tuples."""
         self.assertEqual(ps.DECISIONS, ("insufficient", "prune_drop_observed", "below_threshold"))
         self.assertEqual(
             ps.STAGE_DETAILS,
@@ -228,6 +238,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(ps.DOSES, (0, 18, 36, 72))
 
     def test_counts_and_budgets(self):
+        """Panel counts and budget constants equal the frozen design values."""
         self.assertEqual(ps.CASE_COUNT, 24)
         self.assertEqual(ps.ELIGIBLE_WORDS, 144)
         self.assertEqual(ps.MAX_GROUND_RECORDS, 576)
@@ -237,6 +248,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual((ps.MIN_C, ps.MIN_A), (12, 5))
 
     def test_lists_are_frozen_and_disjoint(self):
+        """The frozen word lists have their frozen sizes and are pairwise disjoint."""
         self.assertEqual(len(ps.TOPICS), 8)
         self.assertTrue(all(len(t.split(" ")) == 2 for t in ps.TOPICS))
         self.assertEqual(len(ps.VALUES), 24)
@@ -270,6 +282,9 @@ class FrozenMaterialTests(unittest.TestCase):
         # The value "quartz" and the topic word "quarry" share
         # the 4-char prefix "quar": the frozen TIMES pool must
         # not contain "quarter" (the build-time repair).
+        """The stem screen has teeth on the frozen lists: near-miss time words and value stems are
+        caught.
+        """
         self.assertNotIn("quarter", ps.TIMES)
         for value in ps.VALUES:
             for pool in (ps.SUBJECTS, ps.OBJECTS, ps.PLACES, ps.TIMES):
@@ -277,6 +292,7 @@ class FrozenMaterialTests(unittest.TestCase):
                     self.assertNotEqual(word[:4], value[:4], (word, value))
 
     def test_protocol_object_and_fingerprint(self):
+        """protocol_object binds the seed and backend fingerprint into the protocol dict."""
         protocol = ps.protocol_object(7, "fp-x")
         self.assertEqual(protocol["seed"], 7)
         self.assertEqual(protocol["backend_fingerprint"], "fp-x")
@@ -291,6 +307,7 @@ class FrozenMaterialTests(unittest.TestCase):
         # Amendment A: the candidate's printed null row
         # (0 / 40,000) was false; these are the exact-
         # enumeration values, re-derived in OperatingTests.
+        """The shipped operating characteristics equal the corrected exact enumerations."""
         self.assertEqual(
             ps.OPERATING_CHARACTERISTICS,
             {
@@ -315,9 +332,11 @@ class FrozenMaterialTests(unittest.TestCase):
 
 class ConstructionTests(unittest.TestCase):
     """Design section 3.4 + amendments C/E: the generated
-    panel and the frozen operator."""
+    panel and the frozen operator.
+    """
 
     def test_panel_shape_and_topics(self):
+        """generate_cases yields the 24 frozen fixture ids in order with the panel shape."""
         cases = ps.generate_cases(0)
         self.assertEqual(len(cases), 24)
         self.assertEqual([c["fixture_id"] for c in cases], [f"prune-{i:02d}" for i in range(24)])
@@ -327,11 +346,13 @@ class ConstructionTests(unittest.TestCase):
             self.assertEqual(len(case["fact_sentence"].split(" ")), 6)
 
     def test_validate_case_battery_across_seeds(self):
+        """Every generated case validates across the battery of seeds."""
         for seed in (0, 1, 7, 20261029):
             for case in ps.generate_cases(seed):
                 self.assertTrue(ps.validate_case(case, seed), (seed, case["fixture_id"]))
 
     def test_validate_case_rejects_tampering(self):
+        """validate_case rejects a case whose context sentences were tampered with."""
         case = ps.generate_case(0, 3)
         bad = copy.deepcopy(case)
         sentences = list(bad["context_sentences"])
@@ -347,6 +368,7 @@ class ConstructionTests(unittest.TestCase):
     def test_drop_order_key_is_the_eligible_index(self):
         # Amendment E: position = eligible-list index in
         # passage order; the key is sha256("seed:case:position").
+        """drop_order is keyed by the seed/fixture hash over the eligible indices."""
         import hashlib
 
         order = ps.drop_order(5, "prune-03")
@@ -360,6 +382,7 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual(sorted(order), list(range(144)))
 
     def test_nested_drops_and_tail_identity(self):
+        """Dropped sets nest across doses and the tail72 set is the complement identity."""
         for seed in (0, 3):
             for case in ps.generate_cases(seed):
                 cid = str(case["fixture_id"])
@@ -374,6 +397,9 @@ class ConstructionTests(unittest.TestCase):
                 self.assertEqual(ps.dropped_positions(cid, "dose0", seed), frozenset())
 
     def test_protected_parts_byte_identical_and_exact_doses(self):
+        """Instruction, fact and question stay byte-identical across arms while doses drop exact
+        word counts.
+        """
         case = ps.generate_case(0, 0)
         base = ps.arm_content(case, "dose0", 0)
         lines = base.split("\n")
@@ -391,6 +417,9 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual(closed, f"{ps.INSTRUCTION}\n{lines[2]}")
 
     def test_fact_position_and_tail_relocation(self):
+        """The fact sentence sits at its frozen position in dose0 and relocates to the tail in
+        tail72.
+        """
         case = ps.generate_case(0, 0)
         passage0 = ps.arm_content(case, "dose0", 0).split("\n")[1]
         sentences0 = passage0.split(". ")
@@ -402,6 +431,7 @@ class ConstructionTests(unittest.TestCase):
         # Amendment C: recomputed on the build's own lists --
         # case 0 overlaps in exactly 32 words (both review
         # reconstructions agree), the panel mean is 35.92.
+        """At seed 0 the tail72/dose72 overlap figures match the frozen values."""
         overlaps = []
         for case in ps.generate_cases(0):
             order = ps.drop_order(0, str(case["fixture_id"]))
@@ -411,6 +441,9 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual((min(overlaps), max(overlaps)), (29, 41))
 
     def test_dropped_shares_are_zero_on_the_panel(self):
+        """Dropped-share accounting is zero on the generated panel: no protected category is ever
+        dropped.
+        """
         for seed in (0, 1):
             for case in ps.generate_cases(seed):
                 shares = ps.dropped_set_shares(case, seed)
@@ -420,9 +453,11 @@ class ConstructionTests(unittest.TestCase):
 
 class ClassificationTests(unittest.TestCase):
     """Design section 5: the frozen decision rule and its
-    worked McNemar values."""
+    worked McNemar values.
+    """
 
     def test_mcnemar_worked_values(self):
+        """The exact McNemar p-values match the worked values for (5,0), (6,0) and (7,0)."""
         self.assertEqual(mcnemar_exact_p(5, 0), 0.0625)
         self.assertEqual(mcnemar_exact_p(6, 0), 0.03125)
         self.assertEqual(mcnemar_exact_p(7, 0), 0.015625)
@@ -432,6 +467,9 @@ class ClassificationTests(unittest.TestCase):
         self.assertIsNone(mcnemar_exact_p(0, 0))
 
     def test_decision_truth_table(self):
+        """classify_decision reproduces the frozen truth table over completed, discordant and p
+        inputs.
+        """
         self.assertEqual(ps.classify_decision(11, 24, 0), "insufficient")
         self.assertEqual(ps.classify_decision(0, 0, 0), "insufficient")
         # (5, 0) does not fire: p = 0.0625 -- the A >= 5 floor
@@ -448,6 +486,9 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(ps.classify_decision(24, 0, 0), "below_threshold")
 
     def test_decisions_vocabulary(self):
+        """classify_decision only ever returns the frozen decision vocabulary over the full input
+        grid.
+        """
         for c in range(0, 25):
             for a in range(0, 25):
                 for b in range(0, 6):
@@ -456,9 +497,13 @@ class ClassificationTests(unittest.TestCase):
 
 class DecompositionTests(unittest.TestCase):
     """Design section 3.5 + amendment B: the digest-only
-    decomposition in its frozen order."""
+    decomposition in its frozen order.
+    """
 
     def test_frozen_order(self):
+        """Answer decomposition classifies digests in the frozen order: expected value, other pool
+        value, junk.
+        """
         expected = ps.digest_text("amber")
         other = ps.digest_text("birch")
         junk = ps.digest_text("not-a-pool-value")
@@ -473,12 +518,14 @@ class DecompositionTests(unittest.TestCase):
 
 
 def _binom_pmf(n: int, p: Fraction) -> list[Fraction]:
+    """Exact binomial probability mass function as Fractions (operating-characteristics oracle)."""
     return [Fraction(comb(n, k)) * p**k * (1 - p) ** (n - k) for k in range(n + 1)]
 
 
 def _fire_stated(n_cases: int, p0: float, q: float, r: float) -> Fraction:
     """Exact enumeration, stated conditional basis (pass0
-    Bernoulli p0; fail72|pass0 = q; pass72|fail0 = r)."""
+    Bernoulli p0; fail72|pass0 = q; pass72|fail0 = r).
+    """
     total = Fraction(0)
     pc = _binom_pmf(n_cases, Fraction(p0).limit_denominator(1000))
     for c in range(n_cases + 1):
@@ -501,7 +548,8 @@ def _fire_stated(n_cases: int, p0: float, q: float, r: float) -> Fraction:
 def _fire_exchangeable(v: float, marginal: float, n: int = 24) -> Fraction:
     """Exact enumeration, exchangeable basis: per-case joint
     (pass, pass) = m - v, (pass, fail) = (fail, pass) = v,
-    (fail, fail) = 1 - m - v."""
+    (fail, fail) = 1 - m - v.
+    """
     from math import factorial
 
     m = Fraction(marginal).limit_denominator(1000)
@@ -528,9 +576,11 @@ def _fire_exchangeable(v: float, marginal: float, n: int = 24) -> Fraction:
 
 class OperatingTests(unittest.TestCase):
     """Amendment A + I: every printed operating figure is
-    re-derived here by exact enumeration (no Monte Carlo)."""
+    re-derived here by exact enumeration (no Monte Carlo).
+    """
 
     def test_stated_basis_nulls_and_power(self):
+        """The stated-basis null and power figures equal independent Fraction re-derivations."""
         oc = ps.OPERATING_CHARACTERISTICS
         self.assertEqual(round(float(_fire_stated(24, 0.5, 0.5, 0.5)), 4), oc["null_random_stated"])
         self.assertEqual(
@@ -544,6 +594,7 @@ class OperatingTests(unittest.TestCase):
         self.assertEqual(round(float(_fire_stated(24, 0.9, 0.75, 0.1)), 4), oc["power_q75"])
 
     def test_exchangeable_basis(self):
+        """The exchangeable-basis figures equal independent re-derivations."""
         oc = ps.OPERATING_CHARACTERISTICS
         self.assertEqual(
             round(float(_fire_exchangeable(0.09, 0.9)), 4), oc["null_competent_exchangeable_v09"]
@@ -561,6 +612,9 @@ class OperatingTests(unittest.TestCase):
         )
 
     def test_familywise(self):
+        """The family-wise expectations equal 24 times the per-decision stated fire rate, as
+        printed.
+        """
         oc = ps.OPERATING_CHARACTERISTICS
         stated = float(_fire_stated(24, 0.9, 0.1, 0.1))
         self.assertEqual(round(24 * stated, 2), oc["familywise_expected_stated"])
@@ -572,11 +626,15 @@ class OperatingTests(unittest.TestCase):
     def test_screening_shrinks_the_population(self):
         # Stated basis, frozen floors, smaller N (the design's
         # printed sensitivity rows).
+        """Screening shrinks the effective population: fire figures at n=14, 16 and 17 match the
+        re-derived values.
+        """
         self.assertEqual(round(float(_fire_stated(16, 0.9, 0.1, 0.1)), 4), 0.0017)
         self.assertLess(abs(float(_fire_stated(17, 0.5, 0.5, 0.5)) - 0.00715), 1e-6)
         self.assertEqual(round(float(_fire_stated(14, 0.5, 0.5, 0.5)), 4), 0.0019)
 
     def test_firing_triples_census(self):
+        """The census of firing triples is exactly 492 and no firing triple has A <= B."""
         triples = []
         for c in range(12, 25):
             for a in range(5, c + 1):
@@ -594,7 +652,12 @@ class OperatingTests(unittest.TestCase):
         # q_d = q72 * d / 72 (printed in the design); the
         # returns-cap figure is re-derived by an exact DP over
         # per-case outcome categories.
+        """The shape-gate power figures equal the dynamic-programming re-derivation with the printed
+        interpolation.
+        """
+
         def shape_dp(q18, q36, q72, p0=0.9, r=0.1):
+            """Dynamic-programming oracle for the shape-gate power computation."""
             cats = [(0, 0, 1, 0, 0, (1 - p0) * r), (0, 0, 0, 0, 0, (1 - p0) * (1 - r))]
             for f18 in (0, 1):
                 for f36 in (0, 1):
@@ -640,6 +703,9 @@ class OperatingTests(unittest.TestCase):
 
     def test_operator_constants(self):
         # Amendment F: hypergeometric fact shift at dose72.
+        """The fact-shift operator constants equal their closed forms (mean 36.0 words; sd from the
+        variance).
+        """
         self.assertEqual(ps.FACT_SHIFT_MEAN_WORDS, 36.0)
         var = 72 * 0.5 * 0.5 * (72 / 143)
         self.assertEqual(round(var**0.5, 2), ps.FACT_SHIFT_SD_WORDS)
@@ -651,9 +717,12 @@ class OperatingTests(unittest.TestCase):
 
 class AggregateTests(unittest.TestCase):
     """Design sections 5/6 + amendments B/F: the aggregate
-    over synthetic records (executed shapes, not assumed)."""
+    over synthetic records (executed shapes, not assumed).
+    """
 
-    def _panel(self, overrides_by_index):
+    @staticmethod
+    def _panel(overrides_by_index):
+        """Build a synthetic 24-record panel, applying per-index cell overrides."""
         records = []
         for i in range(24):
             verdicts = _pass_verdicts()
@@ -669,6 +738,7 @@ class AggregateTests(unittest.TestCase):
         return records
 
     def test_perfect_panel_below_threshold(self):
+        """A perfect panel aggregates to below_threshold with the full population retained."""
         agg = ps.aggregate_candidate(self._panel({}))
         head = agg["headline"]
         self.assertEqual(head["n_population"], 24)
@@ -682,6 +752,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["n_incomplete"], 0)
 
     def test_drop_panel_fires(self):
+        """Six dose72 discordant drops fire prune_drop_observed."""
         overrides = {i: {"dose72": False, "dose72_digest": "other"} for i in range(6)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         head = agg["headline"]
@@ -693,6 +764,7 @@ class AggregateTests(unittest.TestCase):
     def test_boundary_only_never_counts_toward_a(self):
         # Amendment B: eight boundary-only dose72 failures
         # move boundary attrition only; A stays 0.
+        """Boundary-only dose72 failures never count toward A (amendment B)."""
         overrides = {i: {"dose72": False, "dose72_digest": "expected"} for i in range(8)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         head = agg["headline"]
@@ -704,6 +776,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(decomp["exact_pass"], 16)
 
     def test_mixed_drop_and_boundary(self):
+        """A mixed panel counts only the real drops toward A, not the boundary-only failures."""
         overrides = {}
         for i in range(4):
             overrides[i] = {"dose72": False, "dose72_digest": "junk"}
@@ -716,6 +789,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(head["decision"], "below_threshold")
 
     def test_screened_cases_leave_the_population(self):
+        """Closed-book-screened cases leave the headline population."""
         overrides = {i: {"closed_book": True} for i in range(3)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         head = agg["headline"]
@@ -724,6 +798,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(head["direct_passes"], 21)
 
     def test_closed_book_incomplete_cases_stay_in(self):
+        """Cases with an incomplete closed-book cell stay in the population."""
         overrides = {i: {"closed_book": None} for i in range(2)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         head = agg["headline"]
@@ -732,6 +807,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["n_incomplete"], 2)
 
     def test_ids_identical_cases_are_excluded(self):
+        """Cases whose rendered ids are identical across arms are excluded from the population."""
         overrides = {
             0: {"dose72": False, "dose72_digest": "other", "ids_identical": True},
             1: {"ids_identical": True},
@@ -745,6 +821,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(head["drop_cases"], 0)
 
     def test_headline_incomplete_cases_are_excluded(self):
+        """Cases with an incomplete headline cell are excluded from the population."""
         overrides = {0: {"dose36": None}}
         agg = ps.aggregate_candidate(self._panel(overrides))
         head = agg["headline"]
@@ -752,6 +829,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(head["n_population"], 23)
 
     def test_reverse_discordants_suppress(self):
+        """Reverse discordants (dose0 fails while dose72 passes) suppress the fire decision."""
         overrides = {i: {"dose72": False, "dose72_digest": "other"} for i in range(6)}
         for i in range(6, 9):
             overrides[i] = {"dose0": False, "dose72": True}
@@ -762,6 +840,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(head["decision"], "below_threshold")
 
     def test_shape_readout_returns_and_first_flip(self):
+        """The shape readout reports per-dose returns and the first flip dose."""
         overrides = {
             0: {"dose18": False},
             1: {"dose18": False, "dose36": False},
@@ -779,6 +858,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(shape["dose_pass_rates"]["dose18"], 22 / 24)
 
     def test_tail_contrast_and_rival_reading(self):
+        """The tail contrast computes the rival word-count reading alongside the headline."""
         overrides = {i: {"dose72": False, "dose72_digest": "other"} for i in range(6)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         tail = agg["tail_contrast"]
@@ -794,6 +874,7 @@ class AggregateTests(unittest.TestCase):
         self.assertTrue(tail2["rival_reading"])
 
     def test_ids_block_deltas_and_same_ids_flips(self):
+        """The ids block reports token deltas and flips when a record's arm ids coincide."""
         record = _record(0, _pass_verdicts(dose36=False), ids_identical=False)
         record["id_digests"]["dose36"] = record["id_digests"]["dose0"]
         agg = ps.aggregate_candidate([record])
@@ -805,6 +886,9 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["ids"]["dose72"]["id_length_delta_by_case"], [-72])
 
     def test_insufficient_when_population_small(self):
+        """When failures shrink the completed population below the floor, the decision is
+        insufficient.
+        """
         overrides = {i: {"dose0": False} for i in range(13)}
         agg = ps.aggregate_candidate(self._panel(overrides))
         self.assertEqual(agg["headline"]["direct_passes"], 11)
@@ -813,9 +897,11 @@ class AggregateTests(unittest.TestCase):
 
 class StageTests(unittest.TestCase):
     """Design sections 3.4/3.5/10: stage behaviour end to
-    end on scripted backends."""
+    end on scripted backends.
+    """
 
     def test_perfect_backend(self):
+        """A perfect backend yields an available payload with all arms passing."""
         backend = _WordBackend()
         payload = _payload(backend)
         self.assertTrue(payload["available"])
@@ -828,6 +914,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["protocol"]["ground_sha256"], ps.ground_sha256(0))
 
     def test_dose72_drop_fires(self):
+        """A dose72-only drop fires prune_drop_observed for both candidates."""
         payload = _payload(_WordBackend("dose72_drop"))
         for name in ("chatml", "llama3"):
             head = payload["candidates"][name]["headline"]
@@ -838,6 +925,7 @@ class StageTests(unittest.TestCase):
             self.assertFalse(tail["rival_reading"])
 
     def test_both72_drop_prints_rival_reading(self):
+        """When tail72 drops together with dose72, the rival word-count reading is produced."""
         payload = _payload(_WordBackend("both72_drop"))
         tail = payload["candidates"]["chatml"]["tail_contrast"]
         self.assertEqual(tail["dose72_fails"], 24)
@@ -845,6 +933,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(tail["rival_reading"])
 
     def test_closed_book_screen_excludes_case(self):
+        """A closed-book pass on the fact value screens exactly one case out."""
         payload = _payload(_WordBackend("amber_closed"))
         head = payload["candidates"]["chatml"]["headline"]
         self.assertEqual(head["n_screened"], 1)
@@ -858,6 +947,7 @@ class StageTests(unittest.TestCase):
         # output; that class is exercised at the decompose /
         # aggregate / validator level, as in the sibling
         # suites.)
+        """A backend that never emits the boundary leaves the decision insufficient."""
         payload = _payload(_WordBackend("no_boundary"))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["headline"]["decision"], "insufficient")
@@ -866,6 +956,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["arms"]["dose72"]["decomposition"]["non_value"], 24)
 
     def test_exploding_backend_yields_evaluation_failed_cells(self):
+        """An exploding backend yields evaluation-failed cells while the payload stays available."""
         payload = _payload(_WordBackend("explode"))
         self.assertTrue(payload["available"])
         arm = payload["candidates"]["chatml"]["arms"]["dose0"]
@@ -874,12 +965,14 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["candidates"]["chatml"]["headline"]["n_population"], 0)
 
     def test_context_exceeded_cells(self):
+        """A tiny max_context marks all 24 dose0 cells context-exceeded."""
         payload = _payload(max_context=10)
         arm = payload["candidates"]["chatml"]["arms"]["dose0"]
         self.assertEqual(arm["n_context_exceeded"], 24)
         self.assertEqual(arm["n_completed"], 0)
 
     def test_budget_exceeded_fails_closed(self):
+        """More candidates than the generation budget fails the stage closed."""
         formats = tuple(Format(f"cand-{i:02d}", "", "u:", "a:", "\n") for i in range(25))
         backend = _WordBackend()
         stage = experiments.prune_sweep_stage(
@@ -894,6 +987,8 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_cancelled_stage(self):
+        """A pre-set cancel event yields the cancelled, unavailable payload."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         cancel = threading.Event()
@@ -912,6 +1007,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_boundary_text_in_content_fails_the_screen(self):
+        """Boundary text embedded in arm content fails the stage screen closed."""
         backend = _WordBackend()
         stage = experiments.prune_sweep_stage(
             backend,
@@ -925,10 +1021,12 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_case_invariant_screen_fails_closed(self):
+        """A duplicated context sentence trips the case-invariant screen and fails closed."""
         backend = _WordBackend()
         original = ps.generate_cases
 
         def mutant(seed):
+            """Mutate generate_cases to duplicate a context sentence."""
             cases = [dict(case) for case in original(seed)]
             sentences = list(cases[0]["context_sentences"])
             sentences[1] = sentences[0]
@@ -952,10 +1050,12 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_special_token_screen_fails_closed(self):
+        """Arm content containing a special token fails the stage screen closed."""
         backend = _WordBackend()
         original = ps.arm_content
 
         def mutant(case, arm, seed):
+            """Mutate arm_content to inject a special token into a three-line arm text."""
             text = original(case, arm, seed)
             lines = text.split("\n")
             if len(lines) == 3:
@@ -984,6 +1084,9 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_records_shape_and_content_binding(self):
+        """Stage records carry the frozen shape, with content digests bound to the regenerated
+        cases.
+        """
         payload = _payload(seed=3)
         cases = ps.generate_cases(3)
         for entry in payload["candidates"].values():
@@ -1003,6 +1106,7 @@ class StageTests(unittest.TestCase):
                 self.assertEqual(record["dropped_shares"], ps.dropped_set_shares(case, 3))
 
     def test_stage_rejects_duplicate_format_names(self):
+        """Duplicate format names are rejected with ValueError."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.prune_sweep_stage(
@@ -1016,14 +1120,17 @@ class StageTests(unittest.TestCase):
 
 class ValidatorTests(unittest.TestCase):
     """The diff validator recompute standard: real payloads
-    validate; every forgery class is rejected."""
+    validate; every forgery class is rejected.
+    """
 
     def test_real_payloads_validate(self):
+        """Real payloads from every scripted mode validate under the diff mirror."""
         for mode in ("perfect", "dose72_drop", "both72_drop", "no_boundary", "explode"):
             payload = _payload(_WordBackend(mode))
             self.assertTrue(diffreports._valid_prune_sweep(payload), mode)
 
     def test_self_diff_is_unchanged(self):
+        """Diffing a payload against itself reports both-available and unchanged."""
         payload = _payload(_WordBackend("dose72_drop"))
         diff = diffreports.diff_prune_sweep(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
@@ -1031,6 +1138,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_changed_payloads_diff(self):
+        """Diffing a perfect payload against a dose72-drop payload reports the change."""
         old = _payload(_WordBackend("perfect"))
         new = _payload(_WordBackend("dose72_drop"))
         diff = diffreports.diff_prune_sweep(old, new)
@@ -1040,6 +1148,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn(("chatml", "drop_cases"), metrics)
 
     def test_one_sided_and_neither(self):
+        """One-sided payloads diff as old/new only; two Nones diff as neither."""
         payload = _payload(_WordBackend("perfect"))
         self.assertEqual(diffreports.diff_prune_sweep(payload, None)["available"], "old")
         self.assertEqual(diffreports.diff_prune_sweep(None, payload)["available"], "new")
@@ -1048,50 +1157,66 @@ class ValidatorTests(unittest.TestCase):
             diffreports.diff_prune_sweep({"available": False}, payload)["available"], "new"
         )
 
-    def _tampered(self, mutate):
+    @staticmethod
+    def _tampered(mutate):
+        """Return a perfect payload mutated by the given forgery function."""
         payload = _payload(_WordBackend("perfect"))
         mutate(payload)
         return payload
 
     def test_tamper_battery(self):
+        """Every forgery in the battery makes the mirror reject the payload."""
+
         def verdict_flip(p):
+            """Forgery: flip one dose72 cell verdict to False."""
             p["candidates"]["chatml"]["records"][0]["cells"]["dose72"]["verdict"] = False
 
         def content_forgery(p):
+            """Forgery: zero one dose72 content digest."""
             p["candidates"]["chatml"]["records"][0]["content_digests"]["dose72"] = "0" * 64
 
         def ids_forgery(p):
+            """Forgery: copy the dose0 id digest over the dose72 one."""
             record = p["candidates"]["chatml"]["records"][0]
             record["id_digests"]["dose72"] = record["id_digests"]["dose0"]
 
         def ids_flag_flip(p):
+            """Forgery: flip ids_identical to True."""
             p["candidates"]["chatml"]["records"][0]["ids_identical"] = True
 
         def shares_forgery(p):
+            """Forgery: set a dropped share to 0.5."""
             p["candidates"]["chatml"]["records"][0]["dropped_shares"]["dose72"]["numeral"] = 0.5
 
         def token_forgery(p):
+            """Forgery: increment one arm token count."""
             p["candidates"]["chatml"]["records"][0]["arm_tokens"]["dose72"] += 1
 
         def protocol_forgery(p):
+            """Forgery: zero the protocol fingerprint."""
             p["protocol"]["fingerprint"] = "0" * 64
 
         def count_forgery(p):
+            """Forgery: set n_cases to 23."""
             p["n_cases"] = 23
 
         def aggregate_forgery(p):
+            """Forgery: rewrite the headline decision to prune_drop_observed."""
             p["candidates"]["chatml"]["headline"]["decision"] = "prune_drop_observed"
 
         def record_swap(p):
+            """Forgery: swap the first two records."""
             records = p["candidates"]["chatml"]["records"]
             records[0], records[1] = records[1], records[0]
 
         def detail_forgery(p):
+            """Forgery: null a cell while leaving its detail empty."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cells"]["dose18"] = None
             record["cell_details"]["dose18"] = ""
 
         def audit_forgery(p):
+            """Forgery: set a negative special-token finding count."""
             p["audit"]["special_token_findings"] = -1
 
         for mutate in (
@@ -1117,6 +1242,7 @@ class ValidatorTests(unittest.TestCase):
         # A boundary_only dose72 cell in an otherwise real
         # payload: rebuild the aggregates through the producer
         # and the mirror must accept (attrition, not A).
+        """A boundary-only cell in a real record set validates: a legitimate cell shape."""
         payload = _payload(_WordBackend("perfect"))
         entry = payload["candidates"]["chatml"]
         record = entry["records"][0]
@@ -1134,9 +1260,11 @@ class ValidatorTests(unittest.TestCase):
 class ReportingTests(unittest.TestCase):
     """Design section 6: the report section in printed
     order, with the corrected OC paragraph and the bundle
-    fencing."""
+    fencing.
+    """
 
     def test_section_renders_for_drop_payload(self):
+        """The prune-sweep section renders for a drop payload under its card anchor."""
         payload = _payload(_WordBackend("dose72_drop"))
         html = reporting.render_html({"prune_sweep": payload})
         self.assertIn('<section class="card" id="prune-sweep">', html)
@@ -1150,11 +1278,13 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("word-count loss at 50 percent", section)
 
     def test_rival_wording_prints_only_when_rival(self):
+        """The rival word-count wording prints for the both72 payload."""
         payload = _payload(_WordBackend("both72_drop"))
         section = reporting._prune_sweep_section({"prune_sweep": payload})
         self.assertIn("word-count loss at 50 percent of the eligible words", section)
 
     def test_section_empty_without_payload(self):
+        """The section is empty when the payload is absent."""
         self.assertEqual(reporting._prune_sweep_section({}), "")
         self.assertEqual(
             reporting._prune_sweep_section(
@@ -1164,6 +1294,7 @@ class ReportingTests(unittest.TestCase):
         )
 
     def test_hostile_candidate_name_is_escaped(self):
+        """A script-tag candidate name is HTML-escaped in the rendered section."""
         payload = _payload(_WordBackend("perfect"))
         entry = payload["candidates"].pop("chatml")
         payload["candidates"]["<script>alert(1)</script>"] = entry
@@ -1176,9 +1307,13 @@ class CliTests(unittest.TestCase):
     """Amendment H + the CLI surface: the flag exists, its
     help discloses the pruning in the first sentence and
     renders (no bare percent), and the wrapper never
-    raises."""
+    raises.
+    """
 
     def test_flag_and_help(self):
+        """The --prune-sweep flag is registered and its help renders with the first-sentence
+        disclosure.
+        """
         import argparse
         import io
         from contextlib import redirect_stdout
@@ -1206,6 +1341,7 @@ class CliTests(unittest.TestCase):
         # The run subparser's own help carries the disclosure
         # (rendering it exercises argparse's percent expansion
         # of help strings).
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         subparsers = next(
             action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
         )
@@ -1217,6 +1353,9 @@ class CliTests(unittest.TestCase):
         self.assertIn("prunes passage words", buffer.getvalue())
 
     def test_wrapper_success_and_failure(self):
+        """The CLI wrapper returns the stage payload on success and fails closed when the stage
+        raises.
+        """
         from model_protocol_lab import cli
 
         backend = _WordBackend()
@@ -1237,6 +1376,7 @@ class CliTests(unittest.TestCase):
         original = experiments.prune_sweep_stage
 
         def boom(*args, **kwargs):
+            """Replacement stage that raises, exercising the wrapper's fail-closed path."""
             raise RuntimeError("stage exploded")
 
         experiments.prune_sweep_stage = boom  # type: ignore[misc]
@@ -1262,77 +1402,103 @@ class CliTests(unittest.TestCase):
 
 class GapValidatorBatteryTests(unittest.TestCase):
     """Hostile-payload battery over the validator's reject
-    branches (shape, types, bindings)."""
+    branches (shape, types, bindings).
+    """
 
-    def _bad(self, mutate):
+    @staticmethod
+    def _bad(mutate):
+        """Return a perfect payload mutated by the given reject-battery forgery."""
         payload = _payload(_WordBackend("perfect"))
         mutate(payload)
         return payload
 
     def test_reject_battery(self):
+        """Each malformed-payload forgery in the battery is rejected by the mirror validator."""
+
         def top_level_key(p):
+            """Forgery: add an extra top-level key."""
             p["extra"] = 1
 
         def detail_not_empty(p):
+            """Forgery: set a non-empty detail on an available payload."""
             p["detail"] = "x"
 
         def audit_missing_key(p):
+            """Forgery: delete the audit by_reason map."""
             del p["audit"]["by_reason"]
 
         def audit_negative(p):
+            """Forgery: set a negative audit exclusion count."""
             p["audit"]["n_audit_excluded"] = -1
 
         def candidate_unavailable_shape(p):
+            """Forgery: give an unavailable candidate a records list."""
             p["candidates"]["chatml"] = {"status": "unavailable", "detail": "x", "records": [1]}
 
         def entry_missing_aggregate_key(p):
+            """Forgery: delete the candidate headline block."""
             del p["candidates"]["chatml"]["headline"]
 
         def record_missing_field(p):
+            """Forgery: delete a record's topic field."""
             del p["candidates"]["chatml"]["records"][0]["topic"]
 
         def record_wrong_topic(p):
+            """Forgery: set a record topic outside the frozen topics."""
             p["candidates"]["chatml"]["records"][0]["topic"] = "summit trail"
 
         def record_wrong_expected(p):
+            """Forgery: zero a record's expected digest."""
             p["candidates"]["chatml"]["records"][0]["expected_digest"] = "0" * 64
 
         def cell_field_missing(p):
+            """Forgery: delete a cell's input_tokens field."""
             del p["candidates"]["chatml"]["records"][0]["cells"]["dose0"]["input_tokens"]
 
         def cell_verdict_not_bool(p):
+            """Forgery: set a cell verdict to the int 1 instead of a bool."""
             p["candidates"]["chatml"]["records"][0]["cells"]["dose0"]["verdict"] = 1
 
         def cell_digest_malformed(p):
+            """Forgery: set a malformed cell answer digest."""
             p["candidates"]["chatml"]["records"][0]["cells"]["dose0"]["answer_digest"] = "zz"
 
         def cell_input_tokens_mismatch(p):
+            """Forgery: increment a cell's input_tokens."""
             p["candidates"]["chatml"]["records"][0]["cells"]["dose0"]["input_tokens"] += 1
 
         def detail_unknown(p):
+            """Forgery: pair a null cell with an unknown detail string."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cells"]["dose0"] = None
             record["cell_details"]["dose0"] = "arm_parse_failed"
 
         def tokens_negative(p):
+            """Forgery: set a negative arm token count."""
             p["candidates"]["chatml"]["records"][0]["arm_tokens"]["dose0"] = -1
 
         def tokens_bool(p):
+            """Forgery: set an arm token count to True."""
             p["candidates"]["chatml"]["records"][0]["arm_tokens"]["dose0"] = True
 
         def id_digest_malformed(p):
+            """Forgery: set a malformed id digest."""
             p["candidates"]["chatml"]["records"][0]["id_digests"]["dose0"] = "nope"
 
         def seed_bool(p):
+            """Forgery: set the protocol seed to True."""
             p["protocol"]["seed"] = True
 
         def n_candidates_wrong(p):
+            """Forgery: set n_candidates to 5."""
             p["n_candidates"] = 5
 
         def protocol_not_dict(p):
+            """Forgery: replace the protocol with a string."""
             p["protocol"] = "x"
 
         def too_many_candidates(p):
+            """Forgery: inflate the candidate set past the cap."""
             for i in range(30):
                 p["candidates"][f"c{i}"] = {
                     "status": "unavailable",
@@ -1341,46 +1507,59 @@ class GapValidatorBatteryTests(unittest.TestCase):
                 }
 
         def entry_not_dict(p):
+            """Forgery: replace a candidate entry with an int."""
             p["candidates"]["chatml"] = 42
 
         def entry_status_weird(p):
+            """Forgery: set an unknown candidate status."""
             p["candidates"]["chatml"]["status"] = "weird"
 
         def records_not_list(p):
+            """Forgery: replace the records list with a dict."""
             p["candidates"]["chatml"]["records"] = {}
 
         def records_short(p):
+            """Forgery: truncate the records list to 23 entries."""
             p["candidates"]["chatml"]["records"] = p["candidates"]["chatml"]["records"][:23]
 
         def record_not_dict(p):
+            """Forgery: replace a record with an int."""
             p["candidates"]["chatml"]["records"][0] = 42
 
         def content_digest_tail_wrong(p):
+            """Forgery: zero the tail72 content digest."""
             p["candidates"]["chatml"]["records"][0]["content_digests"]["tail72"] = "0" * 64
 
         def dropped_shares_wrong(p):
+            """Forgery: set a dropped share to 0.5."""
             p["candidates"]["chatml"]["records"][0]["dropped_shares"]["dose72"]["numeral"] = 0.5
 
         def cell_none_empty_detail(p):
+            """Forgery: null a cell and empty its detail."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cells"]["dose0"] = None
             record["cell_details"]["dose0"] = ""
 
         def cell_present_with_detail(p):
+            """Forgery: attach a detail string to a present cell."""
             p["candidates"]["chatml"]["records"][0]["cell_details"]["dose0"] = (
                 "arm_evaluation_failed"
             )
 
         def cell_input_tokens_string(p):
+            """Forgery: set a cell's input_tokens to a string."""
             p["candidates"]["chatml"]["records"][0]["cells"]["dose0"]["input_tokens"] = "40"
 
         def by_reason_not_dict(p):
+            """Forgery: replace the audit by_reason map with a string."""
             p["audit"]["by_reason"] = "x"
 
         def by_reason_int_key(p):
+            """Forgery: key the by_reason map by an int."""
             p["audit"]["by_reason"] = {1: 2}
 
         def by_reason_negative_count(p):
+            """Forgery: set a negative by_reason count."""
             p["audit"]["by_reason"] = {"case_invariant": -1}
 
         for mutate in (
@@ -1424,9 +1603,11 @@ class GapValidatorBatteryTests(unittest.TestCase):
 
 class GapReportingTests(unittest.TestCase):
     """The section renderer over hostile/fat payload
-    shapes: it must never raise and must degrade to n/a."""
+    shapes: it must never raise and must degrade to n/a.
+    """
 
     def test_fat_payload_renders(self):
+        """A fat payload with a non-numeric rate renders without raising, degrading to n/a."""
         payload = _payload(_WordBackend("dose72_drop"))
         entry = payload["candidates"]["chatml"]
         entry["arms"]["dose0"]["rate"] = "not-a-number"
@@ -1438,6 +1619,7 @@ class GapReportingTests(unittest.TestCase):
         self.assertIn("prune_drop_observed", section)
 
     def test_unavailable_candidate_row(self):
+        """An unavailable candidate renders as its own row in the section."""
         payload = _payload(_WordBackend("perfect"))
         payload["candidates"]["ghost"] = {
             "status": "unavailable",
@@ -1457,18 +1639,23 @@ class GapCoverageTests(unittest.TestCase):
     exactly the list-edit failure mode those screens guard),
     the aggregate helpers' malformed-record paths, the
     stage's remaining precondition/screen paths, and the
-    renderer's malformed-candidate paths."""
+    renderer's malformed-candidate paths.
+    """
 
-    def _case(self):
+    @staticmethod
+    def _case():
+        """Return the seed-0 case-0 fixture."""
         return ps.generate_case(0, 0)
 
     def _with_case(self, mutate):
+        """Validate a mutated copy of the seed-0 case, with generate_case patched."""
         case = copy.deepcopy(self._case())
         mutate(case)
         with mock.patch.object(ps, "generate_case", return_value=case):
             return ps.validate_case(case, 0)
 
     def test_draw_exhaustion_raises(self):
+        """Exhausting the value draws raises ValueError."""
         template = ps.TEMPLATES[1]
         sentence = template.format(
             subject=ps.SUBJECTS[0],
@@ -1480,11 +1667,15 @@ class GapCoverageTests(unittest.TestCase):
             ps._draw_sentence(0, "prune-00", 1, {sentence})
 
     def test_dropped_positions_unknown_arm_is_empty(self):
+        """dropped_positions is empty for the closed-book arm and for unknown arms."""
         self.assertEqual(ps.dropped_positions("prune-00", "closed_book", 0), frozenset())
         self.assertEqual(ps.dropped_positions("prune-00", "bogus", 0), frozenset())
 
     def test_validate_duplicate_sentence(self):
+        """validate_case rejects a duplicated context sentence."""
+
         def mutate(case):
+            """Mutate: duplicate a context sentence."""
             case["context_sentences"] = case["context_sentences"][:15] + (
                 case["context_sentences"][0],
             )
@@ -1492,7 +1683,10 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_short_sentence(self):
+        """validate_case rejects a context sentence truncated below the minimum length."""
+
         def mutate(case):
+            """Mutate: truncate sentence 3 to eight words."""
             sentences = list(case["context_sentences"])
             sentences[3] = " ".join(sentences[3].split(" ")[:8])
             case["context_sentences"] = tuple(sentences)
@@ -1500,13 +1694,19 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_short_fact(self):
+        """validate_case rejects a fact sentence below the frozen word count."""
+
         def mutate(case):
+            """Mutate: replace the fact sentence with a five-word one."""
             case["fact_sentence"] = "The harbor light code amber."
 
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_value_in_context(self):
+        """validate_case rejects the answer value appearing inside a context sentence."""
+
         def mutate(case):
+            """Mutate: plant the answer value inside sentence 2."""
             sentences = list(case["context_sentences"])
             words = sentences[2].split(" ")
             words[4] = case["value"]
@@ -1516,7 +1716,10 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_stem_collision(self):
+        """validate_case rejects a context word sharing the answer value's stem."""
+
         def mutate(case):
+            """Mutate: plant a stem-colliding word in sentence 2."""
             sentences = list(case["context_sentences"])
             words = sentences[2].split(" ")
             words[4] = case["value"][:4] + "zzzz"
@@ -1526,22 +1729,28 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_pool_intersects_value(self):
+        """validate_case rejects a word pool containing the answer value."""
         case = self._case()
         with mock.patch.object(ps, "_POOL_WORDS", ps._POOL_WORDS | {case["value"]}):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_pool_intersects_fact_words(self):
+        """validate_case rejects a word pool containing a fact-sentence word."""
         case = self._case()
         with mock.patch.object(ps, "_POOL_WORDS", ps._POOL_WORDS | {"code"}):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_pool_intersects_instruction(self):
+        """validate_case rejects a word pool containing an instruction word."""
         case = self._case()
         with mock.patch.object(ps, "_POOL_WORDS", ps._POOL_WORDS | {"passage"}):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_digit_word(self):
+        """validate_case rejects a context word containing digits."""
+
         def mutate(case):
+            """Mutate: replace a sentence-5 word with 'abc123'."""
             sentences = list(case["context_sentences"])
             words = sentences[5].split(" ")
             words[2] = "abc123"
@@ -1551,7 +1760,10 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_negation_word(self):
+        """validate_case rejects a negation word inside the context."""
+
         def mutate(case):
+            """Mutate: replace a sentence-5 word with 'never'."""
             sentences = list(case["context_sentences"])
             words = sentences[5].split(" ")
             words[2] = "never"
@@ -1561,7 +1773,10 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(self._with_case(mutate))
 
     def test_validate_acrostic(self):
+        """validate_case rejects a context whose sentence initials spell a pool value."""
+
         def mutate(case):
+            """Mutate: rebuild the context so its sentence initials form an acrostic."""
             starts = ["Apples", "Melons", "Boxes", "Ember", "Rocks"]
             tails = [
                 "morning",
@@ -1597,15 +1812,18 @@ class GapCoverageTests(unittest.TestCase):
         # function, not against a different order. Pin the
         # semantics honestly: a reversed (but consistent)
         # order still validates.
+        """A reversed drop order still yields nested dropped sets that validate."""
         case = self._case()
         with mock.patch.object(ps, "drop_order", return_value=tuple(range(143, -1, -1))):
             self.assertTrue(ps.validate_case(case, 0))
 
     def test_validate_tail_set_mismatch(self):
+        """validate_case rejects a tail dropped set that mismatches the dose72 set."""
         case = self._case()
         original = ps.dropped_positions
 
         def fake(case_id, arm, seed):
+            """Fake dropped_positions returning a wrong tail set for the descriptive arm."""
             if arm == ps.DESCRIPTIVE_ARM:
                 return frozenset({0})
             return original(case_id, arm, seed)
@@ -1614,10 +1832,12 @@ class GapCoverageTests(unittest.TestCase):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_content_instruction_mismatch(self):
+        """validate_case rejects arm content whose instruction differs from the case."""
         case = self._case()
         original = ps.arm_content
 
         def fake(case_arg, arm, seed):
+            """Fake arm_content altering the dose0 instruction."""
             text = original(case_arg, arm, seed)
             if arm == "dose0":
                 return "Wrong instruction line.\n" + text.split("\n", 1)[1]
@@ -1627,10 +1847,12 @@ class GapCoverageTests(unittest.TestCase):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_content_fact_missing(self):
+        """validate_case rejects arm content missing the fact sentence."""
         case = self._case()
         original = ps.arm_content
 
         def fake(case_arg, arm, seed):
+            """Fake arm_content dropping the fact sentence from the dose18 arm."""
             text = original(case_arg, arm, seed)
             if arm == "dose18":
                 lines = text.split("\n")
@@ -1644,10 +1866,12 @@ class GapCoverageTests(unittest.TestCase):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_validate_dose_count_mismatch(self):
+        """validate_case rejects arm content with a wrong dropped-word count."""
         case = self._case()
         original = ps.arm_content
 
         def fake(case_arg, arm, seed):
+            """Fake arm_content dropping the wrong word count in the dose36 arm."""
             text = original(case_arg, arm, seed)
             if arm == "dose36":
                 lines = text.split("\n")
@@ -1659,6 +1883,7 @@ class GapCoverageTests(unittest.TestCase):
             self.assertFalse(ps.validate_case(case, 0))
 
     def test_aggregate_malformed_records(self):
+        """Malformed records aggregate to an empty population instead of raising."""
         records = [
             {
                 "fixture": "prune-00",
@@ -1679,6 +1904,9 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(aggregates["dropped_shares"]["dose72"], {"numeral": 0.0, "negation": 0.0})
 
     def test_aggregate_tail_incomplete_and_tail_only(self):
+        """Tail-incomplete and tail-only records aggregate, with the tail contrast skipping
+        incomplete cells.
+        """
         records = [_record(index, _pass_verdicts()) for index in range(14)]
         # One population record with an incomplete tail cell
         # (skipped by the contrast), one where only the tail
@@ -1691,6 +1919,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(aggregates["tail_contrast"]["dose72_only"], 0)
 
     def test_stage_formats_must_be_tuple(self):
+        """A non-tuple formats argument is rejected with ValueError."""
         backend = _WordBackend("perfect")
         with self.assertRaises(ValueError):
             experiments.prune_sweep_stage(
@@ -1703,11 +1932,15 @@ class GapCoverageTests(unittest.TestCase):
             )
 
     def test_stage_cancel_during_generation(self):
+        """Cancellation raised during generation yields the cancelled payload."""
         cancel = threading.Event()
         event = cancel
 
         class CancellingBackend(_WordBackend):
+            """Word backend whose generate sets the cancel event before delegating."""
+
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate that sets the cancel event, then delegates to the scripted backend."""
                 event.set()
                 return super().generate(
                     input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
@@ -1727,8 +1960,13 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_stage_undecodable_boundary_screens_nothing(self):
+        """An undecodable boundary decode screens nothing and the stage proceeds."""
+
         class UndecodableBoundaryBackend(_WordBackend):
+            """Word backend whose decode leaves the boundary ids undecoded."""
+
             def decode(self, ids):
+                """Decode that leaves the boundary ids undecoded, delegating otherwise."""
                 if list(ids) == list(self.encode("endmark")):
                     raise RuntimeError("no decode")
                 return super().decode(ids)
@@ -1745,7 +1983,9 @@ class GapCoverageTests(unittest.TestCase):
         self.assertTrue(stage["available"])
         self.assertEqual(backend.calls, 144)
 
-    def _real_stage(self):
+    @staticmethod
+    def _real_stage():
+        """Run the real prune-sweep stage with a perfect scripted backend."""
         backend = _WordBackend("perfect")
         return experiments.prune_sweep_stage(
             backend,
@@ -1757,12 +1997,14 @@ class GapCoverageTests(unittest.TestCase):
         )
 
     def test_analysis_detail_passthrough(self):
+        """The analysis passes an unavailable stage's detail through unchanged."""
         stage = dict(self._real_stage(), available=False, detail="cancelled")
         out = experiments.prune_sweep_analysis(stage, ("chatml",))
         self.assertFalse(out["available"])
         self.assertEqual(out["detail"], "cancelled")
 
     def test_analysis_unavailable_candidate_passthrough(self):
+        """The analysis passes an unavailable candidate entry through unchanged."""
         stage = self._real_stage()
         stage["candidates"]["chatml"] = {
             "status": "unavailable",
@@ -1775,12 +2017,14 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(out["candidates"]["chatml"]["records"], [])
 
     def test_validate_malformed_case_fails_closed(self):
+        """validate_case returns False for empty, partial and None cases."""
         self.assertFalse(ps.validate_case({}, 0))
         self.assertFalse(ps.validate_case({"fixture_id": "prune-00"}, 0))
         self.assertFalse(ps.validate_case(None, 0))
         self.assertFalse(ps.validate_case({"fixture_id": "bogus"}, 0))
 
     def test_aggregate_ids_identical_non_dict_digests(self):
+        """Records with non-dict id digests aggregate without raising."""
         records = [_record(index, _pass_verdicts()) for index in range(3)]
         for record in records:
             record["id_digests"] = "not-a-dict"
@@ -1793,10 +2037,14 @@ class GapCoverageTests(unittest.TestCase):
         # after the stage's per-case check, before the first
         # generation -- so the cell's own pre-evaluation
         # cancel check is the one that fires.
+        """A cancel event set during encode yields the cancelled payload."""
         cancel = threading.Event()
 
         class EncodeCancellingBackend(_WordBackend):
+            """Word backend whose encode sets the cancel event on the instruction text."""
+
             def encode(self, text):
+                """Encode that sets the cancel event when the instruction text is encoded."""
                 if "Read the passage" in text:
                     cancel.set()
                 return super().encode(text)
@@ -1816,12 +2064,14 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_validator_context_exceeded_payload(self):
+        """A context-exceeded payload validates under the mirror."""
         payload = _payload(_WordBackend("perfect"), max_context=10)
         self.assertTrue(diffreports._valid_prune_sweep(payload))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["arms"]["dose0"]["n_context_exceeded"], 24)
 
     def test_tail72_drop_payload_validates(self):
+        """A tail72-drop payload validates and its tail contrast is populated."""
         payload = _payload(_WordBackend("tail72_drop"))
         self.assertTrue(diffreports._valid_prune_sweep(payload))
         entry = payload["candidates"]["chatml"]
@@ -1832,6 +2082,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_ids_identical_payload_validates(self):
+        """An ids-identical payload validates, with per-record id digests bound."""
         payload = _payload(_WordBackend("dose72_drop"))
         entry = payload["candidates"]["chatml"]
         for record in entry["records"]:
@@ -1848,6 +2099,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(rebuilt["ids"]["dose72"]["n_same_ids_flips"], 24)
 
     def test_diff_candidate_status_drift(self):
+        """Diffing payloads whose candidate status drifted reports the drift."""
         old = _payload(_WordBackend("perfect"))
         new = copy.deepcopy(old)
         new["candidates"]["chatml"] = {
@@ -1870,6 +2122,9 @@ class GapCoverageTests(unittest.TestCase):
         # shape checks reject such records before the
         # aggregate runs (the same defensive posture as the
         # producer's helpers).
+        """The mirror's digest and cell helpers behave on direct unit inputs, including the
+        patched-digest path.
+        """
         with mock.patch.object(diffreports, "_prunesweep_digest", return_value="0" * 64):
             template = diffreports._PRUNESWEEP_TEMPLATES[1]
             sentence = template.format(
@@ -1903,6 +2158,7 @@ class GapCoverageTests(unittest.TestCase):
         )
 
     def test_mirror_recompute_caps(self):
+        """The mirror's recompute caps the candidate count it will process."""
         payload = _payload(_WordBackend("perfect"))
         many = copy.deepcopy(payload)
         for i in range(30):
@@ -1913,6 +2169,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertIsNone(diffreports._prunesweep_recompute(padded))
 
     def test_mirror_returns_and_tail_skip(self):
+        """The mirror's returns readout skips tail-incomplete records as designed."""
         payload = _payload(_WordBackend("perfect"))
         entry = payload["candidates"]["chatml"]
         record0 = entry["records"][0]
@@ -1931,6 +2188,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(rebuilt["tail_contrast"]["n_compared"], 23)
 
     def test_reporting_malformed_candidates(self):
+        """The section renderer tolerates a non-dict candidate entry."""
         self.assertEqual(
             reporting._prune_sweep_section({"prune_sweep": {"available": True, "candidates": "x"}}),
             "",

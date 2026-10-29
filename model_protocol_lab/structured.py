@@ -226,8 +226,10 @@ _SPEC_KEYS = ("id", "question", "context", "shape", "schema", "answer")
 
 
 def _is_finite_number(value: object) -> bool:
+    """Return whether finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
+    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     return value == value and abs(value) != float("inf")
 
 

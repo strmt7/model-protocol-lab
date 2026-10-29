@@ -195,7 +195,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "Decision: compatible_on_fixture_set -> no_candidate" in err
         assert "Winner: llama3 -> (none)" in err
 
-    def test_winner_change_same_decision(self):
+    @staticmethod
+    def test_winner_change_same_decision():
         old = _results(winner="llama3")
         new = _results(winner="chatml")
         payload = diff_reports(old, new)
@@ -204,7 +205,8 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["winner"]["new"] == "chatml"
         assert payload["decision"]["changed"] is False
 
-    def test_verdict_flips_search_and_held_out(self):
+    @staticmethod
+    def test_verdict_flips_search_and_held_out():
         old = _results()
         new = _results(decision="held_out_failed", passes=(1, 0), held_outcomes=(("h1", False),))
         # make held-out summary match the failing observation count
@@ -219,7 +221,8 @@ class DiffreportsTests(unittest.TestCase):
         assert flips[("held_out", "llama3")] == ("pass", "fail")
         assert payload["summary"]["candidates_changed_status"] == 2
 
-    def test_absent_candidate_verdict_flip(self):
+    @staticmethod
+    def test_absent_candidate_verdict_flip():
         old = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         new = _results(candidates=("llama3",), passes=(2,))
         payload = diff_reports(old, new)
@@ -229,7 +232,8 @@ class DiffreportsTests(unittest.TestCase):
         }
         assert flips[("search", "chatml")] == ("pass", "absent")
 
-    def test_malformed_summary_verdict_unknown(self):
+    @staticmethod
+    def test_malformed_summary_verdict_unknown():
         old = _results()
         new = _results()
         new["search"][0]["summary"] = {"planned": "two"}  # hostile shape
@@ -240,7 +244,8 @@ class DiffreportsTests(unittest.TestCase):
         }
         assert flips[("search", "llama3")] == ("pass", "unknown")
 
-    def test_fixture_diffs_changed_only_by_default(self):
+    @staticmethod
+    def test_fixture_diffs_changed_only_by_default():
         old = _results()
         new = _results(outcomes=(("f1", True), ("f2", False)))
         payload = diff_reports(old, new)
@@ -256,7 +261,8 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["fixture_diffs"] == changed
         assert payload["fixture_diffs_include_unchanged"] is False
 
-    def test_all_flag_lists_unchanged_fixtures(self):
+    @staticmethod
+    def test_all_flag_lists_unchanged_fixtures():
         old = _results()
         new = _results(outcomes=(("f1", True), ("f2", False)))
         payload = diff_reports(old, new, all_fixtures=True)
@@ -268,7 +274,8 @@ class DiffreportsTests(unittest.TestCase):
         # summary still counts only actual flips
         assert payload["summary"]["fixtures_flipped"] == 2
 
-    def test_fixture_diffs_deterministic_order(self):
+    @staticmethod
+    def test_fixture_diffs_deterministic_order():
         old = _results()
         new = _results(outcomes=(("f1", False), ("f2", False)))
         first = diff_reports(old, new, all_fixtures=True)
@@ -280,7 +287,8 @@ class DiffreportsTests(unittest.TestCase):
         assert keys(first) == sorted(keys(first))
         assert keys(first) == keys(second)
 
-    def test_malformed_observations_skipped_and_counted(self):
+    @staticmethod
+    def test_malformed_observations_skipped_and_counted():
         old = _results()
         new = _results()
         new["search"][0]["observations"].append({"fixture": "fx"})  # missing flags
@@ -290,7 +298,8 @@ class DiffreportsTests(unittest.TestCase):
         # Skipped junk never changes the verdict: identical on every compared axis.
         assert payload["summary"]["identical"] is True
 
-    def test_identical_runs_no_differences(self):
+    @staticmethod
+    def test_identical_runs_no_differences():
         run = _results()
         payload = diff_reports(run, json.loads(json.dumps(run)))
         assert payload["summary"]["identical"] is True
@@ -308,7 +317,8 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["summary"]["identical"] is True
         assert "no differences" in err.lower()
 
-    def test_drift_families_and_candidates(self):
+    @staticmethod
+    def test_drift_families_and_candidates():
         old = _results(candidates=("llama3", "chatml/mutate"), passes=(2, 2))
         new = _results(candidates=("llama3", "gemma"), passes=(2, 2))
         payload = diff_reports(old, new)
@@ -322,7 +332,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "WARNING: run configurations differ" in rendered
         assert "families" in rendered
 
-    def test_drift_boundaries_max_tokens_fingerprint(self):
+    @staticmethod
+    def test_drift_boundaries_max_tokens_fingerprint():
         old = _results()
         new = _results(boundary=(198, 271), max_new_tokens=128, fingerprint="fp-backend-2")
         payload = diff_reports(old, new)
@@ -340,7 +351,8 @@ class DiffreportsTests(unittest.TestCase):
         }
         assert payload["summary"]["identical"] is False
 
-    def test_drift_fixture_sets(self):
+    @staticmethod
+    def test_drift_fixture_sets():
         old = _results()
         new = _results(outcomes=(("f1", True), ("f9", True)))
         payload = diff_reports(old, new)
@@ -350,7 +362,8 @@ class DiffreportsTests(unittest.TestCase):
         # differing fixture sets are flagged, not silently unioned
         assert payload["summary"]["config_drift_warnings"] >= 1
 
-    def test_drift_field_order_is_fixed(self):
+    @staticmethod
+    def test_drift_field_order_is_fixed():
         old = _results()
         new = _results(boundary=(1,), max_new_tokens=1, fingerprint="x", candidates=("other",))
         payload = diff_reports(old, new)
@@ -364,7 +377,8 @@ class DiffreportsTests(unittest.TestCase):
         ]
         assert [f for f in fields if not f.startswith("fixtures:")] == expected
 
-    def test_missing_evidence_degrades_loudly(self):
+    @staticmethod
+    def test_missing_evidence_degrades_loudly():
         old = _results()
         new = _results()
         for entry in new["search"]:
@@ -385,7 +399,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "Per-fixture comparison unavailable" in rendered
         assert "new run has no --include-evidence observations" in rendered
 
-    def test_both_sides_missing_evidence(self):
+    @staticmethod
+    def test_both_sides_missing_evidence():
         old = _results()
         new = _results()
         for result in (old, new):
@@ -477,7 +492,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "results_invalid_json" in captured.err
         assert "(new input)" in captured.err
 
-    def test_stderr_sanitizes_hostile_identifiers(self):
+    @staticmethod
+    def test_stderr_sanitizes_hostile_identifiers():
         old = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         new = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         evil = "chatml\x1b[31mPWNED\x07"
@@ -495,7 +511,8 @@ class DiffreportsTests(unittest.TestCase):
         text = json.dumps(payload, ensure_ascii=True)
         assert "\x1b" not in text
 
-    def test_determinism_byte_identical(self):
+    @staticmethod
+    def test_determinism_byte_identical():
         old = _results()
         new = _results(decision="no_candidate", winner=None, passes=(0, 1))
         first = json.dumps(
@@ -525,7 +542,8 @@ class DiffreportsTests(unittest.TestCase):
         assert first == third
         assert first != second  # direction matters, deterministically
 
-    def test_payload_json_serializable(self):
+    @staticmethod
+    def test_payload_json_serializable():
         old = _results()
         new = _results(decision="ambiguous", winner=None)
         payload = diff_reports(old, new, all_fixtures=True)
@@ -564,7 +582,8 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["fixture_diffs_include_unchanged"] is True
         assert len(payload["fixture_diffs"]) == 5
 
-    def test_stderr_sanitizes_hostile_decision_strings(self):
+    @staticmethod
+    def test_stderr_sanitizes_hostile_decision_strings():
         old = _results(decision="compatible_on_fixture_set\x1b[31mPWNED\x1b[0m")
         new = _results(decision="\x1b]0;pwned\x07no_candidate")
         payload = diff_reports(old, new)
@@ -574,7 +593,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "PWNED" in rendered  # readable text survives; escapes do not
         assert "Decision:" in rendered
 
-    def test_stderr_sanitizes_hostile_source_labels(self):
+    @staticmethod
+    def test_stderr_sanitizes_hostile_source_labels():
         old = _results()
         new = _results()
         payload = diff_reports(old, new, old_label="old\x1b[2J", new_label="new\x07evil")
@@ -583,7 +603,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "\x07" not in rendered
         assert "evil" in rendered
 
-    def test_config_snapshot_dedup_scales(self):
+    @staticmethod
+    def test_config_snapshot_dedup_scales():
         count = 50_000
         result = {
             "decision": "compatible_on_fixture_set",
@@ -597,7 +618,8 @@ class DiffreportsTests(unittest.TestCase):
         assert snapshot["candidates"] == sorted(f"cand-{i:06d}" for i in range(count))
         assert snapshot["families"] == sorted({f"cand-{i:06d}" for i in range(count)})
 
-    def test_planned_count_drift_flags_silent_mismatch(self):
+    @staticmethod
+    def test_planned_count_drift_flags_silent_mismatch():
         old = _results(planned=2, passes=(2, 2))
         new = _results(planned=50, passes=(50, 50))
         payload = diff_reports(old, new)
@@ -610,7 +632,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "planned:llama3" in rendered
         assert "2 -> 50" in rendered
 
-    def test_stderr_sanitizes_hostile_planned_drift_field(self):
+    @staticmethod
+    def test_stderr_sanitizes_hostile_planned_drift_field():
         evil = "llama3\x1b[31mPWNED\x07"
         old = _results(candidates=(evil, "chatml"), passes=(2, 2), planned=2)
         new = _results(candidates=(evil, "chatml"), passes=(50, 50), planned=50)
@@ -623,7 +646,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "PWNED" in rendered  # readable text survives; escapes do not
         assert "planned:" in rendered
 
-    def test_evidence_asymmetry_is_not_identical(self):
+    @staticmethod
+    def test_evidence_asymmetry_is_not_identical():
         old = _results()
         new = _results()
         for entry in new["search"]:
@@ -636,7 +660,8 @@ class DiffreportsTests(unittest.TestCase):
         assert "Per-fixture comparison unavailable" in rendered
         assert "new run has no --include-evidence observations" in rendered
 
-    def test_identical_summary_names_compared_axes(self):
+    @staticmethod
+    def test_identical_summary_names_compared_axes():
         run = _results()
         rendered = render_summary(diff_reports(run, json.loads(json.dumps(run))))
         assert "No differences: the two runs are identical on every compared axis" in rendered

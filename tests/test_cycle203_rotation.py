@@ -146,7 +146,8 @@ def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
 def _payload_with_unavailable():
     """A coherent payload whose second candidate is an
     unavailable entry, built through the real analysis so the
-    rest of the payload stays consistent."""
+    rest of the payload stays consistent.
+    """
     backend = _WordBackend()
     stage = experiments.rotation_stage(
         backend,
@@ -387,7 +388,8 @@ def _record(fixture, verdicts, exact=True, screened_pass=False):
     """Fabricate one aggregate-level record: ``verdicts`` maps
     arm -> bool (present, completed) or None (incomplete). All
     span arms share one inventory digest (exact) unless
-    ``exact`` is False, which perturbs rot_2's digest."""
+    ``exact`` is False, which perturbs rot_2's digest.
+    """
     cells = {}
     details = {}
     for arm in rotation.ARM_KEYS:
@@ -421,7 +423,8 @@ def _record(fixture, verdicts, exact=True, screened_pass=False):
 def _all_arms(value):
     """Every arm at ``value``, except the closed-book screen
     cell, which stays False so the record is live (a closed-book
-    pass would screen the record out of every population)."""
+    pass would screen the record out of every population).
+    """
     verdicts = dict.fromkeys(rotation.ARM_KEYS, value)
     verdicts["closed_book"] = False
     return verdicts
@@ -524,9 +527,11 @@ class TestAggregateLabels(unittest.TestCase):
     aggregator on fabricated records (the chirality patterns a
     scripted backend cannot produce from text alone are
     fabricated at the record level, where the aggregator's
-    contract lives)."""
+    contract lives).
+    """
 
-    def _aggregate(self, records):
+    @staticmethod
+    def _aggregate(records):
         return rotation.aggregate_candidate(records)
 
     def test_invariant_observed(self):
@@ -617,7 +622,8 @@ class TestAggregateLabels(unittest.TestCase):
 class TestMirrorAgreement(unittest.TestCase):
     """The diffreports literal-table mirror must agree with
     the producer module on every shared computation (a drift
-    in either side's constants breaks the agreement)."""
+    in either side's constants breaks the agreement).
+    """
 
     def test_mirror_generator(self):
         for seed in (0, 1, 2, 13):
@@ -992,9 +998,11 @@ class TestScreeningAndConditions(unittest.TestCase):
 
 class TestValidatorBattery(unittest.TestCase):
     """One break at a time: each mutation of a coherent
-    payload must flip _valid_rotation to False."""
+    payload must flip _valid_rotation to False.
+    """
 
-    def _breaks(self):
+    @staticmethod
+    def _breaks():
         payload = _payload()
 
         def entry(payload):
@@ -1202,7 +1210,8 @@ class TestReportingAndCli(unittest.TestCase):
 class TestGapCoverage(unittest.TestCase):
     """Full-run coverage left three defensive branches in
     rotation.py unexecuted; each is proven reachable here
-    (a passing suite is not proof a guarded line ran)."""
+    (a passing suite is not proof a guarded line ran).
+    """
 
     def test_arm_id_exact_malformed_record(self):
         self.assertFalse(rotation.arm_id_exact({"fixture": "rotation-00"}, "rot_1"))
@@ -1271,7 +1280,8 @@ class TestValidatorGapBattery(unittest.TestCase):
     -- the cycle-174 gap pattern): each break must flip
     _valid_rotation to False through its named branch, and
     each direct mirror call must produce the producer's
-    result on the fabricated input."""
+    result on the fabricated input.
+    """
 
     def test_mirror_generator_value_redraw(self):
         # Force blocks 0 and 1 of case 0 to collide at counter
@@ -1401,7 +1411,8 @@ class _SecondFormatSlotFail(_WordBackend):
     is not the first block; rt-a is perfect -- a unique winner
     on every non-trivial arm, which drives the selection's
     exactly-one-passer return in BOTH the producer and the
-    recompute mirror."""
+    recompute mirror.
+    """
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         text = self.decode(list(input_ids))
@@ -1455,7 +1466,8 @@ class TestStageGapBranches(unittest.TestCase):
 class TestReportingGapBranches(unittest.TestCase):
     """Section branches the main reporting tests did not
     reach: malformed candidates/conditions containers and a
-    non-dict condition entry."""
+    non-dict condition entry.
+    """
 
     def test_section_candidates_not_dict(self):
         html = render_html({"rotation": {"available": True, "candidates": [], "conditions": {}}})
@@ -1484,7 +1496,8 @@ class TestReportingGapBranches(unittest.TestCase):
 
 class _DispatchFakeHFBackend:
     """Stand-in for LocalHFBackend in the run flow (the
-    cycle-179 harness pattern): no weights, no generations."""
+    cycle-179 harness pattern): no weights, no generations.
+    """
 
     def __init__(self, model, device=None, max_context=None, dtype=None):
         self.model = model
@@ -1499,7 +1512,8 @@ class TestMainDispatchGap(unittest.TestCase):
     """The --placement and --rotate call sites inside
     cli.main's post-hoc block, driven through the real run
     flow with the stage layer stubbed (cycle-179 pattern):
-    both flags in one run must attach both payload keys."""
+    both flags in one run must attach both payload keys.
+    """
 
     def test_placement_and_rotation_dispatch(self):
         fixture_doc = {

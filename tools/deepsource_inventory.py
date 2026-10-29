@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import BinaryIO
 
 if __package__:
     from .json_input import decode_json
@@ -96,7 +98,15 @@ def authentication(config_path: Path) -> str:
 class NoRedirects(urllib.request.HTTPRedirectHandler):
     """Keep the authorization header confined to the selected HTTPS endpoint."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: BinaryIO,
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> None:
         """Refuse redirect handling before urllib can construct another request."""
         raise InventoryError("DeepSource API redirect refused; no redirect target was contacted")
 

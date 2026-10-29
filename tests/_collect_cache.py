@@ -31,6 +31,7 @@ def pytest_collect_counts(repo_root: Path) -> tuple[dict[str, int], int]:
     per process; subsequent calls reuse the cached result. Raises
     RuntimeError with collection diagnostics after 3 failed attempts.
     """
+    # skipcq: PYL-W0603 - module-level mutable test state is the fixture mechanism
     global _CACHE
     if _CACHE is not None:
         return _CACHE
@@ -52,6 +53,7 @@ def pytest_collect_counts(repo_root: Path) -> tuple[dict[str, int], int]:
                 capture_output=True,
                 text=True,
                 timeout=300,
+                check=False,
             )
         except subprocess.TimeoutExpired as exc:
             last_diagnostics = f"attempt {attempt + 1}: timed out after 300s: {exc}"
