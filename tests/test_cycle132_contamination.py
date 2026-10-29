@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _fx(fid, user, expected="expected", group=None):
+    """Fx."""
     return Fixture(
         fid,
         (Message("user", user),),
@@ -34,24 +35,33 @@ def _fx(fid, user, expected="expected", group=None):
 
 
 class TestNormalize(unittest.TestCase):
+    """Test normalize."""
+
     def test_nfkc_folds_fullwidth(self):
+        """Test nfkc folds fullwidth."""
         self.assertEqual(_normalize_text("ＡＢＣ"), "abc")
 
     def test_format_chars_stripped(self):
+        """Test format chars stripped."""
         # Zero-width space / word joiner must not evade detection.
         self.assertEqual(_normalize_text("ad\u200bmin"), "admin")
         self.assertEqual(_normalize_text("ad\u2060min"), "admin")
 
     def test_case_and_whitespace_collapsed(self):
+        """Test case and whitespace collapsed."""
         self.assertEqual(_normalize_text("  What   IS\nthis?  "), "what is this?")
 
     def test_deterministic(self):
+        """Test deterministic."""
         text = "Some  Fixture\ttext\nwith unicode caf\u00e9"
         self.assertEqual(_normalize_text(text), _normalize_text(text))
 
 
 class TestFixtureSignature(unittest.TestCase):
+    """Test fixture signature."""
+
     def test_user_messages_plus_expected(self):
+        """Test user messages plus expected."""
         fixture = Fixture(
             "f1",
             (Message("user", "Hello"), Message("assistant", "Hi"), Message("user", "Bye")),
@@ -66,33 +76,43 @@ class TestFixtureSignature(unittest.TestCase):
         self.assertNotIn("hi", sig)
 
     def test_signature_stable(self):
+        """Test signature stable."""
         fixture = _fx("f1", "What is 2+2?")
         self.assertEqual(fixture_signature(fixture), fixture_signature(fixture))
 
 
 class TestSimilarity(unittest.TestCase):
+    """Test similarity."""
+
     def test_identical_scores_one(self):
+        """Test identical scores one."""
         ratio, jaccard = similarity_scores("the quick brown fox", "the quick brown fox")
         self.assertEqual(ratio, 1.0)
         self.assertEqual(jaccard, 1.0)
 
     def test_disjoint_scores_low(self):
+        """Test disjoint scores low."""
         ratio, jaccard = similarity_scores("alpha beta gamma delta", "one two three four five six")
         self.assertLess(ratio, 0.5)
         self.assertEqual(jaccard, 0.0)
 
     def test_empty_both_jaccard_one(self):
+        """Test empty both jaccard one."""
         ratio, jaccard = similarity_scores("", "")
         self.assertEqual(ratio, 1.0)
         self.assertEqual(jaccard, 1.0)
 
     def test_deterministic_across_calls(self):
+        """Test deterministic across calls."""
         pair = ("lorem ipsum dolor sit amet", "lorem ipsum dolor sit AMET!")
         self.assertEqual(similarity_scores(*pair), similarity_scores(*pair))
 
 
 class TestClassify(unittest.TestCase):
+    """Test classify."""
+
     def test_tier_boundaries(self):
+        """Test tier boundaries."""
         self.assertEqual(classify_pair(0.98, 0.0), "duplicate")
         self.assertEqual(classify_pair(0.979, 0.0), "near_duplicate")
         self.assertEqual(classify_pair(0.90, 0.0), "near_duplicate")
@@ -105,7 +125,10 @@ class TestClassify(unittest.TestCase):
 
 
 class TestContaminationReport(unittest.TestCase):
+    """Test contamination report."""
+
     def test_exact_duplicate_flagged(self):
+        """Test exact duplicate flagged."""
         search = (_fx("s-01", "What is the capital of France?", "Paris"),)
         held = (_fx("h-01", "What is the capital of France?", "Paris"),)
         report = contamination_report(search, held)
@@ -118,24 +141,28 @@ class TestContaminationReport(unittest.TestCase):
         self.assertEqual(pair["ratio"], 1.0)
 
     def test_near_duplicate_flagged(self):
+        """Test near duplicate flagged."""
         search = (_fx("s-01", "What is the capital of France?", "Paris"),)
         held = (_fx("h-01", "What is the capital city of France?", "Paris"),)
         report = contamination_report(search, held)
         self.assertEqual(report["worst_tier"], "near_duplicate")
 
     def test_case_whitespace_evasion_still_duplicate(self):
+        """Test case whitespace evasion still duplicate."""
         search = (_fx("s-01", "What is the capital of France?", "Paris"),)
         held = (_fx("h-01", "  WHAT is the CAPITAL of france?\n", "paris"),)
         report = contamination_report(search, held)
         self.assertEqual(report["worst_tier"], "duplicate")
 
     def test_zwsp_evasion_still_duplicate(self):
+        """Test zwsp evasion still duplicate."""
         search = (_fx("s-01", "admin panel access", "granted"),)
         held = (_fx("h-01", "ad\u200bmin panel access", "granted"),)
         report = contamination_report(search, held)
         self.assertEqual(report["worst_tier"], "duplicate")
 
     def test_disjoint_is_clean(self):
+        """Test disjoint is clean."""
         search = (_fx("s-01", "Explain photosynthesis in one sentence.", "Plants."),)
         held = (_fx("h-01", "Who wrote the Odyssey?", "Homer."),)
         report = contamination_report(search, held)
@@ -143,6 +170,7 @@ class TestContaminationReport(unittest.TestCase):
         self.assertEqual(report["pairs"], [])
 
     def test_best_match_wins_per_held_out(self):
+        """Test best match wins per held out."""
         search = (
             _fx("s-01", "Completely unrelated prompt about stars.", "A"),
             _fx("s-02", "What is the capital of France?", "Paris"),
@@ -153,6 +181,7 @@ class TestContaminationReport(unittest.TestCase):
         self.assertEqual(report["pairs"][0]["search"], "s-02")
 
     def test_deterministic_ordering(self):
+        """Test deterministic ordering."""
         search = (
             _fx("s-01", "What is the capital of France?", "Paris"),
             _fx("s-02", "What is the capital of Spain?", "Madrid"),
@@ -169,9 +198,11 @@ class TestContaminationReport(unittest.TestCase):
         self.assertNotEqual(first["pairs"], second["pairs"])
 
     def test_empty_inputs_fail_closed(self):
+        """Test empty inputs fail closed."""
         self.assertEqual(contamination_report((), ()), {"worst_tier": "clean", "pairs": []})
 
     def test_hostile_inputs_fail_closed(self):
+        """Test hostile inputs fail closed."""
         self.assertEqual(contamination_report(None, None), {"worst_tier": "clean", "pairs": []})
         self.assertEqual(
             contamination_report("junk", [{"id": 1}]),
@@ -179,6 +210,7 @@ class TestContaminationReport(unittest.TestCase):
         )
 
     def test_worst_tier_is_max(self):
+        """Test worst tier is max."""
         search = (
             _fx("s-01", "What is the capital of France?", "Paris"),
             _fx("s-02", "Explain photosynthesis in one sentence.", "Plants."),
@@ -197,6 +229,7 @@ class TestInspectWiring(unittest.TestCase):
 
     @staticmethod
     def _dataset_file(tmp, search_text, held_text):
+        """Dataset file."""
         path = Path(tmp) / "ds.json"
         path.write_text(
             json.dumps(
@@ -225,6 +258,7 @@ class TestInspectWiring(unittest.TestCase):
 
     @staticmethod
     def _run_inspect(dataset):
+        """Run inspect."""
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", "inspect", str(dataset)],
             capture_output=True,
@@ -236,6 +270,7 @@ class TestInspectWiring(unittest.TestCase):
         return proc
 
     def test_contaminated_dataset_warns_and_reports(self):
+        """Test contaminated dataset warns and reports."""
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
@@ -255,6 +290,7 @@ class TestInspectWiring(unittest.TestCase):
             self.assertEqual(len(payload["contamination"]["pairs"]), 1)
 
     def test_clean_dataset_no_warning(self):
+        """Test clean dataset no warning."""
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
@@ -270,6 +306,7 @@ class TestFixturesBuildWiring(unittest.TestCase):
     """mpl fixtures build warns on contamination and carries the JSON block."""
 
     def test_build_reports_contamination(self):
+        """Test build reports contamination."""
         from tempfile import TemporaryDirectory
 
         csv_text = (
@@ -308,6 +345,7 @@ class TestExamineDatasetWiring(unittest.TestCase):
     """doctor --dataset surfaces the contamination report."""
 
     def test_examine_dataset_carries_contamination(self):
+        """Test examine dataset carries contamination."""
         from tempfile import TemporaryDirectory
 
         from model_protocol_lab.doctor import examine_dataset
@@ -350,16 +388,19 @@ class TestReportCallout(unittest.TestCase):
 
     @staticmethod
     def _render(contamination):
+        """Render."""
         from model_protocol_lab.reporting import _config_section
 
         return _config_section({"contamination": contamination})
 
     def test_clean_callout(self):
+        """Test clean callout."""
         html = self._render({"worst_tier": "clean", "pairs": []})
         self.assertIn("Fixture hygiene", html)
         self.assertIn("clean", html)
 
     def test_flagged_callout(self):
+        """Test flagged callout."""
         html = self._render(
             {
                 "worst_tier": "near_duplicate",
@@ -378,11 +419,13 @@ class TestReportCallout(unittest.TestCase):
         self.assertIn("advisory", html)
 
     def test_hostile_contamination_never_crashes(self):
+        """Test hostile contamination never crashes."""
         for hostile in (None, "junk", {"worst_tier": 5}, {"worst_tier": "x"}, []):
             html = self._render(hostile)
             self.assertIn("Fixture hygiene", html)
 
     def test_missing_key_renders_not_recorded(self):
+        """Test missing key renders not recorded."""
         from model_protocol_lab.reporting import _config_section
 
         html = _config_section({})
@@ -395,6 +438,7 @@ class TestMutationGate(unittest.TestCase):
     # Hand-planted mutants: each must change the verdict visibly.
 
     def test_flip_expected_answer_changes_tier(self):
+        """Test flip expected answer changes tier."""
         # Perturbing one word of a duplicate must drop the tier.
         search = (_fx("s-01", "What is the capital of France?", "Paris"),)
         held_exact = (_fx("h-01", "What is the capital of France?", "Paris"),)
@@ -408,6 +452,7 @@ class TestMutationGate(unittest.TestCase):
         )
 
     def test_threshold_boundary_mutant(self):
+        """Test threshold boundary mutant."""
         # classify_pair(0.98 - eps) must not be duplicate.
         self.assertNotEqual(classify_pair(0.98 - 1e-9, 0.0), "duplicate")
         self.assertEqual(classify_pair(0.98, 0.0), "duplicate")
@@ -423,6 +468,7 @@ class ContaminationHtmlInjectionTest(unittest.TestCase):
     """
 
     def test_worst_tier_escaped_at_config_section(self):
+        """Test worst tier escaped at config section."""
         from model_protocol_lab.reporting import _config_section
 
         html = _config_section(
@@ -438,6 +484,7 @@ class ContaminationHtmlInjectionTest(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_clean_tier_unchanged(self):
+        """Test clean tier unchanged."""
         from model_protocol_lab.reporting import _contamination_line
 
         self.assertEqual(
@@ -447,11 +494,15 @@ class ContaminationHtmlInjectionTest(unittest.TestCase):
 
 
 def _contamination_payload(worst="clean", pairs=None):
+    """Contamination payload."""
     return {"worst_tier": worst, "pairs": pairs or []}
 
 
 class DiffContaminationTest(unittest.TestCase):
+    """Diff contamination test."""
+
     def test_identical_unchanged(self):
+        """Test identical unchanged."""
         payload = _contamination_payload(
             "near_duplicate",
             [{"held_out": "h1", "search": "s1", "tier": "near_duplicate"}],
@@ -461,6 +512,7 @@ class DiffContaminationTest(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_worst_tier_change_detected(self):
+        """Test worst tier change detected."""
         old = _contamination_payload("clean", [])
         new = _contamination_payload(
             "near_duplicate",
@@ -472,6 +524,7 @@ class DiffContaminationTest(unittest.TestCase):
         self.assertEqual(len(diff["pairs_added"]), 1)
 
     def test_pair_removed(self):
+        """Test pair removed."""
         old = _contamination_payload(
             "duplicate",
             [{"held_out": "h1", "search": "s1", "tier": "duplicate"}],
@@ -482,6 +535,7 @@ class DiffContaminationTest(unittest.TestCase):
         self.assertEqual(len(diff["pairs_removed"]), 1)
 
     def test_tier_change_detected(self):
+        """Test tier change detected."""
         old = _contamination_payload(
             "near_duplicate",
             [{"held_out": "h1", "search": "s1", "tier": "near_duplicate"}],
@@ -497,11 +551,13 @@ class DiffContaminationTest(unittest.TestCase):
         self.assertEqual(diff["tier_changes"][0]["new_tier"], "duplicate")
 
     def test_asymmetric(self):
+        """Test asymmetric."""
         diff = diffreports.diff_contamination(_contamination_payload(), {"worst_tier": "clean"})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
 
     def test_malformed_pairs_ignored(self):
+        """Test malformed pairs ignored."""
         # Pairs without string IDs are ignored, not crashed on.
         old = _contamination_payload("clean", [])
         new = _contamination_payload(
@@ -513,6 +569,7 @@ class DiffContaminationTest(unittest.TestCase):
         self.assertEqual(diff["pairs_added"], [])
 
     def test_feeds_identical(self):
+        """Test feeds identical."""
         old = {"decision": "selected", "contamination": _contamination_payload()}
         new = {"decision": "selected", "contamination": _contamination_payload()}
         diff = diffreports.diff_reports(old, new)

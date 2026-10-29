@@ -17,27 +17,35 @@ from model_protocol_lab.core import Format
 
 
 class OrdinalBackend:
+    """Ordinal backend."""
+
     fingerprint = "cycle170-gaps-ordinal"
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
 class SpecialBackend:
+    """Special backend."""
+
     fingerprint = "cycle170-gaps-special"
     MARKER = "<|im_end|>"
 
     @classmethod
     def encode(cls, text):
+        """Encode."""
         out, i = [], 0
         while i < len(text):
             if text.startswith(cls.MARKER, i):
@@ -50,18 +58,22 @@ class SpecialBackend:
 
     @classmethod
     def decode(cls, ids):
+        """Decode."""
         return "".join(cls.MARKER if x == 7 else chr(x) for x in ids)
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(name=name, bos="", user_prefix=f"[{name}]", assistant_prefix="A:", turn_end="\n")
 
 
 def _scored(cls, occurrences=1):
+    """Scored."""
     return {
         "class": cls,
         "cut": 3,
@@ -72,6 +84,7 @@ def _scored(cls, occurrences=1):
 
 
 def _fixture(fid, reserved, subword, reserved_state="scored", subword_state="no_pair"):
+    """Fixture."""
     return {
         "id": fid,
         "reserved": reserved,
@@ -81,6 +94,7 @@ def _fixture(fid, reserved, subword, reserved_state="scored", subword_state="no_
 
 
 def _hand_payload(colliding: bool):
+    """Hand payload."""
     cls_list = ["collision", "intact"] if colliding else ["intact", "intact"]
     per_fixture = [_fixture(f"f{i}", _scored(c), None) for i, c in enumerate(cls_list)]
     cell = col.collision_cell(per_fixture, n_fixtures=2, boundary_len=1)
@@ -91,22 +105,28 @@ def _hand_payload(colliding: bool):
 
 
 def _base_spec(sid="x", marker="<|m|>", position="interior", expected="a <|m|> b"):
+    """Base spec."""
     return {"id": sid, "marker": marker, "position": position, "expected": expected}
 
 
 class ValidateGapTests(unittest.TestCase):
+    """Validate gap tests."""
+
     def test_clean_with_hostile_string_rejected(self):
+        """Test clean with hostile string rejected."""
         spec = _base_spec(sid="clean", marker=None, position="clean", expected="has <s> here")
         with self.assertRaises(ValueError):
             col.validate_answer_fixtures((spec,), "<|im_end|>")
 
     def test_non_string_marker_rejected(self):
+        """Test non string marker rejected."""
         for bad_marker in (7, "", None):
             spec = _base_spec(marker=bad_marker)
             with self.assertRaises(ValueError, msg=repr(bad_marker)):
                 col.validate_answer_fixtures((spec,), "<|im_end|>")
 
     def test_position_violations_rejected(self):
+        """Test position violations rejected."""
         marker = "<|m|>"
         cases = [
             ("start", f"x {marker}"),  # not at start
@@ -124,6 +144,7 @@ class ValidateGapTests(unittest.TestCase):
                 col.validate_answer_fixtures((spec,), "<|im_end|>")
 
     def test_empty_marker_text_rejected(self):
+        """Test empty marker text rejected."""
         with self.assertRaises(ValueError):
             col.validate_answer_fixtures((_base_spec(),), "")
         with self.assertRaises(ValueError):
@@ -131,22 +152,30 @@ class ValidateGapTests(unittest.TestCase):
 
 
 class EmissionGapTests(unittest.TestCase):
+    """Emission gap tests."""
+
     def test_reserved_emission_negative_ids_rejected(self):
+        """Test reserved emission negative ids rejected."""
         ids = col.reserved_emission(lambda t: (-1, 7), OrdinalBackend.decode, "ab")
         self.assertIsNone(ids)
 
     def test_reserved_emission_decode_raises(self):
+        """Test reserved emission decode raises."""
+
         def boom_decode(ids):
+            """Boom decode."""
             raise RuntimeError("decode boom")
 
         self.assertIsNone(col.reserved_emission(OrdinalBackend.encode, boom_decode, "ab"))
 
     def test_subword_emission_non_string_marker(self):
+        """Test subword emission non string marker."""
         self.assertIsNone(
             col.subword_emission(SpecialBackend.encode, SpecialBackend.decode, "abc", 7, (7,))
         )
 
     def test_subword_emission_pair_lookup_raises(self):
+        """Test subword emission pair lookup raises."""
         with mock.patch(
             "model_protocol_lab.deliforge.find_encoding_pair",
             side_effect=RuntimeError("lookup boom"),
@@ -162,7 +191,10 @@ class EmissionGapTests(unittest.TestCase):
             )
 
     def test_subword_emission_chunk_encode_raises(self):
+        """Test subword emission chunk encode raises."""
+
         def flaky_encode(text):
+            """Flaky encode."""
             if text == "<|im_end|>":
                 return (7,)
             if "z" in text:
@@ -180,10 +212,13 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_invalid_ids(self):
+        """Test subword emission invalid ids."""
+
         # The pair lookup succeeds (splits of the marker encode to
         # ordinary ordinals), but re-encoding the chunk " now" yields a
         # negative id: the construction refuses it fail-closed.
         def bad_encode(text):
+            """Bad encode."""
             if text == "<|im_end|>":
                 return (7,)
             if text == " now":
@@ -197,10 +232,13 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_reserved_id_in_control_arm(self):
+        """Test subword emission reserved id in control arm."""
+
         # A vocabulary collision: the chunk " then Q done" also encodes
         # through the reserved id 7, so the control arm would contain
         # the very id it controls for -- construction refuses it.
         def colliding_encode(text):
+            """Colliding encode."""
             if text == "<|im_end|>":
                 return (7,)
             if "Q" in text:
@@ -218,7 +256,10 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_final_decode_mismatch(self):
+        """Test subword emission final decode mismatch."""
+
         def short_only_decode(ids):
+            """Short only decode."""
             if len(ids) > 10:
                 return "WRONG"
             return "".join("<|im_end|>" if x == 7 else chr(x) for x in ids)
@@ -234,7 +275,10 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_final_decode_raises(self):
+        """Test subword emission final decode raises."""
+
         def racy_decode(ids):
+            """Racy decode."""
             if len(ids) > 10:
                 raise RuntimeError("decode boom")
             return "".join("<|im_end|>" if x == 7 else chr(x) for x in ids)
@@ -251,7 +295,11 @@ class EmissionGapTests(unittest.TestCase):
 
 
 class StageGapTests(unittest.TestCase):
+    """Stage gap tests."""
+
     def test_repeat_decode_failure_splits_failed_and_anomalous(self):
+        """Test repeat decode failure splits failed and anomalous."""
+
         # A stateful backend whose decode raises on the SECOND call with
         # the same id tuple: emissions verify fine the first time, then
         # (a) intact fixtures fail inside evaluate's answer decode
@@ -260,10 +308,13 @@ class StageGapTests(unittest.TestCase):
         # differ from the full emission) but the stage's full-output
         # decode raises -> anomalous, never intact.
         class RepeatDecodeBackend(OrdinalBackend):
+            """Repeat decode backend."""
+
             def __init__(self):
                 self._seen = set()
 
             def decode(self, ids):
+                """Decode."""
                 ids = tuple(ids)
                 if ids in self._seen:
                     raise RuntimeError("second decode boom")
@@ -285,9 +336,14 @@ class StageGapTests(unittest.TestCase):
         self.assertEqual(cell["reserved"]["n_scored"], 0)
 
     def test_evaluate_exception_degrades_fixture(self):
+        """Test evaluate exception degrades fixture."""
+
         class PromptBoomBackend(OrdinalBackend):
+            """Prompt boom backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 if "Which token ends the turn?" in text:
                     raise RuntimeError("prompt encode boom")
                 return tuple(map(ord, text))
@@ -301,6 +357,7 @@ class StageGapTests(unittest.TestCase):
         self.assertEqual(cell["reserved"]["n_failed"], 21)
 
     def test_stage_invalid_forms(self):
+        """Test stage invalid forms."""
         self.assertEqual(
             experiments.answer_collision_profile(("a",), {})["detail"], "stage_invalid"
         )
@@ -311,8 +368,11 @@ class StageGapTests(unittest.TestCase):
 
 
 class ValidatorGapTests(unittest.TestCase):
+    """Validator gap tests."""
+
     @staticmethod
     def _arm(**over):
+        """Arm."""
         arm = {
             "n_evaluable": 2,
             "n_scored": 2,
@@ -331,6 +391,7 @@ class ValidatorGapTests(unittest.TestCase):
         return arm
 
     def _cell(self, reserved=None, subword=None, **over):
+        """Cell."""
         cell = {
             "n": 2,
             "boundary_ids": 1,
@@ -353,6 +414,7 @@ class ValidatorGapTests(unittest.TestCase):
         return cell
 
     def test_arm_rejections(self):
+        """Test arm rejections."""
         for bad in (
             "junk",  # not a dict
             self._arm(n_collision=-1),
@@ -369,6 +431,7 @@ class ValidatorGapTests(unittest.TestCase):
             )
 
     def test_cell_rejections(self):
+        """Test cell rejections."""
         self.assertTrue(experiments._answer_collision_cell_valid(None))
         for bad in (
             "junk",
@@ -386,6 +449,7 @@ class ValidatorGapTests(unittest.TestCase):
             self.assertFalse(experiments._answer_collision_cell_valid(bad))
 
     def test_validator_rejections(self):
+        """Test validator rejections."""
         for mutate in (
             lambda p: p.update({"protocol": "junk"}),
             lambda p: p.update({"protocol": {"fingerprint": 7}}),
@@ -408,6 +472,7 @@ class ValidatorGapTests(unittest.TestCase):
             self.assertFalse(diffreports._valid_answer_collision(bad), mutate)
 
     def test_validator_rates_absent(self):
+        """Test validator rates absent."""
         # A payload with no measurable cells must carry no rates.
         per_fixture = [_fixture(f"f{i}", None, None, reserved_state="failed") for i in range(2)]
         cell = col.collision_cell(per_fixture, n_fixtures=2, boundary_len=1)
@@ -420,31 +485,40 @@ class ValidatorGapTests(unittest.TestCase):
 
 
 class ReportingGapTests(unittest.TestCase):
+    """Reporting gap tests."""
+
     def test_section_per_candidate_not_dict(self):
+        """Test section per candidate not dict."""
         payload = _hand_payload(True)
         payload["per_candidate"] = ["junk"]
         self.assertEqual(reporting._answer_collision_section({"answer_collision": payload}), "")
 
     def test_section_none_cell_row(self):
+        """Test section none cell row."""
         payload = _hand_payload(True)
         payload["per_candidate"]["cand"] = None
         section = reporting._answer_collision_section({"answer_collision": payload})
         self.assertIn("unavailable", section)
 
     def test_section_non_numeric_counts(self):
+        """Test section non numeric counts."""
         payload = _hand_payload(True)
         payload["per_candidate"]["cand"]["boundary_ids"] = "seven"
         section = reporting._answer_collision_section({"answer_collision": payload})
         self.assertIn("n/a", section)
 
     def test_section_uniform_intact_line(self):
+        """Test section uniform intact line."""
         payload = _hand_payload(False)
         section = reporting._answer_collision_section({"answer_collision": payload})
         self.assertIn("Null result", section)
 
 
 class RendererGapTests(unittest.TestCase):
+    """Renderer gap tests."""
+
     def test_protocol_drift_line(self):
+        """Test protocol drift line."""
         new = _hand_payload(False)
         proto = dict(col.protocol_dict())
         proto["fingerprint"] = "0" * 64
@@ -455,6 +529,7 @@ class RendererGapTests(unittest.TestCase):
         self.assertTrue(any("protocol drift" in line for line in lines))
 
     def test_many_drifts_truncated(self):
+        """Test many drifts truncated."""
         old_cells, new_cells = {}, {}
         for n in range(5):
             name = f"cand{n}"
@@ -476,12 +551,14 @@ class RendererGapTests(unittest.TestCase):
         self.assertTrue(any("more rate drifts" in line for line in lines))
 
     def test_old_side_missing_line(self):
+        """Test old side missing line."""
         lines = diffreports._render_answer_collision_summary(
             diffreports.diff_answer_collision(None, _hand_payload(True))
         )
         self.assertTrue(any("did not record" in line for line in lines))
 
     def test_non_dict_section_returns_empty(self):
+        """Test non dict section returns empty."""
         self.assertEqual(diffreports._render_answer_collision_summary(None), [])
         self.assertEqual(diffreports._render_answer_collision_summary("junk"), [])
 

@@ -9,13 +9,17 @@ from model_protocol_lab.backends import _ids_valid, _manifest, _member, _model_a
 
 
 class AssetTests(unittest.TestCase):
+    """Asset tests."""
+
     def test_ids_require_exact_integer_tuple_and_vocabulary_bounds(self):
+        """Test ids require exact integer tuple and vocabulary bounds."""
         self.assertTrue(_ids_valid((0, 3), 4))
         for value in ([0], (True,), (-1,), (4,), (1.0,), None):
             with self.subTest(value=value):
                 self.assertFalse(_ids_valid(value, 4))
 
     def test_member_rejects_paths_and_missing_assets(self):
+        """Test member rejects paths and missing assets."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             for name in (
@@ -29,6 +33,7 @@ class AssetTests(unittest.TestCase):
                     _member(root, name)
 
     def test_json_requires_object(self):
+        """Test json requires object."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
             path.write_text("[]", encoding="utf-8")
@@ -36,6 +41,7 @@ class AssetTests(unittest.TestCase):
                 _read_json(path)
 
     def test_single_layout_and_manifest_are_path_independent(self):
+        """Test single layout and manifest are path independent."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "config.json").write_text("{}", encoding="utf-8")
@@ -49,6 +55,7 @@ class AssetTests(unittest.TestCase):
             self.assertEqual(records, _manifest(root, names))
 
     def test_conflicting_layouts_rejected(self):
+        """Test conflicting layouts rejected."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "model.safetensors").write_bytes(b"")
@@ -57,6 +64,7 @@ class AssetTests(unittest.TestCase):
                 _model_assets(root)
 
     def test_adapter_directory_rejected(self):
+        """Test adapter directory rejected."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "adapter_config.json").write_text("{}", encoding="utf-8")
@@ -64,6 +72,7 @@ class AssetTests(unittest.TestCase):
                 _model_assets(root)
 
     def test_sharded_layout_rejects_traversal(self):
+        """Test sharded layout rejects traversal."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "config.json").write_text("{}", encoding="utf-8")
@@ -74,6 +83,7 @@ class AssetTests(unittest.TestCase):
                     _model_assets(root)
 
     def test_sharded_layout_requires_every_shard(self):
+        """Test sharded layout requires every shard."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "config.json").write_text("{}", encoding="utf-8")
@@ -87,8 +97,11 @@ class AssetTests(unittest.TestCase):
 
 
 class WeightIndexEdgeTests(unittest.TestCase):
+    """Weight index edge tests."""
+
     @staticmethod
     def _root_with_index(tmp, weight_map):
+        """Root with index."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path as _Path
 
@@ -100,6 +113,7 @@ class WeightIndexEdgeTests(unittest.TestCase):
         return root
 
     def test_empty_and_nondict_weight_maps_rejected(self):
+        """Test empty and nondict weight maps rejected."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tempfile import TemporaryDirectory as _TD
 
@@ -110,6 +124,7 @@ class WeightIndexEdgeTests(unittest.TestCase):
                     _model_assets(root)
 
     def test_oversized_asset_json_rejected(self):
+        """Test oversized asset json rejected."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path as _Path
 

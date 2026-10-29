@@ -71,6 +71,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -82,9 +83,12 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -122,6 +126,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 4096)
     stage = experiments.placement_stage(
@@ -157,7 +162,10 @@ def _payload_with_unavailable():
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(
             placement.ARM_KEYS,
             ("question_first", "payload_first", "sandwich", "closed_book"),
@@ -171,6 +179,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(placement.GENERATION_BUDGET, 2304)
 
     def test_protocol_object_and_fingerprint(self):
+        """Test protocol object and fingerprint."""
         proto = placement.protocol_object(3, "sha256:x")
         self.assertEqual(proto["seed"], 3)
         self.assertEqual(proto["ground_sha256"], placement.ground_sha256(3))
@@ -185,11 +194,15 @@ class TestProtocol(unittest.TestCase):
 
 
 class TestGenerator(unittest.TestCase):
+    """Test generator."""
+
     def test_deterministic_and_seed_sensitive(self):
+        """Test deterministic and seed sensitive."""
         self.assertEqual(placement.generate_cases(7), placement.generate_cases(7))
         self.assertNotEqual(placement.generate_cases(7), placement.generate_cases(8))
 
     def test_case_shape(self):
+        """Test case shape."""
         cases = placement.generate_cases(0)
         self.assertEqual(len(cases), 24)
         for index, case in enumerate(cases):
@@ -213,17 +226,20 @@ class TestGenerator(unittest.TestCase):
             self.assertEqual(case["expected"], case["value"])
 
     def test_seed_must_be_int(self):
+        """Test seed must be int."""
         with self.assertRaises(ValueError):
             placement.generate_cases("7")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             placement.generate_cases(True)  # type: ignore[arg-type]
 
     def test_values_distinct_across_seeds(self):
+        """Test values distinct across seeds."""
         for seed in range(60):
             values = [case["value"] for case in placement.generate_cases(seed)]
             self.assertEqual(len(set(values)), 24, f"seed {seed}")
 
     def test_redraw_path_exercised(self):
+        """Test redraw path exercised."""
         # Seed 739 collides on a first-draw value, so its
         # generation takes the redraw branch (counter > 0);
         # seed 1322 is a second such seed. The mirror must
@@ -240,6 +256,7 @@ class TestGenerator(unittest.TestCase):
             self.assertEqual(rows, mirror, f"seed {seed}")
 
     def test_topic_word_stem_disjoint(self):
+        """Test topic word stem disjoint."""
         # F10 residue: no topic token may share a 4-character
         # stem with a code word, and neither may prefix the
         # other -- a topic token must never read as part of the
@@ -252,6 +269,7 @@ class TestGenerator(unittest.TestCase):
                 self.assertFalse(word.startswith(token), (token, word))
 
     def test_neutral_pool_screen_properties(self):
+        """Test neutral pool screen properties."""
         for sentence in placement.NEUTRAL_POOL:
             self.assertFalse(any(ch.isdigit() for ch in sentence), sentence)
             for word in placement.WORDS:
@@ -262,7 +280,10 @@ class TestGenerator(unittest.TestCase):
 
 
 class TestArmContent(unittest.TestCase):
+    """Test arm content."""
+
     def test_arms_are_question_moves_only(self):
+        """Test arms are question moves only."""
         case = placement.generate_cases(0)[0]
         question = case["question"]
         payload = case["payload"]
@@ -281,7 +302,10 @@ class TestArmContent(unittest.TestCase):
 
 
 class TestClassify(unittest.TestCase):
+    """Test classify."""
+
     def test_truth_table(self):
+        """Test truth table."""
         classify = placement.classify_placement
         # Below the paired floor nothing else is read.
         self.assertEqual(classify(5, 0, 0, 0, None, False), "insufficient")
@@ -300,12 +324,14 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(classify(24, 1, 0, 24, 0, False), "below_threshold")
 
     def test_both_fail_dominant(self):
+        """Test both fail dominant."""
         self.assertTrue(placement.both_fail_dominant(0, 0, 2))
         self.assertTrue(placement.both_fail_dominant(1, 0, 3))
         self.assertFalse(placement.both_fail_dominant(0, 0, 1))
         self.assertFalse(placement.both_fail_dominant(3, 0, 2))
 
     def test_falsification_coherence_enumeration(self):
+        """Test falsification coherence enumeration."""
         # The registered claim: falsified exactly when the
         # classification lands on one of the two acquitting
         # labels at sufficient population. Enumerated over the
@@ -340,13 +366,17 @@ class TestClassify(unittest.TestCase):
 
 
 class TestMirrorAgreement(unittest.TestCase):
+    """Test mirror agreement."""
+
     def test_mirror_protocol(self):
+        """Test mirror protocol."""
         for seed in (0, 1, 42):
             expected = dict(placement.protocol_object(seed, "sha256:m"))
             expected["fingerprint"] = placement.protocol_fingerprint(seed, "sha256:m")
             self.assertEqual(diffreports._placement_protocol(seed, "sha256:m"), expected)
 
     def test_mirror_classify_and_falsified(self):
+        """Test mirror classify and falsified."""
         for args in [
             (24, 0, 0, 24, None, False),
             (24, 2, 2, 24, 1, False),
@@ -363,6 +393,7 @@ class TestMirrorAgreement(unittest.TestCase):
             )
 
     def test_mirror_classify_control_states(self):
+        """Test mirror classify control states."""
         for args in [(24, 2, 0, 3, None, False), (24, 2, 0, 24, None, False)]:
             self.assertEqual(
                 diffreports._placement_classify(*args), placement.classify_placement(*args)
@@ -372,6 +403,7 @@ class TestMirrorAgreement(unittest.TestCase):
             )
 
     def test_mirror_aggregate_malformed_record(self):
+        """Test mirror aggregate malformed record."""
         records = [{"fixture": "placement-00", "cells": None}]
         self.assertEqual(
             diffreports._placement_aggregate(records),
@@ -379,7 +411,10 @@ class TestMirrorAgreement(unittest.TestCase):
         )
 
     def test_mirror_selection_outcomes(self):
+        """Test mirror selection outcomes."""
+
         def record(fixture, qf, pf):
+            """Record."""
             return {
                 "fixture": fixture,
                 "cells": {
@@ -411,6 +446,7 @@ class TestMirrorAgreement(unittest.TestCase):
         )
 
     def test_mirror_aggregate_on_stage_records(self):
+        """Test mirror aggregate on stage records."""
         payload = _payload()
         for entry in payload["candidates"].values():
             records = entry["records"]
@@ -435,7 +471,10 @@ if __name__ == "__main__":
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_perfect_backend_no_discordance(self):
+        """Test perfect backend no discordance."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_placement(payload))
@@ -457,6 +496,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(condition["flip"])
 
     def test_payload_first_failure_absorbed_by_sandwich(self):
+        """Test payload first failure absorbed by sandwich."""
         # pf_fail: the payload-first arm fails everywhere, the
         # sandwich (which also asks first) passes everywhere, so
         # the headline discordance equals the control level and
@@ -473,6 +513,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(entry["placement_effect_falsified"])
 
     def test_split_sandwich_exceeds_control(self):
+        """Test split sandwich exceeds control."""
         payload = _payload(_WordBackend(mode="split"))
         self.assertTrue(_valid_placement(payload))
         entry = payload["candidates"]["pl-a"]
@@ -483,6 +524,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(entry["placement_effect_falsified"])
 
     def test_wrong_backend_joint_collapse(self):
+        """Test wrong backend joint collapse."""
         payload = _payload(_WordBackend(mode="wrong"))
         self.assertTrue(_valid_placement(payload))
         entry = payload["candidates"]["pl-a"]
@@ -493,6 +535,7 @@ class TestStage(unittest.TestCase):
         self.assertNotEqual(headline["classification"], "no_discordance_observed")
 
     def test_stage_rejects_bad_formats(self):
+        """Test stage rejects bad formats."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.placement_stage(backend, [], boundary=(1,), max_context=100)
@@ -502,6 +545,7 @@ class TestStage(unittest.TestCase):
             experiments.placement_stage(backend, [FORMATS[0]], boundary=(1,), max_context=100)
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         # Red-team F7: two formats sharing a name must not
         # silently collapse into one candidate.
         backend = _WordBackend()
@@ -510,6 +554,7 @@ class TestStage(unittest.TestCase):
             experiments.placement_stage(backend, dup, boundary=(1,), max_context=100)
 
     def test_record_budget(self):
+        """Test record budget."""
         backend = _WordBackend()
         formats = tuple(
             Format(name=f"f{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
@@ -522,6 +567,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "placement_record_budget_exceeded")
 
     def test_screen_failed_stage(self):
+        """Test screen failed stage."""
         # A boundary whose decoded text occurs inside the
         # generated texts screens the whole stage closed.
         backend = _WordBackend()
@@ -538,6 +584,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "placement_screen_failed")
 
     def test_context_exceeded_cells(self):
+        """Test context exceeded cells."""
         payload = _payload(max_context=8)
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_placement(payload))
@@ -548,6 +595,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(set(record["cell_details"].values()), {"arm_context_exceeded"})
 
     def test_exploding_backend_degrades_cells(self):
+        """Test exploding backend degrades cells."""
         payload = _payload(_WordBackend(mode="explode"))
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_placement(payload))
@@ -555,6 +603,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(set(record["cell_details"].values()), {"arm_evaluation_failed"})
 
     def test_screen_audit_findings_fail_closed(self):
+        """Test screen audit findings fail closed."""
         # The frozen-text audit half of the stage screen: the
         # frozen texts carry no token-shaped literals today,
         # so the branch is proven with the audit stubbed to
@@ -573,12 +622,16 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "placement_screen_failed")
 
     def test_cancel_at_case_boundary(self):
+        """Test cancel at case boundary."""
         # The event lands during setup (the boundary decode),
         # so the case-loop check is the one that unwinds.
         event = threading.Event()
 
         class _DecodeCancels(_WordBackend):
+            """Decode cancels."""
+
             def decode(self, ids):
+                """Decode."""
                 event.set()
                 return super().decode(ids)
 
@@ -595,13 +648,17 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cancel_before_first_evaluation(self):
+        """Test cancel before first evaluation."""
         # The event lands in the first arm's render encode, so
         # the cell's pre-evaluation check is the one that
         # raises (never an evaluation failure).
         event = threading.Event()
 
         class _EncodeCancels(_WordBackend):
+            """Encode cancels."""
+
             def encode(self, text):
+                """Encode."""
                 ids = super().encode(text)
                 if len(text) > 20:  # arm renders only; setup encodes stay clean
                     event.set()
@@ -620,6 +677,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cancel_at_arm_boundary(self):
+        """Test cancel at arm boundary."""
         # The event lands just after a cell completes (the
         # wrapper sets it), so the next arm's loop check is
         # the one that raises.
@@ -628,6 +686,7 @@ class TestStage(unittest.TestCase):
         original = experiments._placement_cell
 
         def wrapper(*args, **kwargs):
+            """Wrapper."""
             outcome = original(*args, **kwargs)
             event.set()
             return outcome
@@ -645,6 +704,8 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cell_returning_neither_is_tolerated(self):
+        """Test cell returning neither is tolerated."""
+
         # _placement_cell's contract sets exactly one of
         # (detail, cell); the stage's elif structure is the
         # defensive mirror of the needle stage, proven with
@@ -652,6 +713,7 @@ class TestStage(unittest.TestCase):
         # keeps an empty cell the validator then rejects,
         # which is the fail-closed division of labour.
         def neither(*args, **kwargs):
+            """Neither."""
             return None, None
 
         backend = _WordBackend()
@@ -669,6 +731,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(record["cell_details"]["question_first"], "")
 
     def test_analysis_unavailable_candidate(self):
+        """Test analysis unavailable candidate."""
         payload = _payload_with_unavailable()
         self.assertEqual(
             payload["candidates"]["pl-b"],
@@ -677,6 +740,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_placement(payload))
 
     def test_cancel_unwinds_stage(self):
+        """Test cancel unwinds stage."""
         backend = _WordBackend(cancel_after=3)
         event = threading.Event()
         backend.cancel_event = event
@@ -695,7 +759,10 @@ class TestStage(unittest.TestCase):
 
 
 class TestScreeningAndConditions(unittest.TestCase):
+    """Test screening and conditions."""
+
     def test_closed_book_screen_excludes_case(self):
+        """Test closed book screen excludes case."""
         # The backend has memorized the first case's value; the
         # closed-book cell passes, so the case leaves the live
         # population and the headline pairs over 23.
@@ -709,6 +776,7 @@ class TestScreeningAndConditions(unittest.TestCase):
         self.assertEqual(entry["headline"]["n_paired"], 23)
 
     def test_union_screening_across_candidates(self):
+        """Test union screening across candidates."""
         # F14: selections run over the population screened for
         # NO candidate in the run, even when screening itself
         # is per-candidate. Candidate A's closed-book pass on
@@ -717,7 +785,10 @@ class TestScreeningAndConditions(unittest.TestCase):
         first = placement.generate_cases(0)[0]
 
         class _PerFormatBackend(_WordBackend):
+            """Per format backend."""
+
             def generate(self, input_ids, **kwargs):
+                """Generate."""
                 text = self.decode(list(input_ids))
                 if text.startswith("u:") and first["topic"] in text and "code is" not in text:
                     boundary = self.encode("endmark")[0]
@@ -739,9 +810,11 @@ class TestScreeningAndConditions(unittest.TestCase):
             self.assertFalse(payload["conditions"][arm]["withheld"], arm)
 
     def test_shared_live_fixtures_empty(self):
+        """Test shared live fixtures empty."""
         self.assertEqual(placement.shared_live_fixtures({}), frozenset())
 
     def test_aggregate_tolerates_malformed_record(self):
+        """Test aggregate tolerates malformed record."""
         # The aggregator's cell accessor fails soft on a
         # non-dict cells field (the validator, not the
         # aggregator, is the layer that rejects such records).
@@ -750,7 +823,10 @@ class TestScreeningAndConditions(unittest.TestCase):
         self.assertEqual(aggregate["n_closed_book_incomplete"], 1)
 
     def test_selection_selected_and_flip(self):
+        """Test selection selected and flip."""
+
         def record(fixture, qf, pf):
+            """Record."""
             return {
                 "fixture": fixture,
                 "cells": {
@@ -776,6 +852,7 @@ class TestScreeningAndConditions(unittest.TestCase):
         self.assertFalse(pf["flip"])  # the baseline never flips against itself
 
     def test_selection_withheld_on_mismatched_completed_sets(self):
+        """Test selection withheld on mismatched completed sets."""
         # Same recorded fixtures, but candidate B never
         # completed the arm on one shared fixture: the
         # completed sets differ, so the selection is withheld
@@ -799,14 +876,17 @@ class TestValidatorBattery(unittest.TestCase):
 
     @staticmethod
     def _breaks():
+        """Breaks."""
         base = _payload()
 
         def mutate(fn):
+            """Mutate."""
             payload = copy.deepcopy(base)
             fn(payload)
             return payload
 
         def rec(payload, name="pl-a", index=0):
+            """Rec."""
             return payload["candidates"][name]["records"][index]
 
         yield "baseline_valid", base, True
@@ -1005,6 +1085,7 @@ class TestValidatorBattery(unittest.TestCase):
         )
 
         def _all_unavailable(p):
+            """All unavailable."""
             for name in ("pl-a", "pl-b"):
                 p["candidates"][name] = {
                     "status": "unavailable",
@@ -1015,18 +1096,21 @@ class TestValidatorBattery(unittest.TestCase):
         yield ("all_candidates_unavailable", mutate(_all_unavailable), False)
 
         def _total_cap(p):
+            """Total cap."""
             entry = p["candidates"]["pl-a"]
             p["candidates"] = {f"c{i:02d}": copy.deepcopy(entry) for i in range(25)}
 
         yield ("total_records_cap", mutate(_total_cap), False)
 
         def _bytes_cap(p):
+            """Bytes cap."""
             entry = p["candidates"]["pl-a"]
             p["candidates"] = {f"c{i:03d}": copy.deepcopy(entry) for i in range(650)}
 
         yield ("records_bytes_cap", mutate(_bytes_cap), False)
 
         def _unavailable_legit(p):
+            """Unavailable legit."""
             p["candidates"]["pl-b"] = {
                 "status": "unavailable",
                 "detail": "candidate_evaluation_failed",
@@ -1040,6 +1124,7 @@ class TestValidatorBattery(unittest.TestCase):
         yield ("unavailable_candidate_legit", mutate(_unavailable_legit), True)
 
         def _none_digest_consistent(p):
+            """None digest consistent."""
             record = p["candidates"]["pl-a"]["records"][0]
             cell = record["cells"]["question_first"]
             cell["answer_digest"] = None
@@ -1056,13 +1141,17 @@ class TestValidatorBattery(unittest.TestCase):
         yield ("answer_digest_none_consistent", mutate(_none_digest_consistent), True)
 
     def test_battery(self):
+        """Test battery."""
         for name, payload, expected in self._breaks():
             with self.subTest(breakage=name):
                 self.assertEqual(_valid_placement(payload), expected, name)
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         payload = _payload()
         diff = diff_placement(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
@@ -1070,6 +1159,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_classification_drift(self):
+        """Test classification drift."""
         old = _payload()
         new = _payload(_WordBackend(mode="split"))
         diff = diff_placement(old, new)
@@ -1079,6 +1169,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn("placement_effect_falsified", metrics)
 
     def test_foreign_backend_not_comparable(self):
+        """Test foreign backend not comparable."""
         old = _payload()
         new = _payload()
         protocol = dict(placement.protocol_object(0, "sha256:other-backend"))
@@ -1091,6 +1182,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_both_unavailable_no_status_drift(self):
+        """Test both unavailable no status drift."""
         old = _payload_with_unavailable()
         diff = diff_placement(old, copy.deepcopy(old))
         self.assertEqual(diff["available"], "both")
@@ -1098,6 +1190,7 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(diff["candidate_drift"], [])
 
     def test_status_drift(self):
+        """Test status drift."""
         old = _payload()
         new = _payload_with_unavailable()
         diff = diff_placement(old, new)
@@ -1110,6 +1203,7 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(status_entries[0]["new"], "unavailable")
 
     def test_missing_sides(self):
+        """Test missing sides."""
         payload = _payload()
         self.assertEqual(diff_placement(None, None)["available"], "neither")
         self.assertEqual(diff_placement(payload, None)["available"], "old")
@@ -1117,7 +1211,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _payload()
         html = render_html({"placement": payload})
         self.assertIn('<section class="card" id="placement">', html)
@@ -1128,25 +1225,30 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn(first["value"], html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         html = render_html({})
         self.assertNotIn('<section class="card" id="placement">', html)
 
     def test_section_hostile_payload(self):
+        """Test section hostile payload."""
         html = render_html({"placement": {"available": True, "candidates": []}})
         self.assertNotIn('<section class="card" id="placement">', html)
 
     def test_section_na_rates(self):
+        """Test section na rates."""
         payload = _payload(max_context=8)
         html = render_html({"placement": payload})
         self.assertIn('<section class="card" id="placement">', html)
         self.assertIn("n/a", html)
 
     def test_section_unavailable_row(self):
+        """Test section unavailable row."""
         html = render_html({"placement": _payload_with_unavailable()})
         self.assertIn('<section class="card" id="placement">', html)
         self.assertIn("unavailable", html)
 
     def test_section_withheld_and_missing_conditions(self):
+        """Test section withheld and missing conditions."""
         payload = _payload()
         payload["conditions"]["question_first"] = {
             "withheld": True,
@@ -1160,6 +1262,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("selection withheld", html)
 
     def test_section_sparse_available_entry(self):
+        """Test section sparse available entry."""
         html = render_html(
             {
                 "placement": {
@@ -1173,12 +1276,14 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Sandwich control level n/a", html)
 
     def test_section_non_dict_candidate(self):
+        """Test section non dict candidate."""
         html = render_html(
             {"placement": {"available": True, "candidates": {"x": "bogus"}, "conditions": {}}}
         )
         self.assertIn('<section class="card" id="placement">', html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         backend = _WordBackend()
         result: dict = {}
         cli._run_placement_probe(
@@ -1196,11 +1301,16 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertTrue(_valid_placement(result["placement"]))
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
+
         class _Boom:
+            """Boom."""
+
             fingerprint = "sha256:boom"
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("boom")
 
         result: dict = {}

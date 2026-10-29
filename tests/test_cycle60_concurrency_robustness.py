@@ -46,31 +46,37 @@ class TestMutantRootsPidScoped(unittest.TestCase):
     """Every mutant staging root must contain the current PID."""
 
     def test_cycle32(self):
+        """Test cycle32."""
         from tests.test_cycle32_core_verify import MUTANT_DIR
 
         self.assertIn(str(os.getpid()), str(MUTANT_DIR))
 
     def test_cycle42(self):
+        """Test cycle42."""
         from tests.test_cycle42_core_helpers_verify import MUTANT_DIR
 
         self.assertIn(str(os.getpid()), str(MUTANT_DIR))
 
     def test_cycle33(self):
+        """Test cycle33."""
         from tests.test_cycle33_reporting_verify import _MUTANT_ROOT
 
         self.assertIn(str(os.getpid()), str(_MUTANT_ROOT))
 
     def test_cycle37(self):
+        """Test cycle37."""
         from tests.test_cycle37_diffbackends_verify import _SCRATCH_ROOT
 
         self.assertIn(str(os.getpid()), str(_SCRATCH_ROOT))
 
     def test_cycle19(self):
+        """Test cycle19."""
         from tests.test_cycle19_failure_taxonomy_verify import _MUTANT_ROOT
 
         self.assertIn(str(os.getpid()), str(_MUTANT_ROOT))
 
     def test_cycle20_staged_file_is_pid_scoped(self):
+        """Test cycle20 staged file is pid scoped."""
         from tests.test_cycle20_evaluate_verify import load_mutant
 
         case = unittest.TestCase()
@@ -99,6 +105,7 @@ class TestConcurrentMutantStaging(unittest.TestCase):
     """
 
     def test_two_parallel_sensitivity_runs_both_pass(self):
+        """Test two parallel sensitivity runs both pass."""
         script = (
             "import sys, unittest; "
             f"sys.path.insert(0, {str(REPO_ROOT)!r}); "
@@ -127,6 +134,7 @@ class TestOversizedFixtureRobustness(unittest.TestCase):
     """The 128 MiB cap tests must not require 128 MiB of free disk."""
 
     def test_sparse_oversized_file_rejected(self):
+        """Test sparse oversized file rejected."""
         from model_protocol_lab.backends import _read_json
 
         with tempfile.TemporaryDirectory(prefix="cycle60-") as tmp:
@@ -142,6 +150,7 @@ class TestOversizedFixtureRobustness(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "oversized_asset_json")
 
     def test_exactly_at_cap_skips_when_disk_full(self):
+        """Test exactly at cap skips when disk full."""
         from tests.test_cycle35_backends_verify import TestReadJson
 
         case = TestReadJson("test_exactly_at_cap_parses")

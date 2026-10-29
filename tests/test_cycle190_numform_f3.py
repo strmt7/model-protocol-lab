@@ -78,6 +78,7 @@ def _producer_recompute(payload):
 
 
 def _first_celled(payload, task=None):
+    """First celled."""
     for entry in payload["candidates"].values():
         for record in entry["records"]:
             if record["cell"] is not None and (task is None or record["task"] == task):
@@ -86,7 +87,10 @@ def _first_celled(payload, task=None):
 
 
 class TestStageRecords(unittest.TestCase):
+    """Test stage records."""
+
     def test_answer_text_stored_and_bound(self):
+        """Test answer text stored and bound."""
         payload = _base_payload()
         self.assertTrue(_valid_numform(payload))
         for entry in payload["candidates"].values():
@@ -105,6 +109,7 @@ class TestStageRecords(unittest.TestCase):
                         )
 
     def test_failed_cells_carry_no_text(self):
+        """Test failed cells carry no text."""
         payload = _base_payload()
         backend = _NumformBackend(mode="faithful", fail_tasks={"copy"})
         stage = experiments.numform_stage(
@@ -132,6 +137,7 @@ class _FixedAnswerBackend(_NumformBackend):
         self.fixed = answer
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         boundary = self.encode("<|im_end|>")[0]
         out = list(self.encode(self.fixed)) + [boundary]
@@ -147,6 +153,7 @@ class TestVerbatimStorage(unittest.TestCase):
 
     @staticmethod
     def _payload_with(answer):
+        """Payload with."""
         backend = _FixedAnswerBackend(answer)
         stage = experiments.numform_stage(
             backend,
@@ -159,6 +166,7 @@ class TestVerbatimStorage(unittest.TestCase):
         return experiments.numform_analysis(stage, (FORMATS[0].name,))
 
     def test_padded_answer_verbatim(self):
+        """Test padded answer verbatim."""
         # "1 000" with an ASCII space is not any grammar's
         # rendering (the space form uses U+202F): stored
         # verbatim, parses to None, verdict False, and the
@@ -171,6 +179,7 @@ class TestVerbatimStorage(unittest.TestCase):
         self.assertFalse(record["cell"]["verdict"])
 
     def test_empty_answer_verbatim(self):
+        """Test empty answer verbatim."""
         payload = self._payload_with("")
         self.assertTrue(_valid_numform(payload))
         record = _first_celled(payload, task="copy")
@@ -188,6 +197,7 @@ class TestF0Regression(unittest.TestCase):
     """
 
     def test_forged_value_rejected(self):
+        """Test forged value rejected."""
         payload = _base_payload()
         record = _first_celled(payload, task="copy")
         record["answer_value"] += 999
@@ -195,6 +205,7 @@ class TestF0Regression(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_none_variant_rejected(self):
+        """Test none variant rejected."""
         payload = _base_payload()
         record = _first_celled(payload, task="copy")
         record["answer_value"] = None
@@ -202,6 +213,7 @@ class TestF0Regression(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_single_candidate_variant_rejected(self):
+        """Test single candidate variant rejected."""
         payload = _base_payload()
         name = next(iter(payload["candidates"]))
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
@@ -216,13 +228,17 @@ class TestF0Regression(unittest.TestCase):
 
 
 class TestBindingBattery(unittest.TestCase):
+    """Test binding battery."""
+
     def test_answer_text_tampered(self):
+        """Test answer text tampered."""
         payload = _base_payload()
         record = _first_celled(payload, task="copy")
         record["answer_text"] = f"{record['answer_text']}x"
         self.assertFalse(_valid_numform(payload))
 
     def test_text_and_digest_consistent_but_parse_forged(self):
+        """Test text and digest consistent but parse forged."""
         # The forger does everything right except the parse:
         # text and digest agree with each other, the stored
         # value does not.
@@ -235,6 +251,7 @@ class TestBindingBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_cell_absent_clauses(self):
+        """Test cell absent clauses."""
         backend = _NumformBackend(mode="faithful", fail_tasks={"copy"})
         stage = experiments.numform_stage(
             backend,
@@ -255,12 +272,14 @@ class TestBindingBattery(unittest.TestCase):
             self.assertFalse(_valid_numform(payload), field)
 
     def test_non_string_answer_text_rejected(self):
+        """Test non string answer text rejected."""
         payload = _base_payload()
         record = _first_celled(payload, task="copy")
         record["answer_text"] = 123
         self.assertFalse(_valid_numform(payload))
 
     def test_surrogate_answer_text_fails_closed(self):
+        """Test surrogate answer text fails closed."""
         # A3: a lone surrogate cannot be UTF-8 encoded; the
         # validator must answer False, never raise.
         payload = _base_payload()
@@ -269,6 +288,7 @@ class TestBindingBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_pre_f3_payload_rejected(self):
+        """Test pre f3 payload rejected."""
         # A8: no migration shim — the exact record key set
         # rejects payloads written before answer_text existed.
         payload = _base_payload()
@@ -278,6 +298,7 @@ class TestBindingBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_compare_numeric_answer_is_legal(self):
+        """Test compare numeric answer is legal."""
         # A2: a compare record answering "123" is a non_label
         # record; its stored value is None and the digest
         # binding alone governs it. A uniform parse check
@@ -302,6 +323,7 @@ class TestParseDifferential(unittest.TestCase):
 
     @staticmethod
     def _battery():
+        """Battery."""
         strings = set()
         for value in range(0, 2001):
             for form in numform.FORMS:
@@ -359,6 +381,7 @@ class TestParseDifferential(unittest.TestCase):
         state = 190
 
         def _next(modulus):
+            """Next."""
             nonlocal state
             state = (state * 6364136223846793005 + 1442695040888963407) % (1 << 64)
             return state % modulus
@@ -369,6 +392,7 @@ class TestParseDifferential(unittest.TestCase):
         return sorted(strings)
 
     def test_mirror_matches_producer(self):
+        """Test mirror matches producer."""
         for text in self._battery():
             self.assertEqual(
                 numform.parse_value(text),
@@ -377,6 +401,7 @@ class TestParseDifferential(unittest.TestCase):
             )
 
     def test_pattern_texts_equal_across_implementations(self):
+        """Test pattern texts equal across implementations."""
         producer = [
             numform._PLAIN_RE.pattern,
             numform._COMMA_RE.pattern,
@@ -402,6 +427,7 @@ class TestRamblingCap(unittest.TestCase):
     """
 
     def test_rambling_answers_trip_records_cap(self):
+        """Test rambling answers trip records cap."""
         # At the legal maximum (24 candidates x 192 records)
         # a ~6 KB answer per record projects to ~30 MB of
         # ground records — past the 12 MiB cap (B's F5
@@ -429,6 +455,7 @@ class TestReportingPin(unittest.TestCase):
     """
 
     def test_answer_text_not_rendered(self):
+        """Test answer text not rendered."""
         payload = _base_payload()
         record = _first_celled(payload, task="copy")
         record["answer_text"] = "ZQXW-MARKER"

@@ -76,6 +76,7 @@ class ScriptTokenizer:
         self._by_id = {v: k for k, v in pieces.items()}
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         ids: list[int] = []
         pos = 0
         ordered = sorted(self._pieces, key=len, reverse=True)
@@ -90,6 +91,7 @@ class ScriptTokenizer:
         return tuple(ids)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._by_id[token_id] for token_id in token_ids)
 
 
@@ -118,13 +120,16 @@ class StubBackend:
             self.forward_logits = None  # type: ignore[assignment]
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         return self._tokenizer.encode(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return self._tokenizer.decode(token_ids)
 
     # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
         if self._forward_error is not None:
             raise self._forward_error
@@ -137,6 +142,7 @@ MERGE_PIECES = {"a": 0, "b": 1, "c": 2, "ab": 3, "héllo": 9}
 
 
 def stub_with_logits(logits: torch.Tensor, **kwargs) -> StubBackend:
+    """Stub with logits."""
     return StubBackend(MERGE_PIECES, logits, vocab_size=10, **kwargs)
 
 
@@ -144,6 +150,7 @@ class HandBuiltTensorTests(unittest.TestCase):
     """Pure-math layer driven by hand-built logit tensors (§9.5)."""
 
     def test_single_token_vocab_scores_exact_zero(self):
+        """Test single token vocab scores exact zero."""
         # V=1: the only token has probability 1 by hand; log(1) == 0 exactly.
         # Two rows: the prompt row predicts the single target token.
         per_token, total, mean = score_span_from_logits(
@@ -154,6 +161,7 @@ class HandBuiltTensorTests(unittest.TestCase):
         self.assertEqual(mean, 0.0)
 
     def test_one_token_prompt_one_token_answer_known_values(self):
+        """Test one token prompt one token answer known values."""
         # Full sequence = [prompt, target]; the prompt row (position 0)
         # predicts the target token (position 1). Target row [1,2,3],
         # target id 2: by hand,
@@ -171,6 +179,7 @@ class HandBuiltTensorTests(unittest.TestCase):
         self.assertEqual(mean, per_token[0])
 
     def test_multi_token_prompt_multi_token_answer(self):
+        """Test multi token prompt multi token answer."""
         logits = torch.tensor(
             [
                 [0.5, -0.5, 1.5, 0.0],
@@ -193,6 +202,7 @@ class HandBuiltTensorTests(unittest.TestCase):
         self.assertAlmostEqual(mean, exp_mean, places=9)
 
     def test_prompt_rows_are_masked_never_scored(self):
+        """Test prompt rows are masked never scored."""
         # prompt_len=2, two target tokens: target 0 is predicted by row 1,
         # target 1 by row 2. Row 0 (predicts a prompt token) and row 3
         # (predicts past the span) are masked: changing them cannot move
@@ -222,6 +232,7 @@ class HandBuiltTensorTests(unittest.TestCase):
             self.assertAlmostEqual(got, want, places=9)
 
     def test_special_and_pad_like_ids_in_target_are_scored_per_policy(self):
+        """Test special and pad like ids in target are scored per policy."""
         # Declared policy: no implicit unmasking -- every ID in the target
         # span is scored, including pad-like and special IDs on both sides.
         pad, special = 7, 4
@@ -244,6 +255,7 @@ class HandBuiltTensorTests(unittest.TestCase):
         self.assertAlmostEqual(mean, exp_mean, places=9)
 
     def test_empty_target_span_scores_zero_tokens(self):
+        """Test empty target span scores zero tokens."""
         per_token, total, mean = score_span_from_logits(
             torch.tensor([[0.5, -0.5], [0.1, 0.2]]), prompt_len=2, target_ids=()
         )
@@ -252,6 +264,7 @@ class HandBuiltTensorTests(unittest.TestCase):
         self.assertIsNone(mean)
 
     def test_rejects_nan_logits(self):
+        """Test rejects nan logits."""
         with self.assertRaises(ValueError):
             score_span_from_logits(
                 torch.tensor([[float("nan"), 0.0], [0.1, 0.2]]),
@@ -260,6 +273,7 @@ class HandBuiltTensorTests(unittest.TestCase):
             )
 
     def test_rejects_inf_logits(self):
+        """Test rejects inf logits."""
         with self.assertRaises(ValueError):
             score_span_from_logits(
                 torch.tensor([[float("inf"), 0.0], [0.1, 0.2]]),
@@ -268,6 +282,7 @@ class HandBuiltTensorTests(unittest.TestCase):
             )
 
     def test_rejects_out_of_range_token_id(self):
+        """Test rejects out of range token id."""
         with self.assertRaises(ValueError):
             score_span_from_logits(
                 torch.tensor([[0.1, 0.2], [0.3, 0.4]]), prompt_len=1, target_ids=(2,)
@@ -278,22 +293,27 @@ class HandBuiltTensorTests(unittest.TestCase):
             )
 
     def test_rejects_length_mismatch(self):
+        """Test rejects length mismatch."""
         with self.assertRaises(ValueError):
             score_span_from_logits(torch.tensor([[0.1, 0.2]] * 3), prompt_len=1, target_ids=(0,))
 
     def test_rejects_empty_prompt_len(self):
+        """Test rejects empty prompt len."""
         with self.assertRaises(ValueError):
             score_span_from_logits(torch.tensor([[0.1, 0.2]]), prompt_len=0, target_ids=(0,))
 
     def test_rejects_non_2d_logits(self):
+        """Test rejects non 2d logits."""
         with self.assertRaises(ValueError):
             score_span_from_logits(torch.tensor([0.1, 0.2]), prompt_len=1, target_ids=(0,))
 
     def test_rejects_non_tensor_logits(self):
+        """Test rejects non tensor logits."""
         with self.assertRaises(TypeError):
             score_span_from_logits([[0.1, 0.2]], prompt_len=1, target_ids=(0,))
 
     def test_deterministic_bit_identical(self):
+        """Test deterministic bit identical."""
         logits = torch.tensor([[0.7, -0.2, 1.3], [-0.9, 0.4, 0.4], [0.0, 0.0, 0.5]])
         first = score_span_from_logits(logits, prompt_len=1, target_ids=(2, 1))
         second = score_span_from_logits(logits, prompt_len=1, target_ids=(2, 1))
@@ -304,6 +324,7 @@ class AlignmentTests(unittest.TestCase):
     """Alignment verification and refusal behavior (§9.3)."""
 
     def test_aligned_pair_scores_against_reference(self):
+        """Test aligned pair scores against reference."""
         logits = torch.tensor(
             [
                 [0.5, -1.0, 2.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1],
@@ -326,6 +347,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [(0, 2)])
 
     def test_multibyte_target_byte_length(self):
+        """Test multibyte target byte length."""
         logits = torch.zeros(2, 10)
         backend = stub_with_logits(logits)
         score = score_target_logprobs(backend, (0,), (9,))
@@ -334,6 +356,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(score.target_byte_length, 6)
 
     def test_straddling_token_refuses_with_explicit_reason(self):
+        """Test straddling token refuses with explicit reason."""
         # "a" + "b" encode separately as (0, 1) but "ab" encodes as (2,):
         # one token straddles the prompt/answer boundary.
         backend = stub_with_logits(torch.zeros(2, 10))
@@ -347,6 +370,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [])
 
     def test_target_roundtrip_mismatch_refuses(self):
+        """Test target roundtrip mismatch refuses."""
         # decode((0, 1)) == "ab" but encode("ab") == (3,) != (0, 1).
         backend = stub_with_logits(torch.zeros(3, 10))
         score = score_target_logprobs(backend, (3,), (0, 1))
@@ -354,12 +378,14 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(score.reason, "target_roundtrip_mismatch")
 
     def test_prompt_roundtrip_mismatch_refuses(self):
+        """Test prompt roundtrip mismatch refuses."""
         backend = stub_with_logits(torch.zeros(3, 10))
         score = score_target_logprobs(backend, (0, 1), (2,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
         self.assertEqual(score.reason, "prompt_roundtrip_mismatch")
 
     def test_check_alignment_reports_decoded_spans(self):
+        """Test check alignment reports decoded spans."""
         backend = stub_with_logits(torch.zeros(2, 10))
         check = check_alignment(backend, (0,), (2,))
         self.assertTrue(check.ok)
@@ -370,6 +396,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(bad.reason, "boundary_merge_mismatch")
 
     def test_empty_target_is_defined_not_an_error(self):
+        """Test empty target is defined not an error."""
         backend = stub_with_logits(torch.zeros(1, 10))
         score = score_target_logprobs(backend, (0,), ())
         self.assertEqual(score.status, STATUS_OK_EMPTY)
@@ -382,12 +409,14 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [])
 
     def test_empty_prompt_is_refused(self):
+        """Test empty prompt is refused."""
         backend = stub_with_logits(torch.zeros(1, 10))
         score = score_target_logprobs(backend, (), (2,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
         self.assertEqual(score.reason, "empty_prompt")
 
     def test_token_id_out_of_range_is_refused(self):
+        """Test token id out of range is refused."""
         backend = stub_with_logits(torch.zeros(2, 10))
         score = score_target_logprobs(backend, (0,), (10,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
@@ -395,12 +424,14 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [])
 
     def test_backend_without_forward_logits_is_refused(self):
+        """Test backend without forward logits is refused."""
         backend = StubBackend(MERGE_PIECES, torch.zeros(2, 10), with_forward_logits=False)
         score = score_target_logprobs(backend, (0,), (2,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
         self.assertEqual(score.reason, "logits_not_supported")
 
     def test_forward_failure_becomes_unavailable_not_exception(self):
+        """Test forward failure becomes unavailable not exception."""
         backend = stub_with_logits(
             torch.zeros(2, 10), forward_error=RuntimeError("simulated provider outage")
         )
@@ -410,6 +441,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(score.reason, "forward_failed")
 
     def test_known_provider_code_passes_through(self):
+        """Test known provider code passes through."""
         backend = stub_with_logits(
             torch.zeros(2, 10), forward_error=ValueError("context_limit_exceeded")
         )
@@ -418,6 +450,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(score.reason, "context_limit_exceeded")
 
     def test_malformed_caller_input_raises(self):
+        """Test malformed caller input raises."""
         backend = stub_with_logits(torch.zeros(2, 10))
         with self.assertRaises(TypeError):
             score_target_logprobs(backend, [0], (2,))  # type: ignore[arg-type]
@@ -427,6 +460,7 @@ class AlignmentTests(unittest.TestCase):
             score_target_logprobs(backend, (True,), (2,))
 
     def test_deterministic_two_runs_identical(self):
+        """Test deterministic two runs identical."""
         logits = torch.tensor(
             [
                 [0.7, -0.2, 1.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4],
@@ -476,6 +510,7 @@ class RealBackendScoringTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from model_protocol_lab.backends import LocalHFBackend
 
         cls._tmp = TemporaryDirectory()
@@ -485,6 +520,7 @@ class RealBackendScoringTests(unittest.TestCase):
         cls.backend = LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def test_forward_logits_contract(self):
+        """Test forward logits contract."""
         logits = self.backend.forward_logits((0, 2))
         self.assertIsInstance(logits, torch.Tensor)
         self.assertEqual(tuple(logits.shape), (2, 6))
@@ -493,6 +529,7 @@ class RealBackendScoringTests(unittest.TestCase):
         self.assertEqual(self.backend.vocab_size, 6)
 
     def test_forward_logits_rejects_bad_input(self):
+        """Test forward logits rejects bad input."""
         with self.assertRaises(ValueError):
             self.backend.forward_logits(())
         with self.assertRaises(ValueError):
@@ -501,6 +538,7 @@ class RealBackendScoringTests(unittest.TestCase):
             self.backend.forward_logits((0, 99))
 
     def test_real_backend_score_matches_independent_reference(self):
+        """Test real backend score matches independent reference."""
         # prompt "a" -> (0,), target "c" -> (2,): "ac" encodes as (0, 2).
         score = score_target_logprobs(self.backend, (0,), (2,))
         self.assertEqual(score.status, STATUS_OK)
@@ -516,6 +554,7 @@ class RealBackendScoringTests(unittest.TestCase):
         self.assertAlmostEqual(score.mean_logprob, exp_mean, places=6)
 
     def test_real_backend_multi_token_target(self):
+        """Test real backend multi token target."""
         # prompt "a" -> (0,), target "cb" -> (2, 1): "acb" encodes (0, 2, 1).
         score = score_target_logprobs(self.backend, (0,), (2, 1))
         self.assertEqual(score.status, STATUS_OK)
@@ -530,6 +569,7 @@ class RealBackendScoringTests(unittest.TestCase):
         self.assertAlmostEqual(score.mean_logprob, exp_mean, places=6)
 
     def test_real_backend_boundary_merge_refuses(self):
+        """Test real backend boundary merge refuses."""
         # "a" -> (0,), "b" -> (1,), but "ab" -> (3,): straddling token.
         score = score_target_logprobs(self.backend, (0,), (1,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
@@ -537,11 +577,13 @@ class RealBackendScoringTests(unittest.TestCase):
         self.assertIsNone(score.total_logprob)
 
     def test_real_backend_empty_target(self):
+        """Test real backend empty target."""
         score = score_target_logprobs(self.backend, (0,), ())
         self.assertEqual(score.status, STATUS_OK_EMPTY)
         self.assertEqual(score.total_logprob, 0.0)
 
     def test_real_backend_deterministic(self):
+        """Test real backend deterministic."""
         first = score_target_logprobs(self.backend, (0,), (2, 1))
         second = score_target_logprobs(self.backend, (0,), (2, 1))
         self.assertEqual(first, second)

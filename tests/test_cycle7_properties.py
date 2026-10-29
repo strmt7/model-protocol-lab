@@ -95,14 +95,19 @@ class PropertyTableBackend:
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(_TOKEN_TEXTS[token] for token in token_ids)
 
 
 class DivergencePropertyTests(unittest.TestCase):
+    """Divergence property tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.backend = PropertyTableBackend()
 
     def _classify(self, **kwargs: Any) -> dict[str, Any]:
+        """Classify."""
         base: dict[str, Any] = {
             "prompt_ids": (),
             "stop_texts": ("STOP",),

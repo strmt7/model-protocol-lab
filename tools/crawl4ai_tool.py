@@ -34,7 +34,8 @@ ATTRIBUTION = (
 def cache_home(override: str | None = None) -> Path:
     """Purpose: Locate a portable tool cache
     Inputs: Optional absolute override
-    Outputs: Absolute path."""
+    Outputs: Absolute path.
+    """
     selected = override or os.environ.get("MPL_CRAWL4AI_HOME")
     if selected:
         result = Path(selected).expanduser()
@@ -57,14 +58,16 @@ def cache_home(override: str | None = None) -> Path:
 def text_identity(path: Path) -> str:
     """Purpose: Match Git's portable text identity
     Inputs: Text file
-    Outputs: LF-normalized SHA-256 digest."""
+    Outputs: LF-normalized SHA-256 digest.
+    """
     return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def environment_paths(home: Path) -> tuple[Path, Path, str]:
     """Purpose: Isolate dependency revisions
     Inputs: Cache root
-    Outputs: Environment, Python and lock identity."""
+    Outputs: Environment, Python and lock identity.
+    """
     identity = text_identity(LOCK)
     name = f"{VERSION}-py{sys.version_info.major}{sys.version_info.minor}-{identity[:16]}"
     directory = home / name
@@ -75,7 +78,8 @@ def environment_paths(home: Path) -> tuple[Path, Path, str]:
 def tool_environment(home: Path) -> dict[str, str]:
     """Purpose: Keep browser/cache writes scoped
     Inputs: Tool cache
-    Outputs: Child-only environment."""
+    Outputs: Child-only environment.
+    """
     env = dict(os.environ)
     env.update(
         PLAYWRIGHT_BROWSERS_PATH=str(home / "browsers"),
@@ -93,7 +97,8 @@ def tool_environment(home: Path) -> dict[str, str]:
 def _run(args: list[str], env: dict[str, str], timeout: float = 900) -> None:
     """Purpose: Run a bounded child
     Inputs: Command/environment/deadline
-    Outputs: None or failure."""
+    Outputs: None or failure.
+    """
     subprocess.run(
         args,
         env=env,
@@ -110,7 +115,8 @@ def _run(args: list[str], env: dict[str, str], timeout: float = 900) -> None:
 def verify_versions(python: Path, env: dict[str, str]) -> None:
     """Purpose: Confirm the pinned crawler
     Inputs: Environment interpreter
-    Outputs: None or version failure."""
+    Outputs: None or version failure.
+    """
     output = subprocess.run(
         [
             str(python),
@@ -133,7 +139,8 @@ def verify_versions(python: Path, env: dict[str, str]) -> None:
 def install(home: Path) -> Path:
     """Purpose: Provision the pinned package/browser once
     Inputs: Portable cache
-    Outputs: Isolated interpreter."""
+    Outputs: Isolated interpreter.
+    """
     directory, python, identity = environment_paths(home)
     receipt = directory / "install-receipt.json"
     if receipt.is_file():
@@ -184,7 +191,8 @@ def install(home: Path) -> Path:
 def doctor(home: Path) -> None:
     """Purpose: Diagnose the installation
     Inputs: Portable cache
-    Outputs: Diagnostic report or failure."""
+    Outputs: Diagnostic report or failure.
+    """
     directory, python, identity = environment_paths(home)
     report = {
         "version": VERSION,
@@ -211,7 +219,8 @@ def doctor(home: Path) -> None:
 def check_lock(home: Path, requirements: Path = LOCK) -> None:
     """Purpose: Reject incompatible dependencies
     Inputs: Cache/lock
-    Outputs: Resolver result; no runtime install."""
+    Outputs: Resolver result; no runtime install.
+    """
     home.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lock-validation-", dir=home) as owned:
         directory = Path(owned)
@@ -239,7 +248,8 @@ def check_lock(home: Path, requirements: Path = LOCK) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Purpose: Expose installer and crawler entry points
     Inputs: CLI options
-    Outputs: Child exit status."""
+    Outputs: Child exit status.
+    """
     parser = argparse.ArgumentParser(description=__doc__, epilog=ATTRIBUTION)
     parser.add_argument(
         "--home",

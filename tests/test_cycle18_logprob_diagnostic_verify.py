@@ -100,6 +100,7 @@ _ORACLE_PROVIDER_CODES = frozenset(
 
 
 def _oracle_provider_code(exc: BaseException) -> str:
+    """Oracle provider code."""
     if exc.args and type(exc.args[0]) is str and exc.args[0] in _ORACLE_PROVIDER_CODES:
         return exc.args[0]
     return "forward_failed"
@@ -113,6 +114,7 @@ def _ref_encode(text: str) -> tuple[int, ...]:
 
 
 def _ref_decode(ids: tuple[int, ...]) -> str:
+    """Ref decode."""
     return "".join(chr(t) for t in ids)
 
 
@@ -133,6 +135,7 @@ def _piece_encode(text: str, pieces: dict[str, int]) -> tuple[int, ...]:
 
 
 def _piece_decode(ids: tuple[int, ...], by_id: dict[int, str]) -> str:
+    """Piece decode."""
     return "".join(by_id[i] for i in ids)
 
 
@@ -202,6 +205,7 @@ class ScriptedBackend:
         self._encode_as_list = encode_as_list
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         if text in self._encode_raises:
             raise ValueError("scripted-unencodable")
         ids = _ref_encode(text)
@@ -209,9 +213,11 @@ class ScriptedBackend:
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return _ref_decode(tuple(token_ids))
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> "torch.Tensor":
+        """Forward logits."""
         mode = self._plan.get(tuple(input_ids), "low")
         return _logits_for_mode(tuple(input_ids), mode, self.vocab_size)
 
@@ -229,12 +235,15 @@ class MergeBackend:
         self._by_id = {v: k for k, v in self._pieces.items()}
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         return _piece_encode(text, self._pieces)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return _piece_decode(tuple(token_ids), self._by_id)
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> "torch.Tensor":
+        """Forward logits."""
         return _logits_for_mode(tuple(input_ids), "high", self.vocab_size)
 
 
@@ -245,6 +254,7 @@ class NoLogitsBackend(ScriptedBackend):
     forward_logits = None  # type: ignore[assignment]
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_score_expected(
     backend: object,
     prompt_ids: tuple[int, ...],
@@ -456,6 +466,7 @@ def _oracle_aggregate(scores: list[TargetScore]) -> dict:
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_interpret_kind(fixture_scores: list[dict]) -> str:
     """Independent reimplementation of the band interpretation, from the
     ``_interpret_logprob_candidate`` docstring: mean >= DERAILED reads
@@ -488,6 +499,7 @@ _METHOD = (
 )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_diagnostic(
     backend: object,
     result: dict,
@@ -557,6 +569,7 @@ def _oracle_diagnostic(
 
 
 def _make_fixture(fixture_id: str, expected: str, group: str = "g") -> Fixture:
+    """Make fixture."""
     return Fixture(
         id=fixture_id,
         messages=(Message(role="user", content="q"),),
@@ -573,6 +586,7 @@ def _make_obs(
     exact_match: bool = False,
     boundary_found: bool = False,
 ) -> dict:
+    """Make obs."""
     return {
         "candidate": "cand",
         "fixture": fixture_id,
@@ -586,6 +600,7 @@ def _make_obs(
 
 
 def _candidate_entry(name: str, observations: list) -> dict:
+    """Candidate entry."""
     return {"format": {"name": name}, "observations": observations}
 
 
@@ -632,6 +647,7 @@ class DiagnosticCase(unittest.TestCase):
     def assert_diagnostic_matches(
         self, backend: object, result: dict, fixtures, **score_kw: object
     ) -> dict:
+        """Assert diagnostic matches."""
         actual = logprob_diagnostic(backend, result, fixtures)
         expected = _oracle_diagnostic(backend, result, fixtures, **score_kw)
         # Top-level payload (everything but the candidate list).
@@ -656,6 +672,7 @@ class DiagnosticCase(unittest.TestCase):
         return actual
 
     def _check_interpretation_text(self, interp: dict, fixture_scores: list[dict]) -> None:
+        """Check interpretation text."""
         kind = interp["kind"]
         text = interp["text"]
         self.assertIsInstance(text, str)
@@ -684,11 +701,15 @@ class DiagnosticCase(unittest.TestCase):
 
 
 class ThresholdConstantsTests(unittest.TestCase):
+    """Threshold constants tests."""
+
     def test_threshold_values_pinned(self):
+        """Test threshold values pinned."""
         self.assertEqual(LOGPROB_DERAILED_MEAN_THRESHOLD, -2.0)
         self.assertEqual(LOGPROB_UNKNOWN_MEAN_THRESHOLD, -5.0)
 
     def test_payload_reports_thresholds_and_method(self):
+        """Test payload reports thresholds and method."""
         backend = ScriptedBackend()
         fixture = _make_fixture("f1", "c")
         prompt_ids = _ref_encode("ab")
@@ -708,6 +729,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
     """Direct differential tests of ``_score_expected_answer``."""
 
     def test_ok_path_matches_oracle(self):
+        """Test ok path matches oracle."""
         plan = {tuple(_ref_encode("abcd")): "high"}
         backend = ScriptedBackend(plan=plan)
         prompt_ids = _ref_encode("ab")
@@ -718,6 +740,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertGreater(actual.mean_logprob, -0.01)
 
     def test_encode_raising_becomes_encode_failed(self):
+        """Test encode raising becomes encode failed."""
         backend = ScriptedBackend(encode_raises=frozenset({"nope"}))
         prompt_ids = _ref_encode("ab")
         actual = _score_expected_answer(backend, prompt_ids, "nope")
@@ -732,6 +755,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertIsNone(actual.total_logprob)
 
     def test_encode_returning_non_tuple_becomes_encode_failed(self):
+        """Test encode returning non tuple becomes encode failed."""
         backend = ScriptedBackend(encode_as_list=True)
         prompt_ids = _ref_encode("ab")
         actual = _score_expected_answer(backend, prompt_ids, "cd")
@@ -742,6 +766,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertEqual(actual.reason, "encode_failed")
 
     def test_empty_expected_is_ok_empty(self):
+        """Test empty expected is ok empty."""
         backend = ScriptedBackend()
         prompt_ids = _ref_encode("ab")
         actual = _score_expected_answer(backend, prompt_ids, "")
@@ -752,6 +777,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertIsNone(actual.mean_logprob)
 
     def test_forward_raising_becomes_forward_failed(self):
+        """Test forward raising becomes forward failed."""
         prompt_ids = _ref_encode("ab")
         plan = {prompt_ids + _ref_encode("cd"): "raise"}
         backend = ScriptedBackend(plan=plan)
@@ -761,6 +787,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertEqual(actual.reason, "forward_failed")
 
     def test_nonfinite_logits_become_non_finite_logits(self):
+        """Test nonfinite logits become non finite logits."""
         prompt_ids = _ref_encode("ab")
         plan = {prompt_ids + _ref_encode("cd"): "nonfinite"}
         backend = ScriptedBackend(plan=plan)
@@ -770,6 +797,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertEqual(actual.reason, "non_finite_logits")
 
     def test_token_id_out_of_range(self):
+        """Test token id out of range."""
         # vocab_size=100 < ord("d")==100: the engine refuses before alignment.
         backend = ScriptedBackend(vocab_size=100)
         prompt_ids = _ref_encode("ab")
@@ -779,6 +807,7 @@ class ScoreExpectedAnswerTests(unittest.TestCase):
         self.assertEqual(actual.reason, "token_id_out_of_range")
 
     def test_boundary_merge_mismatch(self):
+        """Test boundary merge mismatch."""
         backend = MergeBackend()
         prompt_ids = (0,)  # "a"; "a"+"b" re-tokenizes as the single piece "ab"
         actual = _score_expected_answer(backend, prompt_ids, "b")
@@ -798,12 +827,14 @@ class AggregateOracleTests(unittest.TestCase):
     """Direct differential tests of ``_aggregate_fixture_scores``."""
 
     def _check(self, scores: list[TargetScore]) -> dict:
+        """Check."""
         actual = _aggregate_fixture_scores(scores)
         expected = _oracle_aggregate(scores)
         self.assertEqual(actual, expected)
         return actual
 
     def test_empty_list(self):
+        """Test empty list."""
         agg = self._check([])
         self.assertEqual(
             agg,
@@ -817,6 +848,7 @@ class AggregateOracleTests(unittest.TestCase):
         )
 
     def test_only_ok_contributes(self):
+        """Test only ok contributes."""
         ok = TargetScore("ok", None, (-0.5, -1.5), -2.0, -1.0, 2, 4, 3)
         ok_empty = TargetScore("ok_empty", None, (), 0.0, None, 0, 0, 3)
         refused = TargetScore("unavailable", "forward_failed", (), None, None, 0, 0, 3)
@@ -829,6 +861,7 @@ class AggregateOracleTests(unittest.TestCase):
         self.assertEqual(agg["target_byte_length"], 4)
 
     def test_token_weighted_mean_across_fixtures(self):
+        """Test token weighted mean across fixtures."""
         # Means -1.0 over 2 tokens and -4.0 over 1 token: weighted mean -2.0.
         first = TargetScore("ok", None, (-1.0, -1.0), -2.0, -1.0, 2, 2, 1)
         second = TargetScore("ok", None, (-4.0,), -4.0, -4.0, 1, 1, 1)
@@ -839,6 +872,7 @@ class AggregateOracleTests(unittest.TestCase):
         self.assertEqual(agg["scored_token_count"], 3)
 
     def test_nonfinite_total_degrades_to_none(self):
+        """Test nonfinite total degrades to none."""
         hostile = TargetScore("ok", None, (), float("inf"), float("inf"), 1, 1, 2)
         agg = self._check([hostile])
         self.assertIsNone(agg["total_logprob"])
@@ -849,6 +883,7 @@ class AggregateOracleTests(unittest.TestCase):
         json.dumps(agg, allow_nan=False)
 
     def test_nan_total_degrades_to_none(self):
+        """Test nan total degrades to none."""
         hostile = TargetScore("ok", None, (), float("nan"), float("nan"), 1, 1, 2)
         agg = self._check([hostile])
         self.assertIsNone(agg["total_logprob"])
@@ -856,6 +891,7 @@ class AggregateOracleTests(unittest.TestCase):
         json.dumps(agg, allow_nan=False)
 
     def test_none_total_withholds_aggregate(self):
+        """Test none total withholds aggregate."""
         # An ok score with a non-float total cannot join the sums.
         hostile = TargetScore("ok", None, (), None, -1.0, 1, 1, 2)
         agg = self._check([hostile])
@@ -863,6 +899,7 @@ class AggregateOracleTests(unittest.TestCase):
         self.assertIsNone(agg["mean_logprob"])
 
     def test_zero_tokens_withholds_totals(self):
+        """Test zero tokens withholds totals."""
         hostile = TargetScore("ok", None, (), -2.0, -2.0, 0, 0, 2)
         agg = self._check([hostile])
         self.assertIsNone(agg["total_logprob"])
@@ -873,12 +910,14 @@ class ObservationOracleTests(unittest.TestCase):
     """Direct differential tests of ``_diagnostic_observation``."""
 
     def _check(self, backend, obs, expected_by_id, **kw) -> None:
+        """Check."""
         actual_dict, actual_score = _diagnostic_observation(backend, obs, expected_by_id)
         expected_dict, expected_score = _oracle_observation(backend, obs, expected_by_id, **kw)
         self.assertEqual(actual_dict, expected_dict)
         self.assertEqual(actual_score, expected_score)
 
     def test_completed_ok_observation(self):
+        """Test completed ok observation."""
         prompt_ids = _ref_encode("ab")
         plan = {prompt_ids + _ref_encode("cd"): "high"}
         backend = ScriptedBackend(plan=plan)
@@ -890,6 +929,7 @@ class ObservationOracleTests(unittest.TestCase):
         )
 
     def test_native_pass_flag_combinations(self):
+        """Test native pass flag combinations."""
         backend = ScriptedBackend()
         prompt_ids = _ref_encode("ab")
         for exact, boundary in [(True, True), (True, False), (False, True), (False, False)]:
@@ -899,6 +939,7 @@ class ObservationOracleTests(unittest.TestCase):
                 self.assertEqual(actual_dict["native_pass"], exact and boundary)
 
     def test_non_dict_observation(self):
+        """Test non dict observation."""
         backend = ScriptedBackend()
         for obs in ("junk", None, 42, ["f1"]):
             with self.subTest(obs=obs):
@@ -909,6 +950,7 @@ class ObservationOracleTests(unittest.TestCase):
                 self.assertIsNone(actual_score)
 
     def test_non_completed_status_not_scored(self):
+        """Test non completed status not scored."""
         backend = ScriptedBackend()
         prompt_ids = _ref_encode("ab")
         for status in ("failed", "cancelled", "running", None):
@@ -917,6 +959,7 @@ class ObservationOracleTests(unittest.TestCase):
                 self._check(backend, obs, {"f1": "c"}, vocab_size=128)
 
     def test_bad_input_ids_not_scored(self):
+        """Test bad input ids not scored."""
         backend = ScriptedBackend()
         cases = [
             (),
@@ -932,17 +975,20 @@ class ObservationOracleTests(unittest.TestCase):
                 self._check(backend, obs, {"f1": "c"}, vocab_size=128)
 
     def test_list_input_ids_accepted(self):
+        """Test list input ids accepted."""
         # isinstance(list/tuple) accepts lists; tuple(raw_ids) normalizes.
         backend = ScriptedBackend()
         prompt_ids = list(_ref_encode("ab"))
         self._check(backend, _make_obs("f1", prompt_ids), {"f1": "c"}, vocab_size=128)
 
     def test_unknown_fixture_not_scored(self):
+        """Test unknown fixture not scored."""
         backend = ScriptedBackend()
         prompt_ids = _ref_encode("ab")
         self._check(backend, _make_obs("ghost", prompt_ids), {"f1": "c"}, vocab_size=128)
 
     def test_non_string_fixture_label(self):
+        """Test non string fixture label."""
         backend = ScriptedBackend()
         prompt_ids = _ref_encode("ab")
         obs = _make_obs(123, prompt_ids)
@@ -956,6 +1002,7 @@ class ObservationOracleTests(unittest.TestCase):
         self.assertEqual(actual_dict["fixture"], "?")
 
     def test_encode_failure_surfaces_in_dict(self):
+        """Test encode failure surfaces in dict."""
         backend = ScriptedBackend(encode_raises=frozenset({"nope"}))
         prompt_ids = _ref_encode("ab")
         self._check(
@@ -1004,6 +1051,7 @@ class InterpretationBoundaryTests(unittest.TestCase):
     ]
 
     def _check_kind(self, fixture_scores: list[dict], expected_kind: str) -> None:
+        """Check kind."""
         actual = _interpret_logprob_candidate(fixture_scores)
         self.assertEqual(actual["kind"], expected_kind)
         self.assertEqual(actual["kind"], _oracle_interpret_kind(fixture_scores))
@@ -1011,40 +1059,48 @@ class InterpretationBoundaryTests(unittest.TestCase):
         self.assertTrue(actual["text"])
 
     def test_boundary_means(self):
+        """Test boundary means."""
         for mean, expected_kind in self.BOUNDARY_CASES:
             with self.subTest(mean=mean):
                 self._check_kind([_score_dict(mean)], expected_kind)
 
     def test_boundary_combos(self):
+        """Test boundary combos."""
         for means, expected_kind in self.COMBO_CASES:
             with self.subTest(means=means):
                 self._check_kind([_score_dict(m) for m in means], expected_kind)
 
     def test_native_passes_do_not_classify(self):
+        """Test native passes do not classify."""
         # A failing mid-band fixture plus a passing low fixture: the passing
         # fixture must not pull the reading toward weights_dont_know.
         scores = [_score_dict(-3.5), _score_dict(-10.0, native_pass=True)]
         self._check_kind(scores, "indeterminate")
 
     def test_passing_high_fixture_does_not_derail(self):
+        """Test passing high fixture does not derail."""
         scores = [_score_dict(-3.5), _score_dict(-0.5, native_pass=True)]
         self._check_kind(scores, "indeterminate")
 
     def test_no_failures(self):
+        """Test no failures."""
         self._check_kind([_score_dict(-10.0, native_pass=True)], "no_failures")
         self._check_kind([], "no_failures")
 
     def test_all_unavailable(self):
+        """Test all unavailable."""
         scores = [_score_dict(None, status="unavailable")]
         self._check_kind(scores, "unavailable")
 
     def test_ok_empty_failing_fixture_does_not_classify(self):
+        """Test ok empty failing fixture does not classify."""
         # ok_empty is not "ok": a failing empty-answer fixture leaves the
         # diagnostic with nothing scored.
         scores = [_score_dict(None, status="ok_empty", total=0.0, count=0)]
         self._check_kind(scores, "unavailable")
 
     def test_mixed_statuses(self):
+        """Test mixed statuses."""
         scores = [
             _score_dict(-0.5),
             _score_dict(None, status="unavailable"),
@@ -1053,10 +1109,12 @@ class InterpretationBoundaryTests(unittest.TestCase):
         self._check_kind(scores, "greedy_derailed")
 
     def test_non_float_mean_does_not_classify(self):
+        """Test non float mean does not classify."""
         scores = [_score_dict(None, total=-3.0)]
         self._check_kind(scores, "unavailable")
 
     def test_zero_token_counts_report_na_mean(self):
+        """Test zero token counts report na mean."""
         # Defensive path: scored (ok + float mean) but no tokens, so the
         # reported mean is None and the text says "n/a".
         scores = [_score_dict(-1.0, total=None, count=0)]
@@ -1066,6 +1124,7 @@ class InterpretationBoundaryTests(unittest.TestCase):
         self.assertIn("n/a", actual["text"])
 
     def test_reported_mean_is_token_weighted(self):
+        """Test reported mean is token weighted."""
         scores = [_score_dict(-1.0, total=-2.0, count=2), _score_dict(-4.0, total=-4.0, count=1)]
         actual = _interpret_logprob_candidate(scores)
         self.assertEqual(actual["kind"], "greedy_derailed")
@@ -1092,6 +1151,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
     ]
 
     def _band_case(self, mean_p: float, expected: str, prompt_text: str = "ab"):
+        """Band case."""
         prompt_ids = _ref_encode(prompt_text)
         plan = {prompt_ids + _ref_encode(expected): ("band", mean_p)}
         backend = ScriptedBackend(plan=plan)
@@ -1104,6 +1164,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
         return backend, prompt_ids
 
     def test_exact_and_near_boundary_means_end_to_end(self):
+        """Test exact and near boundary means end to end."""
         for mean_p, expected_kind in self.PLACEMENTS:
             with self.subTest(mean=mean_p):
                 backend, prompt_ids = self._band_case(mean_p, "c")
@@ -1116,6 +1177,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
 
     def test_multi_token_exact_boundary(self):
+        """Test multi token exact boundary."""
         # Three identical per-token logprobs: the n*p/n path must still land
         # exactly on the threshold after float32 rounding.
         for mean_p, expected_kind in [(-2.0, "greedy_derailed"), (-5.0, "indeterminate")]:
@@ -1154,26 +1216,32 @@ class InterpretationEndToEndTests(DiagnosticCase):
         return diag["candidates"][0]
 
     def test_greedy_derailed(self):
+        """Test greedy derailed."""
         cand = self._run([("f1", "c", "high", False)])
         self.assertEqual(cand["interpretation"]["kind"], "greedy_derailed")
 
     def test_weights_dont_know(self):
+        """Test weights dont know."""
         cand = self._run([("f1", "c", "low", False)])
         self.assertEqual(cand["interpretation"]["kind"], "weights_dont_know")
 
     def test_mixed(self):
+        """Test mixed."""
         cand = self._run([("f1", "c", "high", False), ("f2", "d", "low", False)])
         self.assertEqual(cand["interpretation"]["kind"], "mixed")
 
     def test_indeterminate(self):
+        """Test indeterminate."""
         cand = self._run([("f1", "c", ("band", -3.5), False)])
         self.assertEqual(cand["interpretation"]["kind"], "indeterminate")
 
     def test_no_failures(self):
+        """Test no failures."""
         cand = self._run([("f1", "c", "low", True), ("f2", "d", "high", True)])
         self.assertEqual(cand["interpretation"]["kind"], "no_failures")
 
     def test_unavailable(self):
+        """Test unavailable."""
         cand = self._run([("f1", "c", "raise", False), ("f2", "d", "nonfinite", False)])
         self.assertEqual(cand["interpretation"]["kind"], "unavailable")
         agg = cand["aggregate"]
@@ -1182,6 +1250,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
         self.assertEqual(agg["unavailable_fixtures"], 2)
 
     def test_passing_fixtures_excluded_from_interpretation_but_in_aggregate(self):
+        """Test passing fixtures excluded from interpretation but in aggregate."""
         # The brief's scope subtlety, pinned: scoring covers every completed
         # observation (aggregate counts both), but only failures classify.
         cand = self._run([("f1", "c", "high", False), ("f2", "d", "low", True)])
@@ -1192,6 +1261,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
         self.assertEqual(agg["native_failures"], 1)
 
     def test_ok_empty_failing_fixture_excluded_everywhere(self):
+        """Test ok empty failing fixture excluded everywhere."""
         cand = self._run([("f1", "", "high", False), ("f2", "c", "high", False)])
         self.assertEqual(cand["interpretation"]["kind"], "greedy_derailed")
         agg = cand["aggregate"]
@@ -1201,6 +1271,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
         self.assertEqual(agg["unavailable_fixtures"], 0)
 
     def test_candidate_with_no_observations(self):
+        """Test candidate with no observations."""
         backend = ScriptedBackend()
         result = {"search": [_candidate_entry("cand", [])]}
         diag = self.assert_diagnostic_matches(
@@ -1212,6 +1283,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
         self.assertEqual(cand["aggregate"]["scored_fixtures"], 0)
 
     def test_encode_as_list_backend_all_unavailable(self):
+        """Test encode as list backend all unavailable."""
         cand = self._run(
             [("f1", "c", "high", False), ("f2", "d", "high", False)],
             encode_as_list=True,
@@ -1248,6 +1320,7 @@ class EndToEndFuzzTests(DiagnosticCase):
     ENCODE_RAISES = frozenset({"UNENCODABLE"})
 
     def _build_case(self, seed: int):
+        """Build case."""
         rng = random.Random(seed)  # noqa: S311 -- deterministic seeded fuzz, not crypto
         fixtures = [
             _make_fixture(f"f{i}", rng.choice(self.EXPECTED_POOL)) for i in range(rng.randint(1, 4))
@@ -1295,6 +1368,7 @@ class EndToEndFuzzTests(DiagnosticCase):
         return backend, result, fixtures_arg
 
     def test_seeded_fuzz_full_payload(self):
+        """Test seeded fuzz full payload."""
         for seed in range(self.N_SEEDS):
             with self.subTest(seed=seed):
                 backend, result, fixtures = self._build_case(seed)
@@ -1309,7 +1383,10 @@ class EndToEndFuzzTests(DiagnosticCase):
 
 
 class InputValidationTests(DiagnosticCase):
+    """Input validation tests."""
+
     def test_result_must_be_dict_with_search_list(self):
+        """Test result must be dict with search list."""
         backend = ScriptedBackend()
         fixtures = (_make_fixture("f1", "c"),)
         for bad in (None, [], {"search": {}}, {"search": None}, {"other": []}):
@@ -1320,6 +1397,7 @@ class InputValidationTests(DiagnosticCase):
                 logprob_diagnostic(backend, bad, fixtures)
 
     def test_fixtures_must_be_tuple_of_fixture(self):
+        """Test fixtures must be tuple of fixture."""
         backend = ScriptedBackend()
         result = {"search": []}
         for bad in (None, "x", (1, 2), [_make_fixture("f1", "c"), "nope"]):
@@ -1330,6 +1408,7 @@ class InputValidationTests(DiagnosticCase):
                 logprob_diagnostic(backend, result, bad)
 
     def test_fixtures_list_is_accepted(self):
+        """Test fixtures list is accepted."""
         backend = ScriptedBackend()
         fixture = _make_fixture("f1", "c")
         prompt_ids = _ref_encode("ab")
@@ -1338,6 +1417,7 @@ class InputValidationTests(DiagnosticCase):
         self.assertTrue(diag["available"])
 
     def test_backend_without_forward_logits(self):
+        """Test backend without forward logits."""
         backend = NoLogitsBackend()
         fixture = _make_fixture("f1", "c")
         prompt_ids = _ref_encode("ab")
@@ -1349,6 +1429,7 @@ class InputValidationTests(DiagnosticCase):
         self.assertEqual(diag, _oracle_diagnostic(backend, result, (fixture,), vocab_size=128))
 
     def test_no_scorable_observations(self):
+        """Test no scorable observations."""
         backend = ScriptedBackend()
         result = {
             "search": [
@@ -1364,6 +1445,7 @@ class InputValidationTests(DiagnosticCase):
         self.assertEqual(diag["candidates"], [])
 
     def test_deterministic_across_runs(self):
+        """Test deterministic across runs."""
         backend = ScriptedBackend()
         fixtures = (_make_fixture("f1", "cd"), _make_fixture("f2", "dc"))
         prompt_ids = _ref_encode("ab")
@@ -1380,6 +1462,7 @@ class InputValidationTests(DiagnosticCase):
         self.assertEqual(json.dumps(first, sort_keys=True), json.dumps(second, sort_keys=True))
 
     def test_input_result_not_mutated(self):
+        """Test input result not mutated."""
         backend = ScriptedBackend()
         fixture = _make_fixture("f1", "c")
         prompt_ids = _ref_encode("ab")

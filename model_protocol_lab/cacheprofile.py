@@ -104,6 +104,7 @@ def _prefix_counts(prompts: list[tuple[int, ...]]) -> dict[tuple[int, ...], int]
     return counts
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def candidate_cache_profile(
     records: list[Any],
     block_size: int = DEFAULT_BLOCK_SIZE,

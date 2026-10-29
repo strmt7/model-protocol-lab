@@ -25,6 +25,7 @@ class _BurnTokenizer:
     def apply_chat_template(
         self, conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
+        """Apply chat template."""
         end = time.monotonic() + self._seconds
         # skipcq: PTC-W0047 - burning cycles until the deadline is the fixture
         while time.monotonic() < end:
@@ -33,15 +34,21 @@ class _BurnTokenizer:
 
 
 class _OkTokenizer:
+    """Ok tokenizer."""
+
     @staticmethod
     def apply_chat_template(
         conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
+        """Apply chat template."""
         return "<|user|>hi<|assistant|>"
 
 
 class TestRenderTimeBudget(unittest.TestCase):
+    """Test render time budget."""
+
     def test_cpu_burn_aborts_with_budget_exceeded(self) -> None:
+        """Test cpu burn aborts with budget exceeded."""
         import signal
 
         from model_protocol_lab.doctor import _render_with_time_budget, _RenderTimeBudgetExceeded
@@ -55,6 +62,7 @@ class TestRenderTimeBudget(unittest.TestCase):
         self.assertLess(elapsed, 20.0, f"budget did not abort the burn (took {elapsed:.1f}s)")
 
     def test_budget_exceeded_is_value_error_not_keyboard_interrupt(self) -> None:
+        """Test budget exceeded is value error not keyboard interrupt."""
         # The per-pair handler catches Exception; ValueError keeps a budget
         # expiry distinct from a user ^C.
         from model_protocol_lab.doctor import _RenderTimeBudgetExceeded
@@ -63,6 +71,7 @@ class TestRenderTimeBudget(unittest.TestCase):
         self.assertFalse(issubclass(_RenderTimeBudgetExceeded, KeyboardInterrupt))
 
     def test_legitimate_render_unaffected(self) -> None:
+        """Test legitimate render unaffected."""
         from model_protocol_lab.doctor import _render_with_time_budget
 
         self.assertEqual(
@@ -73,6 +82,7 @@ class TestRenderTimeBudget(unittest.TestCase):
         )
 
     def test_alarm_disarmed_after_render(self) -> None:
+        """Test alarm disarmed after render."""
         # No stray SIGALRM may fire after the wrapper returns.
         import signal
 
@@ -83,11 +93,13 @@ class TestRenderTimeBudget(unittest.TestCase):
         self.assertEqual(delay, 0.0)
 
     def test_previous_handler_and_timer_restored(self) -> None:
+        """Test previous handler and timer restored."""
         import signal
 
         from model_protocol_lab.doctor import _render_with_time_budget
 
         def _handler(signum: int, frame: object) -> None:
+            """Handler."""
             raise AssertionError("stray alarm fired")
 
         old = signal.getsignal(signal.SIGALRM)
@@ -101,6 +113,7 @@ class TestRenderTimeBudget(unittest.TestCase):
             signal.signal(signal.SIGALRM, old)
 
     def test_non_main_thread_runs_without_watchdog(self) -> None:
+        """Test non main thread runs without watchdog."""
         # SIGALRM is delivered to the main thread only; off-main-thread the
         # wrapper must not arm a timer (it would never fire) and must still
         # return the render result.
@@ -109,6 +122,7 @@ class TestRenderTimeBudget(unittest.TestCase):
         results: list[str] = []
 
         def _work() -> None:
+            """Work."""
             results.append(_render_with_time_budget(_OkTokenizer(), [], budget_s=0.01))
 
         worker = threading.Thread(target=_work)
@@ -118,22 +132,27 @@ class TestRenderTimeBudget(unittest.TestCase):
         self.assertEqual(results, ["<|user|>hi<|assistant|>"])
 
     def test_memory_error_still_propagates_through_watchdog(self) -> None:
+        """Test memory error still propagates through watchdog."""
         # The time wrapper composes with the memory cap; it must not mask it.
         from model_protocol_lab.doctor import _render_with_time_budget
 
         class _MemBomb:
+            """Mem bomb."""
+
             @staticmethod
             def apply_chat_template(
                 conversation: object,
                 tokenize: bool = False,
                 add_generation_prompt: bool = True,
             ) -> str:
+                """Apply chat template."""
                 return "x" * 500_000_000
 
         with self.assertRaises(MemoryError):
             _render_with_time_budget(_MemBomb(), [], budget_s=30.0)
 
     def test_zero_budget_disables_watchdog(self) -> None:
+        """Test zero budget disables watchdog."""
         from model_protocol_lab.doctor import _render_with_time_budget
 
         self.assertEqual(
@@ -142,6 +161,7 @@ class TestRenderTimeBudget(unittest.TestCase):
         )
 
     def test_watchdog_setup_failure_falls_back_to_unbounded(self) -> None:
+        """Test watchdog setup failure falls back to unbounded."""
         # If the timer cannot be installed, the render must still run (the
         # pre-existing behavior), not fail.
         from unittest import mock

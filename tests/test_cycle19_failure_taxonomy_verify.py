@@ -99,6 +99,7 @@ def _oracle_classify_observation(obs, eos_id):
     return "no-boundary-in-N"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_failure_taxonomy(result, eos_id):
     """Independent re-derivation of ``failure_taxonomy``.
 
@@ -240,6 +241,7 @@ def _classify_corpus():
 
 
 def _random_obs(rng):
+    """Random obs."""
     obs = {}
     if rng.random() < 0.9:
         obs["status"] = rng.choice(["completed", "failed", "cancelled", "bogus", None])
@@ -261,6 +263,7 @@ def _random_obs(rng):
 
 
 def _random_result(rng):
+    """Random result."""
     result = {}
     search = []
     for _ in range(rng.randint(0, 3)):
@@ -351,6 +354,7 @@ def _taxonomy_corpus():
 
 
 def _count_classify_mismatches(module):
+    """Count classify mismatches."""
     bad = 0
     for obs, eos_id in _classify_corpus():
         expected = _classify_outcome(_oracle_classify_observation, obs, eos_id)
@@ -361,6 +365,7 @@ def _count_classify_mismatches(module):
 
 
 def _count_taxonomy_mismatches(module):
+    """Count taxonomy mismatches."""
     bad = 0
     for result, eos_id in _taxonomy_corpus():
         expected = _taxonomy_outcome(_oracle_failure_taxonomy, result, eos_id)
@@ -371,7 +376,10 @@ def _count_taxonomy_mismatches(module):
 
 
 class VocabularyTests(unittest.TestCase):
+    """Vocabulary tests."""
+
     def test_oracle_vocabulary_matches_module(self):
+        """Test oracle vocabulary matches module."""
         # The oracle's closed vocabulary is restated independently; it must
         # stay byte-identical to the module's FAILURE_MODES.
         self.assertEqual(list(_ORACLE_MODES), list(FAILURE_MODES))
@@ -383,21 +391,25 @@ class ClassifyDocstringTests(unittest.TestCase):
     """Docstring-derived unit cases: each class and each precedence rule."""
 
     def test_pass_returns_none(self):
+        """Test pass returns none."""
         obs = {"status": "completed", "exact_match": True, "boundary_found": True}
         self.assertIsNone(_oracle_classify_observation(obs, None))
         self.assertIsNone(real.classify_observation(obs, None))
 
     def test_pass_uses_truthiness(self):
+        """Test pass uses truthiness."""
         obs = {"exact_match": 1, "boundary_found": "yes"}
         self.assertIsNone(_oracle_classify_observation(obs, None))
         self.assertIsNone(real.classify_observation(obs, None))
 
     def test_status_failed_is_backend_error(self):
+        """Test status failed is backend error."""
         obs = {"status": "failed", "exact_match": False, "boundary_found": False}
         self.assertEqual(_oracle_classify_observation(obs, None), "backend-error")
         self.assertEqual(real.classify_observation(obs, None), "backend-error")
 
     def test_raw_reason_error_is_backend_error(self):
+        """Test raw reason error is backend error."""
         obs = {
             "status": "completed",
             "raw_reason": "error",
@@ -408,6 +420,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, None), "backend-error")
 
     def test_cancelled_grouped_with_backend_error(self):
+        """Test cancelled grouped with backend error."""
         # Docstring gap (see module docstring): the cancelled grouping lives
         # only in a code comment; both oracle and implementation agree.
         obs = {"status": "cancelled", "exact_match": False, "boundary_found": False}
@@ -415,6 +428,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, None), "backend-error")
 
     def test_backend_error_beats_text_mismatch(self):
+        """Test backend error beats text mismatch."""
         obs = {
             "status": "failed",
             "boundary_found": False,
@@ -425,6 +439,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "backend-error")
 
     def test_backend_error_beats_eos(self):
+        """Test backend error beats eos."""
         obs = {
             "status": "failed",
             "boundary_found": False,
@@ -434,6 +449,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "backend-error")
 
     def test_text_mismatch_beats_eos(self):
+        """Test text mismatch beats eos."""
         obs = {
             "status": "completed",
             "boundary_found": False,
@@ -444,6 +460,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "boundary-text-mismatch")
 
     def test_text_mismatch_requires_exact_true(self):
+        """Test text mismatch requires exact true."""
         # boundary_text_match uses `is True`, not truthiness.
         obs = {
             "status": "completed",
@@ -455,6 +472,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "eos-without-boundary")
 
     def test_eos_without_boundary(self):
+        """Test eos without boundary."""
         obs = {
             "status": "completed",
             "exact_match": False,
@@ -465,6 +483,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "eos-without-boundary")
 
     def test_eos_none_gives_no_boundary_in_n(self):
+        """Test eos none gives no boundary in n."""
         obs = {
             "status": "completed",
             "exact_match": False,
@@ -475,6 +494,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, None), "no-boundary-in-N")
 
     def test_eos_absent_gives_no_boundary_in_n(self):
+        """Test eos absent gives no boundary in n."""
         obs = {
             "status": "completed",
             "exact_match": False,
@@ -485,10 +505,12 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "no-boundary-in-N")
 
     def test_empty_observation_maps_to_no_boundary_in_n(self):
+        """Test empty observation maps to no boundary in n."""
         self.assertEqual(_oracle_classify_observation({}, 2), "no-boundary-in-N")
         self.assertEqual(real.classify_observation({}, 2), "no-boundary-in-N")
 
     def test_wrong_answer_with_found_boundary(self):
+        """Test wrong answer with found boundary."""
         # Docstring: the expected answer never appeared boundary-delimited
         # within the token cap -> no-boundary-in-N.
         obs = {"status": "completed", "exact_match": False, "boundary_found": True}
@@ -496,6 +518,7 @@ class ClassifyDocstringTests(unittest.TestCase):
         self.assertEqual(real.classify_observation(obs, 2), "no-boundary-in-N")
 
     def test_non_dict_raises_value_error(self):
+        """Test non dict raises value error."""
         for bad in ("nope", None, [], 5, (1,)):
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError):
@@ -504,6 +527,7 @@ class ClassifyDocstringTests(unittest.TestCase):
                     real.classify_observation(bad, None)
 
     def test_malformed_output_ids_raise_type_error_in_eos_branch(self):
+        """Test malformed output ids raise type error in eos branch."""
         # Docstring gap (see module docstring): a truthy non-iterable
         # output_ids escapes as TypeError, but only when the EOS branch is
         # actually reached -- backend-error and pass short-circuit first.
@@ -529,7 +553,10 @@ class ClassifyDocstringTests(unittest.TestCase):
 
 
 class ClassifyFuzzTests(unittest.TestCase):
+    """Classify fuzz tests."""
+
     def test_fuzz_classify_matches_oracle(self):
+        """Test fuzz classify matches oracle."""
         corpus = _classify_corpus()
         for obs, eos_id in corpus:
             with self.subTest(obs=obs, eos_id=eos_id):
@@ -542,6 +569,7 @@ class TaxonomyContractTests(unittest.TestCase):
     """Docstring-derived structural invariants on the implementation."""
 
     def test_taxonomy_shape(self):
+        """Test taxonomy shape."""
         result = {"search": [], "decision": "no_candidate"}
         taxonomy = real.failure_taxonomy(result, None)
         self.assertEqual(taxonomy["modes"], list(FAILURE_MODES))
@@ -550,6 +578,7 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertFalse(taxonomy["eos_id_considered"])
 
     def test_all_pass_candidate_gets_zero_counts(self):
+        """Test all pass candidate gets zero counts."""
         observations = [
             {"status": "completed", "exact_match": True, "boundary_found": True},
             {"status": "completed", "exact_match": 1, "boundary_found": "y"},
@@ -563,6 +592,7 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertEqual(set(taxonomy["per_candidate"]["a"]), set(FAILURE_MODES))
 
     def test_counts_sum_to_nonpassing_observations(self):
+        """Test counts sum to nonpassing observations."""
         observations = [
             {"status": "completed", "exact_match": True, "boundary_found": True},
             {"status": "failed"},
@@ -583,18 +613,21 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertEqual(counts["no-boundary-in-N"], 1)
 
     def test_held_out_none_unless_winner_diverged(self):
+        """Test held out none unless winner diverged."""
         base = {"search": [], "held_out": {"observations": [{"status": "failed"}]}}
         for decision in ("compatible_on_fixture_set", "ambiguous", "no_candidate", None):
             result = dict(base, decision=decision)
             self.assertIsNone(real.failure_taxonomy(result, None)["held_out"])
 
     def test_held_out_zeros_when_stage_missing(self):
+        """Test held out zeros when stage missing."""
         result = {"search": [], "decision": "held_out_failed"}
         taxonomy = real.failure_taxonomy(result, None)
         self.assertIsNotNone(taxonomy["held_out"])
         self.assertEqual(sum(taxonomy["held_out"].values()), 0)
 
     def test_held_out_forces_divergence_regardless_of_failure(self):
+        """Test held out forces divergence regardless of failure."""
         # Docstring: every non-passing held-out observation counts as
         # held-out-divergence regardless of its specific failure.
         held_observations = [
@@ -615,12 +648,14 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertEqual(others, 0)
 
     def test_eos_id_considered_flag(self):
+        """Test eos id considered flag."""
         result = {"search": [], "decision": "x"}
         self.assertFalse(real.failure_taxonomy(result, None)["eos_id_considered"])
         self.assertTrue(real.failure_taxonomy(result, 0)["eos_id_considered"])
         self.assertTrue(real.failure_taxonomy(result, 2)["eos_id_considered"])
 
     def test_duplicate_candidate_names_last_wins(self):
+        """Test duplicate candidate names last wins."""
         result = {
             "search": [
                 {
@@ -640,6 +675,7 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertEqual(counts["no-boundary-in-N"], 1)
 
     def test_input_not_mutated(self):
+        """Test input not mutated."""
         result, eos_id = _taxonomy_corpus()[1]
         snapshot = copy.deepcopy(result)
         real.failure_taxonomy(result, eos_id)
@@ -647,6 +683,7 @@ class TaxonomyContractTests(unittest.TestCase):
         self.assertEqual(result, snapshot)
 
     def test_result_non_dict_raises(self):
+        """Test result non dict raises."""
         for bad in ("nope", None, [], 5):
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError):
@@ -656,7 +693,10 @@ class TaxonomyContractTests(unittest.TestCase):
 
 
 class TaxonomyFuzzTests(unittest.TestCase):
+    """Taxonomy fuzz tests."""
+
     def test_fuzz_taxonomy_matches_oracle(self):
+        """Test fuzz taxonomy matches oracle."""
         for result, eos_id in _taxonomy_corpus():
             with self.subTest(result=result, eos_id=eos_id):
                 expected = _taxonomy_outcome(_oracle_failure_taxonomy, result, eos_id)
@@ -744,22 +784,28 @@ _HELDOUT_PER_OBS = [
 
 
 class SensitivityTests(unittest.TestCase):
+    """Sensitivity tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.mut_swap = _build_mutant("mut_swap_predicates", _SWAP_PREDICATES)
         cls.mut_drop = _build_mutant("mut_drop_class", _DROP_CLASS)
         cls.mut_heldout = _build_mutant("mut_heldout_per_obs", _HELDOUT_PER_OBS)
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         # Do not accumulate package copies in /tmp across runs.
         shutil.rmtree(_MUTANT_ROOT, ignore_errors=True)
 
     def test_real_implementation_has_zero_mismatches(self):
+        """Test real implementation has zero mismatches."""
         self.assertEqual(_count_classify_mismatches(real), 0)
         self.assertEqual(_count_taxonomy_mismatches(real), 0)
 
     def test_swapped_predicates_caught(self):
+        """Test swapped predicates caught."""
         # Both the tokenization-mismatch and the EOS condition hold: the
         # docstring priority (mismatch before EOS) decides.
         obs = {
@@ -774,6 +820,7 @@ class SensitivityTests(unittest.TestCase):
         self.assertGreater(_count_classify_mismatches(self.mut_swap), 0)
 
     def test_dropped_class_caught(self):
+        """Test dropped class caught."""
         result = {
             "search": [
                 {
@@ -798,6 +845,7 @@ class SensitivityTests(unittest.TestCase):
         self.assertGreater(_count_taxonomy_mismatches(self.mut_drop), 0)
 
     def test_heldout_per_observation_classification_caught(self):
+        """Test heldout per observation classification caught."""
         result = {
             "search": [],
             "decision": "held_out_failed",

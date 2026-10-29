@@ -1,0 +1,2587 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/CONFIDENCE_DESIGN/">
+      
+      
+        <link rel="prev" href="../CHOICE_AUDIT_DESIGN/">
+      
+      
+        <link rel="next" href="../DATELINE_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Confidence - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#verbalized-confidence-template-run-confidence-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Confidence
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ANSWERSYNTAX_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Answer syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bundle (multi-question)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-is-honestly-framed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this is, honestly framed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prior-art-and-the-scoped-uniqueness-claim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prior art and the scoped uniqueness claim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The instrument
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The readouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#payload-and-diff-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Payload and diff validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guards-and-failure-vocabulary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guards and failure vocabulary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DIRECTIVE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directive ladder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONLANGUAGE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTIQUESTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-question (restated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-is-honestly-framed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this is, honestly framed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prior-art-and-the-scoped-uniqueness-claim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prior art and the scoped uniqueness claim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The instrument
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The readouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#payload-and-diff-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Payload and diff validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guards-and-failure-vocabulary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guards and failure vocabulary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="verbalized-confidence-template-run-confidence-design">Verbalized-confidence × template (<code>run --confidence</code>) — design<a class="headerlink" href="#verbalized-confidence-template-run-confidence-design" title="Permanent link">&para;</a></h1>
+<p>Cycle 199 (wave-8 rank #8, the last wave-8 item). This document
+is the shipped contract. It folds the wave-8 research brief
+(docs/RESEARCH_LOG.md, wave-8 round), the cycle-199 researcher
+pass (primary sources re-verified), red-team A's ten findings
+(F1–F10) and nine amendments (A1–A9), red-team B's disproofs of
+A's positive amendments (its own amendments B1–B7), and a
+verifier pass that re-executed both red teams' probes and
+confirmed every load-bearing claim (V1–V12). Where the brief
+and the shipped contract differ, this document wins, and the
+differences are the adjudicated amendments, recorded below.</p>
+<h2 id="what-this-is-honestly-framed">What this is, honestly framed<a class="headerlink" href="#what-this-is-honestly-framed" title="Permanent link">&para;</a></h2>
+<p><code>--confidence</code> appends <strong>one frozen suffix</strong> to each search
+fixture's last user message, asking the model to end its reply
+with a line of the form <code>Confidence: &lt;integer 0–100&gt;</code>, and
+re-evaluates every candidate template on the search split. The
+elicited text is parsed under a <strong>frozen grammar</strong>; the stated
+number is then set against the exact-match verdict the lab
+already trusts, per candidate: how often the model complies,
+what it states when it is right vs wrong, and what the suffix
+itself costs (verdict flips against the recorded native run).
+A <strong>generated pair</strong> runs alongside: planted-fact cases whose
+answer the prompt states (knowable) vs the same cases with the
+payload binding a <em>different</em> key (donor-key control), testing
+whether the stated number drops when the answer is not
+knowable from the prompt.</p>
+<p>Monday-morning utility: a practitioner serving a checkpoint
+behind a template learns whether the confidence number the
+model states under that template tracks whether it was right —
+and whether it drops when the answer is not in the prompt —
+before exposing that number to anyone downstream.</p>
+<p>A stated confidence is <strong>model output text, not a
+probability</strong>, and nothing in this probe turns it into one.
+The readouts describe <em>agreement</em> between the stated number
+and the measured verdict under each template. No readout is a
+calibration error; the words "calibrated", "overconfident",
+and "ECE" appear nowhere as findings (the verifier confirmed
+no shipped section uses them). What would change the picture:
+a stated number that separates correct from incorrect
+compliant answers <em>and</em> drops on the donor-key control is
+evidence the number carries answer-dependent signal under this
+instrument; a number that does neither is evidence it is
+theatre under this instrument. Both are claims about this
+checkpoint, this fixture set, this suffix, and this seed —
+nothing more is claimed.</p>
+<h2 id="prior-art-and-the-scoped-uniqueness-claim">Prior art and the scoped uniqueness claim<a class="headerlink" href="#prior-art-and-the-scoped-uniqueness-claim" title="Permanent link">&para;</a></h2>
+<p>Verbalized confidence is a studied elicitation method; the
+lab's contribution is not the method but <strong>the combination</strong>:
+(1) per-template candidate crossing — prompt format as the
+independent variable, the stated number compared across the
+lab's candidate templates on identical fixtures; (2) the
+confidence line <strong>separated from the scored span</strong> under a
+frozen grammar, so elicited generations are scored by the
+lab's ordinary exact-match verdict on the span (published
+studies score generated text with a judge model, or score
+log-probabilities instead); (3) <strong>verdict flips against the
+recorded native run</strong> — the elicitation cost of asking, which
+no surveyed study reports; (4) a <strong>donor-key knowability
+control</strong> — a paired generated control in which nothing false
+is stated and the asked fact is simply absent; and (5) the
+result shipped as a <strong>fail-closed diff-validated section</strong> of
+the lab's deterministic report, recomputed from digest-bound
+ground records. No surveyed tool or study ships this
+combination (researcher pass, cycle 199: lm-evaluation-harness,
+HELM, Inspect AI, OpenAI Evals, promptfoo, DSPy — Inspect's
+primitives could assemble something similar, but primitives are
+not a shipped measurement).</p>
+<p>The neighbours, named so a reviewer does not have to discover
+them, with the researcher's corrections applied:</p>
+<ul>
+<li>Kadavath et al., "Language Models (Mostly) Know What They
+  Know" (arXiv:2207.05221): logit-based self-evaluation
+  (P(True)/P(IK)), <strong>not</strong> verbalized confidence; cited only
+  for the logit line of work, never as a verbalized precedent.</li>
+<li>Lin et al., "Teaching Models to Express Their Uncertainty in
+  Words" (arXiv:2205.14334): the origin of "verbalized
+  probability", and a <strong>fine-tuning</strong> result (GPT-3 trained on
+  CalibratedMath). Zero-shot untrained calibration is not
+  shown there and is not claimed here.</li>
+<li>Tian et al., "Just Ask for Calibration" (arXiv:2305.14975):
+  the method ancestor (answer-then-confidence elicitation),
+  with two differences that forbid numeric comparison: their
+  scale is a float 0.0–1.0, and their correctness is GPT-judged,
+  not exact-match. Their closing open question — how sensitive
+  the method is to the prompt — is part of what a
+  per-template crossing speaks to.</li>
+<li>Xiong et al., "Can LLMs Express Their Uncertainty?"
+  (arXiv:2306.13063): the lab's exact surface form (integer
+  0–100, "Answer and Confidence (0-100)") and the documented
+  shape to expect: stated values cluster at multiples of 5 in
+  the 80–100 range with a peak at 95, and vanilla elicitation
+  is heavily overconfident by their (judge-scored) measure.
+  Top-bin-dominated, sparse low bins are the pre-registered
+  expected shape here, not a surprise.</li>
+<li>Seo et al., "ADVICE: Answer-Dependent Verbalized Confidence
+  Estimation" (arXiv:2510.10913): a <strong>primary fine-tuning
+  study</strong> (an earlier brief miscited it as a survey; the
+  researcher corrected the genre and the verifier confirmed it
+  against the paper). Its §7 answer-masking experiment —
+  replace answer tokens with padding and watch stated
+  confidence — is the nearest published neighbour of this
+  probe's knowability control, and is cited by name for that
+  reason: the donor-key control differs by manipulating the
+  <em>prompt's evidence</em> instead of the model's own answer tokens,
+  and by needing no fine-tuned model. ADVICE's five-format
+  taxonomy includes ScorePercent; the lab's surface form is
+  literature-standard, claimed as such, not as an invention.</li>
+<li>Damani et al., "Beyond Binary Rewards" (arXiv:2507.16806):
+  RLCR, the RL-with-calibration-rewards training method
+  (verbalized-confidence ECE 0.37 → 0.03 on HotpotQA after
+  training). An earlier brief attributed that number to a
+  different paper (arXiv:2604.26152, a single-author
+  observability survey); the researcher refuted the
+  attribution and the verifier confirmed Damani et al. as the
+  primary source against the full text. Training a model to
+  calibrate is the opposite direction from measuring an
+  untrained checkpoint, and no number from it is comparable
+  to anything this probe prints.</li>
+<li>Yang, Tsai &amp; Yamada, "On Verbalized Confidence Scores for
+  LLMs" (arXiv:2412.14737): the strongest published
+  prompt-method-sensitivity result for verbalized confidence —
+  reliability "heavily depends on how we ask for it", with
+  method rankings inverting between small and large models.
+  Named here because it is the published reason a
+  per-template crossing is a measurement and not a formality.</li>
+</ul>
+<p>Cross-study numeric comparison to published calibration
+numbers is <strong>invalid</strong> and the docs must not invite it: the
+correctness ground truths differ (exact match here, judge
+models or human labels elsewhere).</p>
+<h2 id="the-instrument">The instrument<a class="headerlink" href="#the-instrument" title="Permanent link">&para;</a></h2>
+<p><strong>Suffix and surgery.</strong> The suffix is a frozen constant
+(<code>confidence.SUFFIX</code>): "Answer the question, then state your
+confidence that your answer is correct. Put the confidence on
+its own final line as a whole number from 0 to 100, in exactly
+this form:\nConfidence: <number>". It is appended to the last
+user message only, as <code>content + "\n\n" + SUFFIX</code> (dateline's
+joiner and surgery pattern; id, group, and expected are
+unchanged, so the per-fixture seed is the same as the native
+run's). The placeholder line in the suffix is deliberately not
+a grammar line: a model echoing the instruction verbatim is
+<code>malformed_line</code>, never compliant. Before any generation, the
+suffix is screened against every candidate's special-token
+inventory (<code>fixtures.audit_special_token_literals</code>, the
+repetition precedent): a collision fails the stage closed
+with <code>confidence_screen_failed</code>, because a framing that turns
+the suffix text into a special token would forge the
+elicitation.</p>
+<p><strong>The grammar and the parser.</strong> A compliant final line matches
+<code>^Confidence: (0|[1-9][0-9]?|100)$</code> exactly — ASCII digits, no
+sign, no leading zeros, no surrounding whitespace. The regex
+is load-bearing, not pedantry (executed in the red-team
+passes): <code>int()</code> accepts <code>+85</code>, <code>8_5</code>, <code>85</code>, and non-ASCII
+digits, and an unflagged <code>\d</code> matches fullwidth digits, so any
+strip-and-int parser manufactures compliance the grammar does
+not grant. The parser is a <strong>total function</strong> over all
+strings, pure <code>str</code> (it never encodes, so a lone surrogate
+cannot raise), with five outcome codes and a <strong>final-line-first</strong>
+precedence, adjudicated in cycle 199 over red-team A's
+count-first alternative:</p>
+<ul>
+<li>lines come from <code>split("\n")</code> with exactly one trailing empty
+  element dropped (<code>splitlines()</code> is never used — it also
+  splits on U+2028/U+0085 and would manufacture a final line);</li>
+<li>a grammar-matching final line: <code>ok</code> if it is the only grammar
+  line in the answer, <code>multiple_lines</code> if any earlier line also
+  matches;</li>
+<li>else a final line starting with <code>Confidence:</code> (exact) or
+  <code>confidence:</code> (case-insensitive): <code>malformed_line</code> — even
+  when an earlier line matched (the model's last act decides);</li>
+<li>else any grammar line elsewhere: <code>confidence_not_final</code>;</li>
+<li>else <code>missing_line</code>.</li>
+</ul>
+<p>The <strong>span</strong> is the answer with the compliant line removed for
+<code>ok</code> cells, and the whole answer for every other code. A cell's
+<strong>verdict</strong> is one definition everywhere: <code>span_digest ==
+expected_digest and boundary_found</code>. Compliance and correctness
+are separate axes and the joint table keeps them apart: a
+correct answer that never stated a number is correct <em>and</em>
+non-compliant; the verdicts recorded on suffixed generations
+by the raw evaluator are meaningless (the suffix text is part
+of the answer), which is why every verdict here is re-derived
+from the span.</p>
+<p><strong>Screens.</strong> A fixture is screened out of every elicitation
+population — its record carries the class and no cell, for
+every candidate identically — when: its expected answer is
+blank under <code>strip()</code> (<code>expected_blank</code>; a whitespace-only
+expected is "correctly" answered by whitespace, the vacuous
+pole); its expected answer already contains a grammar line
+<strong>anywhere</strong> (<code>expected_confidence_shaped</code>; red-team B's
+executed counterexample showed a final-line-only screen lets
+an honest generation gain a second grammar line through no
+act of the model's); its last user message is vacuous
+(<code>vacuous_last_user</code>; the suffix would be the whole turn,
+measuring suffix echo, not elicitation — red-team B forced
+the exclusion over red-team A's keep-or-exclude ambiguity);
+or it has no user turn (<code>no_user_turn</code>). Screens are computed
+by the stage and recorded in the protocol; the validator
+checks protocol/record consistency (see Residue).</p>
+<p><strong>The generated pair.</strong> 24 planted-fact cases, derived from
+the run seed: each binds a synthetic key (<code>key-&lt;8 hex&gt;</code>) to a
+6-hex value, pairwise distinct by construction. The knowable
+arm's payload states the asked key's true binding; the
+control arm's payload states the <strong>next case's</strong> key and
+value. The control is red-team B's donor-key construction,
+and what it replaced matters: red-team A's original repair
+replaced the stated value with a false one, and B executed a
+definitionally payload-faithful backend against it — the
+faithful model reads the only stated value, answers it at
+Confidence 95, and the falsification boolean convicts correct
+behaviour of theatre (95 ≥ 95 fires backwards). Donor-key
+states <strong>nothing false about the asked key</strong>; the asked
+binding is simply absent. Pre-registered expectation: a model
+whose stated number tracks knowability states a lower number
+on the control arm; a model confidently answering the donor
+value there is copying the only value it can see — genuine
+answer-independence, the ADVICE mechanism, measured from the
+prompt side. Stated values are unguessable (16⁻⁶) and
+unmemorizable (seeded hex), so the knowable arm measures
+reading and the control its absence. The generated cases are
+<strong>instrument cases</strong>, labelled as such in the report; they are
+not operator fixtures.</p>
+<h2 id="the-readouts">The readouts<a class="headerlink" href="#the-readouts" title="Permanent link">&para;</a></h2>
+<p>Per candidate, over the operator population (unscreened search
+fixtures): completed and compliant counts with the compliance
+rate; the compliant × correct joint table; mean stated
+confidence over compliant cells, split by verdict, and their
+<strong>separation gap</strong> — descriptive only, printed beside the
+compliance rate and the joint table, and <strong>withheld with a
+named reason</strong> (<code>no_compliant_cells</code>, <code>no_correct_compliant</code>,
+<code>no_incorrect_compliant</code>) when a class is empty, because the
+three situations the bare <code>None</code> would conflate are
+themselves findings. The frozen four-bin table
+(<code>[0,24] [25,49] [50,74] [75,100]</code>, edges in the protocol
+fingerprint) counts compliant cells per bin with per-bin
+accuracy (withheld at n = 0). Elicitation cost: verdict flips
+against the recorded native run, split by direction
+(<code>pass_to_fail</code> / <code>fail_to_pass</code>), over fixtures with a native
+verdict and a completed elicited cell.</p>
+<p>Per candidate, over the generated population, each arm gets
+the same block. Between the arms, the <strong>knowability
+readout</strong>: over cases where <em>both</em> arms are compliant, the
+paired means and <code>falsified = control_mean &gt;= knowable_mean</code>.
+The boolean is withheld (<code>insufficient_paired_compliant</code>)
+below <strong>6 paired compliant cases</strong> (placement's
+<code>MIN_PAIRED_EVALUABLE</code> floor precedent: floors gate readouts,
+never counts). Two scope statements ship with it, in the
+report text and here: the boolean conditions on joint
+compliance — it asks only "among cases where the model stated
+a number both times, did the number drop?" — and a control arm
+whose compliance collapses is <em>not</em> folded into the boolean;
+it is reported as its own per-arm compliance count beside it.
+The word "elicited" never names a population mean in this
+design (red-team B showed the brief's <code>elicited_mean</code> was
+ambiguous between operator and generated arms); the boolean
+compares the two generated arms only.</p>
+<h2 id="payload-and-diff-validation">Payload and diff validation<a class="headerlink" href="#payload-and-diff-validation" title="Permanent link">&para;</a></h2>
+<p>Ground records are digest-bound: one record per (candidate,
+fixture) and one per (candidate, generated case). A cell
+carries <code>answer_digest</code>, <code>span_digest</code>, <code>boundary_found</code>,
+<code>code</code>, <code>confidence</code>, <code>final_line</code>, <code>final_line_length</code>,
+<code>input_tokens</code>, and the derived <code>verdict</code>. Red-team A's
+original record shape carried the confidence as a bare
+attested integer, and red-team B <strong>executed the forgery</strong>:
+editing only the integers moves the gap +5 → ±100 and flips
+the falsification boolean while passing every consistency
+check A proposed, because the residue was the probe's headline
+axis. The shipped binding (B2) closes it:</p>
+<ul>
+<li>an <code>ok</code> cell carries its final line verbatim. The line is one
+  of exactly 101 strings and a bijection with the scalar
+  already in the record, so carrying it discloses zero
+  additional information — and the validator <strong>re-runs the
+  grammar over it and derives the scalar</strong>, rejecting any
+  record whose scalar disagrees. Stage/validator parser
+  divergence and internally inconsistent records die with it.</li>
+<li>a <code>malformed_line</code> cell carries the first 32 characters of
+  the final line plus the full line length — exactly what
+  re-verifying the class takes (the classification prefix is
+  11 characters; a grammar line is at most 15).</li>
+<li>every other code's final line is ordinary answer text and is
+  never carried.</li>
+<li>digest relations are code-dependent and unconditional:
+  <code>span_digest == answer_digest</code> for every non-<code>ok</code> code,
+  <code>!=</code> for every <code>ok</code> cell — <strong>with no exception</strong>: red-team
+  A's draft excepted the answer that is exactly one grammar
+  line, and B and the verifier both executed the disproof
+  (sha256("") ≠ sha256("Confidence: 50")).</li>
+<li>scalar typing is strict: <code>type(confidence) is int</code> — a JSON
+  <code>true</code> must not validate as confidence 1 (the tree's F2
+  discipline).</li>
+</ul>
+<p>The generated case set is <strong>regenerated from the protocol
+seed</strong> by the diff validator's own mirror and must match the
+protocol exactly (ids, key digests, expected digests, both
+payload digests), so the control arm's construction is bound,
+not attested. Caps are enforced before any recompute (2,400
+operator records, 576 generated records, 12 MiB combined — the
+combined-bytes measure is the stage's own construction,
+repeated verbatim by the validator). Every derived value is
+recomputed from the records by the validator's independent
+mirror and compared type-strictly; the diff section reports
+per-candidate compliance/gap/flip drift, knowable and control
+mean drift, and falsification drift, with protocol or backend
+drift marking the comparison not comparable.</p>
+<p><strong>Residue, named.</strong> What remains stage-attested: that the
+carried line was the generation's <em>final</em> line and the <em>only</em>
+grammar line (finality and multiplicity have no textual
+artefact that may be carried — the final lines of
+<code>missing_line</code>/<code>confidence_not_final</code>/<code>multiple_lines</code> cells
+are ordinary answer text); the span split itself; the screen
+classes (the fixture texts are not in the payload, so screens
+are checked for protocol/record consistency, not recomputed);
+and the digest↔text relation every digest-bound probe in the
+tree shares. The diff validator's standard is the
+answer-collision standard: everything with a checkable
+artefact is derived, and what cannot be is named here rather
+than silently trusted.</p>
+<h2 id="cost">Cost<a class="headerlink" href="#cost" title="Permanent link">&para;</a></h2>
+<p>One full extra search evaluation (2,400 generations at the
+legal maximum: 24 candidates × 100 fixtures) plus the
+generated paired control (2 arms × 24 cases × 24 candidates =
+1,152) — <strong>3,552 extra generations</strong> in total, each on a
+suffix-lengthened prompt. (Red-team A's draft priced the
+generated arms as 576 <em>records</em>; generations and records
+carry different constants — placement.py's own comment — and
+B's recount, confirmed by the verifier, is the figure above.)
+No second checkpoint load, no teacher forcing. Defence in
+depth: the records caps above are also the budget the stage
+enforces before evaluating (<code>confidence_cell_budget_exceeded</code>).</p>
+<h2 id="guards-and-failure-vocabulary">Guards and failure vocabulary<a class="headerlink" href="#guards-and-failure-vocabulary" title="Permanent link">&para;</a></h2>
+<p>The CLI wrapper adopts the choice-audit wrapper gate verbatim
+(the verifier confirmed the shipped wrappers' conditions):
+a failed, cancelled, or truncated native search gates the
+probe to zero forwards with <code>native_search_incomplete</code>. Stage
+unavailability details: <code>confidence_screen_failed</code>,
+<code>confidence_cell_budget_exceeded</code>,
+<code>confidence_records_budget_exceeded</code>,
+<code>native_search_incomplete</code>, <code>cancelled</code>. Per candidate, a
+failed evaluation degrades that candidate's cells alone
+(absent cells, never fabricated ones); a candidate with no
+completed cell anywhere is listed in
+<code>unavailable_candidates</code>, a set the validator re-derives
+exactly. Scope: the search split only — held-out fixtures are
+never treated; the probe never touches the decision, the
+selected candidate, or the exit code; and <strong>confidence cells
+are outside <code>verify --determinism</code> scope</strong> — the determinism
+certificate covers the recorded native search observations,
+and the report section states so in the same three places the
+multiturn/needle/placement/dateline sections state it (design
+doc, USAGE, section text).</p>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
+<p><code>tests/test_cycle199_confidence.py</code>: the parser battery (24
+named shapes, including every int()/regex trap and both
+contested precedence cases); a <strong>mutation gate</strong> over the
+parser — eight mutants (sign, leading zeros, non-ASCII digits,
+any-line, multiple-threshold, splitlines, loose-regex-plus-int,
+count-first precedence), each killed by a named battery case,
+with the unmutated control passing the whole battery; screens
+and surgery; case-generation distinctness/determinism/donor
+pairing; stage behaviour over scripted backends (faithful,
+theatrical, per-candidate failure, budget, cancel, suffix
+screen); a one-break-at-a-time validator tamper battery (19
+breaks, including the scalar edit the carried line exists to
+catch); diff-section behaviour; the HTML section including a
+hostile candidate name through the C0/surrogate-stripping
+escape; the CLI wrapper gate; and one tiny-checkpoint
+end-to-end run. The diff-section blast radius is covered in
+<code>test_cycle67_diffreports_audit.py</code> (independent oracle trio,
+a fuzz builder that runs the real stage over scripted
+backends with hostile mutations and a coherent foreign
+fingerprint, the <code>_identical_expected</code> key set, and the
+flip-identical gate anchor extended in both its original and
+mutant texts — the same pass also repaired two sections the
+oracle's identical conjunction had silently omitted,
+placement and precision) and in
+<code>test_cycle27_diffreports_verify.py</code> (availability oracle
+recomputing through the producer's aggregation). CLI pins:
+<code>test_cycle179_cli_dispatch.py</code> (flag + helper-dispatch
+entries) and <code>test_cycle44_validation_audit.py</code> (source-file
+count 58 → 59).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

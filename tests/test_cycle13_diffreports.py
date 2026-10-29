@@ -32,6 +32,7 @@ from model_protocol_lab.diffreports import (
 
 
 def _obs(fixture, ok, candidate="cand"):
+    """Obs."""
     return {
         "candidate": candidate,
         "fixture": fixture,
@@ -48,6 +49,7 @@ def _obs(fixture, ok, candidate="cand"):
 
 
 def _summary(passes, planned):
+    """Summary."""
     return {
         "status": "complete",
         "planned": planned,
@@ -62,6 +64,7 @@ def _summary(passes, planned):
 
 
 def _entry(name, passes, planned, outcomes=(), boundary=(198,)):
+    """Entry."""
     observations = [_obs(fixture, ok, candidate=name) for fixture, ok in outcomes]
     return {
         "format": {"name": name},
@@ -73,6 +76,7 @@ def _entry(name, passes, planned, outcomes=(), boundary=(198,)):
 
 
 def _held_out(passes, planned, outcomes):
+    """Held out."""
     return {
         "summary": _summary(passes, planned),
         "observations": [_obs(fixture, ok) for fixture, ok in outcomes],
@@ -92,6 +96,7 @@ def _results(
     max_new_tokens=64,
     fingerprint="fp-backend-1",
 ):
+    """Results."""
     search = [
         _entry(name, p, planned, outcomes=outcomes, boundary=boundary)
         for name, p in zip(candidates, passes, strict=False)
@@ -111,6 +116,7 @@ def _results(
 
 
 def _write_results(tmp_path, name, payload):
+    """Write results."""
     directory = tmp_path / name
     directory.mkdir()
     (directory / "results.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -118,6 +124,7 @@ def _write_results(tmp_path, name, payload):
 
 
 def _run_cli(old, new, capsys, *extra):
+    """Run cli."""
     code = main(["diff-reports", str(old), str(new), *extra])
     captured = capsys.readouterr()
     return code, json.loads(captured.out), captured.err
@@ -147,7 +154,9 @@ class _CaptureShim:
         self._err_ctx.__exit__(None, None, None)
         self._out_ctx.__exit__(None, None, None)
 
-    def readouterr(self):  # pytest CaptureResult shape: .out / .err
+    def readouterr(self):
+        """Readouterr."""
+        # pytest CaptureResult shape: .out / .err
         from types import SimpleNamespace
 
         return SimpleNamespace(out=self._out.getvalue(), err=self._err.getvalue())
@@ -157,6 +166,7 @@ class DiffreportsTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         import tempfile
         from pathlib import Path
 
@@ -170,10 +180,12 @@ class DiffreportsTests(unittest.TestCase):
         self.capsys = SimpleNamespace(readouterr=self._cap.readouterr)
 
     def tearDown(self) -> None:
+        """Tear down the test fixture."""
         self._cap.__exit__()
         self._td.cleanup()
 
     def test_decision_and_winner_flip(self):
+        """Test decision and winner flip."""
         old = _results()
         new = _results(decision="no_candidate", winner=None, passes=(0, 0))
         code, payload, err = _run_cli(
@@ -197,6 +209,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_winner_change_same_decision():
+        """Test winner change same decision."""
         old = _results(winner="llama3")
         new = _results(winner="chatml")
         payload = diff_reports(old, new)
@@ -207,6 +220,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_verdict_flips_search_and_held_out():
+        """Test verdict flips search and held out."""
         old = _results()
         new = _results(decision="held_out_failed", passes=(1, 0), held_outcomes=(("h1", False),))
         # make held-out summary match the failing observation count
@@ -223,6 +237,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_absent_candidate_verdict_flip():
+        """Test absent candidate verdict flip."""
         old = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         new = _results(candidates=("llama3",), passes=(2,))
         payload = diff_reports(old, new)
@@ -234,6 +249,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_malformed_summary_verdict_unknown():
+        """Test malformed summary verdict unknown."""
         old = _results()
         new = _results()
         new["search"][0]["summary"] = {"planned": "two"}  # hostile shape
@@ -246,6 +262,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_fixture_diffs_changed_only_by_default():
+        """Test fixture diffs changed only by default."""
         old = _results()
         new = _results(outcomes=(("f1", True), ("f2", False)))
         payload = diff_reports(old, new)
@@ -263,6 +280,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_all_flag_lists_unchanged_fixtures():
+        """Test all flag lists unchanged fixtures."""
         old = _results()
         new = _results(outcomes=(("f1", True), ("f2", False)))
         payload = diff_reports(old, new, all_fixtures=True)
@@ -276,12 +294,14 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_fixture_diffs_deterministic_order():
+        """Test fixture diffs deterministic order."""
         old = _results()
         new = _results(outcomes=(("f1", False), ("f2", False)))
         first = diff_reports(old, new, all_fixtures=True)
         second = diff_reports(old, new, all_fixtures=True)
 
         def keys(payload):
+            """Keys."""
             return [(e["stage"], e["candidate"], e["fixture"]) for e in payload["fixture_diffs"]]
 
         assert keys(first) == sorted(keys(first))
@@ -289,6 +309,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_malformed_observations_skipped_and_counted():
+        """Test malformed observations skipped and counted."""
         old = _results()
         new = _results()
         new["search"][0]["observations"].append({"fixture": "fx"})  # missing flags
@@ -300,6 +321,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_identical_runs_no_differences():
+        """Test identical runs no differences."""
         run = _results()
         payload = diff_reports(run, json.loads(json.dumps(run)))
         assert payload["summary"]["identical"] is True
@@ -310,6 +332,7 @@ class DiffreportsTests(unittest.TestCase):
         assert "No differences: the two runs are identical" in summary
 
     def test_identical_runs_via_cli(self):
+        """Test identical runs via cli."""
         run = _results()
         path = _write_results(self.tmp_path, "run", run)
         code, payload, err = _run_cli(path, path, self.capsys)
@@ -319,6 +342,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_drift_families_and_candidates():
+        """Test drift families and candidates."""
         old = _results(candidates=("llama3", "chatml/mutate"), passes=(2, 2))
         new = _results(candidates=("llama3", "gemma"), passes=(2, 2))
         payload = diff_reports(old, new)
@@ -334,6 +358,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_drift_boundaries_max_tokens_fingerprint():
+        """Test drift boundaries max tokens fingerprint."""
         old = _results()
         new = _results(boundary=(198, 271), max_new_tokens=128, fingerprint="fp-backend-2")
         payload = diff_reports(old, new)
@@ -353,6 +378,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_drift_fixture_sets():
+        """Test drift fixture sets."""
         old = _results()
         new = _results(outcomes=(("f1", True), ("f9", True)))
         payload = diff_reports(old, new)
@@ -364,6 +390,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_drift_field_order_is_fixed():
+        """Test drift field order is fixed."""
         old = _results()
         new = _results(boundary=(1,), max_new_tokens=1, fingerprint="x", candidates=("other",))
         payload = diff_reports(old, new)
@@ -379,6 +406,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_missing_evidence_degrades_loudly():
+        """Test missing evidence degrades loudly."""
         old = _results()
         new = _results()
         for entry in new["search"]:
@@ -401,6 +429,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_both_sides_missing_evidence():
+        """Test both sides missing evidence."""
         old = _results()
         new = _results()
         for result in (old, new):
@@ -413,6 +442,7 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["summary"]["identical"] is True  # everything comparable matches
 
     def test_hostile_inputs_fixed_codes(self):
+        """Test hostile inputs fixed codes."""
         _expect_code(self.tmp_path, "a.json", "{not json", "results_invalid_json")
         _expect_code(
             self.tmp_path, "b.json", '{"decision": 1, "search": []}', "results_wrong_shape"
@@ -434,6 +464,7 @@ class DiffreportsTests(unittest.TestCase):
         _expect_code(self.tmp_path, "g.json", b"\xff\xfe{", "results_not_utf8")
 
     def test_hostile_inputs_too_large(self):
+        """Test hostile inputs too large."""
         path = self.tmp_path / "big.json"
         with path.open("wb") as handle:
             handle.write(b'{"decision": "x", "search": [], "pad": "')
@@ -444,6 +475,7 @@ class DiffreportsTests(unittest.TestCase):
         assert str(excinfo.exception) == "results_too_large"
 
     def test_hostile_inputs_not_regular_file(self):
+        """Test hostile inputs not regular file."""
         fifo = self.tmp_path / "fifo.json"
         os.mkfifo(fifo)
         with self.assertRaises(ValueError) as excinfo:
@@ -451,6 +483,7 @@ class DiffreportsTests(unittest.TestCase):
         assert str(excinfo.exception) == "results_not_regular_file"
 
     def test_hostile_inputs_missing(self):
+        """Test hostile inputs missing."""
         with self.assertRaises(ValueError) as excinfo:
             load_results(self.tmp_path / "nope.json")
         assert str(excinfo.exception) == "results_path_missing"
@@ -459,6 +492,7 @@ class DiffreportsTests(unittest.TestCase):
         assert str(excinfo.exception) == "results_path_missing"
 
     def test_hostile_inputs_deep_nesting(self):
+        """Test hostile inputs deep nesting."""
         path = self.tmp_path / "deep.json"
         path.write_text('{"decision": "x", "search": [' + "[" * 4000, encoding="utf-8")
         with self.assertRaises(ValueError) as excinfo:
@@ -466,6 +500,7 @@ class DiffreportsTests(unittest.TestCase):
         assert str(excinfo.exception) in ("results_invalid_json", "results_nesting_too_deep")
 
     def test_hostile_inputs_directory_resolution(self):
+        """Test hostile inputs directory resolution."""
         run = _results()
         old = _write_results(self.tmp_path, "old", run)
         new = _write_results(self.tmp_path, "new", run)
@@ -482,6 +517,7 @@ class DiffreportsTests(unittest.TestCase):
         assert "diff-reports:" in captured.err
 
     def test_malformed_cli_reports_fixed_code_no_traceback(self):
+        """Test malformed cli reports fixed code no traceback."""
         bad = self.tmp_path / "bad.json"
         bad.write_text("{oops", encoding="utf-8")
         good = _write_results(self.tmp_path, "good", _results())
@@ -494,6 +530,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_stderr_sanitizes_hostile_identifiers():
+        """Test stderr sanitizes hostile identifiers."""
         old = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         new = _results(candidates=("llama3", "chatml"), passes=(2, 2))
         evil = "chatml\x1b[31mPWNED\x07"
@@ -513,6 +550,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_determinism_byte_identical():
+        """Test determinism byte identical."""
         old = _results()
         new = _results(decision="no_candidate", winner=None, passes=(0, 1))
         first = json.dumps(
@@ -544,12 +582,14 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_payload_json_serializable():
+        """Test payload json serializable."""
         old = _results()
         new = _results(decision="ambiguous", winner=None)
         payload = diff_reports(old, new, all_fixtures=True)
         json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=True, allow_nan=False)
 
     def test_cli_accepts_results_json_paths_directly(self):
+        """Test cli accepts results json paths directly."""
         old = _write_results(self.tmp_path, "old", _results()) / "results.json"
         new = _write_results(self.tmp_path, "new", _results()) / "results.json"
         code, payload, _err = _run_cli(old, new, self.capsys)
@@ -557,6 +597,7 @@ class DiffreportsTests(unittest.TestCase):
         assert payload["summary"]["identical"] is True
 
     def test_cli_summary_counts_and_exit_zero_with_differences(self):
+        """Test cli summary counts and exit zero with differences."""
         old = _results()
         new = _results(outcomes=(("f1", False), ("f2", True)))
         code, payload, err = _run_cli(
@@ -570,6 +611,7 @@ class DiffreportsTests(unittest.TestCase):
         assert "2 fixture(s) flipped" in err
 
     def test_cli_all_flag(self):
+        """Test cli all flag."""
         old = _results()
         new = _results(outcomes=(("f1", True), ("f2", False)))
         code, payload, _err = _run_cli(
@@ -584,6 +626,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_stderr_sanitizes_hostile_decision_strings():
+        """Test stderr sanitizes hostile decision strings."""
         old = _results(decision="compatible_on_fixture_set\x1b[31mPWNED\x1b[0m")
         new = _results(decision="\x1b]0;pwned\x07no_candidate")
         payload = diff_reports(old, new)
@@ -595,6 +638,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_stderr_sanitizes_hostile_source_labels():
+        """Test stderr sanitizes hostile source labels."""
         old = _results()
         new = _results()
         payload = diff_reports(old, new, old_label="old\x1b[2J", new_label="new\x07evil")
@@ -605,6 +649,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_config_snapshot_dedup_scales():
+        """Test config snapshot dedup scales."""
         count = 50_000
         result = {
             "decision": "compatible_on_fixture_set",
@@ -620,6 +665,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_planned_count_drift_flags_silent_mismatch():
+        """Test planned count drift flags silent mismatch."""
         old = _results(planned=2, passes=(2, 2))
         new = _results(planned=50, passes=(50, 50))
         payload = diff_reports(old, new)
@@ -634,6 +680,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_stderr_sanitizes_hostile_planned_drift_field():
+        """Test stderr sanitizes hostile planned drift field."""
         evil = "llama3\x1b[31mPWNED\x07"
         old = _results(candidates=(evil, "chatml"), passes=(2, 2), planned=2)
         new = _results(candidates=(evil, "chatml"), passes=(50, 50), planned=50)
@@ -648,6 +695,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_evidence_asymmetry_is_not_identical():
+        """Test evidence asymmetry is not identical."""
         old = _results()
         new = _results()
         for entry in new["search"]:
@@ -662,6 +710,7 @@ class DiffreportsTests(unittest.TestCase):
 
     @staticmethod
     def test_identical_summary_names_compared_axes():
+        """Test identical summary names compared axes."""
         run = _results()
         rendered = render_summary(diff_reports(run, json.loads(json.dumps(run))))
         assert "No differences: the two runs are identical on every compared axis" in rendered
@@ -680,6 +729,7 @@ class DiffreportsTests(unittest.TestCase):
 
 
 def _drift_fields(payload):
+    """Drift fields."""
     return {entry["field"]: entry for entry in payload["config_drift"]}
 
 
@@ -694,6 +744,7 @@ def _drift_fields(payload):
 
 
 def _expect_code(tmp_path, filename, data, code):
+    """Expect code."""
     path = tmp_path / filename
     if isinstance(data, str):
         path.write_text(data, encoding="utf-8")

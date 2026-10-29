@@ -47,6 +47,7 @@ def _obs(
     status: str = "completed",
     boundary: bool = True,
 ) -> dict[str, Any]:
+    """Obs."""
     return {
         "fixture": fixture,
         "answer": answer,
@@ -57,6 +58,7 @@ def _obs(
 
 
 def _entry(name: str, observations: list[dict[str, Any]], *, eligible: bool = True) -> dict:
+    """Entry."""
     return {
         "format": {"name": name},
         "summary": {"aggregate_eligible": eligible},
@@ -68,40 +70,48 @@ class TestLadderPins(unittest.TestCase):
     """Named pins for every counterexample the cross-check produced."""
 
     def test_r1_whitespace_only(self):
+        """Test r1 whitespace only."""
         self.assertEqual(scorerlens.first_flip("  42\t", "42"), (1, None))
         self.assertEqual(scorerlens.first_flip("a  b", "a b"), (1, None))
 
     def test_r1_preserves_line_structure(self):
+        """Test r1 preserves line structure."""
         # F8: collapsing newlines would equate these; R1 must not.
         self.assertEqual(scorerlens.first_flip("1\n2", "1 2"), (None, None))
         self.assertEqual(scorerlens.first_flip("a\n\nb", "a b"), (None, None))
         self.assertEqual(scorerlens.first_flip("a\n\n\nb", "a\n\nb"), (1, None))
 
     def test_r2_casefold_and_nfc_attribution(self):
+        """Test r2 casefold and nfc attribution."""
         self.assertEqual(scorerlens.first_flip("PARIS", "Paris"), (2, "casefold"))
         nfd = "Cafe\u0301"
         self.assertEqual(scorerlens.first_flip(nfd, "Caf\u00e9"), (2, "nfc"))
 
     def test_r2_turkish_dotted_i_recovers(self):
+        """Test r2 turkish dotted i recovers."""
         # The refusals detector's fix, adopted at R2: casefold alone
         # leaves i + combining dot; the Mn strip equates them.
         self.assertEqual(scorerlens.first_flip("\u0130", "i"), (2, "casefold"))
 
     def test_r2_ligature_recovers_via_casefold(self):
+        """Test r2 ligature recovers via casefold."""
         # Red-team B's refutation of A's scope note: casefold maps
         # the fi ligature to "fi", so R2 does equate them.
         self.assertEqual(scorerlens.first_flip("\ufb01le", "file"), (2, "casefold"))
 
     def test_r3_trailing_punctuation_and_quotes(self):
+        """Test r3 trailing punctuation and quotes."""
         self.assertEqual(scorerlens.first_flip("42.", "42"), (3, None))
         self.assertEqual(scorerlens.first_flip('"42"', "42"), (3, None))
         self.assertEqual(scorerlens.first_flip("**42**.", "42"), (3, None))
 
     def test_r3_fence_strip_with_info_string(self):
+        """Test r3 fence strip with info string."""
         self.assertEqual(scorerlens.first_flip("```\n42\n```", "42"), (3, None))
         self.assertEqual(scorerlens.first_flip("```python\n42\n```", "42"), (3, None))
 
     def test_r3_sign_and_decimal_point_are_content(self):
+        """Test r3 sign and decimal point are content."""
         # F7: -42 is not 42; .5 is not 5; 50% is not 50.
         self.assertEqual(scorerlens.first_flip("-42", "42"), (None, None))
         self.assertEqual(scorerlens.first_flip(".5", "5"), (None, None))
@@ -109,16 +119,19 @@ class TestLadderPins(unittest.TestCase):
         self.assertEqual(scorerlens.first_flip("C++", "C"), (None, None))
 
     def test_r3_internal_punctuation_untouched(self):
+        """Test r3 internal punctuation untouched."""
         self.assertEqual(scorerlens.first_flip("3.5", "35"), (None, None))
         self.assertEqual(scorerlens.first_flip("don't", "dont"), (None, None))
 
     def test_s3_erasure_to_empty_never_passes(self):
+        """Test s3 erasure to empty never passes."""
         self.assertFalse(scorerlens.rung_match("?", "!", 3))
         self.assertFalse(scorerlens.rung_match("***", "", 1))
         self.assertFalse(scorerlens.rung_match("***", "", 4))
         self.assertEqual(scorerlens.first_flip("?", "!"), (None, None))
 
     def test_s4_numeric_grammar(self):
+        """Test s4 numeric grammar."""
         self.assertEqual(scorerlens.first_flip("1,000", "1000"), (4, None))
         self.assertEqual(scorerlens.first_flip("1e3", "1000"), (4, None))
         self.assertEqual(scorerlens.first_flip("-0", "0"), (4, None))
@@ -138,6 +151,7 @@ class TestLadderPins(unittest.TestCase):
                 self.assertEqual(scorerlens.first_flip(answer, expected), (None, None))
 
     def test_s4_no_normalize_collapse(self):
+        """Test s4 no normalize collapse."""
         # Decimal == is exact; normalize() under the default context
         # would collapse this pair.
         self.assertEqual(
@@ -146,18 +160,21 @@ class TestLadderPins(unittest.TestCase):
         )
 
     def test_s4_nan_survives_via_union(self):
+        """Test s4 nan survives via union."""
         # F4: R4 as a replacement comparison would un-pass this pair
         # (Decimal NaN != NaN); the union definition keeps the R2 pass.
         self.assertEqual(scorerlens.first_flip("nan", "NaN"), (2, "casefold"))
         self.assertTrue(scorerlens.rung_match("nan", "NaN", 4))
 
     def test_no_label_strip(self):
+        """Test no label strip."""
         # F3, option (a): lead-in prose flips at no rung, by design.
         for answer in ("Answer: 42", "The answer is 42.", "**Answer:** 42"):
             with self.subTest(answer=answer):
                 self.assertEqual(scorerlens.first_flip(answer, "42"), (None, None))
 
     def test_unknown_rung_raises(self):
+        """Test unknown rung raises."""
         with self.assertRaises(ValueError):
             scorerlens.rung_match("a", "a", 5)
 
@@ -191,7 +208,10 @@ _ADVERSARIAL_PAIRS = [
 
 
 class TestMonotonicity(unittest.TestCase):
+    """Test monotonicity."""
+
     def test_s2_monotone_over_adversarial_corpus(self):
+        """Test s2 monotone over adversarial corpus."""
         for answer, expected in _ADVERSARIAL_PAIRS:
             for rung in range(4):
                 with self.subTest(answer=answer, expected=expected, rung=rung):
@@ -202,6 +222,7 @@ class TestMonotonicity(unittest.TestCase):
                         )
 
     def test_first_flip_consistent_with_rung_match(self):
+        """Test first flip consistent with rung match."""
         for answer, expected in _ADVERSARIAL_PAIRS:
             if answer == expected:
                 continue
@@ -215,7 +236,10 @@ class TestMonotonicity(unittest.TestCase):
 
 
 class TestS1Oracle(unittest.TestCase):
+    """Test s1 oracle."""
+
     def test_r0_reproduces_native_verdicts(self):
+        """Test r0 reproduces native verdicts."""
         observations = [
             _obs("f1", "42"),
             _obs("f1", "42."),
@@ -243,7 +267,10 @@ class TestS1Oracle(unittest.TestCase):
 
 
 class TestAnalyzeCandidate(unittest.TestCase):
+    """Test analyze candidate."""
+
     def test_empty_expected_excluded_with_count(self):
+        """Test empty expected excluded with count."""
         record = scorerlens.analyze_candidate(
             [_obs("f1", "42"), _obs("f4", "")], _EXPECTED, eligible=True
         )
@@ -253,10 +280,12 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual([r["fixture"] for r in excluded], ["f4"])
 
     def test_unknown_fixture_fails_closed(self):
+        """Test unknown fixture fails closed."""
         record = scorerlens.analyze_candidate([_obs("nope", "42")], _EXPECTED, eligible=True)
         self.assertEqual(record, {"available": False, "detail": "unknown_fixture"})
 
     def test_malformed_observations_fail_closed(self):
+        """Test malformed observations fail closed."""
         self.assertEqual(
             scorerlens.analyze_candidate("nope", _EXPECTED, eligible=True),
             {"available": False, "detail": "observations_not_a_list"},
@@ -272,6 +301,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         )
 
     def test_boundary_blocked_counted_and_share(self):
+        """Test boundary blocked counted and share."""
         observations = [
             _obs("f1", "42."),  # flips R3, verdict passes
             _obs("f2", "Paris", boundary=False),  # exact text, boundary blocks
@@ -287,17 +317,20 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(record["share_note"], "")
 
     def test_share_withheld_when_ineligible(self):
+        """Test share withheld when ineligible."""
         record = scorerlens.analyze_candidate([_obs("f1", "42.")], _EXPECTED, eligible=False)
         self.assertIsNone(record["surface_failure_share"])
         self.assertEqual(record["share_note"], "candidate_not_eligible")
 
     def test_share_none_when_no_failures(self):
+        """Test share none when no failures."""
         record = scorerlens.analyze_candidate([_obs("f1", "42")], _EXPECTED, eligible=True)
         self.assertIsNone(record["surface_failure_share"])
         self.assertEqual(record["share_note"], "no_native_failures")
 
 
 def _profile_result() -> dict[str, Any]:
+    """Profile result."""
     return {
         "search": [
             _entry(
@@ -314,7 +347,10 @@ def _profile_result() -> dict[str, Any]:
 
 
 class TestProfile(unittest.TestCase):
+    """Test profile."""
+
     def test_winner_by_rung(self):
+        """Test winner by rung."""
         payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
         self.assertTrue(payload["available"])
         # alpha: f1 flips at R3, f3 native -> winner from R3 on.
@@ -328,6 +364,7 @@ class TestProfile(unittest.TestCase):
         self.assertFalse(payload["evaluable_mismatch"])
 
     def test_winner_withheld_when_ineligible(self):
+        """Test winner withheld when ineligible."""
         result = _profile_result()
         result["search"][1]["summary"]["aggregate_eligible"] = False
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -335,6 +372,7 @@ class TestProfile(unittest.TestCase):
         self.assertEqual(payload["winner_detail"], "candidate_not_eligible")
 
     def test_winner_withheld_on_evaluable_mismatch(self):
+        """Test winner withheld on evaluable mismatch."""
         result = _profile_result()
         result["search"][1]["observations"] = result["search"][1]["observations"][:2]
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -343,6 +381,7 @@ class TestProfile(unittest.TestCase):
         self.assertEqual(payload["winner_detail"], "evaluable_mismatch")
 
     def test_winner_withheld_when_candidate_unavailable(self):
+        """Test winner withheld when candidate unavailable."""
         result = _profile_result()
         result["search"][1]["observations"] = [_obs("ghost", "42")]
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -351,12 +390,14 @@ class TestProfile(unittest.TestCase):
         self.assertEqual(payload["candidates"][1]["detail"], "unknown_fixture")
 
     def test_native_winner_passthrough(self):
+        """Test native winner passthrough."""
         result = _profile_result()
         result["selected_candidate"] = "beta"
         payload = scorerlens_profile(result, dict(_EXPECTED))
         self.assertEqual(payload["native_winner"], "beta")
 
     def test_malformed_inputs(self):
+        """Test malformed inputs."""
         self.assertEqual(
             scorerlens_profile([], {}),  # type: ignore[arg-type]
             {"available": False, "detail": "result_not_a_dict"},
@@ -388,14 +429,21 @@ def _foreign_ladder_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 class TestValidator(unittest.TestCase):
+    """Test validator."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
 
     def test_producer_payload_validates(self):
+        """Test producer payload validates."""
         self.assertTrue(_valid_scorerlens(self.payload))
 
     def test_tamper_battery_rejected(self):
+        """Test tamper battery rejected."""
+
         def tamper(fn):
+            """Tamper."""
             payload = copy.deepcopy(self.payload)
             fn(payload)
             return payload
@@ -423,20 +471,26 @@ class TestValidator(unittest.TestCase):
                 self.assertFalse(_valid_scorerlens(tamper(fn)), name)
 
     def test_foreign_coherent_ladder_validates(self):
+        """Test foreign coherent ladder validates."""
         self.assertTrue(_valid_scorerlens(_foreign_ladder_payload(self.payload)))
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
 
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diff_scorerlens(self.payload, self.payload)
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
         self.assertTrue(diff["comparable"])
 
     def test_winner_and_flip_drift(self):
+        """Test winner and flip drift."""
         other_result = _profile_result()
         other_result["search"][0]["observations"][0] = _obs("f1", "42")  # alpha now native
         other = scorerlens_profile(other_result, dict(_EXPECTED))
@@ -451,12 +505,14 @@ class TestDiff(unittest.TestCase):
         )
 
     def test_protocol_drift_not_comparable(self):
+        """Test protocol drift not comparable."""
         diff = diff_scorerlens(self.payload, _foreign_ladder_payload(self.payload))
         self.assertTrue(diff["protocol_drift"])
         self.assertFalse(diff["comparable"])
         self.assertTrue(diff["changed"])
 
     def test_fixture_set_drift(self):
+        """Test fixture set drift."""
         other = copy.deepcopy(self.payload)
         other["fixture_set_sha256"] = hashlib.sha256(b"other").hexdigest()
         diff = diff_scorerlens(self.payload, other)
@@ -464,6 +520,7 @@ class TestDiff(unittest.TestCase):
         self.assertFalse(diff["comparable"])
 
     def test_one_sided(self):
+        """Test one sided."""
         diff = diff_scorerlens(self.payload, None)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -472,7 +529,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
+    """Test reporting section."""
+
     def test_section_renders_with_winner_and_honesty(self):
+        """Test section renders with winner and honesty."""
         payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
         html = reporting._scorerlens_section({"scorerlens": payload})
         self.assertIn('id="scorerlens"', html)
@@ -481,10 +541,12 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("first passes at rung 3", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertEqual(reporting._scorerlens_section({}), "")
         self.assertEqual(reporting._scorerlens_section({"scorerlens": {"available": False}}), "")
 
     def test_section_escapes_candidate_names(self):
+        """Test section escapes candidate names."""
         result = _profile_result()
         result["search"][0]["format"]["name"] = "<script>x</script>"
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -494,13 +556,18 @@ class TestReportingSection(unittest.TestCase):
 
 
 class _Fixture:
+    """Fixture."""
+
     def __init__(self, fid: str, expected: str) -> None:
         self.id = fid
         self.expected = expected
 
 
 class TestCliProbe(unittest.TestCase):
+    """Test cli probe."""
+
     def test_probe_attaches_payload(self):
+        """Test probe attaches payload."""
         result = _profile_result()
         cli_module._run_scorerlens_probe(
             result, search_fixtures=[_Fixture(k, v) for k, v in _EXPECTED.items()]
@@ -509,6 +576,7 @@ class TestCliProbe(unittest.TestCase):
         self.assertEqual(result["scorerlens"]["winner_by_rung"]["3"], "alpha")
 
     def test_probe_never_raises(self):
+        """Test probe never raises."""
         result: dict[str, Any] = {}
         cli_module._run_scorerlens_probe(result, search_fixtures=[object()])
         self.assertEqual(
@@ -516,6 +584,7 @@ class TestCliProbe(unittest.TestCase):
         )
 
     def test_flag_parses(self):
+        """Test flag parses."""
         parser = cli_module.build_parser()
         args = parser.parse_args(
             [
@@ -543,6 +612,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     """
 
     def test_scorer_lens_dispatches_through_main(self):
+        """Test scorer lens dispatches through main."""
         from model_protocol_lab import backends, doctor, experiments
 
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -596,12 +666,15 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
             }
 
             class _FakeHFBackend:
+                """Fake hf backend."""
+
                 def __init__(self, model, device=None, max_context=None):
                     self.model = model
 
                 eos_token_id = None
 
             def fake_prepare(path):
+                """Fake prepare."""
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 
@@ -661,6 +734,7 @@ class TestMutationGates(unittest.TestCase):
     """
 
     def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
         import importlib.util
         import os
         import sys
@@ -687,7 +761,10 @@ class TestMutationGates(unittest.TestCase):
                 scenario(mutant)
 
     def test_mutant_union_dropped_caught(self):
+        """Test mutant union dropped caught."""
+
         def scenario(mod):
+            """Scenario."""
             # With R4 as a replacement comparison, the NaN pair
             # un-passes at R4 (Decimal NaN != NaN).
             assert mod.rung_match("nan", "NaN", 4) is True
@@ -701,7 +778,10 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_mutant_empty_guard_dropped_caught(self):
+        """Test mutant empty guard dropped caught."""
+
         def scenario(mod):
+            """Scenario."""
             assert mod.rung_match("?", "!", 3) is False
 
         self._run_gate(
@@ -712,7 +792,10 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_mutant_fence_strip_dropped_caught(self):
+        """Test mutant fence strip dropped caught."""
+
         def scenario(mod):
+            """Scenario."""
             # The bare-fence case is also recovered by edge backtick
             # stripping plus the final trim; the info-string fence
             # is the case only the fence operation recovers.
@@ -734,14 +817,17 @@ class TestValidatorBattery(unittest.TestCase):
     """
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
 
     def _tampered(self, fn):
+        """Tampered."""
         payload = copy.deepcopy(self.payload)
         fn(payload)
         return payload
 
     def test_reject_battery(self):
+        """Test reject battery."""
         cand = lambda p: p["candidates"][0]  # noqa: E731
         rec = lambda p: p["candidates"][0]["records"][0]  # noqa: E731
         cases = {
@@ -805,6 +891,7 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_scorerlens(self._tampered(fn)), name)
 
     def test_exact_record_with_via_consistent_flip_rejected(self):
+        """Test exact record with via consistent flip rejected."""
         # flip==2 with a via passes the via check; the exact/flip
         # contradiction is the branch under test.
         payload = copy.deepcopy(self.payload)
@@ -815,6 +902,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_excluded_record_with_flip_rejected(self):
+        """Test excluded record with flip rejected."""
         result = {
             "search": [_entry("alpha", [_obs("f4", "something"), _obs("f1", "42")])],
             "selected_candidate": None,
@@ -826,6 +914,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_ineligible_candidate_wrong_note_rejected(self):
+        """Test ineligible candidate wrong note rejected."""
         result = _profile_result()
         result["search"][1]["summary"]["aggregate_eligible"] = False
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -833,6 +922,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_no_failures_candidate_wrong_note_rejected(self):
+        """Test no failures candidate wrong note rejected."""
         result = {
             "search": [_entry("alpha", [_obs("f1", "42"), _obs("f2", "Paris")])],
             "selected_candidate": None,
@@ -843,6 +933,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_withheld_for_mismatch_validates(self):
+        """Test withheld for mismatch validates."""
         result = _profile_result()
         result["search"][1]["observations"] = result["search"][1]["observations"][:2]
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -850,6 +941,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(_valid_scorerlens(payload))
 
     def test_winners_present_despite_ineligible_candidate_rejected(self):
+        """Test winners present despite ineligible candidate rejected."""
         result = _profile_result()
         result["search"][1]["summary"]["aggregate_eligible"] = False
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -858,6 +950,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_winners_present_despite_mismatch_rejected(self):
+        """Test winners present despite mismatch rejected."""
         result = _profile_result()
         result["search"][1]["observations"] = result["search"][1]["observations"][:2]
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -866,6 +959,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_withheld_reason_must_be_derivable(self):
+        """Test withheld reason must be derivable."""
         # Healthy payload, winner readout removed and a false
         # reason pleaded: no withholding condition holds, so the
         # payload is corruption, not a withheld readout.
@@ -875,6 +969,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_scorerlens(payload))
 
     def test_withheld_for_unavailable_candidate_validates(self):
+        """Test withheld for unavailable candidate validates."""
         result = _profile_result()
         result["search"][1]["observations"] = [_obs("ghost", "42")]
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -882,6 +977,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(_valid_scorerlens(payload))
 
     def test_winners_present_despite_unavailable_candidate_rejected(self):
+        """Test winners present despite unavailable candidate rejected."""
         payload = copy.deepcopy(self.payload)
         payload["candidates"][1] = {
             "candidate": "beta",
@@ -893,10 +989,14 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 class TestDiffGaps(unittest.TestCase):
+    """Test diff gaps."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))
 
     def test_share_drift_alone(self):
+        """Test share drift alone."""
         other_result = _profile_result()
         other_result["search"][0]["observations"][2] = _obs("f3", "999")
         other = scorerlens_profile(other_result, dict(_EXPECTED))
@@ -908,6 +1008,7 @@ class TestDiffGaps(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_excluded_candidate_transitions(self):
+        """Test excluded candidate transitions."""
         other_result = _profile_result()
         other_result["search"][1]["observations"] = [_obs("ghost", "42")]
         other = scorerlens_profile(other_result, dict(_EXPECTED))
@@ -917,6 +1018,7 @@ class TestDiffGaps(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_malformed_entry_candidate_in_view(self):
+        """Test malformed entry candidate in view."""
         result = _profile_result()
         result["search"].append({"format": {}})
         payload = scorerlens_profile(result, dict(_EXPECTED))
@@ -926,7 +1028,10 @@ class TestDiffGaps(unittest.TestCase):
 
 
 class TestReportingGaps(unittest.TestCase):
+    """Test reporting gaps."""
+
     def test_hostile_payload_defensive_branches(self):
+        """Test hostile payload defensive branches."""
         payload = {
             "available": True,
             "evaluable_mismatch": True,
@@ -975,12 +1080,14 @@ class TestReportingGaps(unittest.TestCase):
         self.assertIn("Candidates with no usable recorded observations", html)
 
     def test_candidates_not_a_list(self):
+        """Test candidates not a list."""
         self.assertEqual(
             reporting._scorerlens_section({"scorerlens": {"available": True, "candidates": 42}}),
             "",
         )
 
     def test_section_without_flips(self):
+        """Test section without flips."""
         result = {
             "search": [_entry("alpha", [_obs("f1", "42"), _obs("f2", "Paris")])],
             "selected_candidate": "alpha",

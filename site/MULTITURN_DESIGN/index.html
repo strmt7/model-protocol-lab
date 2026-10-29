@@ -1,0 +1,2782 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/MULTITURN_DESIGN/">
+      
+      
+        <link rel="prev" href="../MULTIQUESTION_DESIGN/">
+      
+      
+        <link rel="next" href="../NEEDLE_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Multi-turn drift - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#multi-turn-drift-design-cycle-189" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Multi-turn drift
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ANSWERSYNTAX_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Answer syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bundle (multi-question)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DIRECTIVE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directive ladder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONLANGUAGE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTIQUESTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-question (restated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-incorporation-policy-p1p3-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The incorporation policy (P1–P3, frozen)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction-synthetic-generated-numform-discipline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction (synthetic, generated, numform discipline)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-mechanics-pre-registered-edge-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage mechanics (pre-registered edge rules)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#falsifiable-claims-pre-registered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsifiable claims (pre-registered)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#determinism-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Determinism scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honesty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honesty
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adjudication-v1-v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adjudication (v1 → v2)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-coordinator-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (coordinator checklist)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-incorporation-policy-p1p3-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The incorporation policy (P1–P3, frozen)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction-synthetic-generated-numform-discipline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction (synthetic, generated, numform discipline)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-mechanics-pre-registered-edge-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage mechanics (pre-registered edge rules)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#falsifiable-claims-pre-registered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsifiable claims (pre-registered)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#determinism-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Determinism scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honesty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honesty
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adjudication-v1-v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adjudication (v1 → v2)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-coordinator-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (coordinator checklist)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="multi-turn-drift-design-cycle-189">Multi-turn drift design (cycle 189)<a class="headerlink" href="#multi-turn-drift-design-cycle-189" title="Permanent link">&para;</a></h1>
+<p>Wave-8 rank #2. The incorporation policy below (P1–P3) is adopted
+from the wave-8 research brief (<code>~/workspace/agents_out/wave8/
+research.md</code> §2 #2) before any code, because cycle 179's closure
+recorded the policy — not the fixture schema — as the blocker:
+synthetic fixtures are built in memory on the hierarchy/numform
+precedent, and <code>core.Fixture</code>'s single <code>expected</code> is enough once
+the policy says which turn is scored.</p>
+<p>This is v2 of the design. v1 was attacked by red-team A
+(<code>~/workspace/agents_out/wave8/cycle189/redteam_a.md</code>, verdict
+DO NOT BUILD AS SPECIFIED: four design-fatal items) and
+cross-checked by red-team B (<code>redteam_b.md</code> in the same
+directory), which confirmed all four fatal items, downgraded
+two findings, refuted two of A's own amendments, and added one
+finding A missed. The coordinator adjudication adopted B's
+surviving must-fix list wholesale; §Adjudication records what
+changed and why. No code was written against v1.</p>
+<h2 id="utility">Utility<a class="headerlink" href="#utility" title="Permanent link">&para;</a></h2>
+<p>A practitioner shipping a multi-turn assistant learns, per
+template family, whether the winner chosen on single-exchange
+fixtures still wins when the model's own earlier replies become
+the history — and whether verdicts at depth 2 and depth 3
+differ — instead of discovering in production that the template
+only won on conversations that never actually happened. (Each
+depth is its own generated task set, so a cross-depth
+comparison is confounded by task length; the probe reports
+per-depth verdicts, not a depth-onset curve.) Opt-in:
+<code>model-protocol-lab run --multiturn</code>.</p>
+<h2 id="the-incorporation-policy-p1p3-frozen">The incorporation policy (P1–P3, frozen)<a class="headerlink" href="#the-incorporation-policy-p1p3-frozen" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>P1 (what a turn is).</strong> A conversation is a frozen sequence
+  of user shards. The model's reply at each intermediate turn
+  is generated greedily under the candidate's own rendering,
+  cut at the candidate's boundary exactly as in native
+  evaluation, and the <strong>cut text</strong> (never the raw
+  over-generation) is inserted verbatim as the assistant turn
+  of the next prompt. In <code>core.evaluate</code> the cut text is
+  <code>Observation.answer</code> (output up to the first boundary); the
+  multiturn stage builds each next turn's <code>Fixture</code> from it
+  unchanged. Scope of the claim (v2, per A9): the history is
+  the cut text <strong>re-rendered under the candidate's own
+  <code>Format</code></strong> — the lab's construction, not a claim about what
+  any vendor template or real deployment would send. For
+  formats whose generation open suffix differs from the
+  history assistant prefix (62 of 118 mutate candidates, 15 of
+  29 base families — e.g. the thinking variants, where text
+  generated inside an opened think block is re-homed outside
+  it by the history render), the recorded conversation is the
+  lab's uniform construction, disclosed here and in the
+  section's honesty text.</li>
+<li><strong>P2 (what is scored).</strong> Only the <strong>final</strong> turn's answer,
+  against the fixture's single <code>expected</code>, under the unchanged
+  exact-match + boundary conjunction. Intermediate replies are
+  never scored; they are context, exactly as in a real
+  conversation. This dissolves the "per-turn expectations"
+  problem by refusing to invent them. Per-turn <code>Fixture</code>s the
+  stage builds carry the fixture's final <code>expected</code>;
+  <code>evaluate</code> computes <code>exact_match</code> against it on every turn
+  and the stage ignores intermediate <code>Observation.exact_match</code>
+  (v2, per A8 — a builder must not invent per-turn
+  expectations).</li>
+<li><strong>P3 (selection).</strong> The probe is informational and never
+  touches the native selection. Per-depth selection readouts
+  (for the <code>full</code> and <code>sharded</code> arms; the scripted arm is a
+  control and gets none) re-apply the conservative rule to
+  final-turn verdicts and are withheld (null) when any
+  candidate's completed set at that depth differs from the
+  defined fixture set or completed sets differ across
+  candidates (the dateline wording, v2 per A13).</li>
+</ul>
+<h2 id="construction-synthetic-generated-numform-discipline">Construction (synthetic, generated, numform discipline)<a class="headerlink" href="#construction-synthetic-generated-numform-discipline" title="Permanent link">&para;</a></h2>
+<p>Fixtures are generated inside the stage from the run seed; no
+user fixtures are read and no file schema is involved. Values
+derive from SHA-256, never <code>random.Random</code>, so the same seed
+regenerates the identical fixture set across runs and
+<code>PYTHONHASHSEED</code> values.</p>
+<p><strong>Derivation (frozen, v2 per A8).</strong>
+<code>_derive(seed, family, depth, index, slot, counter)</code> returns
+<code>int.from_bytes(sha256(material)[:8], "big")</code> where
+<code>material = "multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"</code>
+(the numform <code>_derive</code> construction, with depth deliberately
+in the material: depths are independent task sets and no
+nesting or lineage is claimed between them).</p>
+<p>Two task families, each a deterministic function of all shards.
+The question <strong>rides the final shard</strong> (appended to it), so
+depth is the number of entries/shelves — there is no
+replace-reading and no own-turn reading (v2 per A8/S4).</p>
+<ul>
+<li><strong>ledger</strong> — shard <em>i</em> (non-final) is the text
+  <code>Ledger entry: {v}.</code>; the final shard is
+  <code>Ledger entry: {v}. What is the ledger total?</code> Addend for
+  slot <em>i</em>: <code>u = _derive(seed, "ledger", depth, index, i,
+  counter)</code>; magnitude <code>1 + u % 999</code>; value <code>+magnitude</code> when
+  <code>(u &gt;&gt; 32) % 2 == 0</code>, else <code>-magnitude</code> (nonzero, ±1..±999).
+  Entries render as <code>str(int)</code> — entry style and expected
+  style coincide by construction (v2 per B's A8 correction: a
+  <code>+42</code> entry style against a <code>str(int)</code> expected would
+  manufacture the surface-form confound numform exists to
+  isolate). The expected answer is <code>str(sum)</code>. <strong>Entry-equality
+  screen (A14 as rescoped by B):</strong> if <code>str(sum)</code> equals any
+  stated entry string in the same fixture, the whole fixture
+  is redrawn with <code>counter + 1</code> until it does not. (Substring
+  screening is <em>not</em> used: it is the wrong predicate — a shelf
+  label is a substring of its own shard text in 100% of
+  fixtures.)</li>
+<li><strong>shelf</strong> — shard <em>i</em> (non-final) is
+  <code>Shelf {label} holds {n} units.</code>; the final shard is
+  <code>Shelf {label} holds {n} units. Which shelf holds the most
+  units? Answer with the shelf label.</code> Labels are <code>A</code>, <code>B</code>,
+  <code>C</code> in shard order. Value for slot <em>i</em>:
+  <code>1 + _derive(seed, "shelf", depth, index, i, counter) % 99</code>
+  (range 1..99). Values are pairwise distinct per fixture: if
+  a drawn value equals an earlier slot's value in the same
+  fixture, that slot is redrawn with <code>counter + 1</code> until
+  distinct, so the argmax is unique. The expected answer is
+  the argmax label. Shelf needs no leakage screen (B).</li>
+</ul>
+<p>Depths are 2 and 3 (the shard count). Fixtures per family per
+depth: 12, so 48 fixtures total. Fixture ids are
+<code>mt-{family}-{depth}-{index:02d}</code>. Every <code>Fixture</code> the stage
+builds (per-turn included) carries group <code>"multiturn"</code>. The
+<code>full</code> arm joins shards with the frozen joiner <code>"\n\n"</code> (the
+dateline <code>JOINER</code> precedent). The scripted reply is the frozen
+text <code>Noted.</code>. Shard templates, the question strings, the
+joiner, and the scripted reply are frozen protocol text,
+screened before any generation (the numform template screen:
+<code>audit_special_token_literals</code> against the candidate formats,
+no boundary-text containment).</p>
+<p>Ground records store shard texts and generated integers in
+the clear — synthetic data, and the diff validator must be
+able to recompute from them (numform precedent).</p>
+<h2 id="arms">Arms<a class="headerlink" href="#arms" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>full</strong> — all shards concatenated into one user turn with
+  the frozen joiner (single-turn control; Laban's Full
+  condition). One generation.</li>
+<li><strong>sharded</strong> at depth d — the same shards delivered one per
+  user turn, with the model's own boundary-cut replies as the
+  assistant turns between them (P1). d generations; only the
+  last is scored (P2).</li>
+<li><strong>scripted</strong> at depth d — the same sharding, but every
+  intermediate assistant turn is the one frozen scripted reply
+  (<code>Noted.</code>), identical for every candidate, fixture, and
+  turn. One generation (the final turn). The sharded-vs-scripted
+  contrast measures a <strong>bundle</strong> — authorship, content, and
+  history length move together, because a self-generated reply
+  carries computed state and premature answers (rule 6) at
+  whatever length the model produced, and content/length are
+  the mechanism of self-history, not confounders separable
+  from it (v2 per A4 as reduced by B: no length-matched arm —
+  sizing the control to each candidate's own replies would
+  candidate-depend the control and change the estimand). The
+  design, CLI help, and readouts therefore never say the
+  contrast "isolates" authorship; they report the discordant
+  pair (§Readouts) so churn and silence are distinguishable.</li>
+</ul>
+<h2 id="stage-mechanics-pre-registered-edge-rules">Stage mechanics (pre-registered edge rules)<a class="headerlink" href="#stage-mechanics-pre-registered-edge-rules" title="Permanent link">&para;</a></h2>
+<p>The stage is a sequential loop — the first stage in the lab
+where generation k's output builds generation k+1's prompt.
+Rules, fixed before code:</p>
+<ol>
+<li><strong>Unbounded intermediate.</strong> If an intermediate generation
+   finds no boundary, the full generated text (decoded,
+   budget-capped — exactly <code>Observation.answer</code> when
+   <code>boundary_found</code> is false) becomes the history turn, and
+   the cell is flagged <code>intermediate_unbounded</code>. Truncating
+   or dropping the turn would manufacture a different
+   conversation per candidate.</li>
+<li><strong>Empty intermediate.</strong> If an intermediate cut text is the
+   empty string, it is inserted as an empty assistant turn
+   (legal in every catalog format — verified) and the cell is
+   flagged <code>intermediate_empty</code> (v2 per A9/S1). An empty turn
+   is a no-reply turn, a distinct phenomenon from an unbounded
+   one, and its rendering is family-shaped (e.g. Mistral's
+   empty assistant turn contributes only its turn end), so it
+   is named rather than left derivable-only.</li>
+<li><strong>History screen (v2 per A5).</strong> Before an intermediate
+   reply is incorporated as history, its text is screened
+   with <code>audit_special_token_literals</code> against the candidate
+   format's own special-token inventory (the audit the shipped
+   stages apply to frozen text). Generated text can contain
+   special-token literals that re-encode to real special-token
+   ids — a forged turn boundary inside history is token-real,
+   not inert text. On a screen hit the sharded cell ends with
+   detail <code>arm_screened</code> (the dateline detail precedent), the
+   cell leaves the paired set, and screened cells are counted
+   per candidate (§Readouts). The final-turn answer is never
+   incorporated, so it is not screened; the scripted history
+   is frozen text, screened once with the protocol text.</li>
+<li><strong>Context growth.</strong> Before each turn, if the rendered
+   prompt's token count plus <code>max_new_tokens</code> exceeds
+   <code>max_context</code>, that arm's cell for that fixture ends with
+   detail <code>arm_context_exceeded</code> and leaves the completed set
+   at that depth. A completed-set event, reported — never a
+   crash, never a silent truncation of the conversation.</li>
+<li><strong>Cancellation, with precedence (v2 per S3).</strong> The run's
+   cancel event is threaded into every <code>evaluate</code> call and is
+   checked <strong>immediately after every <code>evaluate</code> return,
+   before the evaluation-failure mapping (rule 6)</strong> — a cancel
+   observed during a turn must not be mislabelled an
+   evaluation failure. A cancelled stage returns the
+   fail-closed payload (<code>available: False</code>,
+   <code>detail: "cancelled"</code>), never partial candidates.</li>
+<li><strong>Evaluation failure.</strong> A turn whose <code>evaluate</code> report is
+   not aggregate-eligible ends the cell with detail
+   <code>arm_evaluation_failed</code>.</li>
+<li><strong>Request seeds (v2 pins per A12).</strong> Each (fixture, arm,
+   turn) evaluates under a distinct case id —
+   <code>{fixture_id}-full</code>, <code>{fixture_id}-scripted</code>, and
+   <code>{fixture_id}-sharded-t{k}</code> for k = 1..depth (turn <code>depth</code>
+   is the final turn) — so <code>core.request_seed_for</code> gives every
+   generation its own deterministic request seed. Final-turn
+   seeds are deliberately unpaired across arms (contrast
+   numform's paired discipline); the real backend does not use
+   the seed for selection, and tests must not assume pairing.</li>
+<li><strong>Premature answers are signal.</strong> An intermediate reply may
+   contain the final answer early (Laban's anchoring
+   mechanism). Nothing detects, penalises, or repairs this;
+   P2 scores only the final turn.</li>
+</ol>
+<p>Attrition is arm-asymmetric by construction (a sharded cell
+must survive d sequential evaluations; the others one), and
+the exiting cells are treatment-correlated (long or unbounded
+intermediates), so every paired denominator is reported beside
+per-arm completion counts with a detail breakdown (v2 per
+A11).</p>
+<h2 id="records">Records<a class="headerlink" href="#records" title="Permanent link">&para;</a></h2>
+<p>One record per (candidate, fixture), carrying everything the
+diff validator recomputes from:</p>
+<ul>
+<li><code>fixture_id</code>, <code>family</code>, <code>depth</code>, <code>shards</code> (texts), <code>values</code>
+  (the generated integers), <code>expected</code>.</li>
+<li>Per arm (<code>full</code>, <code>sharded</code>, <code>scripted</code>): a cell or a
+  <code>detail</code> string from the house vocabulary
+  (<code>arm_context_exceeded</code>, <code>arm_evaluation_failed</code>,
+  <code>arm_screened</code>). A cell is <code>verdict</code>, <code>boundary_found</code>,
+  <code>boundary_text_match</code> (v2 per A6 — the only diagnostic
+  separating "model failed" from "boundary text emitted under
+  a different tokenisation"), <code>input_tokens</code> (final turn),
+  <code>answer_digest</code> (SHA-256 of the final answer text), and for
+  <code>sharded</code> also <code>intermediate_unbounded</code>,
+  <code>intermediate_empty</code>, and <code>turns</code>: one entry per turn
+  (length == depth), each <code>input_tokens</code>, <code>answer_digest</code>,
+  <code>boundary_found</code>. The last <code>turns</code> entry <strong>is</strong> the final
+  turn and must agree with the cell on digest, boundary, and
+  <code>input_tokens</code> (validator-checked identity, v2 per A6);
+  <code>intermediate_unbounded</code> ≡ any intermediate turn with
+  <code>boundary_found</code> false, and <code>intermediate_empty</code> ≡ any
+  intermediate turn whose digest is SHA-256 of <code>""</code>
+  (validator-checked identities, v2 per A6). The scripted arm
+  records no <code>turns</code> (its intermediates are frozen text;
+  there is nothing to attest).</li>
+<li><code>ground_sha256</code> over the canonical generated fixture rows
+  binds the payload to the generator (numform
+  <code>generator_sha256</code> precedent).</li>
+</ul>
+<p>The protocol object carries: version, families, depths,
+fixtures per family per depth, the shard templates, question
+strings, joiner, and scripted reply (fingerprinted via a
+template digest, numform precedent), the floors,
+<code>GENERATION_BUDGET</code>, <code>MAX_GROUND_RECORDS</code>,
+<code>MAX_RECORDS_BYTES</code>, the seed, and the backend fingerprint.
+Protocol drift in any of these makes two payloads not
+comparable.</p>
+<h2 id="readouts">Readouts<a class="headerlink" href="#readouts" title="Permanent link">&para;</a></h2>
+<p>Per candidate, computed by <code>multiturn.aggregate_candidate</code>
+and recomputed by the diff validator. Rates always travel
+with denominators; counts are shipped, never rates alone.</p>
+<p>Per depth d ∈ {2, 3}:</p>
+<ul>
+<li><strong>Paired denominator</strong> = fixtures of depth d completed in
+  all three arms; per-arm final-turn pass rates over that
+  denominator. Per-arm completion counts with detail
+  breakdowns (including <code>n_screened</code>) are reported beside it.</li>
+<li><strong>Delivery 2×2</strong> (<code>full</code> vs <code>sharded</code>) over the paired set:
+  drift (pass <code>full</code> ∧ fail <code>sharded</code>), gains (fail <code>full</code> ∧
+  pass <code>sharded</code>), both-pass, both-fail; McNemar exact p as a
+  diagnostic only. The <code>full</code> vs <code>scripted</code> 2×2 likewise
+  (drift_scripted, gains_scripted, both-pass, both-fail).</li>
+<li><strong>Self-history pair</strong> over the paired full-passers:
+  <code>sh_only</code> (pass <code>scripted</code> ∧ fail <code>sharded</code>), <code>sc_only</code>
+  (fail <code>scripted</code> ∧ pass <code>sharded</code>), both-treated-pass,
+  both-treated-fail. The pair is the headline; <code>net_excess =
+  sh_only - sc_only</code> is reported beside it, never alone, with
+  a McNemar exact p as a diagnostic (v2 per A3 — net-only
+  reporting is the cycle-185 acquittal construction: churn
+  (5, 5) and silence (0, 0) have the same net).</li>
+<li><strong>Per-family counts beside pooled</strong> (v2 per B-NEW-1):
+  drift, gains, drift_scripted, <code>sh_only</code>, <code>sc_only</code> per
+  family per depth. The families have different answer
+  spaces and baseline difficulties; pooling is stated here
+  explicitly, per-family counts ship beside every pooled
+  count, and the classification is pooled (its inputs are
+  visible per family).</li>
+<li><strong>Selection readouts</strong> (P3, §policy) for <code>full</code> and
+  <code>sharded</code> at each depth, or null under the withholding rule.</li>
+</ul>
+<p><strong>Classification</strong> per candidate — a total function of the
+per-depth counts with floors <code>MIN_PAIRED_EVALUABLE = 6</code> and
+<code>MIN_DISCORDANT = 2</code> (house constants). A depth is <em>evaluable</em>
+when its paired denominator ≥ 6. In order (v2 per A2 — the
+sibling classifiers' below-threshold outcome restored, and
+the strong label gated on at-floor paired evidence at a
+single depth):</p>
+<ol>
+<li><code>insufficient_evidence</code> — no depth is evaluable.</li>
+<li><code>self_history_drift</code> — at some evaluable depth,
+   <code>sh_only ≥ 2</code> and <code>sh_only &gt; sc_only</code>.</li>
+<li><code>framing_only</code> — not (2), and at some evaluable depth
+   max(drift, gains, drift_scripted, gains_scripted) ≥ 2:
+   delivery/framing discordance at floor with no
+   self-history signal at floor.</li>
+<li><code>below_threshold</code> — not (2) or (3), and any discordant
+   count (drift, gains, drift_scripted, gains_scripted,
+   <code>sh_only</code>, <code>sc_only</code>) &gt; 0 at any evaluable depth.</li>
+<li><code>no_drift</code> — no discordance in either direction at any
+   evaluable depth.</li>
+</ol>
+<p>There is <strong>no cross-depth recovery counter</strong> (v1's was a
+category error — A1: the depths are different generated
+tasks, so passing at depth 3 after failing at depth 2 is not
+recovery from anything, and its numerator was not a subset of
+its stated denominator). Cross-depth reporting is the two
+per-depth blocks, full stop.</p>
+<h2 id="falsifiable-claims-pre-registered">Falsifiable claims (pre-registered)<a class="headerlink" href="#falsifiable-claims-pre-registered" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>F1 (per candidate).</strong> If at every evaluable depth the
+  self-history pair is (0, 0) while scripted-arm discordance
+  exists, self-authorship adds nothing beyond the framing
+  bundle for this candidate, and the claim "self-generated
+  history is the active ingredient" fails for this candidate
+  and fixture set. The classification concludes per candidate
+  (<code>framing_only</code> or <code>below_threshold</code>), never pooled across
+  candidates (v2 quantifier fix per B).</li>
+<li><strong>F2.</strong> If a candidate shows drift = gains = drift_scripted
+  = gains_scripted = 0 at every depth, the claim "multi-turn
+  delivery is a verdict-relevant surface under this template"
+  is false for this candidate and set; the section says
+  exactly that, with denominators (v2 per A10 — two-directional:
+  drift 0 with gains 5 is a verdict-relevant surface and must
+  not satisfy the null).</li>
+<li><strong>F3 (instrument).</strong> Every derived number in the section is
+  recomputable from the ground records. The binding that
+  makes this true is stated, not implied: for every arm cell,
+  <code>verdict ≡ (answer_digest == sha256(expected)) ∧
+  boundary_found</code>, with <code>expected</code> from the mirror-regenerated
+  fixture (v2 per A6). One honest exception, disclosed rather
+  than papered over: the correspondence between the recorded
+  intermediate digests and the history that was actually
+  rendered is <strong>stage-attested</strong> (the DISTRACTION_DESIGN
+  honesty pattern) — the records bind each turn's digest and
+  the validator checks every identity among recorded fields,
+  but no record can prove the stage incorporated the text it
+  recorded. A payload whose aggregates disagree with a
+  recomputation is rejected by <code>diff-reports</code>.</li>
+</ul>
+<h2 id="diff-validator">Diff validator<a class="headerlink" href="#diff-validator" title="Permanent link">&para;</a></h2>
+<p><code>diff_multiturn</code> recomputes everything (the wave-7 F6
+standard): it regenerates the fixture set from the protocol
+seed through an independent stdlib mirror of the generator
+(the cycle-187 numform fix — <code>generator_sha256</code> alone would
+be tautological), checks every record's shards/values/
+expected against the regenerated set, re-derives every cell
+verdict from its digest identity, checks the <code>turns</code>
+identities (§Records), recomputes pass rates, the 2×2s, the
+self-history pair, per-family counts, selection readouts,
+and the classification from the cells, and rejects on any
+disagreement. Protocol drift (version, seed-derived fixture
+set, scripted reply, templates) makes two payloads not
+comparable.</p>
+<h2 id="determinism-scope">Determinism scope<a class="headerlink" href="#determinism-scope" title="Permanent link">&para;</a></h2>
+<p>The chain is greedy, so a conversation is a deterministic
+function of (checkpoint, candidate, fixture). Multiturn cells
+are <strong>outside</strong> the determinism self-audit's scope: <code>verify
+--determinism</code> replays recorded <em>search</em> observations only,
+and this probe's payload says so rather than implying
+coverage.</p>
+<h2 id="budget">Budget<a class="headerlink" href="#budget" title="Permanent link">&para;</a></h2>
+<p>Per candidate: depth-2 fixtures (24) cost 1 + 2 + 1 = 4
+generations each, depth-3 fixtures (24) cost 1 + 3 + 1 = 5,
+so 216 generations per candidate; at the tree's 24-candidate
+cap (<code>run_experiment</code>: "Supply between 1 and 24 candidates"),
+<code>GENERATION_BUDGET = 5184</code> (v2 per A7 — v1's 25-candidate /
+5,400 figure was wrong). <code>MAX_GROUND_RECORDS = 1152</code>
+(24 candidates × 48 records — generations and records are
+different quantities here and get separate constants, v2 per
+S2) and <code>MAX_RECORDS_BYTES = 12 * 1024 * 1024</code> (measured need
+≈ 1.2 MB at the legal maximum); caps fail closed before
+generation, as in numform. The CLI help states the worst case
+with the forwards formula before the run: generations =
+candidates × (24×4 + 24×5), and prompt cost grows every turn
+because each sharded turn re-renders the whole history, so
+token cost is superlinear in depth even though the generation
+count is linear.</p>
+<h2 id="honesty">Honesty<a class="headerlink" href="#honesty" title="Permanent link">&para;</a></h2>
+<p>The generated tasks are a probe instrument, not a benchmark:
+they measure whether verdicts survive sharded delivery on
+tasks whose entire information content fits in three short
+shards. Nothing here estimates performance on real user
+conversations, which are underspecified in ways a frozen
+shard sequence is not (Laban's simulations use a user
+simulator for exactly that reason). Two further disclosures
+travel with the section: the P1 history construction is the
+lab's re-rendering, with the open-suffix asymmetry for
+thinking formats (§policy); and the sharded-vs-scripted
+contrast is a bundle (authorship + content + length) over a
+minimal neutral history, reported as a discordant pair, not
+an isolated authorship effect. The probe's claim is the
+lab's claim throughout: holding weights fixed, the <em>template</em>
+decides whether the winner survives the conversation shape.</p>
+<h2 id="adjudication-v1-v2">Adjudication (v1 → v2)<a class="headerlink" href="#adjudication-v1-v2" title="Permanent link">&para;</a></h2>
+<p>Red-team A: DO NOT BUILD AS SPECIFIED (A1–A14). Red-team B:
+confirmed A1, A2, A3, A5, A7, A8, A9 (strengthened), A10,
+A11, A12, A13; A4 partially (downgraded HIGH → MEDIUM, its
+length-matched-arm amendment refuted — adopted: wording-only
+fix, bundle named, "isolates" struck); A6 confirmed-
+downgraded (HIGH → MEDIUM — the verdict is re-derivable from
+v1's specified fields; adopted: the identity stated, lineage
+disclosed stage-attested, <code>boundary_text_match</code> added);
+A14 partially (phenomenon confirmed; its substring screen
+refuted — it rejects the shelf family by construction;
+adopted as rescoped: ledger-only entry-equality screen).
+Supplementary items S1 (empty-turn render artefacts),
+S2 (separate budget/record constants), S3 (cancel precedence
+pin), S4 (third budget reading — closed by the
+question-placement decision) all adopted. B-NEW-1 (family
+pooling unstated) adopted: per-family counts beside pooled.
+Fatal four fixed as specified by A and confirmed by B:
+recovery deleted (A1), classification rebuilt with
+<code>below_threshold</code> and single-depth gating (A2), history
+screen pre-registered (A5), generator fully specified
+(A8: question placement, derive material with depth, both
+value mappings, <code>str(int)</code> entries per B's correction,
+joiner, group, caps, protocol object, house vocabulary).</p>
+<h2 id="pin-blast-radius-coordinator-checklist">Pin blast radius (coordinator checklist)<a class="headerlink" href="#pin-blast-radius-coordinator-checklist" title="Permanent link">&para;</a></h2>
+<p>New pure module <code>multiturn.py</code> (54th source file →
+test_cycle44 mypy pin in the same push); one stage in
+<code>experiments.py</code>; one CLI flag <code>--multiturn</code> (cycle-179
+dispatch e2e, cycle-31/64/84 audits, cycle-131 Namespace
+contract); reporting.py's three touchpoints; one diff section
+(test_cycle67's three elements + test_cycle27's stub); USAGE
+§8.44 (next free — verify at build); README/VALIDATION/
+CHANGELOG currency; sample report regenerates byte-identical
+(the section renders nothing when its key is absent).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

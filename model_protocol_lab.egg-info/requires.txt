@@ -1,0 +1,13 @@
+
+[dev]
+ruff>=0.17.3
+mypy>=2.4.0
+coverage>=7.17.0
+hypothesis>=6.170.12
+pytest>=9.2.0
+
+[hf]
+torch<3,>=2.6
+transformers<6,>=4.57.1
+safetensors>=0.6
+jinja2>=3.1.6

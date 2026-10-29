@@ -31,6 +31,7 @@ _VERSIONED_MODULES = ("torch", "transformers")
 
 
 def _is_version_info_subscript(node: ast.AST) -> bool:
+    """Is version info subscript."""
     return (
         isinstance(node, ast.Subscript)
         and isinstance(node.value, ast.Attribute)
@@ -41,6 +42,7 @@ def _is_version_info_subscript(node: ast.AST) -> bool:
 
 
 def _is_bare_dunder_version(node: ast.AST) -> bool:
+    """Is bare dunder version."""
     return (
         isinstance(node, ast.Attribute)
         and node.attr == "__version__"
@@ -50,20 +52,25 @@ def _is_bare_dunder_version(node: ast.AST) -> bool:
 
 
 def _is_const_seq(node: ast.AST) -> bool:
+    """Is const seq."""
     return isinstance(node, (ast.Tuple, ast.List)) and all(
         isinstance(elt, ast.Constant) for elt in node.elts
     )
 
 
 def _is_const_str(node: ast.AST) -> bool:
+    """Is const str."""
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
 class _ExactVersionVisitor(ast.NodeVisitor):
+    """Exact version visitor."""
+
     def __init__(self) -> None:
         self.hits: list[tuple[int, str]] = []
 
     def _check_pair(self, a: ast.AST, b: ast.AST, lineno: int) -> None:
+        """Check pair."""
         for operand, other in ((a, b), (b, a)):
             if _is_version_info_subscript(operand) and _is_const_seq(other):
                 self.hits.append((lineno, "exact sys.version_info tuple comparison"))
@@ -71,6 +78,7 @@ class _ExactVersionVisitor(ast.NodeVisitor):
                 self.hits.append((lineno, "exact torch/transformers __version__ comparison"))
 
     def visit_Compare(self, node: ast.Compare) -> None:
+        """Visit Compare."""
         if any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops):
             operands = [node.left, *node.comparators]
             for i, operand in enumerate(operands):
@@ -79,6 +87,7 @@ class _ExactVersionVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
+        """Visit Call."""
         # The assertEqual / assertNotEqual spellings, as attribute calls.
         func = node.func
         if (
@@ -91,6 +100,7 @@ class _ExactVersionVisitor(ast.NodeVisitor):
 
 
 def _scan(path: Path) -> list[str]:
+    """Scan."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     visitor = _ExactVersionVisitor()
     visitor.visit(tree)
@@ -98,7 +108,10 @@ def _scan(path: Path) -> list[str]:
 
 
 class TestNoExactVersionPins(unittest.TestCase):
+    """Test no exact version pins."""
+
     def test_no_exact_version_assertions(self) -> None:
+        """Test no exact version assertions."""
         hits: list[str] = []
         for path in sorted(TESTS_DIR.glob("test_*.py")):
             if path.name == _GUARD_NAME:
@@ -113,6 +126,7 @@ class TestNoExactVersionPins(unittest.TestCase):
 
 
 def _is_lone_surrogate(char: str) -> bool:
+    """Is lone surrogate."""
     return 0xD800 <= ord(char) <= 0xDFFF
 
 
@@ -133,6 +147,7 @@ def _docstring_surrogate_hits(path: Path) -> list[str]:
     hits: list[str] = []
 
     def _check(label: str, lineno: int, doc: str | None) -> None:
+        """Check."""
         if doc and any(_is_lone_surrogate(c) for c in doc):
             hits.append(f"{path.name}:{lineno}: {label} docstring holds a lone surrogate")
 
@@ -144,7 +159,10 @@ def _docstring_surrogate_hits(path: Path) -> list[str]:
 
 
 class TestNoDocstringSurrogates(unittest.TestCase):
+    """Test no docstring surrogates."""
+
     def test_no_docstring_lone_surrogates(self) -> None:
+        """Test no docstring lone surrogates."""
         hits: list[str] = []
         for path in sorted(TESTS_DIR.glob("test_*.py")):
             if path.name == _GUARD_NAME:
@@ -168,6 +186,7 @@ class TestPublicApiDocstrings(unittest.TestCase):
     """
 
     def test_all_public_api_has_docstrings(self) -> None:
+        """Test all public api has docstrings."""
         pkg = TESTS_DIR.parent / "model_protocol_lab"
         missing: list[str] = []
         for path in sorted(pkg.glob("*.py")):
@@ -196,6 +215,7 @@ class TestMypyStrictPinned(unittest.TestCase):
     """
 
     def test_mypy_strict_enabled(self) -> None:
+        """Test mypy strict enabled."""
         import tomllib
 
         pyproject = TESTS_DIR.parent / "pyproject.toml"
@@ -230,6 +250,7 @@ class TestDualRunnerContribution(unittest.TestCase):
     _UNITTEST_EXEMPT: dict[str, str] = {}
 
     def test_every_test_file_collected_by_unittest(self) -> None:
+        """Test every test file collected by unittest."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import unittest
 
@@ -256,6 +277,7 @@ class TestDualRunnerContribution(unittest.TestCase):
         )
 
     def test_every_test_file_collected_by_pytest(self) -> None:
+        """Test every test file collected by pytest."""
         # The collection subprocess is shared with test_cycle4's README
         # count pin via tests/_collect_cache.py (one ~30-60s spawn per
         # session instead of two).
@@ -274,7 +296,10 @@ class TestDualRunnerContribution(unittest.TestCase):
 
 
 class CollectCacheTests(unittest.TestCase):
+    """Collect cache tests."""
+
     def test_memoized_within_process(self):
+        """Test memoized within process."""
         from tests._collect_cache import pytest_collect_counts
 
         first = pytest_collect_counts(TESTS_DIR.parent)

@@ -106,6 +106,7 @@ FILE_FUZZ = settings(
 
 
 def _fixture_dict(fid, group, content):
+    """Fixture dict."""
     return {
         "id": fid,
         "group": group,
@@ -200,6 +201,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import tempfile
 
@@ -211,10 +213,12 @@ class ParserHostilePropertiesTests(unittest.TestCase):
         self.pid_tmpdir = Path(self._td.name)
 
     def tearDown(self) -> None:
+        """Tear down the test fixture."""
         self._td.cleanup()
 
     @staticmethod
     def test_valid_text_sanity():
+        """Test valid text sanity."""
         split = check_contract(lambda: parse_dataset(_VALID_TEXT))
         assert split is not None
         assert [c.id for c in split.search] == ["s1"]
@@ -223,16 +227,19 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     @FUZZ
     @given(st.text())
     def test_arbitrary_text_contract(self, text):
+        """Test arbitrary text contract."""
         check_contract(lambda: parse_dataset(text))
 
     @FUZZ
     @given(st.integers(0, len(_VALID_TEXT)))
     def test_truncation_contract(self, cut):
+        """Test truncation contract."""
         check_contract(lambda: parse_dataset(_VALID_TEXT[:cut]))
 
     @FUZZ
     @given(st.data())
     def test_char_substitution_contract(self, data):
+        """Test char substitution contract."""
         index = data.draw(st.integers(0, len(_VALID_TEXT) - 1))
         replacement = data.draw(st.characters())
         mutated = _VALID_TEXT[:index] + replacement + _VALID_TEXT[index + 1 :]
@@ -241,32 +248,41 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     @FUZZ
     @given(st.integers(1, len(_VALID_TEXT) - 1))
     def test_rotation_contract(self, split_at):
+        """Test rotation contract."""
         rotated = _VALID_TEXT[split_at:] + _VALID_TEXT[:split_at]
         check_contract(lambda: parse_dataset(rotated))
 
     @FUZZ
     @given(st.integers(0, len(_VALID_TEXT)))
     def test_key_splice_contract(self, index):
+        """Test key splice contract."""
         mutated = _VALID_TEXT[:index] + '"zz": 1, ' + _VALID_TEXT[index:]
         check_contract(lambda: parse_dataset(mutated))
 
     @FUZZ
     @given(_WRONG_VALUE)
     def test_wrong_top_level_shape_property(self, value):
+        """Test wrong top level shape property."""
         check_contract(lambda: parse_dataset(json.dumps(value)))
 
     def test_type_shape_attacks_at_every_level(self):
+        """Test type shape attacks at every level."""
         for name, text in _SHAPE_CASES:
             with self.subTest(name=name, text=text):
                 check_rejected(text)
 
     def test_non_string_inputs_rejected(self):
+        """Test non string inputs rejected."""
         for bad in [None, 123, 4.5, b"{}", bytearray(b"{}"), ["x"], {"a": 1}, True]:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_dataset(bad)  # type: ignore[arg-type]
 
     def test_str_subclass_rejected(self):
+        """Test str subclass rejected."""
+
         class Sneaky(str):
+            """Sneaky."""
+
             pass
 
         with self.assertRaises(ValueError):
@@ -274,6 +290,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
 
     @staticmethod
     def test_number_attacks():
+        """Test number attacks."""
         check_rejected(json.dumps({"search": 10**1000, "held_out": []}))
         check_rejected('{"search": [' + "9" * 5000 + "]}")  # trips the 4300-digit cap
         for token in ("1e308", "-1e308", "1e-9999"):
@@ -282,17 +299,20 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     @FUZZ
     @given(st.integers(50, 500), st.sampled_from(["[]", "{}"]))
     def test_nesting_depth_property(self, depth, kind):
+        """Test nesting depth property."""
         text = "[" * depth + "]" * depth if kind == "[]" else '{"k":' * depth + "0" + "}" * depth
         # Must be ValueError -- a bare RecursionError escaping is the F5 bug class.
         check_contract(lambda: parse_dataset(text))
 
     @staticmethod
     def test_nesting_spliced_inside_fixture():
+        """Test nesting spliced inside fixture."""
         deep = "[" * 300 + "]" * 300
         bad = _VALID_TEXT.replace('[{"role": "user", "content": "Search question?"}]', deep, 1)
         check_rejected(bad)
 
     def test_deep_nesting_guard_fixed_vocabulary(self):
+        """Test deep nesting guard fixed vocabulary."""
         for depth in [20000, 300000]:
             with (
                 self.subTest(depth=depth),
@@ -301,6 +321,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
                 parse_dataset("[" * depth + "]" * depth)
 
     def test_fixed_vocabulary_pins(self):
+        """Test fixed vocabulary pins."""
         dup = _VALID_TEXT.replace('"id": "s1"', '"id": "s1", "id": "s2"', 1)
         with self.assertRaisesRegex(ValueError, re.escape("Duplicate JSON field")):
             parse_dataset(dup)
@@ -322,6 +343,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
             parse_dataset(zero)
 
     def test_oversize_text_rejected(self):
+        """Test oversize text rejected."""
         with self.assertRaisesRegex(ValueError, re.escape("Dataset exceeds size limit")):
             parse_dataset(" " * (MAX_BYTES + 1))
         # Exactly at the cap: still rejected, but by the JSON layer, not the guard.
@@ -330,18 +352,21 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     @FILE_FUZZ
     @given(_HOSTILE_FILE_BYTES)
     def test_load_dataset_hostile_files(self, payload):
+        """Test load dataset hostile files."""
         with tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-") as path:
             target = Path(path) / "hostile.json"
             target.write_bytes(payload)
             check_contract(lambda: load_dataset(target))
 
     def test_load_dataset_valid_file(self):
+        """Test load dataset valid file."""
         target = self.pid_tmpdir / "valid.json"
         target.write_text(_VALID_TEXT, encoding="utf-8")
         split = check_contract(lambda: load_dataset(target))
         assert split is not None
 
     def test_load_dataset_path_attacks(self):
+        """Test load dataset path attacks."""
         with self.assertRaisesRegex(ValueError, re.escape("Fixture path is not a regular file")):
             load_dataset(self.pid_tmpdir)  # a directory is never loadable
 
@@ -384,6 +409,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
 
 
 def _doc(search, held=None):
+    """Doc."""
     return json.dumps({"search": [search], "held_out": [held or _HELD_FIX]})
 
 

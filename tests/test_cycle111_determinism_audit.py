@@ -39,6 +39,7 @@ det-held-number,det-integer,held_out,7,Return only the numeral 7.,,
 
 
 def run_cli_with_seed(seed: str, *args: str, timeout: int = 300) -> subprocess.CompletedProcess:
+    """Run cli with seed."""
     env = {**os.environ, "PYTHONHASHSEED": seed}
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
@@ -57,6 +58,7 @@ class DeterminismAuditTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         cls.addClassCleanup(cls._tmp.cleanup)
         cls.root = Path(cls._tmp.name)
@@ -75,6 +77,7 @@ class DeterminismAuditTests(unittest.TestCase):
         cls.fixture = fixture
 
     def _run_once(self, seed: str, out: Path) -> None:
+        """Run once."""
         proc = run_cli_with_seed(
             seed,
             "run",
@@ -124,6 +127,7 @@ class DeterminismAuditTests(unittest.TestCase):
         return None
 
     def test_two_runs_produce_byte_identical_results(self) -> None:
+        """Test two runs produce byte identical results."""
         out_a = self.root / "report_a"
         out_b = self.root / "report_b"
         # Different hash seeds: any set/dict ordering leak would flip bytes.

@@ -38,6 +38,7 @@ from model_protocol_lab.reporting import (
 )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _quadratic_reference(frontier: dict[str, Any]) -> list[tuple[int, Any, int]]:
     """The pre-C1 O(B*C) sweep, kept as a semantic oracle.
 
@@ -70,6 +71,7 @@ def _quadratic_reference(frontier: dict[str, Any]) -> list[tuple[int, Any, int]]
         keys_of[name] = [b for b, _ in steps_of[name]]
 
     def _count_at(steps: list[tuple[int, int]], keys: list[int], budget: int) -> int:
+        """Count at."""
         index = bisect_right(keys, budget) - 1
         return steps[index][1] if index >= 0 else 0
 
@@ -92,6 +94,7 @@ def _quadratic_reference(frontier: dict[str, Any]) -> list[tuple[int, Any, int]]
 
 
 def _many_candidate_frontier(count: int) -> dict[str, Any]:
+    """Many candidate frontier."""
     # The wave-2 C1 hostile shape: many candidates, one distinct point
     # each -- passes the total-point cap with B == C.
     return {
@@ -107,7 +110,10 @@ def _many_candidate_frontier(count: int) -> dict[str, Any]:
 
 
 class TestMarginTrajectoryComplexity(unittest.TestCase):
+    """Test margin trajectory complexity."""
+
     def test_hostile_candidate_count_is_fast(self) -> None:
+        """Test hostile candidate count is fast."""
         # C1: C=2000 x 1 point took ~1.4s before the restructure (O(C^2));
         # the event sweep does it in milliseconds. Generous bound.
         start = time.perf_counter()
@@ -117,6 +123,7 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
         self.assertTrue(points)
 
     def test_scales_subquadratically(self) -> None:
+        """Test scales subquadratically."""
         # Doubling the hostile shape must not quadruple the time.
         timings = []
         for count in (400, 800):
@@ -132,6 +139,7 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
         self.assertLess(ratio, 3.0, f"scaling ratio {ratio:.2f} looks quadratic")
 
     def test_differential_against_quadratic_reference(self) -> None:
+        """Test differential against quadratic reference."""
         # 1400 seeded frontiers incl. count revisits, decreases, ties,
         # duplicate budgets, and empty candidates: the restructure must
         # emit exactly the old change points.
@@ -157,6 +165,7 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
         self.assertEqual(mismatches, 0)
 
     def test_differential_dense_revisits(self) -> None:
+        """Test differential dense revisits."""
         # Adversarial for the heap: every budget changes every
         # candidate, with frequent count revisits and decreases.
         rng = random.Random(7)  # noqa: S311 -- deterministic test seed
@@ -172,7 +181,10 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
 
 
 class TestDisplayIdTotal(unittest.TestCase):
+    """Test display id total."""
+
     def test_non_string_values_render_without_crash(self) -> None:
+        """Test non string values render without crash."""
         # C3: a hand-edited results.json may carry a dict winner, a list
         # tier, or an int decision; the summary must degrade, not crash.
         self.assertEqual(diffreports._display_id({"a": 1}), "{'a': 1}")
@@ -183,6 +195,7 @@ class TestDisplayIdTotal(unittest.TestCase):
         self.assertEqual(diffreports._display_id("plain"), "plain")
 
     def test_control_chars_stripped_from_coerced_values(self) -> None:
+        """Test control chars stripped from coerced values."""
         self.assertEqual(diffreports._display_id("a\x1b[2Jb"), "a[2Jb")
         self.assertNotIn("\x1b", diffreports._display_id(["\x1b[2J"]))
         # Lone surrogates are stripped, not passed through to the stream.
@@ -190,6 +203,7 @@ class TestDisplayIdTotal(unittest.TestCase):
 
 
 def _hostile_decision_payload(decision: Any) -> dict[str, Any]:
+    """Hostile decision payload."""
     return {
         "available": True,
         "primary_winner": "alpha",
@@ -200,11 +214,15 @@ def _hostile_decision_payload(decision: Any) -> dict[str, Any]:
 
 
 class TestDecisionSanitization(unittest.TestCase):
+    """Test decision sanitization."""
+
     @staticmethod
     def _render(diff: dict[str, Any]) -> str:
+        """Render."""
         return "\n".join(diffreports._render_transfer_summary(diff))
 
     def test_transfer_decision_escapes_stripped(self) -> None:
+        """Test transfer decision escapes stripped."""
         # C2: raw old_decision/new_decision interpolation injected
         # terminal escapes into stderr.
         old = _hostile_decision_payload("selected")
@@ -215,7 +233,10 @@ class TestDecisionSanitization(unittest.TestCase):
         self.assertIn("evil", rendered)
 
     def test_robustness_decision_escapes_stripped(self) -> None:
+        """Test robustness decision escapes stripped."""
+
         def _payload(decision: Any) -> dict[str, Any]:
+            """Payload."""
             return {
                 "available": True,
                 "primary_decision": "selected",
@@ -234,7 +255,10 @@ class TestDecisionSanitization(unittest.TestCase):
         self.assertIn("evil", rendered)
 
     def test_perturbation_decision_escapes_stripped(self) -> None:
+        """Test perturbation decision escapes stripped."""
+
         def _payload(decision: Any) -> dict[str, Any]:
+            """Payload."""
             return {
                 "available": True,
                 "primary_winner": "alpha",
@@ -267,6 +291,7 @@ class TestDecisionSanitization(unittest.TestCase):
         self.assertIn("red", rendered)
 
     def test_non_string_decisions_do_not_crash_render(self) -> None:
+        """Test non string decisions do not crash render."""
         # C3 end-to-end: non-string decisions flow through render_summary.
         base = {
             "decision": "selected",
@@ -295,6 +320,7 @@ class TestChangedDisjunctPinning(unittest.TestCase):
     """
 
     def test_transfer_cell_drift_only_sets_changed(self) -> None:
+        """Test transfer cell drift only sets changed."""
         old = _hostile_decision_payload("selected")
         new = _hostile_decision_payload("selected")
         new["matrix"] = {"alpha": {"ckptA": "fails_there"}}
@@ -316,7 +342,10 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_contamination_tier_escalation_only_sets_changed(self) -> None:
+        """Test contamination tier escalation only sets changed."""
+
         def _payload(tier: str) -> dict[str, Any]:
+            """Payload."""
             return {
                 "worst_tier": "duplicate",
                 "pairs": [
@@ -339,6 +368,7 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         stability: dict[str, Any] | None = None,
         per_variant: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Perturbation payload."""
         return {
             "available": True,
             "primary_winner": "alpha",
@@ -376,6 +406,7 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         }
 
     def test_perturbation_stability_only_sets_changed(self) -> None:
+        """Test perturbation stability only sets changed."""
         # Same per-variant verdicts, different recorded stability: the
         # stability disjunct alone must flip ``changed``.
         old = self._perturbation_payload()
@@ -394,6 +425,7 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_perturbation_variant_drift_only_sets_changed(self) -> None:
+        """Test perturbation variant drift only sets changed."""
         # One variant's winner flips while the recorded stability triplet
         # is unchanged: the variant-drift disjunct alone must flip
         # ``changed``.
@@ -421,6 +453,7 @@ class TestChangedDisjunctPinning(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_perturbation_removed_only_sets_changed(self) -> None:
+        """Test perturbation removed only sets changed."""
         old = self._perturbation_payload()
         new = self._perturbation_payload()
         del new["per_variant"]["v01"]
@@ -434,7 +467,10 @@ class TestChangedDisjunctPinning(unittest.TestCase):
 
 
 class TestCheckpointDriftCap(unittest.TestCase):
+    """Test checkpoint drift cap."""
+
     def test_checkpoint_drift_truncated_at_ten(self) -> None:
+        """Test checkpoint drift truncated at ten."""
         # C6: the only drift renderer without a cap; now capped like
         # cell_drift.
         old = _hostile_decision_payload("selected")

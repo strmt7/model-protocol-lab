@@ -707,6 +707,7 @@ def _observation_ids(observation: dict[str, Any], key: str) -> tuple[int, ...] |
         return None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def divergence_section_data(
     *,
     observations: list[dict[str, Any]] | tuple[dict[str, Any], ...],

@@ -157,6 +157,7 @@ def _subcommand_parsers() -> dict[str, argparse.ArgumentParser]:
 def _subcommand_flags(
     sub_parser: argparse.ArgumentParser,
 ) -> tuple[set[str], set[str]]:
+    """Subcommand flags."""
     flags: set[str] = set()
     positionals: set[str] = set()
     for action in sub_parser._actions:  # noqa: SLF001
@@ -168,7 +169,10 @@ def _subcommand_flags(
 
 
 class TestDocumentedPathsExist(unittest.TestCase):
+    """Test documented paths exist."""
+
     def test_every_documented_path_resolves(self) -> None:
+        """Test every documented path resolves."""
         missing: list[str] = []
         checked = 0
         for doc in AUDITED_DOCS:
@@ -192,7 +196,10 @@ class TestDocumentedPathsExist(unittest.TestCase):
 
 
 class TestDocumentedFlagsExist(unittest.TestCase):
+    """Test documented flags exist."""
+
     def test_documented_flags_match_live_parser(self) -> None:
+        """Test documented flags match live parser."""
         subs = _subcommand_parsers()
         problems: list[str] = []
         for sub_name, invocations in DOCUMENTED_INVOCATIONS:
@@ -205,6 +212,7 @@ class TestDocumentedFlagsExist(unittest.TestCase):
         self.assertEqual(problems, [], f"doc/CLI flag drift: {problems}")
 
     def test_diff_reports_positionals_exist(self) -> None:
+        """Test diff reports positionals exist."""
         subs = _subcommand_parsers()
         _, positionals = _subcommand_flags(subs["diff-reports"])
         self.assertIn("old_results", positionals)
@@ -212,12 +220,16 @@ class TestDocumentedFlagsExist(unittest.TestCase):
 
 
 class TestExampleAssetsValid(unittest.TestCase):
+    """Test example assets valid."""
+
     def test_fixtures_json_parses(self) -> None:
+        """Test fixtures json parses."""
         split = datasets.load_dataset(REPO_ROOT / "examples" / "fixtures.json")
         self.assertEqual(len(split.search), 2)
         self.assertEqual(len(split.held_out), 2)
 
     def test_fixtures_csv_builds_with_same_fixture_ids(self) -> None:
+        """Test fixtures csv builds with same fixture ids."""
         text = fixtures.read_authoring_file(REPO_ROOT / "examples" / "fixtures.csv")
         split, empty_ids = fixtures.parse_fixture_csv(text)
         self.assertEqual(empty_ids, [])
@@ -234,6 +246,7 @@ class TestExampleAssetsValid(unittest.TestCase):
         )
 
     def test_fixtures_build_cli_round_trip(self) -> None:
+        """Test fixtures build cli round trip."""
         with tempfile.TemporaryDirectory(prefix=f"mpl-cycle87-{os.getpid()}-") as tmp:
             out = Path(tmp) / "fixtures.json"
             proc = subprocess.run(  # noqa: S603
@@ -260,7 +273,10 @@ class TestExampleAssetsValid(unittest.TestCase):
 
 
 class TestDocumentedDebugTranscript(unittest.TestCase):
+    """Test documented debug transcript."""
+
     def test_scripted_session_matches_usages_example(self) -> None:
+        """Test scripted session matches usages example."""
         with tempfile.TemporaryDirectory(prefix=f"mpl-cycle87-{os.getpid()}-") as tmp:
             script = Path(tmp) / "session.txt"
             script.write_text(

@@ -106,6 +106,7 @@ EXPECTED_CATALOG_KEYS = {
 def run_mpl(
     *args: str, cwd: Path = REPO_ROOT, input_text: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
+    """Run mpl."""
     return subprocess.run(
         [*MPL, *args],
         cwd=cwd,
@@ -147,6 +148,7 @@ def run_mutant_cli(mutant_dir: Path, *args: str, timeout: int = 120) -> subproce
 
 
 def assert_no_traceback(testcase: unittest.TestCase, stderr: str) -> None:
+    """Assert no traceback."""
     testcase.assertNotIn("Traceback", stderr)
 
 
@@ -164,6 +166,7 @@ class TestPackageSurface(unittest.TestCase):
 
     @staticmethod
     def _load_init_fresh(tag: str):
+        """Load init fresh."""
         path = REPO_ROOT / "model_protocol_lab" / "__init__.py"
         name = f"mpl_init_surface_probe_{tag}"
         spec = importlib.util.spec_from_file_location(name, path)
@@ -174,9 +177,11 @@ class TestPackageSurface(unittest.TestCase):
 
     @staticmethod
     def _drop_probe(name: str) -> None:
+        """Drop probe."""
         sys.modules.pop(name, None)
 
     def test_init_exports_only_version(self) -> None:
+        """Test init exports only version."""
         module, name = self._load_init_fresh("exports")
         try:
             self.assertFalse(hasattr(module, "__all__"), "__init__.py should not define __all__")
@@ -186,6 +191,7 @@ class TestPackageSurface(unittest.TestCase):
             self._drop_probe(name)
 
     def test_import_star_leaks_nothing(self) -> None:
+        """Test import star leaks nothing."""
         _, name = self._load_init_fresh("star")
         try:
             namespace: dict = {}
@@ -197,6 +203,7 @@ class TestPackageSurface(unittest.TestCase):
             self._drop_probe(name)
 
     def test_version_consistent_with_pyproject(self) -> None:
+        """Test version consistent with pyproject."""
         import model_protocol_lab as pkg
 
         pyproject = (REPO_ROOT / "pyproject.toml").read_text()
@@ -205,6 +212,7 @@ class TestPackageSurface(unittest.TestCase):
         self.assertEqual(pkg.__version__, match.group(1))
 
     def test_version_consistent_with_citation(self) -> None:
+        """Test version consistent with citation."""
         import model_protocol_lab as pkg
 
         cff = (REPO_ROOT / "CITATION.cff").read_text()
@@ -213,6 +221,7 @@ class TestPackageSurface(unittest.TestCase):
         self.assertEqual(pkg.__version__, match.group(1))
 
     def test_version_format(self) -> None:
+        """Test version format."""
         import model_protocol_lab as pkg
 
         self.assertRegex(
@@ -221,7 +230,10 @@ class TestPackageSurface(unittest.TestCase):
 
 
 class TestCatalog(unittest.TestCase):
+    """Test catalog."""
+
     def test_catalog_29_families_and_keys(self) -> None:
+        """Test catalog 29 families and keys."""
         proc = run_mpl("catalog")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         data = json.loads(proc.stdout)
@@ -236,13 +248,17 @@ class TestCatalog(unittest.TestCase):
         self.assertFalse(any("source" in d for d in data))
 
     def test_catalog_deterministic(self) -> None:
+        """Test catalog deterministic."""
         first = run_mpl("catalog").stdout
         second = run_mpl("catalog").stdout
         self.assertEqual(first, second)
 
 
 class TestTopLevelCLI(unittest.TestCase):
+    """Test top level cli."""
+
     def test_help_lists_all_subcommands(self) -> None:
+        """Test help lists all subcommands."""
         proc = run_mpl("--help")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         for cmd in (
@@ -259,6 +275,7 @@ class TestTopLevelCLI(unittest.TestCase):
                 self.assertIn(cmd, proc.stdout)
 
     def test_console_script_equivalent(self) -> None:
+        """Test console script equivalent."""
         script = Path(sys.executable).parent / "model-protocol-lab"
         if not script.exists():
             script = shutil.which("model-protocol-lab")
@@ -270,13 +287,17 @@ class TestTopLevelCLI(unittest.TestCase):
         self.assertIn('"chatml"', proc.stdout)
 
     def test_unknown_subcommand_exit_2(self) -> None:
+        """Test unknown subcommand exit 2."""
         proc = run_mpl("nope")
         self.assertEqual(proc.returncode, 2)
         assert_no_traceback(self, proc.stderr)
 
 
 class TestInspect(unittest.TestCase):
+    """Test inspect."""
+
     def test_inspect_examples_shape(self) -> None:
+        """Test inspect examples shape."""
         proc = run_mpl("inspect", str(EXAMPLE_FIXTURES))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
@@ -291,6 +312,7 @@ class TestInspect(unittest.TestCase):
         )
 
     def test_empty_expected_warns_on_stderr(self) -> None:
+        """Test empty expected warns on stderr."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fx.json"
             path.write_text(
@@ -321,12 +343,14 @@ class TestInspect(unittest.TestCase):
         self.assertIn("e1", proc.stderr)
 
     def test_rejects_directory(self) -> None:
+        """Test rejects directory."""
         proc = run_mpl("inspect", tempfile.gettempdir())
         self.assertEqual(proc.returncode, 1)
         self.assertIn("not a regular file", proc.stderr)
         assert_no_traceback(self, proc.stderr)
 
     def test_rejects_22_messages(self) -> None:
+        """Test rejects 22 messages."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fx.json"
             msgs = [
@@ -354,7 +378,10 @@ class TestInspect(unittest.TestCase):
 
 
 class TestFixturesBuild(unittest.TestCase):
+    """Test fixtures build."""
+
     def test_build_csv_matches_committed_json(self) -> None:
+        """Test build csv matches committed json."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "fixtures.json"
             proc = run_mpl("fixtures", "build", str(EXAMPLE_CSV), "--output", str(out))
@@ -364,6 +391,7 @@ class TestFixturesBuild(unittest.TestCase):
             self.assertEqual(built, committed)
 
     def test_build_refuses_overwrite(self) -> None:
+        """Test build refuses overwrite."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "fixtures.json"
             out.write_text("{}")
@@ -385,14 +413,18 @@ class TestFixturesBuild(unittest.TestCase):
 
 
 class TestDebugRepl(unittest.TestCase):
+    """Test debug repl."""
+
     @staticmethod
     def _script(commands: str) -> subprocess.CompletedProcess:
+        """Script."""
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(commands)
             return run_mpl("debug", "--dataset", str(EXAMPLE_FIXTURES), "--script", str(script))
 
     def test_banner_matches_doc(self) -> None:
+        """Test banner matches doc."""
         proc = run_mpl("debug", "--dataset", "examples/fixtures.json", input_text=".quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         match = re.search(
@@ -423,21 +455,25 @@ class TestDebugRepl(unittest.TestCase):
                 self.assertIn(line, proc.stdout)
 
     def test_step_walks_boundary_detection(self) -> None:
+        """Test step walks boundary detection."""
         proc = self._script(".boundary 8\n.step 1,2,8,3\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("token 3/4 id=8 overhang=1/1 boundary_at=2", proc.stdout)
 
     def test_families_lists_29(self) -> None:
+        """Test families lists 29."""
         proc = self._script(".families\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout.strip().splitlines(), EXPECTED_FAMILIES)
 
     def test_unknown_family_error(self) -> None:
+        """Test unknown family error."""
         proc = self._script(".use notafamily\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("error: unknown family 'notafamily'", proc.stdout)
 
     def test_boundary_grammar(self) -> None:
+        """Test boundary grammar."""
         cases = {
             "8": True,
             "1,2,3": True,
@@ -456,21 +492,25 @@ class TestDebugRepl(unittest.TestCase):
                     self.assertNotIn("boundary set:", proc.stdout)
 
     def test_step_without_boundary_errors(self) -> None:
+        """Test step without boundary errors."""
         proc = self._script(".step 1,2\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("error: no boundary set", proc.stdout)
 
     def test_unknown_dot_command_errors(self) -> None:
+        """Test unknown dot command errors."""
         proc = self._script(".bogus\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("error: unknown dot-command '.bogus'", proc.stdout)
 
     def test_tokens_without_model_prints_reminder(self) -> None:
+        """Test tokens without model prints reminder."""
         proc = self._script(".tokens\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("no tokenizer attached", proc.stdout)
 
     def test_audit_reports_zero_findings(self) -> None:
+        """Test audit reports zero findings."""
         proc = self._script(".audit\n.quit\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn(
@@ -478,6 +518,7 @@ class TestDebugRepl(unittest.TestCase):
         )
 
     def test_save_appends_transcript(self) -> None:
+        """Test save appends transcript."""
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             saved = Path(tmp) / "t.txt"
@@ -490,6 +531,7 @@ class TestDebugRepl(unittest.TestCase):
 
 
 def _require_toolkit(testcase: unittest.TestCase) -> None:
+    """Require toolkit."""
     try:
         import safetensors  # noqa: F401
         import tokenizers  # noqa: F401
@@ -504,6 +546,7 @@ class SyntheticCheckpointMixin:
 
     @classmethod
     def build_checkpoint(cls) -> Path:
+        """Build checkpoint."""
         if cls._model_dir is not None and cls._model_dir.exists():
             return cls._model_dir
         import numpy as np
@@ -578,10 +621,12 @@ class TestDebugWithTokenizer(unittest.TestCase, SyntheticCheckpointMixin):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         _require_toolkit(cls)
         cls.model = cls.build_checkpoint()
 
     def test_tokens_exact_ids_with_model(self) -> None:
+        """Test tokens exact ids with model."""
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(".tokens\n.quit\n")
@@ -602,6 +647,7 @@ class TestDebugWithTokenizer(unittest.TestCase, SyntheticCheckpointMixin):
         self.assertIn("ids=[60, 124, 105, 109", proc.stdout)
 
     def test_render_shows_per_segment_ids_with_model(self) -> None:
+        """Test render shows per segment ids with model."""
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(".render\n.quit\n")
@@ -620,12 +666,16 @@ class TestDebugWithTokenizer(unittest.TestCase, SyntheticCheckpointMixin):
 
 
 class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
+    """Test doctor."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         _require_toolkit(cls)
         cls.model = cls.build_checkpoint()
 
     def test_ok_verdict(self) -> None:
+        """Test ok verdict."""
         proc = run_mpl(
             "doctor", "--model", str(self.model), "--dataset", str(EXAMPLE_FIXTURES), timeout=180
         )
@@ -639,6 +689,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         self.assertNotIn("portability matrix", proc.stdout)
 
     def test_suggestion_matches_doc_template(self) -> None:
+        """Test suggestion matches doc template."""
         proc = run_mpl(
             "doctor",
             "--model",
@@ -663,6 +714,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         self.assertIn(str(self.model), cmd)
 
     def test_missing_model_dir_fails(self) -> None:
+        """Test missing model dir fails."""
         proc = run_mpl("doctor", "--model", str(MISSING_MODEL), "--dataset", str(EXAMPLE_FIXTURES))
         self.assertEqual(proc.returncode, 1)
         report = json.loads(proc.stdout)
@@ -674,6 +726,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         assert_no_traceback(self, proc.stderr)
 
     def test_broken_model_fails_with_fixed_code(self) -> None:
+        """Test broken model fails with fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "config.json").write_text("{}")
             proc = run_mpl("doctor", "--model", tmp, "--dataset", str(EXAMPLE_FIXTURES))
@@ -687,6 +740,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         assert_no_traceback(self, proc.stderr)
 
     def test_reference_model_portability(self) -> None:
+        """Test reference model portability."""
         proc = run_mpl(
             "doctor",
             "--model",
@@ -705,6 +759,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         )
 
     def test_portability_matrix_shape(self) -> None:
+        """Test portability matrix shape."""
         proc = run_mpl(
             "doctor",
             "--model",
@@ -730,10 +785,13 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
 
 
 class TestDiffReports(unittest.TestCase):
+    """Test diff reports."""
+
     @staticmethod
     def _write_results(
         path: Path, *, decision: str, winner: str | None, search: list, held_out: dict
     ) -> None:
+        """Write results."""
         path.write_text(
             json.dumps(
                 {
@@ -749,6 +807,7 @@ class TestDiffReports(unittest.TestCase):
     def _entry(
         name: str, planned: int, passes: int, eligible: bool, observations: list | None = None
     ) -> dict:
+        """Entry."""
         entry: dict = {
             "format": {"name": name},
             "summary": {
@@ -763,9 +822,11 @@ class TestDiffReports(unittest.TestCase):
 
     @staticmethod
     def _obs(fixture: str, passed: bool) -> dict:
+        """Obs."""
         return {"fixture": fixture, "exact_match": passed, "boundary_found": passed}
 
     def _pair(self, tmp: Path) -> tuple[Path, Path]:
+        """Pair."""
         base, fixed = tmp / "base", tmp / "fixed"
         base.mkdir()
         fixed.mkdir()
@@ -799,6 +860,7 @@ class TestDiffReports(unittest.TestCase):
         return base, fixed
 
     def test_compare_two_runs_matches_doc_contract(self) -> None:
+        """Test compare two runs matches doc contract."""
         with tempfile.TemporaryDirectory() as tmp:
             base, fixed = self._pair(Path(tmp))
             proc = run_mpl("diff-reports", str(base), str(fixed))
@@ -841,6 +903,7 @@ class TestDiffReports(unittest.TestCase):
                 self.assertIn(line, proc.stderr)
 
     def test_identical_inputs_compare_identical(self) -> None:
+        """Test identical inputs compare identical."""
         with tempfile.TemporaryDirectory() as tmp:
             base, _ = self._pair(Path(tmp))
             proc = run_mpl("diff-reports", str(base), str(base))
@@ -850,6 +913,7 @@ class TestDiffReports(unittest.TestCase):
         self.assertIn("No differences", proc.stderr)
 
     def test_missing_input_fixed_code(self) -> None:
+        """Test missing input fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             base, _ = self._pair(Path(tmp))
             proc = run_mpl("diff-reports", str(base), str(Path(tmp) / "missing"))
@@ -858,6 +922,7 @@ class TestDiffReports(unittest.TestCase):
         assert_no_traceback(self, proc.stderr)
 
     def test_wrong_shape_fixed_code(self) -> None:
+        """Test wrong shape fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text(json.dumps({"nope": 1}))
@@ -868,12 +933,16 @@ class TestDiffReports(unittest.TestCase):
 
 
 class TestDiffBackends(unittest.TestCase, SyntheticCheckpointMixin):
+    """Test diff backends."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         _require_toolkit(cls)
         cls.model = cls.build_checkpoint()
 
     def test_json_contract_and_divergence(self) -> None:
+        """Test json contract and divergence."""
         proc = run_mpl(
             "diff-backends",
             "--model",
@@ -933,6 +1002,7 @@ class TestDiffBackends(unittest.TestCase, SyntheticCheckpointMixin):
         self.assertEqual(div["class"], "KEPT_VS_STRIPPED")
 
     def test_missing_model_fixed_code(self) -> None:
+        """Test missing model fixed code."""
         proc = run_mpl(
             "diff-backends",
             "--model",
@@ -950,12 +1020,16 @@ class TestDiffBackends(unittest.TestCase, SyntheticCheckpointMixin):
 
 
 class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
+    """Test run exit codes."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         _require_toolkit(cls)
         cls.model = cls.build_checkpoint()
 
     def _base_args(self, out: Path) -> list:
+        """Base args."""
         return [
             "run",
             "--model",
@@ -975,6 +1049,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
         ]
 
     def test_missing_model_fixed_code(self) -> None:
+        """Test missing model fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             proc = run_mpl(
                 "run",
@@ -1020,6 +1095,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
         assert_no_traceback(self, proc.stderr)
 
     def test_completed_negative_decision_exit_2(self) -> None:
+        """Test completed negative decision exit 2."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "report"
             proc = run_mpl(*self._base_args(out), timeout=300)
@@ -1031,6 +1107,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
             self.assertEqual(results["decision"], "no_candidate")
 
     def test_existing_output_dir_refused(self) -> None:
+        """Test existing output dir refused."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "report"
             out.mkdir()
@@ -1040,6 +1117,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
         assert_no_traceback(self, proc.stderr)
 
     def test_boundary_map_unknown_candidate_fails_fast(self) -> None:
+        """Test boundary map unknown candidate fails fast."""
         with tempfile.TemporaryDirectory() as tmp:
             proc = run_mpl(
                 "run",
@@ -1095,6 +1173,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
         self.assertEqual(per_candidate["chatml"], [266])
 
     def test_bad_boundary_ids_argparse_exit_2(self) -> None:
+        """Test bad boundary ids argparse exit 2."""
         with tempfile.TemporaryDirectory() as tmp:
             proc = run_mpl(
                 "run",
@@ -1114,6 +1193,7 @@ class TestRunExitCodes(unittest.TestCase, SyntheticCheckpointMixin):
         assert_no_traceback(self, proc.stderr)
 
     def test_missing_required_args_exit_2(self) -> None:
+        """Test missing required args exit 2."""
         proc = run_mpl("run", "--family", "chatml", timeout=60)
         self.assertEqual(proc.returncode, 2)
         assert_no_traceback(self, proc.stderr)
@@ -1129,6 +1209,7 @@ class TestSensitivityControls(unittest.TestCase):
 
     @staticmethod
     def _load_mutant_init(source: str, tag: str):
+        """Load mutant init."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "__init__.py"
             path.write_text(source)
@@ -1139,12 +1220,14 @@ class TestSensitivityControls(unittest.TestCase):
 
     @staticmethod
     def _assert_surface(module) -> None:
+        """Assert surface."""
         public = [n for n in dir(module) if not n.startswith("_")]
         assert public == [], f"unexpected public names: {public}"
         assert not hasattr(module, "__all__"), "__all__ must not exist"
 
     @staticmethod
     def _assert_version(module) -> None:
+        """Assert version."""
         match = re.search(
             r'^version\s*=\s*"([^"]+)"', (REPO_ROOT / "pyproject.toml").read_text(), re.M
         )
@@ -1154,6 +1237,7 @@ class TestSensitivityControls(unittest.TestCase):
         )
 
     def test_mutant_bumped_version_detected(self) -> None:
+        """Test mutant bumped version detected."""
         source = (
             (REPO_ROOT / "model_protocol_lab" / "__init__.py").read_text().replace("0.1.0", "9.9.9")
         )
@@ -1162,6 +1246,7 @@ class TestSensitivityControls(unittest.TestCase):
             self._assert_version(mutant)
 
     def test_mutant_leaked_public_name_detected(self) -> None:
+        """Test mutant leaked public name detected."""
         source = (
             REPO_ROOT / "model_protocol_lab" / "__init__.py"
         ).read_text() + "\nLEAKED_CONSTANT = 1\n"
@@ -1170,6 +1255,7 @@ class TestSensitivityControls(unittest.TestCase):
             self._assert_surface(mutant)
 
     def test_mutant_added_dunder_all_detected(self) -> None:
+        """Test mutant added dunder all detected."""
         source = (
             REPO_ROOT / "model_protocol_lab" / "__init__.py"
         ).read_text() + '\n__all__ = ["__version__"]\n'
@@ -1236,7 +1322,10 @@ class TestSensitivityControls(unittest.TestCase):
 
 
 class TestSampleReportDeterminism(unittest.TestCase):
+    """Test sample report determinism."""
+
     def test_make_sample_report_byte_identical(self) -> None:
+        """Test make sample report byte identical."""
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "repo"
             shutil.copytree(

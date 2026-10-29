@@ -121,13 +121,16 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(ord(c) for c in text)
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(chr(t) for t in token_ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         self.calls += 1
         text = self.decode(input_ids)
         cand_idx = int(re.search(r"<c(\d+)>", text).group(1))
@@ -181,6 +184,7 @@ def _oracle_obs(
     boundary_text_match=None,
     input_text="",
 ):
+    """Oracle obs."""
     return Observation(
         candidate=candidate,
         fixture=fixture.id,  # evaluate records case.id, not the Fixture object
@@ -349,6 +353,7 @@ def oracle_configuration_digest(
     """
 
     def fixture_payload(case):
+        """Fixture payload."""
         return {
             "id": case.id,
             "messages": [asdict(message) for message in case.messages],
@@ -426,6 +431,7 @@ def oracle_classify(obs, eos_id):
     return "no-boundary-in-N"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_failure_taxonomy(result, eos_id):
     """Per failure_taxonomy docstring: per-candidate classification of search
     observations; held-out classified only when the decision is
@@ -505,6 +511,7 @@ def oracle_run_experiment(
     }
 
     def finish():
+        """Finish."""
         output["failure_taxonomy"] = oracle_failure_taxonomy(output, eos_id)
         return output
 
@@ -578,6 +585,7 @@ def oracle_run_experiment(
 
 
 def make_format(i):
+    """Make format."""
     return Format(
         name=f"cand-{i}",
         bos="<bos>",
@@ -588,6 +596,7 @@ def make_format(i):
 
 
 def make_fixture(tag, j):
+    """Make fixture."""
     return Fixture(
         id=f"fx-{tag}{j}",
         messages=(Message("user", f"<{tag}{j}> question-{tag}{j}"),),
@@ -597,6 +606,7 @@ def make_fixture(tag, j):
 
 
 def full_matrix(n_cand, n_fx, tag, default, overrides=()):
+    """Full matrix."""
     m = {(i, (tag, j)): default for i in range(n_cand) for j in range(n_fx)}
     m.update(overrides)
     return m
@@ -645,6 +655,7 @@ class Case:
         self.eos_id = eos_id
 
     def run_actual(self):
+        """Run actual."""
         return run_experiment(
             self.backend,
             self.formats,
@@ -657,6 +668,7 @@ class Case:
         )
 
     def run_expected(self):
+        """Run expected."""
         return oracle_run_experiment(
             self.backend,
             self.plan,
@@ -675,6 +687,7 @@ def diff_paths(actual, expected, path="result"):
     diffs = []
 
     def rec(a, e, p):
+        """Rec."""
         if isinstance(a, dict) and isinstance(e, dict):
             for key in sorted(set(a) | set(e), key=repr):
                 if key not in a:
@@ -714,7 +727,10 @@ def check_case(case):
 
 
 class RunExperimentDirected(unittest.TestCase):
+    """Run experiment directed."""
+
     def assert_oracle_agrees(self, case, label):
+        """Assert oracle agrees."""
         diffs, actual = check_case(case)
         self.assertEqual(
             diffs,
@@ -725,6 +741,7 @@ class RunExperimentDirected(unittest.TestCase):
         return actual
 
     def test_unique_winner_compatible(self):
+        """Test unique winner compatible."""
         n_cand, n_search, n_held = 3, 4, 2
         search = full_matrix(
             n_cand,
@@ -752,6 +769,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertEqual(len(result["held_out"]["observations"]), n_held)
 
     def test_unique_winner_held_out_failed(self):
+        """Test unique winner held out failed."""
         n_cand, n_search, n_held = 3, 3, 2
         search = full_matrix(
             n_cand,
@@ -779,6 +797,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertEqual(tax["held_out"]["held-out-divergence"], 1)
 
     def test_two_way_tie_ambiguous(self):
+        """Test two way tie ambiguous."""
         n_cand, n_search, n_held = 3, 3, 1
         search = full_matrix(n_cand, n_search, "s", "pass", {(2, ("s", 1)): "wrong_answer"})
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -796,6 +815,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertIsNone(result["held_out"])
 
     def test_three_way_tie_ambiguous(self):
+        """Test three way tie ambiguous."""
         n_cand, n_search, n_held = 4, 2, 1
         search = full_matrix(n_cand, n_search, "s", "pass", {(3, ("s", 0)): "both"})
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -812,6 +832,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertNotIn("selected_boundary_token_ids", result)
 
     def test_no_candidate_passes_all(self):
+        """Test no candidate passes all."""
         n_cand, n_search, n_held = 3, 3, 1
         search = full_matrix(
             n_cand,
@@ -838,6 +859,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertIsNone(result["selected_candidate"])
 
     def test_single_search_fixture(self):
+        """Test single search fixture."""
         n_cand, n_search, n_held = 2, 1, 1
         search = full_matrix(n_cand, n_search, "s", "pass", {(1, ("s", 0)): "no_boundary"})
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -854,6 +876,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertEqual(result["selected_candidate"], "cand-0")
 
     def test_boundary_map_per_candidate(self):
+        """Test boundary map per candidate."""
         n_cand, n_search, n_held = 3, 3, 2
         bmap = {"cand-0": (2000001,), "cand-1": (2000002, 2000003)}
         search = full_matrix(
@@ -886,6 +909,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertEqual(by_name["cand-2"]["boundary_token_ids"], [2000000])
 
     def test_cancel_mid_search(self):
+        """Test cancel mid search."""
         n_cand, n_search, n_held = 3, 4, 2
         search = full_matrix(n_cand, n_search, "s", "pass")
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -912,6 +936,7 @@ class RunExperimentDirected(unittest.TestCase):
         self.assertIn("failure_taxonomy", result)
 
     def test_cancel_during_held_out(self):
+        """Test cancel during held out."""
         n_cand, n_search, n_held = 2, 2, 3
         search = full_matrix(n_cand, n_search, "s", "pass", {(1, ("s", 0)): "wrong_answer"})
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -934,6 +959,7 @@ class RunExperimentDirected(unittest.TestCase):
         )
 
     def test_config_echoes(self):
+        """Test config echoes."""
         n_cand, n_search, n_held = 2, 2, 1
         search = full_matrix(n_cand, n_search, "s", "pass", {(1, ("s", 1)): "both"})
         held = full_matrix(n_cand, n_held, "h", "pass")
@@ -973,6 +999,7 @@ class RunExperimentValidation(unittest.TestCase):
     """Input-validation parity between the implementation and the oracle."""
 
     def test_boundary_map_unknown_name(self):
+        """Test boundary map unknown name."""
         case = Case(
             n_cand=2,
             n_search=1,
@@ -987,6 +1014,7 @@ class RunExperimentValidation(unittest.TestCase):
             oracle_resolve_boundaries(case.formats, case.boundary, case.boundary_map)
 
     def test_boundary_map_not_a_dict(self):
+        """Test boundary map not a dict."""
         case = Case(
             n_cand=2,
             n_search=1,
@@ -1001,6 +1029,7 @@ class RunExperimentValidation(unittest.TestCase):
             oracle_resolve_boundaries(case.formats, case.boundary, case.boundary_map)
 
     def test_boundary_map_empty_tuple(self):
+        """Test boundary map empty tuple."""
         case = Case(
             n_cand=2,
             n_search=1,
@@ -1015,6 +1044,7 @@ class RunExperimentValidation(unittest.TestCase):
             oracle_resolve_boundaries(case.formats, case.boundary, case.boundary_map)
 
     def test_duplicate_candidate_names_rejected(self):
+        """Test duplicate candidate names rejected."""
         formats = (make_format(0), make_format(0))
         split = Split(search=(make_fixture("s", 0),), held_out=(make_fixture("h", 0),))
         with self.assertRaises(ValueError):
@@ -1034,9 +1064,13 @@ class RunExperimentValidation(unittest.TestCase):
 
 
 class RunExperimentFuzz(unittest.TestCase):
+    """Run experiment fuzz."""
+
     FUZZ_SEEDS = 48
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_oracle_agreement(self):
+        """Test fuzz oracle agreement."""
         for fuzz_seed in range(self.FUZZ_SEEDS):
             rng = random.Random(20261015 + fuzz_seed)  # noqa: S311 -- deterministic seeded fuzz, not crypto
             n_cand = rng.randint(2, 5)
@@ -1237,6 +1271,8 @@ def run_mutated(mutation_name=None, scenario="majority"):
 
 
 class RunExperimentMutationSensitivity(unittest.TestCase):
+    """Run experiment mutation sensitivity."""
+
     def test_control_unmutated_copy_agrees(self):
         """The harness itself is sound: an unmutated copy shows zero diffs."""
         for scenario in ("majority", "skip_held_out", "decision_string"):
@@ -1246,6 +1282,7 @@ class RunExperimentMutationSensitivity(unittest.TestCase):
                 )
 
     def test_mutation_majority_rule_caught(self):
+        """Test mutation majority rule caught."""
         diffs = run_mutated("majority_rule")
         self.assertTrue(diffs, "majority-rule mutation was NOT caught by the oracle")
         paths = [p for p, _, _ in diffs]
@@ -1254,6 +1291,7 @@ class RunExperimentMutationSensitivity(unittest.TestCase):
         )
 
     def test_mutation_skip_held_out_caught(self):
+        """Test mutation skip held out caught."""
         diffs = run_mutated("skip_held_out")
         self.assertTrue(diffs, "skip-held-out mutation was NOT caught by the oracle")
         paths = [p for p, _, _ in diffs]
@@ -1262,6 +1300,7 @@ class RunExperimentMutationSensitivity(unittest.TestCase):
         )
 
     def test_mutation_decision_string_caught(self):
+        """Test mutation decision string caught."""
         diffs = run_mutated("decision_string")
         self.assertTrue(diffs, "decision-string mutation was NOT caught by the oracle")
         self.assertIn(

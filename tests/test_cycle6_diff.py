@@ -52,16 +52,21 @@ class TableBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
 class DiffBackendsTests(unittest.TestCase):
+    """Diff backends tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # 1->"a", 2->"b", 3->"STOP", 4->"c": stop "STOP" completes at step 3.
         self.backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
         self.output_ids = (1, 2, 3, 4)
 
     def _run(self, **kwargs: Any) -> dict[str, Any]:
+        """Run."""
         base: dict[str, Any] = {
             "prompt_ids": (),
             "output_ids": self.output_ids,
@@ -72,6 +77,7 @@ class DiffBackendsTests(unittest.TestCase):
         return diff_backends(**base)
 
     def test_kept_vs_stripped_divergence_detected(self) -> None:
+        """Test kept vs stripped divergence detected."""
         result = self._run()
         classes = [finding["class"] for finding in result["divergences"]]
         self.assertIn("KEPT_VS_STRIPPED", classes)
@@ -101,6 +107,7 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertNotIn("FIRING_STEP_DIFFERS", classes)
 
     def test_firing_step_agreement_verdict_agree(self) -> None:
+        """Test firing step agreement verdict agree."""
         result = self._run(stop_texts=("ZZZ",))
         self.assertEqual(result["divergences"], [])
         self.assertEqual(result["verdict"], "agree")
@@ -113,6 +120,7 @@ class DiffBackendsTests(unittest.TestCase):
             self.assertEqual(cell["truncated_ids"], [1, 2, 3, 4])
 
     def test_min_tokens_gating_divergence(self) -> None:
+        """Test min tokens gating divergence."""
         backend = TableBackend({1: "x", 2: "STOP", 3: "y"})
         result = diff_backends(
             prompt_ids=(),
@@ -139,11 +147,13 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertEqual(strip["truncated_ids"], [1, 2, 3])
 
     def test_min_tokens_zero_is_not_gating(self) -> None:
+        """Test min tokens zero is not gating."""
         result = self._run(min_tokens=0)
         classes = [finding["class"] for finding in result["divergences"]]
         self.assertNotIn("MIN_TOKENS_GATED", classes)
 
     def test_eos_precedence_divergence(self) -> None:
+        """Test eos precedence divergence."""
         # 2 is EOS: the eos_appended cell fires at step 2, before the
         # stop-string cells fire at step 3 (the SGLang #28802 class).
         backend = TableBackend({1: "a", 2: "<eos>", 3: "STOP"})
@@ -166,6 +176,7 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertIsNone(eos["returned_text"])
 
     def test_eos_without_eos_id_is_unavailable(self) -> None:
+        """Test eos without eos id is unavailable."""
         result = self._run()
         eos = result["cells"][0]["semantics"][EOS_APPENDED]
         self.assertFalse(eos["available"])
@@ -174,6 +185,7 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertNotIn("EOS_PRECEDENCE", classes)
 
     def test_harness_normalization_relied(self) -> None:
+        """Test harness normalization relied."""
         # Kept-disposition cells keep the stop string by definition and are
         # not flagged; the stripped cell's returned text excludes it, so no
         # failed strip is reported in the normal case.
@@ -186,6 +198,7 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertEqual(relied, [])
 
     def test_harness_normalization_relied_on_failed_strip(self) -> None:
+        """Test harness normalization relied on failed strip."""
         # A stop that completes during the min_tokens gate is invisible to
         # the check; when a second stop fires after the gate, the stripped
         # cell's returned text still contains the earlier (gated) stop
@@ -208,16 +221,19 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertTrue(relied[0]["detail"].startswith(VLLM_HOLDBACK_STRIP))
 
     def test_duplicate_stop_texts_deduped(self) -> None:
+        """Test duplicate stop texts deduped."""
         result = self._run(stop_texts=("STOP", "STOP", "ZZZ"))
         self.assertEqual(result["stop_texts"], ["STOP", "ZZZ"])
         self.assertEqual(len(result["cells"]), 2)
 
     def test_oversize_token_sequences_rejected(self) -> None:
+        """Test oversize token sequences rejected."""
         with self.assertRaises(ValueError) as ctx:
             self._run(output_ids=tuple([1] * 131073))
         self.assertEqual(str(ctx.exception), "output_ids_too_long")
 
     def test_invalid_inputs_rejected(self) -> None:
+        """Test invalid inputs rejected."""
         good: dict[str, Any] = {
             "prompt_ids": (),
             "output_ids": (1, 2, 3),
@@ -243,6 +259,8 @@ class DiffBackendsTests(unittest.TestCase):
         ]
 
         class NoDecode:
+            """No decode."""
+
             fingerprint = "no-decode"
 
         bad_cases.append({"backend": NoDecode()})
@@ -254,6 +272,7 @@ class DiffBackendsTests(unittest.TestCase):
                     diff_backends(**kwargs)
 
     def test_determinism_and_json_round_trip(self) -> None:
+        """Test determinism and json round trip."""
         kwargs: dict[str, Any] = {
             "prompt_ids": (1,),
             "output_ids": self.output_ids,
@@ -274,8 +293,11 @@ class DiffBackendsTests(unittest.TestCase):
 
 
 class DiffBackendsCliTests(unittest.TestCase):
+    """Diff backends cli tests."""
+
     @staticmethod
     def _args(extra: list[str]) -> Any:
+        """Args."""
         parser = build_parser()
         return parser, parser.parse_args(
             [
@@ -293,6 +315,7 @@ class DiffBackendsCliTests(unittest.TestCase):
         )
 
     def test_parser_registers_diff_backends(self) -> None:
+        """Test parser registers diff backends."""
         _parser, args = self._args([])
         self.assertEqual(args.command, "diff-backends")
         self.assertEqual(str(args.model), "m")
@@ -303,18 +326,21 @@ class DiffBackendsCliTests(unittest.TestCase):
         self.assertEqual(args.min_tokens, 0)
 
     def test_negative_min_tokens_exits_two(self) -> None:
+        """Test negative min tokens exits two."""
         parser, args = self._args(["--min-tokens", "-1"])
         with self.assertRaises(SystemExit) as ctx:
             run_diff_backends(args, parser)
         self.assertEqual(ctx.exception.code, 2)
 
     def test_negative_eos_id_exits_two(self) -> None:
+        """Test negative eos id exits two."""
         parser, args = self._args(["--eos-id", "-2"])
         with self.assertRaises(SystemExit) as ctx:
             run_diff_backends(args, parser)
         self.assertEqual(ctx.exception.code, 2)
 
     def test_empty_stop_part_exits_two(self) -> None:
+        """Test empty stop part exits two."""
         parser = build_parser()
         args = parser.parse_args(
             [
@@ -334,6 +360,7 @@ class DiffBackendsCliTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_missing_checkpoint_returns_one(self) -> None:
+        """Test missing checkpoint returns one."""
         # Never loads weights: a missing directory fails closed with a
         # fixed message and exit 1.
         with TemporaryDirectory() as tmp:
@@ -353,6 +380,7 @@ class DiffBackendsCliTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_full_run_against_tiny_tokenizer(self) -> None:
+        """Test full run against tiny tokenizer."""
         # End-to-end through main() with a hand-written tokenizer.json:
         # tokenizer only, no weights, no network.
         tokenizer_doc: dict[str, Any] = {

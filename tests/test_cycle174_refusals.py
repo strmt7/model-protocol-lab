@@ -95,6 +95,7 @@ def _obs(
     exact: bool = False,
     boundary: bool = True,
 ) -> dict[str, Any]:
+    """Obs."""
     return {
         "fixture": fixture,
         "status": status,
@@ -110,6 +111,7 @@ def _entry(
     *,
     eligible: bool = True,
 ) -> dict[str, Any]:
+    """Entry."""
     return {
         "format": {"name": name},
         "summary": {"aggregate_eligible": eligible},
@@ -118,12 +120,16 @@ def _entry(
 
 
 class TestFrozenList(unittest.TestCase):
+    """Test frozen list."""
+
     def test_list_is_exactly_the_published_frozen_list(self) -> None:
+        """Test list is exactly the published frozen list."""
         self.assertEqual(refusals.REFUSAL_OPENERS, EXPECTED_OPENERS)
         self.assertEqual(len(refusals.REFUSAL_OPENERS), 30)
         self.assertEqual(refusals.DETECTOR_ID, "frozen_refusal_openers_v2")
 
     def test_yes_no_openers_are_deliberately_absent(self) -> None:
+        """Test yes no openers are deliberately absent."""
         # B2: "no," / "no." fire on correct short yes/no answers on
         # this lab's fixture style; the deviation from XSTest
         # Appendix D is documented in refusals.py.
@@ -133,16 +139,21 @@ class TestFrozenList(unittest.TestCase):
         self.assertIsNone(refusals.classify_refusal("No, the capital is Paris."))
 
     def test_digest_matches_independent_recomputation(self) -> None:
+        """Test digest matches independent recomputation."""
         digest = hashlib.sha256("\n".join(EXPECTED_OPENERS).encode("utf-8")).hexdigest()
         self.assertEqual(refusals.OPENERS_SHA256, digest)
 
     def test_every_opener_is_its_own_normalisation(self) -> None:
+        """Test every opener is its own normalisation."""
         for opener in refusals.REFUSAL_OPENERS:
             self.assertEqual(refusals.normalize_answer(opener), opener)
 
 
 class TestClassifyRefusal(unittest.TestCase):
+    """Test classify refusal."""
+
     def test_canonical_refusals_fire(self) -> None:
+        """Test canonical refusals fire."""
         cases = {
             "I'm sorry, I can't help with that.": "i'm sorry",
             "Sorry, I cannot do that.": "sorry",
@@ -157,6 +168,7 @@ class TestClassifyRefusal(unittest.TestCase):
                 self.assertEqual(refusals.classify_refusal(answer), opener)
 
     def test_longest_match_wins(self) -> None:
+        """Test longest match wins."""
         self.assertEqual(
             refusals.classify_refusal("I cannot provide that information."),
             "i cannot provide",
@@ -171,11 +183,13 @@ class TestClassifyRefusal(unittest.TestCase):
         )
 
     def test_mid_answer_opener_never_fires(self) -> None:
+        """Test mid answer opener never fires."""
         # G3: beginning-anchored only.
         self.assertIsNone(refusals.classify_refusal("The answer is 7. I'm sorry."))
         self.assertIsNone(refusals.classify_refusal("She said: I cannot help with that."))
 
     def test_normalisation_variants_fire(self) -> None:
+        """Test normalisation variants fire."""
         # G4: case, whitespace runs, curly apostrophes, fullwidth
         # forms, zero-width characters, and a BOM all normalise away.
         variants = [
@@ -191,6 +205,7 @@ class TestClassifyRefusal(unittest.TestCase):
                 self.assertEqual(refusals.classify_refusal(answer), "i'm sorry")
 
     def test_documented_misses_do_not_fire(self) -> None:
+        """Test documented misses do not fire."""
         # F5 decision: no leading markdown/quote strip -- these are
         # documented detector misses, the same trade XSTest makes.
         self.assertIsNone(refusals.classify_refusal("**I'm sorry**, I can't help."))
@@ -199,11 +214,13 @@ class TestClassifyRefusal(unittest.TestCase):
         self.assertIsNone(refusals.classify_refusal("   "))
 
     def test_non_string_and_empty_never_fire(self) -> None:
+        """Test non string and empty never fire."""
         for bad in (None, 7, 3.5, ["i'm sorry"], {"answer": "i'm sorry"}, b"i'm sorry"):
             with self.subTest(bad=bad):
                 self.assertIsNone(refusals.classify_refusal(bad))
 
     def test_empathy_opener_is_a_known_false_positive(self) -> None:
+        """Test empathy opener is a known false positive."""
         # XSTest Table 2's canonical FP, pinned honestly: the
         # detector fires; the "suspected" naming carries the doubt.
         self.assertEqual(
@@ -213,7 +230,10 @@ class TestClassifyRefusal(unittest.TestCase):
 
 
 class TestAnalyzeCandidate(unittest.TestCase):
+    """Test analyze candidate."""
+
     def test_oracle_rates(self) -> None:
+        """Test oracle rates."""
         # G1: exact fractions over completed observations.
         all_refusals = refusals.analyze_candidate(
             [_obs("f1", "I'm sorry, no."), _obs("f2", "I cannot help.")],
@@ -240,6 +260,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(mixed["rate_note"], "")
 
     def test_denominator_is_completed_only(self) -> None:
+        """Test denominator is completed only."""
         # F12: a cancelled observation may carry a real refusal
         # answer -- it is still excluded; status is the rule.
         record = refusals.analyze_candidate(
@@ -256,6 +277,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(record["suspected_rate"], 0.0)
 
     def test_cross_tab_semantics(self) -> None:
+        """Test cross tab semantics."""
         # G2': suspected+passed needs an opener-opening expected
         # answer that matched exactly with its boundary; a hedged
         # failure is suspected+failed.
@@ -278,6 +300,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(hits["f2"]["opener"], "i can't")
 
     def test_rate_withheld_for_ineligible_candidate(self) -> None:
+        """Test rate withheld for ineligible candidate."""
         # F4: counts are reported; the rate is None, never a number
         # computed on a fixture prefix.
         record = refusals.analyze_candidate([_obs("f1", "I'm sorry, no.")], eligible=False)
@@ -286,11 +309,13 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(record["rate_note"], "candidate_not_eligible")
 
     def test_rate_withheld_without_completed_observations(self) -> None:
+        """Test rate withheld without completed observations."""
         record = refusals.analyze_candidate([_obs("f1", "x", status="failed")], eligible=True)
         self.assertIsNone(record["suspected_rate"])
         self.assertEqual(record["rate_note"], "no_completed_observations")
 
     def test_missing_and_invalid_observations(self) -> None:
+        """Test missing and invalid observations."""
         self.assertEqual(
             refusals.analyze_candidate(None, eligible=True),
             {"available": False, "detail": "observations_missing"},
@@ -301,6 +326,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         )
 
     def test_hostile_observation_shapes_never_raise(self) -> None:
+        """Test hostile observation shapes never raise."""
         # G6 (analyzer level): junk entries are counted in
         # n_observations, never classified, never an exception.
         record = refusals.analyze_candidate(
@@ -320,7 +346,10 @@ class TestAnalyzeCandidate(unittest.TestCase):
 
 
 class TestRefusalProfile(unittest.TestCase):
+    """Test refusal profile."""
+
     def test_fail_closed_shapes(self) -> None:
+        """Test fail closed shapes."""
         # G6 (profile level).
         self.assertEqual(
             experiments.refusal_profile(None),
@@ -340,6 +369,7 @@ class TestRefusalProfile(unittest.TestCase):
         )
 
     def test_method_block_is_complete(self) -> None:
+        """Test method block is complete."""
         profile = experiments.refusal_profile({"search": [_entry("a", [])]})
         method = profile["method"]
         self.assertEqual(method["detector"], refusals.DETECTOR_ID)
@@ -347,6 +377,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertEqual(method["openers_sha256"], refusals.OPENERS_SHA256)
 
     def test_all_candidates_unavailable_stays_available(self) -> None:
+        """Test all candidates unavailable stays available."""
         # B4: an explained absence, not a silent one.
         profile = experiments.refusal_profile({"search": [_entry("a", None), _entry("b", "junk")]})
         self.assertTrue(profile["available"])
@@ -357,6 +388,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertEqual(details["b"], "observations_invalid")
 
     def test_malformed_entry_recorded_not_raised(self) -> None:
+        """Test malformed entry recorded not raised."""
         profile = experiments.refusal_profile({"search": [{"noformat": True}, _entry("a", [])]})
         self.assertTrue(profile["available"])
         first = profile["candidates"][0]
@@ -364,6 +396,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertEqual(first["detail"], "entry_malformed")
 
     def test_evaluable_mismatch_detection(self) -> None:
+        """Test evaluable mismatch detection."""
         same = experiments.refusal_profile(
             {
                 "search": [
@@ -384,6 +417,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertTrue(prefix["evaluable_mismatch"])
 
     def test_held_out_is_never_read(self) -> None:
+        """Test held out is never read."""
         result = {
             "search": [_entry("a", [_obs("f1", "7", exact=True)])],
             "held_out": [_entry("a", [_obs("h1", "I'm sorry, no.")])],
@@ -392,6 +426,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertEqual(profile["candidates"][0]["n_suspected"], 0)
 
     def test_payload_contains_no_answer_text(self) -> None:
+        """Test payload contains no answer text."""
         # F1: the payload is counts + pointers; the answer text
         # itself must not appear anywhere in it.
         sentinel = "I'm sorry, the secret token is ZQXW-9917."
@@ -403,6 +438,7 @@ class TestRefusalProfile(unittest.TestCase):
         self.assertIn("i'm sorry", payload)
 
     def test_deterministic_repeat(self) -> None:
+        """Test deterministic repeat."""
         # G5 (payload level): same input, byte-identical section.
         result = {
             "search": [_entry("a", [_obs("f1", "I'm sorry, no."), _obs("f2", "7", exact=True)])]
@@ -413,7 +449,10 @@ class TestRefusalProfile(unittest.TestCase):
 
 
 class TestCliWiring(unittest.TestCase):
+    """Test cli wiring."""
+
     def test_flag_parses(self) -> None:
+        """Test flag parses."""
         parser = cli_module.build_parser()
         required = [
             "--model",
@@ -433,12 +472,14 @@ class TestCliWiring(unittest.TestCase):
         self.assertFalse(args.refusals)
 
     def test_probe_attaches_profile(self) -> None:
+        """Test probe attaches profile."""
         result: dict[str, Any] = {"search": [_entry("a", [_obs("f1", "I'm sorry, no.")])]}
         cli_module._run_refusals_probe(result)
         self.assertTrue(result["refusals"]["available"])
         self.assertEqual(result["refusals"]["candidates"][0]["suspected_rate"], 1.0)
 
     def test_probe_never_raises(self) -> None:
+        """Test probe never raises."""
         with mock.patch(
             "model_protocol_lab.experiments.refusal_profile",
             side_effect=RuntimeError("boom"),
@@ -449,8 +490,11 @@ class TestCliWiring(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
+    """Test reporting section."""
+
     @staticmethod
     def _result(**overrides: Any) -> dict[str, Any]:
+        """Result."""
         result: dict[str, Any] = {
             "search": [
                 _entry(
@@ -467,6 +511,7 @@ class TestReportingSection(unittest.TestCase):
         return result
 
     def test_section_renders_counts_and_hits(self) -> None:
+        """Test section renders counts and hits."""
         section = reporting._refusals_section(self._result())
         self.assertIn('id="refusals"', section)
         self.assertIn("chatml", section)
@@ -476,6 +521,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("Suspected", section)
 
     def test_section_absent_without_key_or_when_unavailable(self) -> None:
+        """Test section absent without key or when unavailable."""
         # G5 (HTML level).
         self.assertEqual(reporting._refusals_section({}), "")
         self.assertEqual(
@@ -486,6 +532,7 @@ class TestReportingSection(unittest.TestCase):
         )
 
     def test_section_never_renders_answer_text(self) -> None:
+        """Test section never renders answer text."""
         # F1 at the HTML boundary: the fixture id and opener render;
         # the recorded answer does not.
         sentinel = "I'm sorry, the secret token is ZQXW-9917."
@@ -497,6 +544,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("f1", section)
 
     def test_section_escapes_hostile_names(self) -> None:
+        """Test section escapes hostile names."""
         result = self._result()
         result["search"][0]["format"]["name"] = "<script>alert(1)</script>"
         result["refusals"] = experiments.refusal_profile(result)
@@ -505,12 +553,14 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("&lt;script&gt;", section)
 
     def test_mismatch_caution_renders(self) -> None:
+        """Test mismatch caution renders."""
         result = self._result()
         result["refusals"]["evaluable_mismatch"] = True
         section = reporting._refusals_section(result)
         self.assertIn("Caution", section)
 
     def test_withheld_rate_renders_note_not_a_number(self) -> None:
+        """Test withheld rate renders note not a number."""
         result = {"search": [_entry("slow", [_obs("f1", "I'm sorry, no.")], eligible=False)]}
         result["refusals"] = experiments.refusal_profile(result)
         section = reporting._refusals_section(result)
@@ -518,6 +568,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("candidate not eligible", section)
 
     def test_render_html_includes_section_from_sample(self) -> None:
+        """Test render html includes section from sample."""
         sample = json.loads(
             (REPO_ROOT / "examples" / "sample-report" / "results.json").read_text(encoding="utf-8")
         )
@@ -530,8 +581,11 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestDiffRefusals(unittest.TestCase):
+    """Test diff refusals."""
+
     @staticmethod
     def _profile(name: str = "a", answers: Any = None, **kw: Any) -> dict[str, Any]:
+        """Profile."""
         answers = answers if answers is not None else ["7"]
         observations = [
             _obs(f"f{i}", answer, exact=(answer == "7")) for i, answer in enumerate(answers)
@@ -539,6 +593,7 @@ class TestDiffRefusals(unittest.TestCase):
         return experiments.refusal_profile({"search": [_entry(name, observations, **kw)]})
 
     def test_validator_accepts_real_profile_and_rejects_hostile(self) -> None:
+        """Test validator accepts real profile and rejects hostile."""
         good = self._profile(answers=["I'm sorry, no.", "7"])
         self.assertTrue(diffreports._valid_refusals(good))
         hostile = json.loads(json.dumps(good))
@@ -557,6 +612,7 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertFalse(diffreports._valid_refusals(None))
 
     def test_identical_profiles_unchanged(self) -> None:
+        """Test identical profiles unchanged."""
         profile = self._profile(answers=["I'm sorry, no.", "7"])
         diff = diffreports.diff_refusals(profile, profile)
         self.assertEqual(diff["available"], "both")
@@ -564,6 +620,7 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertFalse(diff["protocol_drift"])
 
     def test_rate_drift_carries_denominators(self) -> None:
+        """Test rate drift carries denominators."""
         old = self._profile(answers=["7", "Paris"])
         new = self._profile(answers=["I'm sorry, no.", "Paris", "London"])
         diff = diffreports.diff_refusals(old, new)
@@ -578,6 +635,7 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertEqual(diff["hits_added"][0]["opener"], "i'm sorry")
 
     def test_protocol_drift_detected(self) -> None:
+        """Test protocol drift detected."""
         # Cycle 176 (F6a): drift is a COHERENT foreign detector --
         # a changed opener list with its own matching digest. A bare
         # digest edit is list/digest corruption and validates as
@@ -600,12 +658,14 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertEqual(diffreports.diff_refusals(old, corrupt)["available"], "old")
 
     def test_availability_states(self) -> None:
+        """Test availability states."""
         good = self._profile()
         self.assertEqual(diffreports.diff_refusals(good, None)["available"], "old")
         self.assertEqual(diffreports.diff_refusals(None, good)["available"], "new")
         self.assertEqual(diffreports.diff_refusals(None, None)["available"], "neither")
 
     def test_excluded_transitions(self) -> None:
+        """Test excluded transitions."""
         old = self._profile()
         new = experiments.refusal_profile({"search": [_entry("a", None)]})
         diff = diffreports.diff_refusals(old, new)
@@ -616,6 +676,7 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertEqual(back["excluded_removed"], ["a"])
 
     def test_diff_reports_integration(self) -> None:
+        """Test diff reports integration."""
         base = json.loads(
             (REPO_ROOT / "examples" / "sample-report" / "results.json").read_text(encoding="utf-8")
         )
@@ -628,6 +689,7 @@ class TestDiffRefusals(unittest.TestCase):
         self.assertIn("Refusals rate drift", summary)
 
     def test_render_summary_states(self) -> None:
+        """Test render summary states."""
         self.assertEqual(diffreports._render_refusals_summary({"available": "neither"}), [])
         lines = diffreports._render_refusals_summary({"available": "old"})
         self.assertEqual(len(lines), 1)
@@ -665,7 +727,10 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
 
 
 class TestMutationGates(unittest.TestCase):
+    """Test mutation gates."""
+
     def test_gate_unanchored_matching_is_killed(self) -> None:
+        """Test gate unanchored matching is killed."""
         mutant = _exec_variant(
             "if normalized.startswith(opener) and _at_word_boundary(normalized, len(opener))",
             "if opener in normalized",
@@ -676,6 +741,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertIsNone(refusals.classify_refusal("The answer is 7. I'm sorry."))
 
     def test_gate_boundary_rule_removed_is_killed(self) -> None:
+        """Test gate boundary rule removed is killed."""
         # Cycle 175 (detector v2): without the word-boundary rule,
         # the wave-7 false positives return.
         mutant = _exec_variant(
@@ -688,6 +754,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertIsNone(refusals.classify_refusal("I will note the key points."))
 
     def test_gate_first_match_attribution_is_killed(self) -> None:
+        """Test gate first match attribution is killed."""
         mutant = _exec_variant(
             "return max(matches, key=len) if matches else None",
             "return matches[0] if matches else None",
@@ -698,6 +765,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertEqual(refusals.classify_refusal("I cannot provide that."), "i cannot provide")
 
     def test_gate_rate_gating_removed_is_killed(self) -> None:
+        """Test gate rate gating removed is killed."""
         mutant = _exec_variant(
             "n_suspected / n_completed if not rate_note else None",
             "n_suspected / n_completed if n_completed else None",
@@ -716,6 +784,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     @staticmethod
     def _good() -> dict[str, Any]:
+        """Good."""
         profile = experiments.refusal_profile(
             {
                 "search": [
@@ -733,9 +802,11 @@ class TestValidatorBattery(unittest.TestCase):
         return copy.deepcopy(profile)
 
     def test_baseline_is_valid(self) -> None:
+        """Test baseline is valid."""
         self.assertTrue(diffreports._valid_refusals(self._good()))
 
     def test_lone_surrogate_opener_fails_closed_not_raises(self) -> None:
+        """Test lone surrogate opener fails closed not raises."""
         # Oversight edge-case F1: a lone-surrogate opener passes the
         # str guard but cannot be UTF-8 encoded; the digest
         # recomputation must fail closed (False), never raise, and
@@ -747,9 +818,11 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_each_broken_identity_is_rejected(self) -> None:
+        """Test each broken identity is rejected."""
         cases: list[tuple[str, Any]] = []
 
         def case(label: str, mutate: Any) -> None:
+            """Case."""
             payload = self._good()
             mutate(payload)
             cases.append((label, payload))
@@ -815,7 +888,10 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 class TestDiffAndRenderGaps(unittest.TestCase):
+    """Test diff and render gaps."""
+
     def test_view_skips_unnamed_candidate_records(self) -> None:
+        """Test view skips unnamed candidate records."""
         profile = experiments.refusal_profile(
             {"search": [{"noformat": True}, _entry("a", [_obs("f1", "7", exact=True)])]}
         )
@@ -824,6 +900,7 @@ class TestDiffAndRenderGaps(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_hits_removed_reported(self) -> None:
+        """Test hits removed reported."""
         old = experiments.refusal_profile({"search": [_entry("a", [_obs("f1", "I'm sorry, no.")])]})
         new = experiments.refusal_profile({"search": [_entry("a", [_obs("f1", "7", exact=True)])]})
         diff = diffreports.diff_refusals(old, new)
@@ -832,6 +909,7 @@ class TestDiffAndRenderGaps(unittest.TestCase):
         self.assertEqual(diff["hits_added"], [])
 
     def test_render_summary_full_house(self) -> None:
+        """Test render summary full house."""
         diff = {
             "available": "both",
             "changed": True,
@@ -862,7 +940,10 @@ class TestDiffAndRenderGaps(unittest.TestCase):
 
 
 class TestReportingSectionHostile(unittest.TestCase):
+    """Test reporting section hostile."""
+
     def test_defensive_branches(self) -> None:
+        """Test defensive branches."""
         payload = {
             "available": True,
             "method": {},
@@ -907,6 +988,8 @@ class TestReportingSectionHostile(unittest.TestCase):
 
 
 class _DispatchFakeBackend:
+    """Dispatch fake backend."""
+
     def __init__(self, model: Any, device: Any = None, max_context: Any = None):
         self.model = model
         self.device = device
@@ -919,6 +1002,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     """The --refusals flag reaches the probe in a real CLI dispatch."""
 
     def _dispatch(self, argv_extra: tuple[str, ...]) -> dict[str, Any]:
+        """Dispatch."""
         result_doc: dict[str, Any] = {
             "decision": "compatible_on_fixture_set",
             "selected_candidate": None,
@@ -973,6 +1057,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
             )
 
             def fake_prepare(path: Any) -> Path:
+                """Fake prepare."""
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 
@@ -1003,12 +1088,14 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
         return result_doc
 
     def test_flag_attaches_refusals_section(self) -> None:
+        """Test flag attaches refusals section."""
         result_doc = self._dispatch(("--refusals",))
         self.assertIn("refusals", result_doc)
         self.assertTrue(result_doc["refusals"]["available"])
         self.assertEqual(result_doc["refusals"]["candidates"][0]["suspected_rate"], 1.0)
 
     def test_no_flag_no_section(self) -> None:
+        """Test no flag no section."""
         # G5 at dispatch level: the key is absent without the flag.
         result_doc = self._dispatch(())
         self.assertNotIn("refusals", result_doc)

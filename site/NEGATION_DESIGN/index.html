@@ -1,0 +1,3636 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/NEGATION_DESIGN/">
+      
+      
+        <link rel="prev" href="../NEEDLE_DESIGN/">
+      
+      
+        <link rel="next" href="../NUMFORM_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Negation - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#negation-probe-design-round-adjudicated-build-with-binding-amendments" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Negation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ANSWERSYNTAX_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Answer syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bundle (multi-question)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DIRECTIVE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directive ladder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONLANGUAGE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTIQUESTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-question (restated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-36-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #36, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verdict-build-as-amended-in-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verdict: BUILD (as amended in this doc)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verdict: BUILD (as amended in this doc)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-binding-amendments-each-incorporated-below-none-left-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Binding amendments (each incorporated below, none left open)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-the-loose-sketch-was-no-build-fatals-each-executed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why the loose sketch was NO-BUILD (fatals, each executed)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why the loose sketch was NO-BUILD (fatals, each executed)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-no-single-arm-pair-diagnoses-negation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — No single arm pair diagnoses negation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-byte-exact-scorer-negated-answer-form-reporting-fatal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — Byte-exact scorer × negated answer form (reporting fatal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-the-negated-arm-bundles-treatments-length-has-no-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — The negated arm bundles treatments; length has no control
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-winner-re-derivation-over-this-panel-is-forbidden-by-settlement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — Winner re-derivation over this panel is forbidden by settlement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-borrowed-floors-fire-on-noise-new-fatal-for-the-narrowed-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Borrowed floors fire on noise (new fatal for the narrowed design)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#non-fatals-adjudicated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-fatals, adjudicated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-instrument-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The instrument (frozen)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. The instrument (frozen)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-home-and-frozen-base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Home and frozen base
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-frozen-instruction-strings-v1-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Frozen instruction strings (v1 arms)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-expected-answer-derivation-rule-and-the-distinctness-condition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Expected-answer derivation rule (and the distinctness condition)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-falsifiable-claim-pre-registered-one-directional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Falsifiable claim (pre-registered, one-directional)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-variants-kept-descriptive-excluded-all-decided" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Variants: kept, descriptive, excluded (all decided)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-population-and-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Population and controls
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Population and controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-generated-cases-only-stage-local-never-the-user-split" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Generated cases only, stage-local, never the user Split
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-value-ranges-strata-form-and-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Value ranges, strata, form, and presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-counts-frozen-with-derivations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Counts (frozen, with derivations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-token-id-divergence-reported-not-gated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Token-ID divergence: reported, not gated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-scorer-pins-and-fail-closed-vocabulary-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Scorer pins and fail-closed vocabulary (binding)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Scorer pins and fail-closed vocabulary (binding)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-headline-scorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Headline scorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-decomposition-and-the-frozen-negation_echo-subclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Decomposition and the frozen negation_echo subclass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-pre-generation-audit-counts-never-silent-drops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Pre-generation audit (counts, never silent drops)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-report-shape-and-operating-characteristics-printed-not-footnoted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Report shape and operating characteristics (printed, not footnoted)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-scope-justification-red-team-a-m3-required-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Scope justification (red-team A M3, required section)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-removals-applied-verifier-72-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Removals applied (verifier §7.2 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-sources-the-build-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Sources the build may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-36-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #36, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verdict-build-as-amended-in-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verdict: BUILD (as amended in this doc)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verdict: BUILD (as amended in this doc)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-binding-amendments-each-incorporated-below-none-left-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Binding amendments (each incorporated below, none left open)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-the-loose-sketch-was-no-build-fatals-each-executed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why the loose sketch was NO-BUILD (fatals, each executed)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why the loose sketch was NO-BUILD (fatals, each executed)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-no-single-arm-pair-diagnoses-negation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — No single arm pair diagnoses negation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-byte-exact-scorer-negated-answer-form-reporting-fatal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — Byte-exact scorer × negated answer form (reporting fatal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-the-negated-arm-bundles-treatments-length-has-no-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — The negated arm bundles treatments; length has no control
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-winner-re-derivation-over-this-panel-is-forbidden-by-settlement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — Winner re-derivation over this panel is forbidden by settlement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-borrowed-floors-fire-on-noise-new-fatal-for-the-narrowed-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Borrowed floors fire on noise (new fatal for the narrowed design)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#non-fatals-adjudicated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-fatals, adjudicated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-instrument-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The instrument (frozen)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. The instrument (frozen)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-home-and-frozen-base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Home and frozen base
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-frozen-instruction-strings-v1-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Frozen instruction strings (v1 arms)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-expected-answer-derivation-rule-and-the-distinctness-condition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Expected-answer derivation rule (and the distinctness condition)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-falsifiable-claim-pre-registered-one-directional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Falsifiable claim (pre-registered, one-directional)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-variants-kept-descriptive-excluded-all-decided" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Variants: kept, descriptive, excluded (all decided)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-population-and-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Population and controls
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Population and controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-generated-cases-only-stage-local-never-the-user-split" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Generated cases only, stage-local, never the user Split
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-value-ranges-strata-form-and-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Value ranges, strata, form, and presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-counts-frozen-with-derivations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Counts (frozen, with derivations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-token-id-divergence-reported-not-gated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Token-ID divergence: reported, not gated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-scorer-pins-and-fail-closed-vocabulary-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Scorer pins and fail-closed vocabulary (binding)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Scorer pins and fail-closed vocabulary (binding)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-headline-scorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Headline scorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-decomposition-and-the-frozen-negation_echo-subclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Decomposition and the frozen negation_echo subclass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-pre-generation-audit-counts-never-silent-drops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Pre-generation audit (counts, never silent drops)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-report-shape-and-operating-characteristics-printed-not-footnoted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Report shape and operating characteristics (printed, not footnoted)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-scope-justification-red-team-a-m3-required-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Scope justification (red-team A M3, required section)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-removals-applied-verifier-72-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Removals applied (verifier §7.2 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-sources-the-build-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Sources the build may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="negation-probe-design-round-adjudicated-build-with-binding-amendments">Negation probe — design round (ADJUDICATED: BUILD, with binding amendments)<a class="headerlink" href="#negation-probe-design-round-adjudicated-build-with-binding-amendments" title="Permanent link">&para;</a></h1>
+<h2 id="round-summary-coordinator-36-design-round-only-nothing-built">Round summary (coordinator #36, design round only — nothing built)<a class="headerlink" href="#round-summary-coordinator-36-design-round-only-nothing-built" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Tree at main <code>960b70dcde87</code> (cycle 211 closed green, 8,402 tests, per the
+  round brief). This round was READ-ONLY except for this doc and the briefs;
+  no suite was run, no push was made, no tag was cut or discussed.</li>
+<li>Specialists (blind to each other, then audited): researcher
+  (<code>~/workspace/agents_out/negation/research.md</code>), red-team A
+  (<code>redteam_a.md</code>), red-team B (<code>redteam_b.md</code>), verifier/claims auditor
+  (<code>verifier.md</code>). All four briefs landed.</li>
+<li>Convergence and divergence, in one paragraph: both red teams
+  independently returned NO-BUILD for the loose sketch, and the verifier
+  sustained NO-BUILD for the researcher's narrowed instrument <em>as the
+  researcher specified it</em> — its §1 "iff" is false, its §3.4 operating
+  characteristics story is backwards, its winner readout must be dropped
+  rather than demoted, and its floors, echo decomposition, and scope
+  justification were unfrozen. The coordinator concurs with every one of
+  those judgments about the brief <em>as specified</em>. The verdict below is
+  nevertheless BUILD, for a precise reason stated in §1: every defect
+  the verifier names is corrected <em>inside this doc</em>, by amendment to the
+  same instrument — same population, same arms, same scorer, same
+  joint-rule shape — with the one genuinely quantitative correction (the
+  decision threshold) derived by the coordinator's own execution in §7
+  and frozen here. The build cycle implements THIS doc, not the research
+  brief. Any deviation from a frozen item in this doc (arms, rule,
+  threshold, vocabulary, echo set, claim language) is not an
+  implementation detail: it voids this verdict and requires fresh review.
+  This is the distinction from the payload round's F6 rule: there the
+  amendments replaced an undefined instrument with a different one
+  (undefined payload → frozen tables, causal → descriptive); here they
+  correct the decision rule and the claim language of an instrument
+  whose population and arms were already frozen and executable.</li>
+</ul>
+<h2 id="verdict-build-as-amended-in-this-doc">Verdict: BUILD (as amended in this doc)<a class="headerlink" href="#verdict-build-as-amended-in-this-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Verdict: BUILD</strong> — the narrowed instrument specified in §2–§6,
+  under the binding amendments in §1.1.</li>
+<li>What the verdict is NOT: it is not a build order for the research
+  brief, not for the loose "negation sensitivity" sketch, not for any
+  winner headline, and not for the borrowed 6/2 floors. All four are
+  NO-BUILD and are removed in §8.</li>
+</ul>
+<h3 id="11-binding-amendments-each-incorporated-below-none-left-open">1.1 Binding amendments (each incorporated below, none left open)<a class="headerlink" href="#11-binding-amendments-each-incorporated-below-none-left-open" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Claim narrowed and made one-directional.</strong> No "iff", no
+   "negation-invariance is falsified", no "negation sensitivity" as a
+   headline, no causal "negation changes verdicts" sentence. The
+   section's only falsification-class label is
+   <code>negation_drop_observed</code>, defined exactly in §2.4 as a sufficient
+   pattern detector, with its named rival patterns printed beside it.</li>
+<li><strong>Decision threshold re-derived from this panel's own operating
+   characteristics (§7.3), not borrowed.</strong> The rule is D ≥ 8 and
+   J ≥ 5 (definitions in §2.4). The borrowed placement/canonical-form
+   floors (6/2) are REMOVED: the coordinator reproduced the verifier's
+   finding that (6,2) fires on a random labeller 58% of the time.
+   At (8,5) the random-labeller fire rate is ~4%, the no-effect
+   competent-candidate fire rate is 0.7%, power at a 0.5 drop rate is
+   84%, and power at a 0.25 drop rate is only ~21% — the panel is
+   powered for large drop rates and weak for small ones, and the
+   section must print exactly that (§5).</li>
+<li><strong>Winner readout DROPPED in v1, not demoted.</strong> No per-arm selection,
+   no winner headline, no winner-vs-abstention readout. Per-arm pass
+   rates and the joint pattern are the only readouts. Grounds: the
+   numform settlement (experiments stage docstring, §7.1) forbids
+   selection over the synthetic set, canonical-form's <code>winner_headline</code>
+   is a total function of <em>two</em> arms with no three-arm extension, and
+   NUMFORM_DESIGN itself records that over 16 values an all-pass
+   selection readout "carries almost no information per unit of
+   validator surface". Any future selection claim must first overturn
+   that settlement with argument; it may not be added at build time.</li>
+<li><strong>Frozen <code>negation_echo</code> decomposition (§4.2).</strong> The echo diagnostic
+   is enumerated, validator-mirrored, and printed beside — never
+   inside — the byte-exact headline. Without it the negated-arm rates
+   are uninterpretable (a perfect comprehender answering "not second"
+   scores 0/16 on the negated arm); with it, that pattern is labelled
+   as echo, not as negation-drop.</li>
+<li><strong>Antonym bundle disclosed in the claim itself (§2.2).</strong> The negated
+   arm differs from direct in two lexical moves (negation token +
+   larger→smaller antonym swap). The claim is therefore
+   "antonym-negated definite-description discordance", and the section
+   states the bundle wherever the headline appears. The flipped arm is
+   a <em>necessary competence gate</em>, not a control: flipped-pass is
+   necessary, not sufficient, for attributing a negated failure to
+   negation processing, and wording × position interaction remains an
+   unexcluded rival, printed as such.</li>
+<li><strong>Scope justification (§6).</strong> Semantic instruction variation is
+   deliberately excluded scope for surface-noise (see §6); this probe
+   re-enters that scope for one frozen, derivable-ground-truth
+   criterion variation, for the reasons in §6 — not for paraphrase
+   generally.</li>
+<li><strong>Open points decided, not deferred (§2.5, §3, §4):</strong> the 2×2
+   factorial completion is v2; the descriptive alt-negated arm is kept
+   as a non-decision sensitivity only; the record shape is canonical
+   multi-cell (one record per candidate × case, one cell per arm);
+   the stage screen detail is <code>negation_screen_failed</code>, bound to the
+   pre-generation audit screen defined in §4.3.</li>
+</ol>
+<h2 id="1-why-the-loose-sketch-was-no-build-fatals-each-executed">1. Why the loose sketch was NO-BUILD (fatals, each executed)<a class="headerlink" href="#1-why-the-loose-sketch-was-no-build-fatals-each-executed" title="Permanent link">&para;</a></h2>
+<h3 id="f1-no-single-arm-pair-diagnoses-negation">F1 — No single arm pair diagnoses negation<a class="headerlink" href="#f1-no-single-arm-pair-diagnoses-negation" title="Permanent link">&para;</a></h3>
+<p>Red-team B's executed truth table over the seed-0 generated compare
+set: a larger-default candidate (always answers the larger label)
+passes direct <em>and</em> negated 16/16 with zero direct–negated discordance,
+and is indistinguishable from a smaller-blind-lexical candidate on
+every per-arm pass count and every pair discordance. An always-<code>first</code>
+candidate yields maximal direct–flipped discordance (16/16) with zero
+negation content (red-team A E5). The direct–negated pair therefore
+cannot be the headline, and the direct–flipped pair cannot be a
+control: it measures antonym/criterion following, position bias, and
+base-task weakness jointly. Only the per-case <em>triple</em> pattern
+(pass direct, wrong-label on negated, pass flipped on the same case)
+diagnoses the negation-drop pattern — and only as a sufficient
+detector, never as an "iff" (see §2.4: larger-default is an
+<em>undiagnosed rival pattern</em>, not an acquittal; it is visible in the
+flipped pass rate printed beside the decision, never hidden).</p>
+<h3 id="f2-byte-exact-scorer-negated-answer-form-reporting-fatal">F2 — Byte-exact scorer × negated answer form (reporting fatal)<a class="headerlink" href="#f2-byte-exact-scorer-negated-answer-form-reporting-fatal" title="Permanent link">&para;</a></h3>
+<p>The verdict is byte-exact (<code>core.py:797</code>: <code>exact_match = status ==
+"completed" and answer == case.expected</code>), conjoined with boundary
+presence in stage cells. A semantically correct negated answer
+("not second" for expected "first") therefore fails at every
+scorer-lens rung — the ladder has no label-strip operation
+(<code>scorerlens.py</code>: "label_prefix": "no label-strip operation exists")
+— and numform's own decomposition buckets it as <code>non_label</code>, the same
+class as gibberish (coordinator execution, §7.2). Wrong-label-only
+counting in the joint rule neutralises this for the <em>boolean</em> (echoes
+cannot fire it), but without a frozen <code>negation_echo</code> subclass the
+negated-arm <em>rates</em> stay uninterpretable and the perfect comprehender
+still scores 0/16 on the arm. That is why amendment 4 is binding and
+why the section must never print a negated-arm pass rate without its
+echo share beside it.</p>
+<h3 id="f3-the-negated-arm-bundles-treatments-length-has-no-control">F3 — The negated arm bundles treatments; length has no control<a class="headerlink" href="#f3-the-negated-arm-bundles-treatments-length-has-no-control" title="Permanent link">&para;</a></h3>
+<p>Direct (79 chars) vs flipped (80) vs "not smaller" (84) vs "not the
+smaller one" (92) vs "not less than the other" (96) — red-team B's
+executed character deltas. The negated arm is longer by construction,
+and no length-matched negated control exists that is not itself a
+treatment (verbosity territory). Length is therefore a <em>reported</em>
+rival, not a controlled one: per-case <code>id_length_delta</code> is printed,
+the descriptive alt-negated arm (longer still) provides a
+length-gradient check, and a systematic <em>wrong-label</em> pattern (not
+mere failure) is the only pattern the section may attribute — with
+the length rival printed beside it, never argued away. Token-count
+delta is UNEXECUTED in this round (the tree has no frozen local
+tokenizer; only <code>backend.encode</code> exists) and must not be claimed in
+the build doc; character delta and render-id length delta are the
+reported quantities.</p>
+<h3 id="f4-winner-re-derivation-over-this-panel-is-forbidden-by-settlement">F4 — Winner re-derivation over this panel is forbidden by settlement<a class="headerlink" href="#f4-winner-re-derivation-over-this-panel-is-forbidden-by-settlement" title="Permanent link">&para;</a></h3>
+<p>See amendment 3. The three-arm winner rule in the research brief is
+not a total function over three arms, and the settlement it would
+violate is explicit in the tree (experiments numform stage docstring:
+"No selection, no winner, no flip against the primary run: the
+synthetic set is a different contest from the user's fixtures, and a
+winner over 16 generated values per task would invite exactly the
+headline the design forbids"). Dropped, not demoted.</p>
+<h3 id="f5-borrowed-floors-fire-on-noise-new-fatal-for-the-narrowed-design">F5 — Borrowed floors fire on noise (new fatal for the narrowed design)<a class="headerlink" href="#f5-borrowed-floors-fire-on-noise-new-fatal-for-the-narrowed-design" title="Permanent link">&para;</a></h3>
+<p>Coordinator reproduction (§7.3): the researcher's 6/2 rule fires on a
+random labeller (independent 0.5 labels per arm) 58% of the time, and
+the researcher's §3.4 operating-characteristics story is backwards
+(it claims the rule "fires only on a fairly lopsided pattern").
+A falsification rule that fires on noise more often than not is not
+a conservative label; it is a broken instrument. The derived (8,5)
+rule in §2.4 replaces it in full. Borrowed floors are forbidden for
+every rule in this panel.</p>
+<h3 id="non-fatals-adjudicated">Non-fatals, adjudicated<a class="headerlink" href="#non-fatals-adjudicated" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Conditional equivalence survives.</strong> "Not the smaller" ≡ "larger"
+  given a ≠ b, by the pair-closed complement rule (§2.3). The article
+  form beats the bare form (the verifier's §6.1: the bare form's own
+  ¬(x&lt;y) ⟺ x≥y concedes the equality ambiguity). Ties are not a
+  population defect: the generator enforces a ≠ b (<code>numform.py:550</code>)
+  and the validator re-derives it; an equal pair fails the stage
+  closed (§4.3), never gets tie-broken. Refuted attacks (red-team B
+  R1–R5): no-equivalent-phrasing, operand-order scoping change,
+  context-capacity threat (max delta +17 chars), single-digit
+  breakage, ties-as-population-defect — all refuted by execution and
+  not carried forward.</li>
+<li><strong>Scope (red-team A M3) stands as a requirement, not a fatal.</strong>
+  Addressed by §6.</li>
+<li><strong>Form-crossing (red-team A M1) is settled, not open.</strong> Plain form
+  only in v1; form-crossing is a v2 panel with its own claim. Budget
+  arithmetic follows from the frozen record shape (§3.3).</li>
+<li><strong>Degenerate populations (red-team A M4) are pinned, not open.</strong>
+  Distinct-only, direct-pass conditioning, per-stratum/per-band
+  reporting (§3).</li>
+</ul>
+<h2 id="2-the-instrument-frozen">2. The instrument (frozen)<a class="headerlink" href="#2-the-instrument-frozen" title="Permanent link">&para;</a></h2>
+<h3 id="21-home-and-frozen-base">2.1 Home and frozen base<a class="headerlink" href="#21-home-and-frozen-base" title="Permanent link">&para;</a></h3>
+<p>The home is the numform compare task, plain form only. Its frozen
+template is <code>model_protocol_lab/numform.py:121-127</code> (compare entry):</p>
+<div class="highlight"><pre><span></span><code>"Which of these two numbers is larger? Reply with only the word first or second.\n{a}\n{b}"
+</code></pre></div>
+<p>Compare is the one numform task whose expected answer is a
+form-invariant label (<code>numform.py:596-603</code>, <code>expected_answer</code>:
+compare returns <code>expected_label</code>, never a rendered number). The
+generator constructs compare pairs with <code>a != b</code> enforced
+(<code>numform.py:550</code>), records which side is larger (<code>larger_first</code>,
+lines 572–576), and decomposes a compare cell into <code>exact_pass</code> /
+<code>wrong_label</code> (the other label) / <code>non_label</code>
+(<code>numform.py:840-863</code>, <code>cell_decomposition</code>). That decomposition is
+load-bearing: <code>wrong_label</code> on the negated arm is the negation-drop
+signature, <code>non_label</code> is a different failure, and <code>negation_echo</code>
+(§4.2) is a frozen subclass of <code>non_label</code> — never pooled into
+<code>wrong_label</code>, never rescuing a flip into a pass.</p>
+<h3 id="22-frozen-instruction-strings-v1-arms">2.2 Frozen instruction strings (v1 arms)<a class="headerlink" href="#22-frozen-instruction-strings-v1-arms" title="Permanent link">&para;</a></h3>
+<p>Operands are rendered in plain form only and substituted for <code>{a}</code>
+(first line) and <code>{b}</code> (second line), exactly as numform does. The
+reply contract — "Reply with only the word first or second." — is
+byte-identical in every arm, so the answer vocabulary never varies.
+Operand order is identical across the arms of one case — only the
+instruction sentence changes.</p>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Frozen instruction (operands appended, one per line)</th>
+<th>Expected answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>direct</code></td>
+<td><code>Which of these two numbers is larger? Reply with only the word first or second.</code></td>
+<td>label of the larger operand</td>
+</tr>
+<tr>
+<td><code>negated</code> (headline)</td>
+<td><code>Which of these two numbers is not the smaller? Reply with only the word first or second.</code></td>
+<td>label of the larger operand — the same label as <code>direct</code></td>
+</tr>
+<tr>
+<td><code>flipped</code></td>
+<td><code>Which of these two numbers is smaller? Reply with only the word first or second.</code></td>
+<td>label of the smaller operand — the opposite label to <code>direct</code></td>
+</tr>
+<tr>
+<td><code>negated_alt</code> (descriptive only, §2.5)</td>
+<td><code>Which of these two numbers is not smaller than the other? Reply with only the word first or second.</code></td>
+<td>label of the larger operand — never a decision input</td>
+</tr>
+</tbody>
+</table>
+<p>Worked examples (from the shipped generator at seed 0, verified by
+the coordinator, §7.2): operands <code>[100, 47]</code>,
+<code>larger_first=True</code>, <code>expected_label="first"</code> — direct → <code>first</code>,
+negated → <code>first</code>, flipped → <code>second</code>. Operands <code>[199, 999]</code>,
+<code>larger_first=False</code>, <code>expected_label="second"</code> — direct →
+<code>second</code>, negated → <code>second</code>, flipped → <code>first</code>. The label flips
+with presentation order, so a position-biased candidate cannot pass
+all three headline arms by position alone, and the generator's
+<code>larger_first</code> alternation (slot parity, <code>numform.py:572</code>) keeps the
+direct expected-label balance exact by construction (8/8 at seed 0).</p>
+<p><strong>Antonym-bundle disclosure (binding).</strong> The <code>negated</code> arm differs
+from <code>direct</code> in two lexical moves: insertion of the negation token
+("not the") <em>and</em> the antonym swap (larger→smaller). Negating the
+direct predicate alone ("not larger") <em>is</em> the flipped arm. The
+claim in §2.4 is therefore about the antonym-negated definite
+description as a whole, and every headline rendering of it states
+the bundle. No sentence in the report may attribute a discordance
+to "negation" simpliciter.</p>
+<h3 id="23-expected-answer-derivation-rule-and-the-distinctness-condition">2.3 Expected-answer derivation rule (and the distinctness condition)<a class="headerlink" href="#23-expected-answer-derivation-rule-and-the-distinctness-condition" title="Permanent link">&para;</a></h3>
+<p>Let the pair be (x, y), x ≠ y, presented as (first, second). Define
+L = the label of max(x, y), S = the label of min(x, y); L ≠ S.</p>
+<ul>
+<li>direct: "larger" denotes max(x, y) → L.</li>
+<li>negated: "the smaller" is a definite description denoting
+  min(x, y) — it has a unique referent <em>only because</em> x ≠ y. "Not
+  the smaller", read as complement within the presented pair,
+  denotes the pair member that is not min(x, y), i.e. max(x, y) → L.
+  The derivation is the pair-closed complement rule, not a general
+  English equivalence. It is conditional, and the section states
+  the condition wherever the derivation appears.</li>
+<li>flipped: "smaller" denotes min(x, y) → S = the opposite label.</li>
+<li>negated_alt: same derivation as negated, for its own phrasing;
+  its scope profile (comparative + "the other" anaphora) differs
+  slightly, which is one reason it is descriptive only.</li>
+</ul>
+<p><strong>Distinctness condition (load-bearing, validator-enforced).</strong> If
+x = y, "the smaller" has no unique referent and "not the smaller"
+is undefined — not "either", not "both", not a third label. The
+generator asserts <code>a != b</code> (already present, <code>numform.py:550</code>); the
+diff validator independently re-derives <code>a != b</code> for every case and
+rejects the record set if any pair is equal; an equal pair is never
+scored, never silently dropped, and never "resolved" by a tie rule.
+Equal values are not a v1 population at all — a tie arm would need
+its own instruction ("neither" is not in the frozen answer
+vocabulary) and is excluded. Margin classes emitted by the
+generator are exactly <code>different_length</code>, <code>same_length_early</code>,
+<code>same_length_last_digit</code> (<code>numform.py:320-342</code>); <code>same_length_middle</code>
+is a real class the classifier reports but the generator never
+emits, so a record carrying it fails validation, as does <code>equal</code>.</p>
+<h3 id="24-falsifiable-claim-pre-registered-one-directional">2.4 Falsifiable claim (pre-registered, one-directional)<a class="headerlink" href="#24-falsifiable-claim-pre-registered-one-directional" title="Permanent link">&para;</a></h3>
+<p>For one candidate, over the cases it completes in all three headline
+arms, let D be the cases it passes on the direct arm, and let J be
+the cases in D where, on the <em>same</em> case, the negated cell's
+decomposition is <code>wrong_label</code> (the smaller label — not any failure,
+not an echo, not a boundary miss) <em>and</em> the flipped cell passes.
+Then, per candidate:</p>
+<ul>
+<li>D &lt; 8 → <code>insufficient</code> — withheld, never defaulted to acquittal
+  and never to a robustness claim.</li>
+<li>D ≥ 8 and J ≥ 5 → <code>negation_drop_observed</code> — the negation-drop
+  pattern is observed on this candidate, on this frozen phrasing,
+  at this panel size. This is a sufficient-pattern detector, not a
+  biconditional: it does not establish "negation-invariance" when
+  it does not fire, and it does not diagnose every negation-related
+  defect when it does.</li>
+<li>D ≥ 8 and J &lt; 5 → <code>below_threshold</code> — an observed null at this
+  panel size, not proof of invariance. The section prints the
+  operating characteristics in §5 beside every <code>below_threshold</code>.</li>
+</ul>
+<p><strong>Named rival patterns (printed beside every decision, never hidden):</strong></p>
+<ul>
+<li><em>Larger-default / instruction-ignoring:</em> passes direct and negated,
+  fails flipped broadly. Visible as a low flipped pass rate; it is
+  undiagnosed by J (J = 0 for it by construction) and must be
+  labelled "negation-drop undiagnosed, not absent" whenever the
+  flipped pass rate on D is below 0.5. It is not acquitted as
+  invariant.</li>
+<li><em>Echo-comprehension:</em> passes direct and flipped, answers negated
+  with a negated label form (§4.2). Visible as a high <code>negation_echo</code>
+  share; it is not negation-drop and must not be reported as such.</li>
+<li><em>Wording × position interaction:</em> a wrong-label pattern that is
+  concentrated in one presentation order (larger-first vs
+  larger-second) is labelled as order-concentrated, not as general
+  negation-drop. The section prints J split by presentation order.</li>
+</ul>
+<p><strong>What the claim is not.</strong> No causal claim about weights, training,
+or "negation understanding" as a latent ability follows from any
+outcome. The instrument measures verdict discordance under greedy
+decoding on one frozen phrasing, not a mechanism. Generalisation to
+open-world negation is an extrapolation the report must not make:
+in an open-world task the complement of the negated description is
+not a singleton, and the expected answer is underdetermined.</p>
+<h3 id="25-variants-kept-descriptive-excluded-all-decided">2.5 Variants: kept, descriptive, excluded (all decided)<a class="headerlink" href="#25-variants-kept-descriptive-excluded-all-decided" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variant</th>
+<th>Status in v1</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Negated-alt phrasing "not smaller than the other"</td>
+<td>Descriptive arm only, never a decision input, never pooled</td>
+<td>Bounds phrasing awkwardness: a joint pattern reproducing on two negated phrasings is harder to dismiss as one phrasing's artefact; a pattern appearing on only one phrasing is labelled phrasing-dependent. Its wrong-label count on D and its alt-joint count are printed descriptively. It is frozen byte-for-byte in §2.2 or it does not ship.</td>
+</tr>
+<tr>
+<td>Negated-flipped "not the larger" (expected = smaller)</td>
+<td>EXCLUDED from v1; named as the v2 2×2 factorial completion</td>
+<td>Fourth cell of criterion {larger, smaller} × polarity {affirmative, negated}. Its expected answer coincides with the flipped arm's, inviting pooling error, and combining two negated contrasts needs its own pre-registered rule. A v2 factorial requires a rewritten claim and fresh review, not a column added at build time.</td>
+</tr>
+<tr>
+<td>Negated answer option ("reply with the word that is not first")</td>
+<td>EXCLUDED</td>
+<td>Changes the answer vocabulary and the scorer's target set at once; failure could be vocabulary confusion, not negation processing.</td>
+</tr>
+<tr>
+<td>Imperative negation ("Do not pick the smaller…")</td>
+<td>EXCLUDED from v1</td>
+<td>Different speech act (prohibition vs interrogative definite description) and a different scope; a genuine second probe, closer to hierarchy territory, not a variant of this one.</td>
+</tr>
+<tr>
+<td>Scope variants "not larger" vs "not the larger" (bare vs article)</td>
+<td>EXCLUDED as arms; REQUIRED as a design note</td>
+<td>Without the article, "not larger" in open English means ≥, which coincides with the article reading on distinct pairs and diverges on equal pairs — precisely why §2.3's distinctness assert is load-bearing. The article is not decoration; it is the scope pin.</td>
+</tr>
+<tr>
+<td>Double negation, affixal/implicit negation ("un-", "less", "never", "the other one")</td>
+<td>EXCLUDED from v1</td>
+<td>Compositional and lexical negation are different mechanisms with their own ambiguity profiles. "The other one" is not a negation at all (anaphora) and must not enter a negation headline.</td>
+</tr>
+<tr>
+<td>Negated operand statement ("The first number is not the smaller…")</td>
+<td>EXCLUDED</td>
+<td>That is a claim arm (leading territory), not a criterion arm.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-population-and-controls">3. Population and controls<a class="headerlink" href="#3-population-and-controls" title="Permanent link">&para;</a></h2>
+<h3 id="31-generated-cases-only-stage-local-never-the-user-split">3.1 Generated cases only, stage-local, never the user Split<a class="headerlink" href="#31-generated-cases-only-stage-local-never-the-user-split" title="Permanent link">&para;</a></h3>
+<p>Cases are generated by the shipped numform compare generator (same
+seed, same value set) and live only in the stage; they never enter
+the user's search/held-out Split. This is the canonical-form
+invariant, and it is forced here for a stronger reason than in
+canonical-form: variant fixtures (direct vs negated vs flipped
+renderings of one pair) are three fixtures about one pair, and any
+future Split-adjacent analysis that groups by pair would inherit a
+triple-counting trap. Stage-local generation avoids the question
+entirely, exactly as canonical-form does
+(<code>canonicalform.py:17-22</code> in its module docstring: generated cases
+only, stage-local, never the Split). Note the Split mechanics for
+the record: Split compares message inputs by NFC key and rejects
+identical message inputs across the split (<code>core.py:169</code>, class
+<code>Split</code>; uniqueness at line 204, identical-message rejection at
+line 214) — variant fixtures are not identical messages, so they
+would not collide, but the triple-counting trap above is the reason
+to stay stage-local regardless.</p>
+<h3 id="32-value-ranges-strata-form-and-presentation">3.2 Value ranges, strata, form, and presentation<a class="headerlink" href="#32-value-ranges-strata-form-and-presentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Values:</strong> reuse numform's bands verbatim —
+  <code>numform.py:99</code>: <code>BANDS = ((1, 3), (4, 6), (7, 9), (10, 12))</code>
+  digit lengths, 4 values per band per task, giving 16 compare
+  cases per candidate. Margin strata cycle by slot —
+  <code>different_length</code>, <code>same_length_early</code>, <code>same_length_last_digit</code>
+  — and the headline is reported per stratum descriptively, never
+  pooled across strata into a single "negation rate" that hides a
+  stratum effect (e.g. a last-digit-only effect would be a
+  digit-discrimination story, not a negation story). Seed-0 shape
+  (verifier-confirmed): strata 8/4/4, bands 3/4/5/4, 8/16
+  length-decidable (<code>different_length</code> — the larger is necessarily
+  the longer string, so length alone decides those cases).</li>
+<li><strong>Form:</strong> plain only. Crossing negation with form would be a
+  3 × 4 (4 × 4 with the descriptive arm) panel whose headline could
+  not attribute a flip to either axis — the payload F3 bundle
+  again. Plain is the form where the operands are bare digit
+  strings and the only moving part is the instruction, which is
+  the point. Form-crossing is a v2 panel with its own claim.</li>
+<li><strong>Presentation order:</strong> the shipped <code>larger_first</code> alternation
+  (<code>numform.py:572-573</code>) is kept byte-for-byte, so direct expected
+  labels are balanced first/second by construction and no new
+  order bias is introduced.</li>
+<li><strong>Answer contract and decoding:</strong> byte-identical reply contract
+  in every arm (§2.2); greedy decoding, same <code>--max-new-tokens</code>,
+  same boundary ids, same seed, same template family per
+  candidate. Templates are not touched: negation lives inside the
+  user message content only.</li>
+<li><strong>Closed-book screen: none, and canonical-form is the precedent.</strong>
+  Placement's screen (<code>placement.py:370-381</code>, <code>screened()</code>: a
+  record is screened when its closed-book cell completed and
+  passed) does <strong>not</strong> transfer, for a structural reason: in
+  placement the payload is a prose fact passage that can be
+  removed while leaving a well-formed question; in compare, the
+  operands <em>are</em> the task content, and removing them leaves a
+  question with no ground truth. The screen's function — excluding
+  cases the treatment cannot move — is already served by
+  conditioning on D: a case the candidate fails directly is a
+  case negation-drop cannot be shown to move, and it is excluded
+  from the headline population by construction. Canonical-form
+  explicitly takes the same position (<code>canonicalform.py:556-557</code>:
+  "There is no closed-book screen in this probe").</li>
+</ul>
+<h3 id="33-counts-frozen-with-derivations">3.3 Counts (frozen, with derivations)<a class="headerlink" href="#33-counts-frozen-with-derivations" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Headline generations: 16 cases × 3 arms × 24 candidates
+  (run_experiment's cap, per the placement comment on its
+  24-candidate panel) = 1,152.</li>
+<li>With the descriptive alt arm: 16 × 4 × 24 = 1,536 generations.</li>
+<li>Ground records: 24 candidates × 16 cases = 384 records, in the
+  canonical multi-cell shape (one record per candidate × case,
+  one cell per arm — the canonical-form record shape, not
+  numform's one-record-per-generation shape; this choice is what
+  makes the arithmetic above the record arithmetic, and the diff
+  validator regenerates arms from the same shape).</li>
+<li>The build cycle states the byte/record cap derivation in CLI help
+  from this shape (the sibling pattern: a frozen cap constant with
+  its derivation, enforced by the stage and re-derived by the
+  validator), and prints these numbers with derivations, not as
+  bare constants.</li>
+</ul>
+<h3 id="34-token-id-divergence-reported-not-gated">3.4 Token-ID divergence: reported, not gated<a class="headerlink" href="#34-token-id-divergence-reported-not-gated" title="Permanent link">&para;</a></h3>
+<p>Canonical-form's headline population is ID-divergent paired cases
+only (<code>canonicalform.py:399</code>, <code>_pair_block_divergent</code>), because
+NFC/NFD renderings <em>can</em> collapse to identical id sequences, in
+which case the instrument is inapplicable rather than the model
+robust. For negation the situation is inverted: the arms differ in
+instruction <em>text</em> by construction, so their full render id
+sequences will diverge on any ordinary tokenizer, and
+divergence-gating would be vacuous — it would gate on a condition
+that is true by construction and hide the one informative event, a
+same-ids case, which indicates a tokenizer/rendering pathology.
+(The research brief's universal "will diverge on any sane
+tokenizer" is REMOVED: it is an unexecuted universal. The design
+reports divergence and treats same-ids as an anomaly, which covers
+both outcomes without asserting either.)</p>
+<p>Required machinery (canonical-form shape, different gating):</p>
+<ul>
+<li>Per case, per arm, record the full render id sequence digest and
+  length, following the canonical-form stage pattern
+  (<code>experiments.py:9639-9647</code>: <code>ids_identical</code> and <code>id_length_delta</code>
+  computed from the arms' render ids at construction).</li>
+<li>Report, per candidate: <code>n_ids_identical</code> across arm pairs
+  (expected 0), the per-case <code>id_length_delta</code> list in case order
+  for direct-vs-negated (expected positive: the negated instruction
+  is longer), and <code>max_abs_id_delta</code>.</li>
+<li>Headline population = cases completed in all three headline arms,
+  <strong>not</strong> id-divergent. A same-ids case, if one ever occurs, is
+  excluded from the headline population <em>and</em> counted separately
+  as a rendering anomaly, never as a pass or a fail, and a
+  same-ids verdict flip is recorded as a determinism finding,
+  never as negation fragility (payload-round rule).</li>
+<li>Token-count delta is NOT reported as a measured quantity (see
+  F3): the tree has no frozen local tokenizer. Character delta and
+  render-id length delta are the reported quantities.</li>
+</ul>
+<h2 id="4-scorer-pins-and-fail-closed-vocabulary-binding">4. Scorer pins and fail-closed vocabulary (binding)<a class="headerlink" href="#4-scorer-pins-and-fail-closed-vocabulary-binding" title="Permanent link">&para;</a></h2>
+<h3 id="41-headline-scorer">4.1 Headline scorer<a class="headerlink" href="#41-headline-scorer" title="Permanent link">&para;</a></h3>
+<p><code>core.evaluate</code>'s byte-exact verdict (<code>core.py:797</code>:
+<code>exact_match = status == "completed" and answer == case.expected</code>),
+conjoined with boundary presence in the stage cell (the
+canonical-form cell pattern: cell verdict = <code>exact_match and
+boundary_found</code>). No stripping, no parsing, no normalisation is
+added to the headline path. The scorer-lens ladder
+(<code>scorerlens.py:137</code>, <code>RUNGS = (0, 1, 2, 3, 4)</code>) may be reported
+as a sensitivity beside the headline — in particular, a
+negated-arm failure that recovers at R1/R3 (whitespace/fence) is
+a scorer artefact, not a negation discordance — but it never
+rescues a flip into a pass, and the ladder has no label-strip
+operation, so "Answer: first" does not recover against "first"
+at any rung.</p>
+<h3 id="42-decomposition-and-the-frozen-negation_echo-subclass">4.2 Decomposition and the frozen <code>negation_echo</code> subclass<a class="headerlink" href="#42-decomposition-and-the-frozen-negation_echo-subclass" title="Permanent link">&para;</a></h3>
+<p>Every completed cell is decomposed by numform's
+<code>cell_decomposition</code> (<code>numform.py:840-863</code>) into <code>exact_pass</code> /
+<code>wrong_label</code> / <code>non_label</code>, where for compare <code>wrong_label</code> means
+the answer digest equals the digest of the other label and
+<code>non_label</code> means anything else. On top of that, the build
+defines and the validator mirrors exactly one frozen subclass:</p>
+<ul>
+<li><code>negation_echo</code>: a completed cell whose raw answer is, exactly
+  (byte-for-byte, no stripping, no casefolding), one of the
+  negated forms of the <em>other</em> label for that arm — that is, for
+  an arm whose expected label is E with other label O, the answer
+  is <code>"not " + O</code> or <code>"not the " + O</code>. Concretely: expected
+  <code>first</code> → echo answers <code>"not second"</code>, <code>"not the second"</code>;
+  expected <code>second</code> → echo answers <code>"not first"</code>,
+  <code>"not the first"</code>. Any other negated form ("not the second
+  one", "not second.", "NOT second") is <code>non_label</code> (other), not
+  echo — the set is frozen, and enlarging it at build time voids
+  this verdict.</li>
+</ul>
+<p>Reporting rules: per arm, the section prints the <code>exact_pass</code> /
+<code>wrong_label</code> / <code>negation_echo</code> / <code>non_label</code> (other) split. The
+<code>negation_echo</code> share is printed beside every negated-arm rate,
+never pooled into <code>wrong_label</code> and never into a pass. The joint
+rule (§2.4) counts only <code>wrong_label</code>, so echoes cannot fire it;
+a candidate whose negated failures are predominantly echo is
+reported as echo-dominant, not as negation-drop, and the section
+must say so in words, not merely in a table column.</p>
+<ul>
+<li><strong>Boundary decomposition (mandatory):</strong> every discordance is
+  decomposed into exact-only vs boundary-only. A boundary-only
+  discordance (answer text equals expected, boundary missed) is
+  a boundary effect, never a negation effect, and cannot count
+  toward J. The cell already carries <code>boundary_found</code>, so this
+  decomposition costs no new machinery — but it must be printed,
+  not merely available.</li>
+<li><strong>Expected values are the two ASCII labels</strong> <code>first</code> /
+  <code>second</code> (canonical-form SCORER PIN transplant: decomposable
+  characters live in carrier prose only; here there is no carrier
+  prose at all, so the pin is satisfied trivially and the scorer
+  cannot be a form/encoding confound).</li>
+<li><strong>Per-arm attrition</strong> (<code>n_context_exceeded</code>,
+  <code>n_evaluation_failed</code>) is printed beside every paired rate;
+  ungated discordance is printed as a sensitivity wherever any
+  gating applies.</li>
+</ul>
+<h3 id="43-fail-closed-vocabulary-frozen-before-building">4.3 Fail-closed vocabulary (frozen before building)<a class="headerlink" href="#43-fail-closed-vocabulary-frozen-before-building" title="Permanent link">&para;</a></h3>
+<p>Following the sibling pattern (e.g. density's stage details
+<code>("cancelled", "density_record_budget_exceeded",
+"density_screen_failed")</code> at <code>density.py:131-136</code>, and per-record
+details <code>("", "arm_evaluation_failed", "arm_context_exceeded")</code>):</p>
+<ul>
+<li>Stage details exactly: <code>{cancelled,
+  negation_record_budget_exceeded, negation_screen_failed}</code>.
+  <code>negation_screen_failed</code> is bound to one real screen: the
+  pre-generation audit screen over the frozen instruction strings
+  and the generated set — special-token-literal audit over every
+  frozen instruction string for every family (the
+  <code>fixtures.py:471</code> <code>audit_special_token_literals</code> pattern),
+  distinctness re-derivation (<code>a != b</code> for every case), and
+  margin-class validity (only the three emitted classes).
+  Failure of that screen makes the stage unavailable with that
+  detail. (Red-team A's <code>negation_template_screen_failed</code> was
+  considered and not adopted: the screen covers the whole
+  generated set, not the template alone.)</li>
+<li>Per-cell details exactly: <code>{"", arm_context_exceeded,
+  arm_evaluation_failed}</code>.</li>
+<li>Whole-stage failure: any generator failure, renderer failure,
+  serializer exception, or non-UTF-8 payload degrades the whole
+  stage to <code>{"available": False, "detail":
+  "negation_unavailable"}</code> — never to a per-cell verdict. A
+  validator rejection of the record set (including an equal pair)
+  is likewise whole-stage <code>negation_unavailable</code>, not a
+  per-cell drop.</li>
+<li>Model parse failure is scored wrong, never a detail. No new
+  verdict words. In particular: no <code>arm_parse_failed</code>, no
+  per-arm "not applicable", no <code>negation_too_large</code>.</li>
+<li>Section decision labels (<code>negation_drop_observed</code>,
+  <code>below_threshold</code>, <code>insufficient</code>) are section labels only,
+  not cell or stage details, and are defined solely by §2.4.</li>
+</ul>
+<h3 id="44-pre-generation-audit-counts-never-silent-drops">4.4 Pre-generation audit (counts, never silent drops)<a class="headerlink" href="#44-pre-generation-audit-counts-never-silent-drops" title="Permanent link">&para;</a></h3>
+<p>Cases failing the §4.3 audit screen are excluded pre-generation
+with counts (<code>n_audit_excluded</code>, by reason), never silently
+dropped. For the shipped generator the expected audit-excluded
+count is 0 (distinctness is enforced by construction); a nonzero
+count is itself a finding about the generator and must be printed,
+not normalised away. Screened cases are never scored.</p>
+<h2 id="5-report-shape-and-operating-characteristics-printed-not-footnoted">5. Report shape and operating characteristics (printed, not footnoted)<a class="headerlink" href="#5-report-shape-and-operating-characteristics-printed-not-footnoted" title="Permanent link">&para;</a></h2>
+<p>Per candidate, the section prints, in this order:</p>
+<ol>
+<li>Per-arm pass rates (direct / negated / flipped / negated_alt
+   descriptive) with per-arm attrition beside each.</li>
+<li>The decomposition split per arm (§4.2), with the
+   <code>negation_echo</code> share separated on the negated arms.</li>
+<li>D, J, and the decision (§2.4), with J split by presentation
+   order (larger-first / larger-second) and by stratum.</li>
+<li>The rival-pattern readouts: flipped pass rate on D (with the
+   gate-weak qualifier when below 0.5), echo-dominant flag, and
+   order-concentration flag.</li>
+<li><code>id_length_delta</code> list (direct-vs-negated, case order) and
+   <code>max_abs_id_delta</code>; <code>n_ids_identical</code> (expected 0; any nonzero
+   count is a determinism finding, §3.4).</li>
+<li>Boundary-only vs exact-only discordance decomposition.</li>
+<li>The operating-characteristics paragraph, verbatim in substance:</li>
+</ol>
+<blockquote>
+<p>"At D = N, this panel (16 cases) falsifies only negation-drop
+patterns at least as lopsided as J ≥ 5 at D ≥ 8. It does not
+establish invariance. Measured operating characteristics of
+the (8,5) rule: a random labeller (independent 0.5 labels per
+arm) fires ~4% of the time; a competent candidate with no
+negation effect (direct/flipped pass 0.9, negated wrong-label
+rate 0.1) fires 0.7%; power is 84% at a 0.5 drop rate
+(direct/flipped pass 0.9) and 99%+ at 0.75, but only ~21% at a
+0.25 drop rate. Small effects are therefore usually missed;
+a <code>below_threshold</code> on this panel is weak evidence."</p>
+</blockquote>
+<p>Records carry digests only (per-arm content digests, token
+counts, <code>ids_identical</code>, <code>id_length_delta</code>, cells, details —
+canonical-form record shape). Reports render counts/rates only,
+no payload/question/answer text, every payload-derived string
+through <code>_escape_text</code> (<code>reporting.py:28</code>), never bare
+<code>escape()</code>.</p>
+<p><strong>No winner headline, no pooled discordance.</strong> Discordance is
+never pooled across candidates/templates: per-candidate contrasts
+only. The per-case joint classification is the primary readout;
+per-arm rates are descriptive context beside it.</p>
+<h2 id="6-scope-justification-red-team-a-m3-required-section">6. Scope justification (red-team A M3, required section)<a class="headerlink" href="#6-scope-justification-red-team-a-m3-required-section" title="Permanent link">&para;</a></h2>
+<p>Surface-noise deliberately excludes semantic instruction variation:
+its <code>not_measured</code> list includes "semantic paraphrase of
+instructions" (<code>surfacenoise.py</code>, listed twice in the module's
+scope declarations), and its perturbation axis is surface-only.
+This probe re-enters that scope for exactly one variation, on
+three grounds that paraphrase generally does not meet:</p>
+<ol>
+<li><strong>Derivable ground truth.</strong> The negated arm's expected answer
+   is derivable by construction from the pair (pair-closed
+   complement, §2.3), without labelling, judging, or a gold set.
+   General paraphrase has no such derivation: a paraphrase's
+   expected answer is "the same as the original" by stipulation,
+   which is exactly the payload round's F2 defect (a false
+   "same content" claim).</li>
+<li><strong>One frozen treatment, not a family.</strong> The variation is one
+   frozen string (§2.2), not "paraphrase" as an open class. Its
+   scope is the definite-description mechanism, stated in the
+   claim (§2.4), not "instruction meaning" in general.</li>
+<li><strong>A sibling precedent for meaning-bearing instruction variation
+   with controls.</strong> Leading varies a stated claim and hierarchy
+   varies instruction privilege, both meaning-bearing, both with
+   joint per-case disciplines — the lab's scope exclusion is
+   specific to surface-noise's axis, not a lab-wide ban on
+   semantic treatments. What surface-noise excludes is <em>uncontrolled</em>
+   semantic variation; this probe's variation is controlled by
+   construction (§2.3, §3, §4).</li>
+</ol>
+<p>If the build cycle widens the variation beyond the frozen string
+(any second negated phrasing as a decision input, any paraphrase
+arm, any imperative arm), it exits this justification and voids
+this verdict.</p>
+<h2 id="7-adjudication-evidence-coordinators-own-execution">7. Adjudication evidence (coordinator's own execution)<a class="headerlink" href="#7-adjudication-evidence-coordinators-own-execution" title="Permanent link">&para;</a></h2>
+<p>All snippets read-only; no suite was run.</p>
+<ul>
+<li><strong>Seed-0 compare population.</strong> <code>build_fixtures(0)</code> gives 16
+  plain compare cases; the first two match the research brief's
+  worked examples exactly (<code>nf-compare-00</code>: "…larger?…
+  \n100\n47", expected <code>first</code>; <code>nf-compare-01</code>: "\n199\n999",
+  expected <code>second</code>). <code>larger_first</code> alternation and the
+  <code>a != b</code> assert are as cited (<code>numform.py:550</code>, <code>572-576</code>).</li>
+<li><strong>Echo decomposition.</strong> Constructed records through
+  <code>numform.cell_decomposition</code> (<code>numform.py:840-863</code>): answer
+  <code>"not second"</code> against expected <code>"first"</code> → <code>non_label</code>;
+  answer <code>"second"</code> → <code>wrong_label</code>. The echo fatal is therefore
+  real for <em>rates</em> (a perfect echo-comprehender scores 0/16 on
+  the negated arm) and neutralised for the <em>boolean</em> (echoes
+  cannot satisfy the joint rule's <code>wrong_label</code> condition) —
+  exactly the verifier's §6.3 split, reproduced here.</li>
+<li><strong>Larger-default.</strong> By construction (not simulation): a
+  larger-default candidate passes direct (expected = larger) and
+  negated (expected = larger) on every case and fails flipped
+  (expected = smaller) on every case, so J = 0 for it. It is an
+  undiagnosed rival pattern, visible only in the flipped pass
+  rate — hence the gate-weak qualifier in §2.4/§5. The
+  always-<code>first</code> simulation (red-team A E5) and the truth table
+  (red-team B §F1, reproduced row-for-row by the verifier) are
+  accepted on the verifier's reproduction.</li>
+<li><strong>Operating characteristics (§5 table).</strong> Coordinator Monte
+  Carlo, independent labels per arm, 40,000 trials per cell,
+  16 cases: (6,2) random-labeller fire rate 0.581 (reproducing
+  the verifier's 57.6% within seed noise); (8,5) random 0.036–0.039
+  across seeds; no-effect competent (0.9, 0.9, 0.1) 0.0073;
+  partial drop (0.9, 0.9, 0.5) 0.84; moderate drop (0.9, 0.9,
+  0.75) 0.99+; small effect (0.9, 0.9, 0.25) 0.21. The (8,5)
+  rule is the smallest (Dmin, K) pair in the explored grid
+  with random fire below 5% and partial-drop power above 80%;
+  (10,5) fires 0.023 with power 0.85 and is an acceptable
+  stricter variant, but (8,5) is frozen here so the build does
+  not re-derive it. Method note: "random labeller" is a
+  noise-floor null, not a model of a real checkpoint; the
+  no-effect competent row is the realistic false-fire row.
+  Both are printed in §5.</li>
+<li><strong>Tree settlements verified by reading (line numbers as
+  observed in this round):</strong> <code>core.py:797</code> exact-match line;
+  <code>numform.py:550</code> distinctness assert; <code>numform.py:572-576</code>
+  larger-first construction; <code>numform.py:840-863</code>
+  decomposition; experiments numform stage docstring ("No
+  selection, no winner, no flip against the primary run");
+  <code>canonicalform.py</code> <code>winner_headline</code> as a total function of
+  <em>two</em> arms; <code>density.py:131-136</code> stage/per-record detail
+  pattern; <code>surfacenoise.py</code> <code>not_measured</code> including
+  "semantic paraphrase of instructions"; <code>scorerlens.py</code>
+  "label_prefix": "no label-strip operation exists";
+  NUMFORM_DESIGN's per-form selection exclusion ("over 16
+  values per task an all-pass selection readout carries almost
+  no information per unit of validator surface").</li>
+<li><strong>Verifier reproductions accepted:</strong> red-team B's Monte Carlo
+  (17,215/2,763/22) bit-for-bit, its truth table row-for-row,
+  red-team A's scorer tables exactly (verifier §4). The
+  coordinator did not re-run those reproductions; they are
+  credited to the verifier, not claimed as coordinator
+  executions.</li>
+</ul>
+<h2 id="8-removals-applied-verifier-72-none-of-these-enter-any-build-doc">8. Removals applied (verifier §7.2 — none of these enter any build doc)<a class="headerlink" href="#8-removals-applied-verifier-72-none-of-these-enter-any-build-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Research §1 "iff" biconditional and the phrase
+  "negation-invariance is falsified" → replaced by
+  one-directional "negation-drop discordance observed" (§2.4).</li>
+<li>Research §3.4 operating-characteristics story in full →
+  replaced by §5/§7.3 (backwards: the 6/2 rule fires on noise).</li>
+<li>Borrowed 6/2 floors for every rule in the panel → replaced by
+  the derived (8,5) rule.</li>
+<li>The winner readout in any form (secondary or headline) →
+  dropped (§1.1 amendment 3).</li>
+<li>Research R7 word counts 11/9/9 → correct counts are
+  question-only 9/7/7, full 17/15/15 (verifier §7.2); no word
+  counts are load-bearing in this doc, and the §3.6 "3-word
+  instruction delta" implication is removed (character deltas
+  are reported instead, §1 F3).</li>
+<li>The "Negation Neglect survey" citation and Zhou §4
+  compositional pointer → REMOVED (unresolved).</li>
+<li>Rezaei &amp; Blanco as a load-bearing source → REMOVED (real
+  paper, never cited in the body).</li>
+<li>Kassner &amp; Schütze Table 2 digits (ρ &gt; 85%, 20.1%, 54.2%,
+  31.3%, p &lt; 0.01) → UNVERIFIED pending primary re-resolution;
+  not declared false, not used. Kassner is not load-bearing
+  in this doc.</li>
+<li>Vrabcová §§2–3 synthesis as evidence → REMOVED (abstract only
+  is used, §9).</li>
+<li>Research's "will diverge on any sane tokenizer" universal →
+  REMOVED (replaced by report-and-anomaly, §3.4).</li>
+<li>Any "negation sensitivity" / "negation-blind" / "negation
+  understanding" causal wording for a pair-only or pooled readout
+  → replaced by the §2.4 language.</li>
+<li>The payload "F1–F5" count → the payload round has F1–F6.</li>
+<li>Red-team A M1's "exactly at the cap" gloss → REMOVED (budget
+  arithmetic follows from the frozen record shape, §3.3).</li>
+<li>Red-team B's bare-phrasing freeze as the default → the
+  article form is adopted (§2.2).</li>
+<li>Red-team A <code>negation_template_screen_failed</code> → considered,
+  not adopted (§4.3).</li>
+<li>Wave-10 Elkins &amp; Chun figures (77%/100% under negation) →
+  NOT carried into this doc (not re-verified in this round).</li>
+<li>Incorrect line ranges corrected, not carried forward (verifier
+  §2.2; substance survives in each case).</li>
+</ul>
+<h2 id="9-sources-the-build-may-safely-cite">9. Sources the build may safely cite<a class="headerlink" href="#9-sources-the-build-may-safely-cite" title="Permanent link">&para;</a></h2>
+<p>Only verifier-§3.1-confirmed figures, plus the combination framing
+scoped to fetched sources. No "first" is claimed anywhere in this
+doc. The contribution is the combination stated in §2–§5, never
+priority.</p>
+<ul>
+<li>Truong et al., arXiv:2306.08189, §3 / Table 5 (via verifier
+  §3.1): negation NLI benchmarks below random for GPT-J-6B
+  zero-shot (e.g. SNLI-neg 0.316, MNLI-neg 0.275, RTE-neg 0.211,
+  NaN-NLI 0.298), MoNLI at chance (0.500, not below random);
+  InstructGPT improves classification (RTE-neg 0.767, NaN-NLI
+  0.647) with MoNLI at 0.470; Finding 4's warning that the
+  InstructGPT gain could reflect similar patterns in training
+  data. Fencing: curated datasets, not generated pairs; no
+  template crossing, no selection rule, no flipped control.</li>
+<li>Ravichander et al. (CondaQA), arXiv:2211.00295, abstract and
+  results section (verifier-corrected pair): UnifiedQA-v2-3B
+  accuracy 73.26% vs human 91.94%; consistency 42.18% vs human
+  81.58%; 14,182 pairs, 200+ negation cues. Fencing:
+  human-labelled Wikipedia passages with open answers, not
+  generated pairs; consistency across passage edits, not
+  instruction phrasings for one fixed task.</li>
+<li>Vrabcová et al., arXiv:2503.22395v2, abstract only: paired
+  entailment datasets differing in negation; size may improve
+  negation handling; accuracy and robustness are
+  language-dependent. Fencing: NLI entailment, not a generated
+  binary-choice task; §§2–3 synthesis not used as evidence.</li>
+<li>Zhou et al., arXiv:2605.03052v1, §3.1 / Table 1 / Table 2 kept
+  separate (verifier §3.1): 162 unique questions × 4 templates
+  = 648 entries; positive accuracy 90.7–95.5% vs negative
+  accuracy 45.4–58.3% across six open-weight models, sensitivity
+  95.1–98.0% (§4.1, Table 1); late-layer attention ablation
+  raising negative accuracy (e.g. Llama-3.1 50.5% → 67.8%,
+  §4.2, Table 2). Fencing: logit-difference accuracy on
+  single-token answers, not greedy byte-exact generation under
+  a chat template with a boundary; no selection rule; no
+  flipped-criterion control; its mechanistic conclusion is not
+  testable through the lab's Backend interface and must not be
+  claimed by this probe.</li>
+<li>Literature direction (not digits, except where listed above):
+  negation failure is well-documented across cloze, NLI, and
+  contrastive-consistency paradigms, and no fetched source
+  measures it on this lab's template-family × greedy × boundary
+  instrument — the combination framing, scoped to fetched
+  sources. Anything beyond this paragraph needs fresh primary
+  resolution before it enters a build doc.</li>
+</ul>
+<h2 id="10-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc">10. What a build cycle must NOT do on the basis of this doc<a class="headerlink" href="#10-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not build the research brief's §1 rule (6/2, "iff"), the
+  loose "negation sensitivity" sketch, or any winner headline.</li>
+<li>Do not add a decision-input arm (negated-flipped, imperative,
+  double negation, paraphrase) without fresh review.</li>
+<li>Do not enlarge the echo set, re-derive the (8,5) threshold, or
+  pool discordance across candidates/templates.</li>
+<li>Do not write a causal "negation changes verdicts" headline, a
+  prose-control framing, or any new verdict word.</li>
+<li>Do not transfer placement/canonical-form or field-order floors
+  to this panel; its floors are §2.4 and §5 only.</li>
+<li>Do not ship a <code>run --negation</code> flag until the naming audit
+  against USAGE passes (precedent: the payload round's reserved
+  "payload" sense; a grep of USAGE finds no existing "negation"
+  use, but the audit itself is a build-cycle check, not a
+  conclusion of this doc).</li>
+<li>Building, if it happens, is a separate cycle, on this doc —
+  and only on this doc's frozen items. A build that deviates
+  from any frozen item needs fresh design review first.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

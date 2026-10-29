@@ -29,6 +29,7 @@ class TestCliModuleEntryPoint(unittest.TestCase):
     """`python -m model_protocol_lab.cli --help` prints usage, exit 0."""
 
     def test_module_help_exits_zero_with_usage(self) -> None:
+        """Test module help exits zero with usage."""
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab.cli", "--help"],
             capture_output=True,
@@ -42,6 +43,7 @@ class TestCliModuleEntryPoint(unittest.TestCase):
         self.assertIn("catalog", proc.stdout)
 
     def test_package_main_help_still_works(self) -> None:
+        """Test package main help still works."""
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", "--help"],
             capture_output=True,
@@ -58,6 +60,7 @@ class TestDocsCommandShorthand(unittest.TestCase):
     """User docs reference the real console script name, never `mpl `."""
 
     def test_no_mpl_shorthand_in_user_docs(self) -> None:
+        """Test no mpl shorthand in user docs."""
         offenders: list[str] = []
         for path in sorted((REPO_ROOT / "docs").glob("*.md")):
             if path.name == "RESEARCH_LOG.md":

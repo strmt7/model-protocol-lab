@@ -10,6 +10,7 @@ Regenerating must be byte-identical; tests/test_sample_report.py enforces it.
 
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -20,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from model_protocol_lab.catalog import candidates
 
 # skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
-from model_protocol_lab.core import Generation
+from model_protocol_lab.core import Generation, Message
 
 # skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.datasets import load_dataset
@@ -765,9 +766,13 @@ def build_sample_report(output_dir: Path) -> dict[str, Any]:
 
         _probes: list[dict[str, Any]] = []
         for _fmt in candidates("llama3", mutate=True):
+
+            def _adapt(messages: Sequence[Message], _render=_fmt.render) -> str:
+                return _render(tuple(messages))
+
             for _case in split.search:
                 _pf = probe_format(
-                    lambda messages, _render=_fmt.render: _render(tuple(messages)),
+                    _adapt,
                     _demo_marker_encode,
                     _SPEC_IDS,
                     _case.messages,

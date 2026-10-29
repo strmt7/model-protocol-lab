@@ -95,11 +95,13 @@ class TruncateExactPins(unittest.TestCase):
     """Pin the operator's EXACT output on adversarial inputs."""
 
     def test_ascii_pins(self) -> None:
+        """Test ascii pins."""
         self.assertEqual(truncate_text_tail("hello", 1), "hell")
         self.assertEqual(truncate_text_tail("hello", 4), "h")
         self.assertEqual(truncate_text_tail("ab", 1), "a")
 
     def test_multibyte_boundary_pins(self) -> None:
+        """Test multibyte boundary pins."""
         # "héllo": h(1) é(2) l(1) l(1) o(1) = 6 bytes.
         self.assertIsNone(truncate_text_tail("héllo", 4))  # splits é
         self.assertEqual(truncate_text_tail("héllo", 5), "h")  # removes éllo
@@ -109,6 +111,7 @@ class TruncateExactPins(unittest.TestCase):
         self.assertEqual(truncate_text_tail("xhé", 3), "x")
 
     def test_combining_mark_pins(self) -> None:
+        """Test combining mark pins."""
         # "e\u0301" is e(1) + COMBINING ACUTE ACCENT(2) = 3 bytes.
         text = "é"
         self.assertEqual(len(text.encode("utf-8")), 3)
@@ -116,6 +119,7 @@ class TruncateExactPins(unittest.TestCase):
         self.assertEqual(truncate_text_tail(text, 2), "e")
 
     def test_emoji_pins(self) -> None:
+        """Test emoji pins."""
         # "a😀b": a(1) 😀(4) b(1) = 6 bytes.
         self.assertEqual(truncate_text_tail("a😀b", 1), "a😀")
         self.assertIsNone(truncate_text_tail("a😀b", 2))  # splits 😀
@@ -125,6 +129,7 @@ class TruncateExactPins(unittest.TestCase):
         self.assertIsNone(truncate_text_tail("😀", 3))
 
     def test_length_cap_pins(self) -> None:
+        """Test length cap pins."""
         # drop == byte length, or larger, is out of contract: ValueError.
         with self.assertRaises(ValueError):
             truncate_text_tail("hello", 5)
@@ -140,6 +145,7 @@ class TruncateExactPins(unittest.TestCase):
         self.assertEqual(truncate_text_tail("abc", 2), "a")
 
     def test_type_pins(self) -> None:
+        """Test type pins."""
         for bad_text in (b"hi", None, 123, ["h"]):
             with self.assertRaises(ValueError, msg=f"text={bad_text!r}"):
                 truncate_text_tail(bad_text, 1)  # type: ignore[arg-type]
@@ -149,6 +155,7 @@ class TruncateExactPins(unittest.TestCase):
                 truncate_text_tail("hello", bad_drop)  # type: ignore[arg-type]
 
     def test_already_perturbed_pin(self) -> None:
+        """Test already perturbed pin."""
         # Perturbing an already-perturbed text just drops further bytes.
         once = truncate_text_tail("hello world", 3)
         self.assertEqual(once, "hello wo")
@@ -156,6 +163,7 @@ class TruncateExactPins(unittest.TestCase):
         self.assertEqual(twice, "hello")
 
     def test_very_long_pins(self) -> None:
+        """Test very long pins."""
         big = "a" * 100_000
         out = truncate_text_tail(big, 8)
         self.assertEqual(out, "a" * 99_992)
@@ -171,6 +179,7 @@ class TruncateInvariants(unittest.TestCase):
     """Verify the operator's documented invariants and algebra."""
 
     def test_byte_length_invariant(self) -> None:
+        """Test byte length invariant."""
         cases = ["hello", "héllo", "a😀b", "日本語", "éx", "a" * 50]
         for text in cases:
             raw = text.encode("utf-8")
@@ -184,6 +193,7 @@ class TruncateInvariants(unittest.TestCase):
                     )
 
     def test_strict_whole_character_prefix(self) -> None:
+        """Test strict whole character prefix."""
         # Content invariance: the kept text is always a strict prefix of the
         # original, and the removed tail encodes to exactly drop_bytes.
         cases = ["hello world", "héllo wörld 😀", "日本語テスト", "a" * 30 + "é"]
@@ -197,6 +207,7 @@ class TruncateInvariants(unittest.TestCase):
                     self.assertEqual(tail.encode("utf-8"), raw[-drop:])
 
     def test_none_iff_codepoint_split(self) -> None:
+        """Test none iff codepoint split."""
         # The None contract, cross-checked by the independent oracle on a
         # sweep over every byte position of multibyte strings.
         for text in ["héllo", "a😀b", "日本語", "é", "😀😀", "x́ŷz̃"]:
@@ -211,6 +222,7 @@ class TruncateInvariants(unittest.TestCase):
                     self.assertIsNone(out, f"{text!r} drop={drop}")
 
     def test_never_fabricates_replacement_chars(self) -> None:
+        """Test never fabricates replacement chars."""
         # Docstring: "rather than fabricating replacement characters".
         for text in ["héllo", "a😀b", "日本語", "é", "\U0001f600\U0001f601"]:
             raw = text.encode("utf-8")
@@ -222,6 +234,7 @@ class TruncateInvariants(unittest.TestCase):
                     out.encode("utf-8")
 
     def test_deterministic(self) -> None:
+        """Test deterministic."""
         cases = ["hello", "héllo", "a😀b", "", "é"]
         for text in cases:
             for drop in range(1, 9):
@@ -236,6 +249,7 @@ class TruncateInvariants(unittest.TestCase):
                 self.assertEqual(first, second, f"{text!r} drop={drop}")
 
     def test_not_idempotent(self) -> None:
+        """Test not idempotent."""
         # Documented non-property: applying the operator twice drops 2d
         # bytes, it does not converge. t(t(x,d),d) == t(x,2d) != t(x,d).
         self.assertEqual(
@@ -248,6 +262,7 @@ class TruncateInvariants(unittest.TestCase):
         )
 
     def test_depths_do_not_compose(self) -> None:
+        """Test depths do not compose."""
         # Composition can be UNDEFINED where the summed single drop is
         # defined: t("xhé",1) is None, yet t("xhé",3) == "x". The sweep must
         # therefore apply each depth fresh -- never chained (pinned
@@ -261,6 +276,7 @@ class TruncateInvariants(unittest.TestCase):
         )
 
     def test_lone_surrogate_edge_documented(self) -> None:
+        """Test lone surrogate edge documented."""
         # Edge OUTSIDE the documented contract: lone surrogates are not
         # UTF-8-encodable, so strict encoding raises before any truncation
         # logic runs. Documented here as an observed edge, NOT a bug: the
@@ -274,6 +290,7 @@ class TruncateFuzz(unittest.TestCase):
     """Seeded fuzz: random prompts x all depths vs the independent oracle."""
 
     def test_fuzz_against_oracle(self) -> None:
+        """Test fuzz against oracle."""
         rng = random.Random(0xC0FFEE)  # noqa: S311 -- deterministic test seed
         alphabet = (
             "abcdefghijklmnopqrstuvwxyz \n\t"
@@ -334,18 +351,21 @@ class _RecordingInner:
         self.encode_calls = 0
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         self.encode_calls += 1
         self.encode_inputs.append(text)
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token) for token in token_ids)
 
     @staticmethod
     def generate(
         input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> core.Generation:
+        """Generate."""
         return core.Generation(token_ids=(ord("~"),) * max_new_tokens, reason="limit")
 
 
@@ -353,12 +373,14 @@ class TruncatedBackendContract(unittest.TestCase):
     """Pin TruncatedPromptBackend's contract with its inner backend."""
 
     def test_encode_applies_truncation(self) -> None:
+        """Test encode applies truncation."""
         inner = _RecordingInner()
         backend = TruncatedPromptBackend(inner, 2)
         self.assertEqual(backend.encode("hello"), tuple(ord(c) for c in "hel"))
         self.assertEqual(inner.encode_inputs, ["hel"])
 
     def test_encode_raises_fixed_code_on_split(self) -> None:
+        """Test encode raises fixed code on split."""
         inner = _RecordingInner()
         backend = TruncatedPromptBackend(inner, 1)
         with self.assertRaises(ValueError) as ctx:
@@ -368,6 +390,7 @@ class TruncatedBackendContract(unittest.TestCase):
         self.assertEqual(inner.encode_calls, 0)
 
     def test_encode_propagates_length_violation(self) -> None:
+        """Test encode propagates length violation."""
         # A prompt shorter than drop_bytes is "cannot be applied": the
         # ValueError propagates (evaluate records encode_failed; the sweep
         # records the failed decision). It must NOT be masked as None.
@@ -378,6 +401,7 @@ class TruncatedBackendContract(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "drop_bytes must lie within the text's byte length")
 
     def test_decode_and_generate_pass_through(self) -> None:
+        """Test decode and generate pass through."""
         inner = _RecordingInner()
         backend = TruncatedPromptBackend(inner, 3)
         ids = (65, 66)
@@ -390,30 +414,37 @@ class TruncatedBackendContract(unittest.TestCase):
         self.assertEqual(gen_wrapped, gen_inner)
 
     def test_fingerprint_and_stop_bytes(self) -> None:
+        """Test fingerprint and stop bytes."""
         inner = _RecordingInner()
         backend = TruncatedPromptBackend(inner, 4)
         self.assertEqual(backend.fingerprint, "cycle56-recording-inner+prompt-trunc-4b")
         self.assertIs(backend.hf_stop_token_bytes, inner.hf_stop_token_bytes)
 
     def test_constructor_validation(self) -> None:
+        """Test constructor validation."""
         inner = _RecordingInner()
         for bad in (0, -1, -100, "1", 1.0, None, True):
             with self.assertRaises(ValueError, msg=f"drop_bytes={bad!r}"):
                 TruncatedPromptBackend(inner, bad)  # type: ignore[arg-type]
 
         class NoFingerprint:
+            """No fingerprint."""
+
             fingerprint = 123
 
         with self.assertRaises(ValueError):
             TruncatedPromptBackend(NoFingerprint(), 1)
 
         class MissingFingerprint:
+            """Missing fingerprint."""
+
             pass
 
         with self.assertRaises(ValueError):
             TruncatedPromptBackend(MissingFingerprint(), 1)
 
     def test_construction_has_no_side_effects(self) -> None:
+        """Test construction has no side effects."""
         inner = _RecordingInner()
         TruncatedPromptBackend(inner, 2)
         self.assertEqual(inner.encode_calls, 0)
@@ -440,16 +471,19 @@ class _ScriptedBackend:
         self.encode_inputs: list[str] = []
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         self.encode_inputs.append(text)
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token) for token in token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> core.Generation:
+        """Generate."""
         prompt = "".join(chr(token) for token in input_ids)
         answer, marker = self._script[prompt]
         body = tuple(ord(c) for c in answer + marker)
@@ -459,6 +493,7 @@ class _ScriptedBackend:
 
 
 def _make_format() -> core.Format:
+    """Make format."""
     # Rendered prompt ends with "A:éx" (12 bytes: ..."A:" + é(2) + "x"):
     #   drop 1 -> "Q:what?A:é"  (valid)
     #   drop 2 -> splits é      (None -> encode raises)
@@ -468,6 +503,7 @@ def _make_format() -> core.Format:
 
 
 def _make_split() -> core.Split:
+    """Make split."""
     search = (
         core.Fixture(
             id="s1",
@@ -519,6 +555,7 @@ class SweepAggregation(unittest.TestCase):
 
     @staticmethod
     def _run(script: dict[str, tuple[str, str]], max_drop: int):
+        """Run."""
         backend = _ScriptedBackend(script)
         result = prompt_sensitivity_sweep(
             backend,
@@ -532,6 +569,7 @@ class SweepAggregation(unittest.TestCase):
         return backend, result
 
     def test_flip_scenario_aggregation(self) -> None:
+        """Test flip scenario aggregation."""
         _, result = self._run(_flip_script(), 3)
         self.assertEqual(result["native_decision"], "compatible_on_fixture_set")
         self.assertEqual(result["native_winner"], "F1")
@@ -554,6 +592,7 @@ class SweepAggregation(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1, 2, 3])
 
     def test_stable_scenario_no_flips(self) -> None:
+        """Test stable scenario no flips."""
         # Winner same AND decision same -> winner_changed False, flips_at [].
         _, result = self._run(_stable_script(), 1)
         self.assertEqual(result["native_decision"], "compatible_on_fixture_set")
@@ -567,6 +606,7 @@ class SweepAggregation(unittest.TestCase):
         self.assertEqual(result["flips_at"], [])
 
     def test_depths_are_independent_not_chained(self) -> None:
+        """Test depths are independent not chained."""
         # Each depth truncates the NATIVE prompt fresh. If depths chained
         # (depth d applied to depth d-1's output), depth 2 would truncate
         # "Q:what?A:é" by 1 -> "Q:what?A:" (valid, no split) and the decision
@@ -589,11 +629,13 @@ class SweepAggregation(unittest.TestCase):
         )
 
     def test_sweep_is_deterministic(self) -> None:
+        """Test sweep is deterministic."""
         _, first = self._run(_flip_script(), 3)
         _, second = self._run(_flip_script(), 3)
         self.assertEqual(first, second)
 
     def test_max_drop_bytes_validation(self) -> None:
+        """Test max drop bytes validation."""
         backend = _ScriptedBackend(_flip_script())
         for bad in (0, -1, 9, 100, "3", 2.5, None, True):
             with self.assertRaises(ValueError, msg=f"max_drop_bytes={bad!r}"):
@@ -608,6 +650,7 @@ class SweepAggregation(unittest.TestCase):
                 )
 
     def test_all_depths_failed_still_reports(self) -> None:
+        """Test all depths failed still reports."""
         # Every depth splits a codepoint: all decisions "failed", winners
         # None, flips recorded -- nothing is silently skipped. A trailing
         # 4-byte emoji makes drops 1..3 all split it.

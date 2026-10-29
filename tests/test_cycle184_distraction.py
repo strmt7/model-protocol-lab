@@ -62,6 +62,7 @@ class _WordBackend:
         self.cancel_event: Event | None = None
 
     def encode(self, text):
+        """Encode."""
         self.encode_calls += 1
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
@@ -74,9 +75,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def _cell_of(self, text):
+        """Cell of."""
         marker = None
         for candidate in self.expected_by_marker:
             if candidate in text:
@@ -103,6 +106,7 @@ class _WordBackend:
         return marker, kind, placement
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         text = self.decode(list(input_ids))
         marker, kind, placement = self._cell_of(text)
@@ -139,6 +143,7 @@ class _CharBackend:
         self.generate_calls = 0
 
     def encode(self, text):
+        """Encode."""
         if self.merge:
             merged = 0x110000 - 1
             out = []
@@ -154,6 +159,7 @@ class _CharBackend:
         return tuple(ord(c) for c in text)
 
     def decode(self, ids):
+        """Decode."""
         chars = []
         for i in ids:
             if self.merge and int(i) == 0x110000 - 1:
@@ -163,6 +169,7 @@ class _CharBackend:
         return "".join(chars)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         text = self.decode(list(input_ids))
         marker = None
@@ -234,6 +241,7 @@ EXPECTED_BY_MARKER = {"marknum": "7", "markcopy": "BLUE", "markvac": "x"}
 
 
 def _obs(backend, fmt, case, answer, ok=True):
+    """Obs."""
     return {
         "candidate": fmt.name,
         "fixture": case.id,
@@ -251,6 +259,7 @@ def _obs(backend, fmt, case, answer, ok=True):
 
 
 def _entries(backend, formats=FORMATS, cases=CASES, answers=None):
+    """Entries."""
     answers = answers or {}
     entries = []
     for fmt in formats:
@@ -274,6 +283,7 @@ def _entries(backend, formats=FORMATS, cases=CASES, answers=None):
 
 
 def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
+    """Run stage."""
     kwargs.setdefault("boundary", tuple(backend.encode(BOUNDARY_WORD)))
     kwargs.setdefault("max_new_tokens", 8)
     kwargs.setdefault("max_context", 8192)
@@ -287,11 +297,15 @@ def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
 
 
 def _payload(backend, stage, decision="compatible_on_fixture_set", winner="dst-a"):
+    """Payload."""
     return distraction_analysis(stage, decision, winner, tuple(fmt.name for fmt in FORMATS))
 
 
 class TestProtocolAndPlant(unittest.TestCase):
+    """Test protocol and plant."""
+
     def test_conditions_and_budgets(self):
+        """Test conditions and budgets."""
         self.assertEqual(len(distraction.CONDITIONS), 10)
         self.assertEqual(distraction.GENERATION_BUDGET, 24000)
         self.assertEqual(distraction.MAX_GROUND_RECORDS, 2400)
@@ -301,6 +315,7 @@ class TestProtocolAndPlant(unittest.TestCase):
         self.assertIn(("neutral", 1024), kinds)
 
     def test_frozen_texts_pinned(self):
+        """Test frozen texts pinned."""
         self.assertEqual(
             distraction.NEUTRAL_CORPUS_SHA256,
             "5969b0123fb992cb4457d75e128c58afffa219832e689b09c08a4ea271bb2159",
@@ -315,12 +330,14 @@ class TestProtocolAndPlant(unittest.TestCase):
             self.assertEqual(template.count("{planted}"), 1)
 
     def test_fingerprint_pinned(self):
+        """Test fingerprint pinned."""
         self.assertEqual(
             distraction.protocol_fingerprint(["f1"], "sha256:scripted"),
             "55ee4395a37ef9bbc2a1b838cce9bfbc1f2b944e69180c430d832d9c09233c4d",
         )
 
     def test_plant_battery_exact(self):
+        """Test plant battery exact."""
         battery = {
             "7": "8",
             "9": "10",
@@ -345,6 +362,7 @@ class TestProtocolAndPlant(unittest.TestCase):
                 self.assertEqual(distraction.planted_answer(expected), planted)
 
     def test_plant_undefined_shapes(self):
+        """Test plant undefined shapes."""
         for expected in (
             "",
             " ",
@@ -371,6 +389,7 @@ class TestProtocolAndPlant(unittest.TestCase):
                 self.assertIsNone(distraction.planted_answer(expected))
 
     def test_plant_deterministic_and_never_identity(self):
+        """Test plant deterministic and never identity."""
         import decimal
 
         samples = ["7", "42.0", "9" * 40, "1,000", ".5", "-42.0"]
@@ -386,7 +405,10 @@ class TestProtocolAndPlant(unittest.TestCase):
 
 
 class TestPureHelpers(unittest.TestCase):
+    """Test pure helpers."""
+
     def test_span_text_prefix_property(self):
+        """Test span text prefix property."""
         full = "".join(distraction.NEUTRAL_CORPUS)
         for whole, suffix in ((0, 0), (0, 5), (3, 0), (3, 17), (70, 4)):
             span = distraction.span_text(distraction.NEUTRAL_CORPUS, whole, suffix)
@@ -397,6 +419,7 @@ class TestPureHelpers(unittest.TestCase):
             distraction.span_text(distraction.NEUTRAL_CORPUS, 0, 10_000)
 
     def test_span_candidates_deterministic_and_ordered(self):
+        """Test span candidates deterministic and ordered."""
         first = distraction.span_candidates(
             distraction.NEUTRAL_CORPUS, target=64, chars_per_token=4.0
         )
@@ -408,12 +431,14 @@ class TestPureHelpers(unittest.TestCase):
         self.assertEqual(estimates, sorted(estimates))
 
     def test_suffix_cuts_plant(self):
+        """Test suffix cuts plant."""
         self.assertTrue(distraction.suffix_cuts_plant("...listed 4", "2 sacks", "42"))
         self.assertFalse(distraction.suffix_cuts_plant("...listed 42", " sacks", "42"))
         self.assertFalse(distraction.suffix_cuts_plant("...listed ", "42 sacks", "42"))
         self.assertFalse(distraction.suffix_cuts_plant("anything", "", "42"))
 
     def test_span_screened(self):
+        """Test span screened."""
         self.assertTrue(distraction.span_screened("the rain fell", "rain", []))
         self.assertTrue(distraction.span_screened("anything", "x", ["<END>"]) is False)
         self.assertTrue(distraction.span_screened("has <END> in it", "x", ["<END>"]))
@@ -421,6 +446,7 @@ class TestPureHelpers(unittest.TestCase):
         self.assertFalse(distraction.span_screened("plain prose", "  ", []))
 
     def test_build_cell_fixture(self):
+        """Test build cell fixture."""
         before = distraction.build_cell_fixture(CASE_NUM, "FILLER ", "before")
         after = distraction.build_cell_fixture(CASE_NUM, "FILLER ", "after")
         self.assertEqual(before.messages[-1].content, "FILLER \nmarknum what is six plus one")
@@ -431,6 +457,7 @@ class TestPureHelpers(unittest.TestCase):
             distraction.build_cell_fixture(CASE_NUM, "x", "sideways")
 
     def test_nearmiss_sentences(self):
+        """Test nearmiss sentences."""
         sentences = distraction.nearmiss_sentences("8")
         self.assertEqual(len(sentences), distraction.NEARMISS_SEQUENCE_LENGTH)
         self.assertIn("recorded 8 crates", sentences[0])
@@ -449,12 +476,16 @@ RULES = {
 
 
 class TestStageWordBackend(unittest.TestCase):
+    """Test stage word backend."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.stage = _run_stage(self.backend)
         self.assertTrue(self.stage["available"], self.stage["detail"])
 
     def test_zero_native_generations(self):
+        """Test zero native generations."""
         # Per candidate: fx-num has 8 evaluable cells (1024 is
         # unmatchable under a word tokenizer — the corpus is 893
         # words), fx-copy has 4 (its near-miss cells are
@@ -463,6 +494,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(self.backend.generate_calls, 2 * (8 + 4))
 
     def test_native_cells_reused_bit_for_bit(self):
+        """Test native cells reused bit for bit."""
         for fmt in FORMATS:
             record = self.stage["candidates"][fmt.name]["records"][0]
             native = record["native"]
@@ -474,12 +506,14 @@ class TestStageWordBackend(unittest.TestCase):
             )
 
     def test_unmatchable_1024_cells(self):
+        """Test unmatchable 1024 cells."""
         record = self.stage["candidates"]["dst-a"]["records"][0]
         for key in ("neutral_1024_before", "neutral_1024_after"):
             self.assertIsNone(record["cells"][key])
             self.assertEqual(record["cell_details"][key], "arm_unmatchable")
 
     def test_capture_only_before(self):
+        """Test capture only before."""
         payload = _payload(self.backend, self.stage)
         entry = payload["candidates"]["dst-a"]
         self.assertEqual(entry["capture"]["before_64"]["capture_rate"], 1.0)
@@ -489,6 +523,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(entry["capture"]["before_256"]["capture_rate"], 1.0)
 
     def test_first_flip_from_stage(self):
+        """Test first flip from stage."""
         payload = _payload(self.backend, self.stage)
         entry = payload["candidates"]["dst-a"]
         flip = entry["first_flip"]["neutral_before"]
@@ -502,6 +537,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(curve["256"]["n_pass"], 1)
 
     def test_vacuous_and_echo_records(self):
+        """Test vacuous and echo records."""
         records = self.stage["candidates"]["dst-a"]["records"]
         vac = records[2]
         self.assertTrue(vac["vacuous"])
@@ -511,6 +547,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertFalse(records[0]["echo_fixture"])
 
     def test_near_miss_defined_flags(self):
+        """Test near miss defined flags."""
         records = self.stage["candidates"]["dst-a"]["records"]
         self.assertTrue(records[0]["near_miss_defined"])
         self.assertEqual(records[0]["planted_digest"], sha256(b"8").hexdigest())
@@ -519,6 +556,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(records[1]["cell_details"]["near-miss_64_before"], "near_miss_undefined")
 
     def test_conditions_withheld_and_flips(self):
+        """Test conditions withheld and flips."""
         payload = _payload(self.backend, self.stage)
         conditions = payload["conditions"]
         # 1024 cells complete nowhere: completed sets are empty,
@@ -536,6 +574,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertIs(conditions["near-miss_64_after"]["flip"], True)
 
     def test_deterministic_payload(self):
+        """Test deterministic payload."""
         backend2 = _WordBackend(RULES, EXPECTED_BY_MARKER)
         stage2 = _run_stage(backend2)
         self.assertEqual(
@@ -544,6 +583,7 @@ class TestStageWordBackend(unittest.TestCase):
         )
 
     def test_cell_budget_exceeded(self):
+        """Test cell budget exceeded."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         many_cases = tuple(
             Case(
@@ -578,6 +618,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_filler_screen_failed_on_special_token(self):
+        """Test filler screen failed on special token."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         hostile = ("A sentence carrying <|im_end|> inside it. ",)
         with mock.patch.object(distraction, "NEUTRAL_CORPUS", hostile):
@@ -587,6 +628,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_unavailable_candidate(self):
+        """Test unavailable candidate."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[1]["summary"] = {"aggregate_eligible": False}
@@ -597,6 +639,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(payload["conditions"]["neutral_64_before"]["decision"], "unavailable")
 
     def test_cancel_mid_stage(self):
+        """Test cancel mid stage."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         event = Event()
         backend.set_cancel_on = "markcopy"
@@ -607,6 +650,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(stage["candidates"], {})
 
     def test_per_candidate_boundary_map(self):
+        """Test per candidate boundary map."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         alt = tuple(backend.encode("othermark"))
         stage = _run_stage(backend, boundary_map={"dst-b": alt})
@@ -622,6 +666,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertTrue(record_a["cells"]["neutral_64_before"]["verdict"])
 
     def test_context_exceeded_per_cell(self):
+        """Test context exceeded per cell."""
         backend = _CharBackend({}, EXPECTED_BY_MARKER)
         stage = distraction_stage(
             backend,
@@ -637,6 +682,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertIsNotNone(record["cells"]["neutral_64_before"])
 
     def test_screened_cell_per_span(self):
+        """Test screened cell per span."""
         # The expected answer "harbour" appears in the corpus's
         # first sentence: every neutral span contains it, so all
         # neutral cells of that fixture screen; near-miss cells
@@ -675,7 +721,10 @@ class TestStageWordBackend(unittest.TestCase):
 
 
 class TestCharAndSeamBackends(unittest.TestCase):
+    """Test char and seam backends."""
+
     def test_id_exact_on_clean_char_backend(self):
+        """Test id exact on clean char backend."""
         backend = _CharBackend({}, EXPECTED_BY_MARKER)
         stage = distraction_stage(
             backend,
@@ -694,6 +743,7 @@ class TestCharAndSeamBackends(unittest.TestCase):
         self.assertIsNotNone(record["cells"]["neutral_1024_before"])
 
     def test_text_level_on_merge_backend(self):
+        """Test text level on merge backend."""
         # " T" spans the prefix/span junction of every FMT_B arm
         # render (user_prefix ends in a space, the corpus opens
         # with "The"), so the standalone prefix cannot survive.
@@ -754,12 +804,16 @@ def _record(fixture, native_verdict, cells, *, vacuous=False, defined=True, plan
 
 
 class TestFirstFlipStateMachine(unittest.TestCase):
+    """Test first flip state machine."""
+
     @staticmethod
     def _flip(cells, native=True):
+        """Flip."""
         record = _record("f", native, cells)
         return distraction.aggregate_candidate([record])["first_flip"]["neutral_before"]
 
     def test_flip_64_return_256(self):
+        """Test flip 64 return 256."""
         flip = self._flip(
             {
                 "neutral_64_before": (False,),
@@ -774,6 +828,7 @@ class TestFirstFlipStateMachine(unittest.TestCase):
         self.assertEqual(flip["n_population"], 1)
 
     def test_fail0_gain_not_flip(self):
+        """Test fail0 gain not flip."""
         flip = self._flip(
             {
                 "neutral_64_before": (True,),
@@ -787,6 +842,7 @@ class TestFirstFlipStateMachine(unittest.TestCase):
         self.assertEqual(flip["n_gains"], 1)
 
     def test_fail_everywhere_no_flip_no_gain(self):
+        """Test fail everywhere no flip no gain."""
         flip = self._flip(
             {
                 "neutral_64_before": (False,),
@@ -799,6 +855,7 @@ class TestFirstFlipStateMachine(unittest.TestCase):
         self.assertEqual(flip["flip_counts"], {"64": 0, "256": 0, "1024": 0})
 
     def test_first_flip_256_returns_1(self):
+        """Test first flip 256 returns 1."""
         flip = self._flip(
             {
                 "neutral_64_before": (True,),
@@ -810,13 +867,17 @@ class TestFirstFlipStateMachine(unittest.TestCase):
         self.assertEqual(flip["n_returns"], 1)
 
     def test_partial_curve_excluded(self):
+        """Test partial curve excluded."""
         flip = self._flip({"neutral_64_before": (False,), "neutral_256_before": (True,)})
         self.assertEqual(flip["n_population"], 0)
         self.assertEqual(flip["n_gain_population"], 0)
 
 
 class TestCaptureRules(unittest.TestCase):
+    """Test capture rules."""
+
     def test_captured_counts(self):
+        """Test captured counts."""
         record = _record(
             "f",
             True,
@@ -831,6 +892,7 @@ class TestCaptureRules(unittest.TestCase):
         self.assertEqual(capture["capture_excess_over_neutral"], 1.0)
 
     def test_neutral_also_planted_no_excess(self):
+        """Test neutral also planted no excess."""
         record = _record(
             "f",
             True,
@@ -844,6 +906,7 @@ class TestCaptureRules(unittest.TestCase):
         self.assertEqual(capture["capture_excess_over_neutral"], 0.0)
 
     def test_native_fail_not_in_population(self):
+        """Test native fail not in population."""
         record = _record(
             "f",
             False,
@@ -854,11 +917,13 @@ class TestCaptureRules(unittest.TestCase):
         self.assertIsNone(capture["capture_rate"])
 
     def test_undefined_not_in_population(self):
+        """Test undefined not in population."""
         record = _record("f", True, {"near-miss_64_before": (False, "8")}, defined=False)
         capture = distraction.aggregate_candidate([record])["capture"]["before_64"]
         self.assertEqual(capture["n_population"], 0)
 
     def test_excess_population_needs_neutral_cell(self):
+        """Test excess population needs neutral cell."""
         record = _record("f", True, {"near-miss_64_before": (False, "8")})
         capture = distraction.aggregate_candidate([record])["capture"]["before_64"]
         self.assertEqual(capture["n_population"], 1)
@@ -867,7 +932,10 @@ class TestCaptureRules(unittest.TestCase):
 
 
 class TestAnalysisMapping(unittest.TestCase):
+    """Test analysis mapping."""
+
     def test_held_out_failed_maps_to_selected(self):
+        """Test held out failed maps to selected."""
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         payload = _payload(backend, stage, decision="held_out_failed", winner="dst-b")
@@ -880,6 +948,7 @@ class TestAnalysisMapping(unittest.TestCase):
         self.assertIs(condition["flip"], True)
 
     def test_verbatim_decision_mapping(self):
+        """Test verbatim decision mapping."""
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         payload = _payload(backend, stage, decision="ambiguous", winner=None)
@@ -890,6 +959,7 @@ class TestAnalysisMapping(unittest.TestCase):
         self.assertIs(condition["flip"], False)
 
     def test_unavailable_stage_passthrough(self):
+        """Test unavailable stage passthrough."""
         payload = distraction_analysis(
             {"available": False, "detail": "cancelled", "protocol": {"x": 1}},
             "compatible_on_fixture_set",
@@ -901,10 +971,17 @@ class TestAnalysisMapping(unittest.TestCase):
 
 
 class TestSizingBudget(unittest.TestCase):
+    """Test sizing budget."""
+
     def test_encode_budget_bounded(self):
+        """Test encode budget bounded."""
+
         class _FlatBackend(_WordBackend):
+            """Flat backend."""
+
             # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def encode(self, text):
+                """Encode."""
                 super().encode(text)
                 return (1, 2, 3)
 
@@ -925,56 +1002,74 @@ class TestSizingBudget(unittest.TestCase):
 
 
 class TestValidatorAndDiff(unittest.TestCase):
+    """Test validator and diff."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.payload = _payload(self.backend, _run_stage(self.backend))
 
     def test_real_payload_validates(self):
+        """Test real payload validates."""
         self.assertTrue(_valid_distraction(self.payload))
 
     def test_identical_diff_unchanged(self):
+        """Test identical diff unchanged."""
         result = diff_distraction(self.payload, copy.deepcopy(self.payload))
         self.assertEqual(result["available"], "both")
         self.assertFalse(result["changed"])
         self.assertTrue(result["comparable"])
 
     def test_tamper_battery(self):
+        """Test tamper battery."""
+
         def flip_rate(payload):
+            """Flip rate."""
             payload["candidates"]["dst-a"]["curves"]["neutral_before"]["64"]["rate"] = 0.5
 
         def flip_capture(payload):
+            """Flip capture."""
             payload["candidates"]["dst-a"]["capture"]["before_64"]["n_captured"] = 0
 
         def flip_cell_verdict(payload):
+            """Flip cell verdict."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["cells"]["neutral_64_before"]["verdict"] = False
 
         def break_delta(payload):
+            """Break delta."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["cells"]["neutral_64_before"]["input_tokens"] += 1
 
         def break_digest(payload):
+            """Break digest."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["planted_digest"] = "zz" * 32
 
         def break_fingerprint(payload):
+            """Break fingerprint."""
             payload["protocol"]["fingerprint"] = "0" * 64
 
         def break_condition(payload):
+            """Break condition."""
             payload["conditions"]["neutral_64_before"]["decision"] = "selected"
 
         def break_share(payload):
+            """Break share."""
             payload["candidates"]["dst-a"]["nearmiss_defined_share"] = 0.25
 
         def seam_too_long(payload):
+            """Seam too long."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["cells"]["neutral_64_before"]["seam_ids"] = [1, 2, 3]
 
         def wrong_detail(payload):
+            """Wrong detail."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["cell_details"]["neutral_64_before"] = "bogus_detail"
 
         def cell_without_detail(payload):
+            """Cell without detail."""
             record = payload["candidates"]["dst-a"]["records"][0]
             record["cells"]["neutral_64_before"] = None
 
@@ -997,6 +1092,7 @@ class TestValidatorAndDiff(unittest.TestCase):
                 self.assertFalse(_valid_distraction(hostile))
 
     def test_shape_prechecks(self):
+        """Test shape prechecks."""
         # 101 records for one candidate: rejected on shape.
         hostile = copy.deepcopy(self.payload)
         record = hostile["candidates"]["dst-a"]["records"][0]
@@ -1014,6 +1110,7 @@ class TestValidatorAndDiff(unittest.TestCase):
         self.assertFalse(_valid_distraction(hostile))
 
     def test_coherent_foreign_protocol(self):
+        """Test coherent foreign protocol."""
         foreign = copy.deepcopy(self.payload)
         foreign["protocol"]["version"] = 99
         # The fingerprint is rebuilt over the payload's own
@@ -1033,12 +1130,14 @@ class TestValidatorAndDiff(unittest.TestCase):
         self.assertTrue(result["changed"])
 
     def test_availability_shapes(self):
+        """Test availability shapes."""
         self.assertEqual(diff_distraction(None, self.payload)["available"], "new")
         self.assertEqual(diff_distraction(self.payload, None)["available"], "old")
         self.assertEqual(diff_distraction(None, None)["available"], "neither")
         self.assertFalse(diff_distraction({"available": True}, self.payload)["changed"])
 
     def test_curve_and_condition_drift(self):
+        """Test curve and condition drift."""
         backend2 = _WordBackend({}, EXPECTED_BY_MARKER)
         other = _payload(backend2, _run_stage(backend2))
         result = diff_distraction(self.payload, other)
@@ -1048,6 +1147,7 @@ class TestValidatorAndDiff(unittest.TestCase):
         self.assertTrue(result["condition_drift"])
 
     def test_full_diff_reports_wiring(self):
+        """Test full diff reports wiring."""
         base = {
             "decision": "compatible_on_fixture_set",
             "selected_candidate": "dst-a",
@@ -1061,11 +1161,15 @@ class TestValidatorAndDiff(unittest.TestCase):
 
 
 class TestReporting(unittest.TestCase):
+    """Test reporting."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.payload = _payload(self.backend, _run_stage(self.backend))
 
     def test_section_renders_with_labels(self):
+        """Test section renders with labels."""
         html = render_html({"distraction": self.payload})
         self.assertIn('id="distraction"', html)
         self.assertIn("upper bound", html)
@@ -1074,6 +1178,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("neutral_1024_before", html)
 
     def test_absent_and_unavailable_render_nothing(self):
+        """Test absent and unavailable render nothing."""
         self.assertNotIn('id="distraction"', render_html({}))
         self.assertNotIn(
             'id="distraction"',
@@ -1081,6 +1186,7 @@ class TestReporting(unittest.TestCase):
         )
 
     def test_hostile_candidate_name_escaped(self):
+        """Test hostile candidate name escaped."""
         hostile = copy.deepcopy(self.payload)
         hostile["candidates"]["<script>alert(1)</script>"] = hostile["candidates"].pop("dst-a")
         html = render_html({"distraction": hostile})
@@ -1088,6 +1194,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_malformed_payload_survives(self):
+        """Test malformed payload survives."""
         html = render_html(
             {
                 "distraction": {
@@ -1102,7 +1209,10 @@ class TestReporting(unittest.TestCase):
 
 
 class TestCliDispatch(unittest.TestCase):
+    """Test cli dispatch."""
+
     def test_cancel_identity_reaches_stage(self):
+        """Test cancel identity reaches stage."""
         from model_protocol_lab import cli as cli_module
 
         seen: dict[str, object] = {}
@@ -1112,6 +1222,7 @@ class TestCliDispatch(unittest.TestCase):
         original_stage = experiments_module.distraction_stage
 
         def spy_stage(backend, formats, cases, entries, **kwargs):
+            """Spy stage."""
             seen["cancel"] = kwargs.get("cancel")
             return original_stage(backend, formats, cases, entries, **kwargs)
 
@@ -1140,6 +1251,7 @@ class TestCliDispatch(unittest.TestCase):
         self.assertTrue(result["distraction"]["available"])
 
     def test_failed_decision_gates_to_zero_generations(self):
+        """Test failed decision gates to zero generations."""
         from model_protocol_lab import cli as cli_module
 
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
@@ -1164,7 +1276,10 @@ class TestCliDispatch(unittest.TestCase):
 
 
 class TestStageGapCoverage(unittest.TestCase):
+    """Test stage gap coverage."""
+
     def test_contract_value_errors(self):
+        """Test contract value errors."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         with self.assertRaises(ValueError):
             distraction_stage(backend, (), CASES, [], boundary=(1,), max_context=100)
@@ -1172,6 +1287,7 @@ class TestStageGapCoverage(unittest.TestCase):
             distraction_stage(backend, FORMATS, (), [], boundary=(1,), max_context=100)
 
     def test_junk_search_entries(self):
+        """Test junk search entries."""
         backend = _WordBackend({}, EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries.append("junk")
@@ -1185,6 +1301,7 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertEqual(stage2["candidates"]["dst-a"]["status"], "unavailable")
 
     def test_marker_in_content(self):
+        """Test marker in content."""
         # The classify probe searches token ids, not rendered
         # text, so marker bytes inside the content itself do not
         # break the measurement (the text-split approach cycle
@@ -1233,6 +1350,7 @@ class TestStageGapCoverage(unittest.TestCase):
 
 
 def _load_variant(source: str):
+    """Load variant."""
     import importlib.util
     import os
     import tempfile
@@ -1255,6 +1373,7 @@ def _load_variant(source: str):
 
 
 def _scenario_plant(module) -> None:
+    """Scenario plant."""
     if module.planted_answer("9") != "10":
         raise AssertionError("carry lost")
     if module.planted_answer("9,999") != "10,000":
@@ -1262,6 +1381,7 @@ def _scenario_plant(module) -> None:
 
 
 def _scenario_capture_population(module) -> None:
+    """Scenario capture population."""
     record = _record(
         "f", False, {"near-miss_64_before": (False, "8"), "neutral_64_before": (False, "x")}
     )
@@ -1271,12 +1391,16 @@ def _scenario_capture_population(module) -> None:
 
 
 def _scenario_boundary_screen(module) -> None:
+    """Scenario boundary screen."""
     if not module.span_screened("span with <END> token", "zebra", ["<END>"]):
         raise AssertionError("boundary screen lost")
 
 
 class TestMutationGates(unittest.TestCase):
+    """Test mutation gates."""
+
     def _gate(self, anchor: str, mutant: str, scenario) -> None:
+        """Gate."""
         source = Path(distraction.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(anchor), 1, f"anchor not unique: {anchor!r}")
         scenario(distraction)
@@ -1285,6 +1409,7 @@ class TestMutationGates(unittest.TestCase):
             scenario(variant)
 
     def test_gate_plant_carry(self):
+        """Test gate plant carry."""
         self._gate(
             "        carry = digit // 10",
             "        carry = 0",
@@ -1292,6 +1417,7 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_gate_capture_population(self):
+        """Test gate capture population."""
         self._gate(
             '                if not isinstance(native, dict) or not native.get("verdict"):',
             "                if not isinstance(native, dict) or False:",
@@ -1299,6 +1425,7 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_gate_boundary_screen(self):
+        """Test gate boundary screen."""
         self._gate(
             "    return any(text and text in span for text in boundary_texts)",
             "    return False",
@@ -1311,21 +1438,27 @@ if __name__ == "__main__":
 
 
 class TestGapCoverage(unittest.TestCase):
+    """Test gap coverage."""
+
     def test_plant_non_string(self):
+        """Test plant non string."""
         self.assertIsNone(distraction.planted_answer(42))
         self.assertIsNone(distraction.planted_answer(None))
 
     def test_span_text_truncate_past_end(self):
+        """Test span text truncate past end."""
         with self.assertRaises(ValueError):
             distraction.span_text(distraction.NEUTRAL_CORPUS, len(distraction.NEUTRAL_CORPUS), 1)
 
     def test_curves_for(self):
+        """Test curves for."""
         curves = distraction.curves_for()
         self.assertEqual(len(curves), 4)
         self.assertEqual(curves[0], ("neutral", "before", (64, 256, 1024)))
         self.assertEqual(curves[3], ("near-miss", "after", (64, 256)))
 
     def test_classify_direct(self):
+        """Test classify direct."""
         encode = lambda text: tuple(ord(c) for c in text)  # noqa: E731
         fmt = FMT_B
         native_ids = encode(fmt.render(CASE_NUM.messages))
@@ -1358,6 +1491,7 @@ class TestGapCoverage(unittest.TestCase):
 
         # Marker does not survive the encode: honest text_level.
         def dropping_encode(text):
+            """Dropping encode."""
             if chr(0) in text:
                 return ()
             return tuple(ord(c) for c in text)
@@ -1422,6 +1556,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(construction, "text_level")
 
     def test_classify_overlap_guards(self):
+        """Test classify overlap guards."""
         # Arms whose content tail overlaps the suffix head pass
         # the prefix/suffix/content checks yet leave no room for
         # the inserted region: the length guards must fire.
@@ -1459,6 +1594,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(construction, "text_level")
 
     def test_aggregate_robustness(self):
+        """Test aggregate robustness."""
         # Records with missing/malformed internals are skipped by
         # the paired loops rather than crashing the aggregate.
         weird = {
@@ -1543,6 +1679,7 @@ def _vrecord(fixture, *, native_pass=True, defined=True, cells=None, vacuous=Fal
 
 
 def _fab_stage(records_by_name, ids=("fx-1", "fx-2")):
+    """Fab stage."""
     protocol = {
         **distraction.protocol_object(list(ids), "sha256:fab"),
         "fingerprint": distraction.protocol_fingerprint(list(ids), "sha256:fab"),
@@ -1561,21 +1698,29 @@ def _fab_stage(records_by_name, ids=("fx-1", "fx-2")):
 
 
 def _fab_payload(records_by_name, ids=("fx-1", "fx-2")):
+    """Fab payload."""
     stage = _fab_stage(records_by_name, ids)
     return distraction_analysis(stage, "no_candidate", None, tuple(records_by_name))
 
 
 class TestValidatorBatteryAndGaps(unittest.TestCase):
+    """Test validator battery and gaps."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.payload = _payload(self.backend, _run_stage(self.backend))
 
     @staticmethod
     def _record0(payload):
+        """Record0."""
         return payload["candidates"]["dst-a"]["records"][0]
 
     def test_structural_battery(self):
+        """Test structural battery."""
+
         def breaks():
+            """Breaks."""
             p = copy.deepcopy(self.payload)
             p["protocol"] = []
             yield "protocol_not_dict", p
@@ -1747,6 +1892,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
                 self.assertFalse(_valid_distraction(broken), name)
 
     def test_fab_capture_cell_none_and_valid(self):
+        """Test fab capture cell none and valid."""
         cells = {"near-miss_64_before": None}
         records = {
             "dst-a": [
@@ -1765,6 +1911,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertEqual(capture["n_captured"], 1)
 
     def test_fab_completed_sets_differ_withholds(self):
+        """Test fab completed sets differ withholds."""
         records = {
             "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],
             "dst-b": [
@@ -1777,6 +1924,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertTrue(_valid_distraction(payload))
 
     def test_analysis_unavailable_candidate(self):
+        """Test analysis unavailable candidate."""
         records = {
             "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],
             "dst-b": "unavailable",
@@ -1789,6 +1937,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertIn("unavailable", html)
 
     def test_analysis_selected_condition(self):
+        """Test analysis selected condition."""
         records = {
             "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],
             "dst-b": [
@@ -1803,6 +1952,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertTrue(_valid_distraction(payload))
 
     def test_curve_drift_between_fab_payloads(self):
+        """Test curve drift between fab payloads."""
         base = {
             "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],
             "dst-b": [_vrecord("fx-1"), _vrecord("fx-2")],
@@ -1819,9 +1969,14 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertTrue(result["curve_drift"])
 
     def test_stage_decode_failure_falls_back(self):
+        """Test stage decode failure falls back."""
+
         class _BadDecodeBackend(_WordBackend):
+            """Bad decode backend."""
+
             @staticmethod
             def decode(ids):
+                """Decode."""
                 raise RuntimeError("scripted decode failure")
 
         backend = _BadDecodeBackend(RULES, EXPECTED_BY_MARKER)
@@ -1829,6 +1984,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertTrue(stage["available"])
 
     def test_stage_sizing_skips_plant_cutting_suffix(self):
+        """Test stage sizing skips plant cutting suffix."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
@@ -1837,6 +1993,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         calls = {"n": 0}
 
         def flaky(first, second, planted):
+            """Flaky."""
             calls["n"] += 1
             if calls["n"] == 1:
                 return True
@@ -1848,6 +2005,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertGreaterEqual(calls["n"], 1)
 
     def test_stage_sizing_skips_empty_span(self):
+        """Test stage sizing skips empty span."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
@@ -1856,6 +2014,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         calls = {"n": 0}
 
         def flaky(sentences, whole, suffix):
+            """Flaky."""
             calls["n"] += 1
             if calls["n"] == 1:
                 return ""
@@ -1867,12 +2026,17 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertGreaterEqual(calls["n"], 1)
 
     def test_stage_cancel_inside_candidate_loop(self):
+        """Test stage cancel inside candidate loop."""
+
         # The event is set by the LAST cell generation of dst-a's
         # fx-copy case, so no per-cell check remains to catch it:
         # the next case's loop-head check must fire. (fx-vac, the
         # last case, is vacuous and never generates.)
         class _LateCancelBackend(_WordBackend):
+            """Late cancel backend."""
+
             def generate(self, input_ids, **kwargs):
+                """Generate."""
                 generation = super().generate(input_ids, **kwargs)
                 marker, _kind, _placement = self._cell_of(self.decode(list(input_ids)))
                 if marker == "markcopy":
@@ -1893,6 +2057,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertEqual(stage["candidates"], {})
 
     def test_reporting_malformed_shapes(self):
+        """Test reporting malformed shapes."""
         self.assertNotIn(
             'id="distraction"',
             render_html({"distraction": {"available": True, "candidates": []}}),
@@ -1918,11 +2083,15 @@ class TestValidatorBatteryRound2(unittest.TestCase):
     """Second battery round: the reject branches round 1 missed."""
 
     def setUp(self):
+        """Set up the test fixture."""
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.payload = _payload(self.backend, _run_stage(self.backend))
 
     def test_remaining_reject_branches(self):
+        """Test remaining reject branches."""
+
         def breaks():
+            """Breaks."""
             p = copy.deepcopy(self.payload)
             p["candidates"] = {42: p["candidates"]["dst-a"]}
             yield "candidate_name_not_str", p
@@ -1982,6 +2151,7 @@ class TestValidatorBatteryRound2(unittest.TestCase):
                 self.assertFalse(_valid_distraction(broken), name)
 
     def test_share_drift_between_fab_payloads(self):
+        """Test share drift between fab payloads."""
         base = {
             "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],
             "dst-b": [_vrecord("fx-1"), _vrecord("fx-2")],
@@ -1996,6 +2166,7 @@ class TestValidatorBatteryRound2(unittest.TestCase):
         self.assertIn("nearmiss_defined_share", metrics)
 
     def test_stage_non_list_search_entries(self):
+        """Test stage non list search entries."""
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         stage = distraction_stage(
             backend,
@@ -2011,6 +2182,7 @@ class TestValidatorBatteryRound2(unittest.TestCase):
         self.assertEqual(stage["candidates"]["dst-a"]["status"], "unavailable")
 
     def test_reporting_entry_without_curves(self):
+        """Test reporting entry without curves."""
         payload = _fab_payload(
             {
                 "dst-a": [_vrecord("fx-1"), _vrecord("fx-2")],

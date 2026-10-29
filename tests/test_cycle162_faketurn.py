@@ -59,10 +59,12 @@ class FakeTurnScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(
@@ -73,6 +75,7 @@ class FakeTurnScriptedBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         prompt = self.decode(tuple(input_ids))
         if "(ref: faketurn/" in prompt:
             match = re.search(r"\(ref: faketurn/[^/]+/(\d+)/", prompt)
@@ -88,6 +91,7 @@ class FakeTurnScriptedBackend:
 
 
 def _format(name: str, user_prefix: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -98,6 +102,7 @@ def _format(name: str, user_prefix: str) -> Format:
 
 
 def _fixture(fid: str) -> Fixture:
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content="Say the word."),),
@@ -116,21 +121,29 @@ _CROSS_PREFIX = "[user]\n"  # marker-free: every marker is cross-family
 
 
 class ValidationTests(unittest.TestCase):
+    """Validation tests."""
+
     def test_sources(self):
+        """Test sources."""
         self.assertEqual(SOURCES, ("same", "cross"))
 
     def test_validate_source_accepts(self):
+        """Test validate source accepts."""
         for source in SOURCES:
             self.assertEqual(validate_source(source), source)
 
     def test_validate_source_rejects(self):
+        """Test validate source rejects."""
         for bad in (None, "", "native", "SAME", 0, b"same"):
             with self.assertRaises(ValueError):
                 validate_source(bad)
 
 
 class FixtureBuilderTests(unittest.TestCase):
+    """Fixture builder tests."""
+
     def test_build_faketurn_fixtures_shape(self):
+        """Test build faketurn fixtures shape."""
         cases = (_fixture("f0"), _fixture("f1"))
         forged = build_faketurn_fixtures(cases, payload="fake_assistant", marker_index=0)
         self.assertEqual(len(forged), 2)
@@ -144,6 +157,7 @@ class FixtureBuilderTests(unittest.TestCase):
         self.assertTrue(content.startswith("Say the word."))
 
     def test_build_faketurn_fixtures_targets_last_user_message(self):
+        """Test build faketurn fixtures targets last user message."""
         cases = (
             Fixture(
                 id="m0",
@@ -164,6 +178,7 @@ class FixtureBuilderTests(unittest.TestCase):
         self.assertEqual(forged.messages[2].content.count(MARKERS[2]), 2)
 
     def test_build_faketurn_fixtures_decoy_distinct_from_expected(self):
+        """Test build faketurn fixtures decoy distinct from expected."""
         cases = (_fixture("f0"),)
         for payload in PAYLOADS:
             for index in range(len(MARKERS)):
@@ -174,6 +189,7 @@ class FixtureBuilderTests(unittest.TestCase):
                         self.assertNotEqual(decoy, "WORD")
 
     def test_build_faketurn_fixtures_rejects_bad_input(self):
+        """Test build faketurn fixtures rejects bad input."""
         cases = (_fixture("f0"),)
         with self.assertRaises(ValueError):
             build_faketurn_fixtures(cases, payload="fake_user", marker_index=0)
@@ -186,15 +202,20 @@ class FixtureBuilderTests(unittest.TestCase):
 
 
 class ProvenanceTests(unittest.TestCase):
+    """Provenance tests."""
+
     def test_marker_provenance_same(self):
+        """Test marker provenance same."""
         rendered = "<|start_header_id|>user<|end_header_id|>\nSay the word."
         self.assertEqual(marker_provenance(rendered, "<|start_header_id|>"), "same")
 
     def test_marker_provenance_cross(self):
+        """Test marker provenance cross."""
         rendered = "[user]\nSay the word."
         self.assertEqual(marker_provenance(rendered, "<|im_start|>"), "cross")
 
     def test_marker_provenance_fail_closed(self):
+        """Test marker provenance fail closed."""
         self.assertIsNone(marker_provenance(None, "<|im_start|>"))
         self.assertIsNone(marker_provenance("text", None))
         self.assertIsNone(marker_provenance("text", ""))
@@ -202,13 +223,17 @@ class ProvenanceTests(unittest.TestCase):
 
 
 class PayloadRefTests(unittest.TestCase):
+    """Payload ref tests."""
+
     def test_payload_ref_shape(self):
+        """Test payload ref shape."""
         self.assertEqual(
             payload_ref("f0", "fake_assistant", 1),
             "(ref: faketurn/fake_assistant/1/f0)",
         )
 
     def test_payload_ref_rejects(self):
+        """Test payload ref rejects."""
         self.assertIsNone(payload_ref("", "fake_assistant", 1))
         self.assertIsNone(payload_ref("f0", "fake_user", 1))
         self.assertIsNone(payload_ref("f0", "fake_assistant", -1))
@@ -218,28 +243,35 @@ class PayloadRefTests(unittest.TestCase):
 
 
 class PayloadIntactTests(unittest.TestCase):
+    """Payload intact tests."""
+
     def test_payload_intact_true(self):
+        """Test payload intact true."""
         marker = MARKERS[0]
         ref = "(ref: faketurn/fake_assistant/0/f0)"
         text = f"prefix {marker} forged {marker} {ref} suffix"
         self.assertTrue(payload_intact(text, ref, marker))
 
     def test_payload_intact_ref_missing(self):
+        """Test payload intact ref missing."""
         self.assertFalse(
             payload_intact("no ref here <|im_start|> x2 <|im_start|>", "(ref: x)", "<|im_start|>")
         )
 
     def test_payload_intact_ref_duplicated(self):
+        """Test payload intact ref duplicated."""
         ref = "(ref: faketurn/fake_assistant/0/f0)"
         text = f"{ref} {MARKERS[0]} {MARKERS[0]} {ref}"
         self.assertFalse(payload_intact(text, ref, MARKERS[0]))
 
     def test_payload_intact_marker_too_few(self):
+        """Test payload intact marker too few."""
         ref = "(ref: faketurn/fake_assistant/0/f0)"
         text = f"only one {MARKERS[0]} here {ref}"
         self.assertFalse(payload_intact(text, ref, MARKERS[0]))
 
     def test_payload_intact_fail_closed(self):
+        """Test payload intact fail closed."""
         self.assertFalse(payload_intact(None, "ref", MARKERS[0]))
         self.assertFalse(payload_intact("text", "", MARKERS[0]))
         self.assertFalse(payload_intact("text", "ref", ""))
@@ -247,18 +279,23 @@ class PayloadIntactTests(unittest.TestCase):
 
 
 class TransferGapTests(unittest.TestCase):
+    """Transfer gap tests."""
+
     def test_transfer_gap_values(self):
+        """Test transfer gap values."""
         self.assertEqual(transfer_gap(1.0, 0.0), 1.0)
         self.assertEqual(transfer_gap(0.0, 1.0), -1.0)
         self.assertEqual(transfer_gap(0.5, 0.5), 0.0)
         self.assertEqual(transfer_gap(0.25, 0.75), -0.5)
 
     def test_transfer_gap_none(self):
+        """Test transfer gap none."""
         self.assertIsNone(transfer_gap(None, 0.0))
         self.assertIsNone(transfer_gap(0.0, None))
         self.assertIsNone(transfer_gap(None, None))
 
     def test_transfer_gap_rejects(self):
+        """Test transfer gap rejects."""
         for bad in (-0.1, 1.1, float("nan"), "0.5", True):
             with self.assertRaises(ValueError):
                 transfer_gap(bad, 0.0)
@@ -272,8 +309,11 @@ class TransferGapTests(unittest.TestCase):
 
 
 class FaketurnStageTests(unittest.TestCase):
+    """Faketurn stage tests."""
+
     @staticmethod
     def _run(formats, payloads=("fake_assistant",), marker_indexes=(0, 3)):
+        """Run."""
         backend = FakeTurnScriptedBackend()
         cases = (_fixture("f0"), _fixture("f1"))
         return faketurn_stage(
@@ -286,6 +326,7 @@ class FaketurnStageTests(unittest.TestCase):
         )
 
     def test_stage_provenance_and_verdicts(self):
+        """Test stage provenance and verdicts."""
         stage = self._run((_format("samefam", _SAME_PREFIX), _format("crossfam", _CROSS_PREFIX)))
         self.assertEqual(stage["payloads"], ["fake_assistant"])
         self.assertEqual(stage["marker_indexes"], [0, 3])
@@ -305,6 +346,7 @@ class FaketurnStageTests(unittest.TestCase):
         self.assertEqual(crossfam_cell["token_source"], "cross")
 
     def test_stage_contract_violations(self):
+        """Test stage contract violations."""
         backend = FakeTurnScriptedBackend()
         cases = (_fixture("f0"),)
         fmts = (_format("a", _CROSS_PREFIX),)
@@ -328,11 +370,16 @@ class FaketurnStageTests(unittest.TestCase):
             faketurn_stage(backend, fmts, cases, boundary=BOUNDARY, seed=-1)
 
     def test_stage_cell_degrades_not_stage(self):
+        """Test stage cell degrades not stage."""
+
         # A backend whose generate always errors: every cell degrades to
         # an unsupported marker, the stage itself still returns its shape.
         class BrokenBackend(FakeTurnScriptedBackend):
+            """Broken backend."""
+
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 raise RuntimeError("boom")
 
         stage = faketurn_stage(
@@ -346,10 +393,12 @@ class FaketurnStageTests(unittest.TestCase):
 
 
 def _native(cands):
+    """Native."""
     return {c: {"per_fixture": {"f0": True, "f1": True}} for c in cands}
 
 
 def _stage_cell(supported=True, source="same", verdicts=None, detail="cell_failed"):
+    """Stage cell."""
     if not supported:
         return {"supported": False, "detail": detail}
     return {
@@ -362,6 +411,7 @@ def _stage_cell(supported=True, source="same", verdicts=None, detail="cell_faile
 
 
 def _stage(candidates, cell_fn):
+    """Stage."""
     per_candidate = {c: cell_fn(c) for c in candidates}
     return {
         "payloads": ["fake_assistant"],
@@ -371,7 +421,10 @@ def _stage(candidates, cell_fn):
 
 
 class FaketurnRobustnessTests(unittest.TestCase):
+    """Faketurn robustness tests."""
+
     def test_robustness_gap_signal(self):
+        """Test robustness gap signal."""
         # same-family cell flips both fixtures; cross-family cell flips none.
         stage = _stage(
             ("c",),
@@ -397,6 +450,7 @@ class FaketurnRobustnessTests(unittest.TestCase):
         self.assertEqual(got["excluded_candidates"], [])
 
     def test_robustness_none_verdicts_excluded(self):
+        """Test robustness none verdicts excluded."""
         stage = _stage(("c",), lambda c: _stage_cell(verdicts={"f0": None, "f1": None}))
         got = faketurn_robustness(_native(("c",)), stage, ("c",))
         entry = got["per_candidate"]["c"]
@@ -406,6 +460,7 @@ class FaketurnRobustnessTests(unittest.TestCase):
         self.assertEqual(got["excluded_candidates"], ["c"])
 
     def test_robustness_unsupported_cells(self):
+        """Test robustness unsupported cells."""
         stage = _stage(("c",), lambda c: _stage_cell(supported=False))
         got = faketurn_robustness(_native(("c",)), stage, ("c",))
         entry = got["per_candidate"]["c"]
@@ -413,6 +468,7 @@ class FaketurnRobustnessTests(unittest.TestCase):
         self.assertEqual(got["excluded_candidates"], ["c"])
 
     def test_robustness_malformed(self):
+        """Test robustness malformed."""
         self.assertEqual(faketurn_robustness("nope", {}, ("c",))["detail"], "native_data_malformed")
         bad_stage = {"payloads": [], "marker_indexes": [0], "per_payload": {}}
         self.assertEqual(
@@ -446,6 +502,7 @@ class FaketurnRobustnessTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_robustness(native_outcomes, stage_result, candidates):
     """Independent reimplementation of the robustness aggregation.
 
@@ -479,6 +536,7 @@ def _oracle_robustness(native_outcomes, stage_result, candidates):
         return {"available": False, "detail": "stage_invalid"}
 
     def _view(entry):
+        """View."""
         if entry is None:
             return {"supported": False, "detail": "cell_failed"}
         if type(entry) is not dict:
@@ -585,6 +643,7 @@ def _oracle_robustness(native_outcomes, stage_result, candidates):
 
 
 def _rand_stage(rng):
+    """Rand stage."""
     payloads = rng.sample(["fake_assistant", "fake_system"], rng.randint(1, 2))
     marker_indexes = sorted(rng.sample([0, 1, 2, 3], rng.randint(1, 3)))
     candidates = ["c0", "c1", "c2"][: rng.randint(1, 3)]
@@ -626,7 +685,10 @@ def _rand_stage(rng):
 
 
 class FaketurnOracleDifferentialTests(unittest.TestCase):
+    """Faketurn oracle differential tests."""
+
     def test_200_case_oracle_agreement(self):
+        """Test 200 case oracle agreement."""
         rng = random.Random(162)  # noqa: S311 -- deterministic test seed
         for case in range(200):
             stage, candidates = _rand_stage(rng)
@@ -647,12 +709,15 @@ class FaketurnOracleDifferentialTests(unittest.TestCase):
 
 
 class FaketurnPropertyTests(unittest.TestCase):
+    """Faketurn property tests."""
+
     @given(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
     )
     @settings(max_examples=200)
     def test_transfer_gap_bounded(self, cross, same):
+        """Test transfer gap bounded."""
         gap = transfer_gap(cross, same)
         assert gap is not None
         assert -1.0 <= gap <= 1.0
@@ -661,6 +726,7 @@ class FaketurnPropertyTests(unittest.TestCase):
     @given(st.text(), st.sampled_from(MARKERS))
     @settings(max_examples=200)
     def test_marker_provenance_total(self, rendered, marker):
+        """Test marker provenance total."""
         result = marker_provenance(rendered, marker)
         assert result in ("same", "cross")
         assert result == ("same" if marker in rendered else "cross")
@@ -668,6 +734,7 @@ class FaketurnPropertyTests(unittest.TestCase):
     @given(st.sampled_from(PAYLOADS), st.integers(min_value=0, max_value=3))
     @settings(max_examples=60)
     def test_fixture_builder_deterministic(self, payload, marker_index):
+        """Test fixture builder deterministic."""
         cases = (_fixture("f0"), _fixture("f1"))
         first = build_faketurn_fixtures(cases, payload=payload, marker_index=marker_index)
         second = build_faketurn_fixtures(cases, payload=payload, marker_index=marker_index)
@@ -684,6 +751,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
     """Each gate reverts one safety property; the scenario must catch it."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -703,6 +771,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _gap_direction_scenario(mod):
+        """Gap direction scenario."""
         # transfer_gap is cross-minus-same: the direction is the finding.
         # (Targeted at the mutated function directly: experiments binds
         # the name at import time, so the gate asserts on mod itself.)
@@ -710,6 +779,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
         assert mod.transfer_gap(1.0, 0.0) == 1.0
 
     def test_mutant_gap_direction_reversed_caught(self):
+        """Test mutant gap direction reversed caught."""
         self._run_gate(
             "faketurn",
             "gap_direction_reversed",
@@ -720,10 +790,12 @@ class FaketurnMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _provenance_scenario(mod):
+        """Provenance scenario."""
         assert mod.marker_provenance("a <|im_start|> b", "<|im_start|>") == "same"
         assert mod.marker_provenance("plain text", "<|im_start|>") == "cross"
 
     def test_mutant_provenance_swapped_caught(self):
+        """Test mutant provenance swapped caught."""
         self._run_gate(
             "faketurn",
             "provenance_swapped",
@@ -734,11 +806,13 @@ class FaketurnMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _intact_count_scenario(mod):
+        """Intact count scenario."""
         ref = "(ref: faketurn/fake_assistant/0/f0)"
         text = f"one {MARKERS[0]} two {MARKERS[0]} {ref}"
         assert mod.payload_intact(text, ref, MARKERS[0]) is True
 
     def test_mutant_intact_count_strict_caught(self):
+        """Test mutant intact count strict caught."""
         self._run_gate(
             "faketurn",
             "intact_count_strict",
@@ -749,6 +823,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _source_drift_scenario(mod):
+        """Source drift scenario."""
         old = _ft_diff_payload()
         new = _ft_diff_payload()
         new["per_candidate"]["c"]["cells"]["fake_assistant/0"]["token_source"] = "cross"
@@ -762,6 +837,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
         assert not diff["top_rate_drift"], diff
 
     def test_mutant_diff_source_drift_ignored_caught(self):
+        """Test mutant diff source drift ignored caught."""
         self._run_gate(
             "diffreports",
             "source_drift_ignored",
@@ -777,6 +853,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
 
 
 def _ft_cell(flip_rate=1.0, source="same", n_evaluable=2, supported=True):
+    """Ft cell."""
     if not supported:
         return {"supported": False, "detail": "cell_failed"}
     return {
@@ -789,6 +866,7 @@ def _ft_cell(flip_rate=1.0, source="same", n_evaluable=2, supported=True):
 
 
 def _ft_candidate(flip_rate=1.0, source="same", gap=-1.0, max_rate=1.0, excluded=False):
+    """Ft candidate."""
     return {
         "cells": {"fake_assistant/0": _ft_cell(flip_rate, source)},
         "n_cells": 1,
@@ -804,6 +882,7 @@ def _ft_candidate(flip_rate=1.0, source="same", gap=-1.0, max_rate=1.0, excluded
 def _ft_diff_payload(
     flip_rate=1.0, source="same", gap=-1.0, max_rate=1.0, candidates=("c",), excluded=()
 ):
+    """Ft diff payload."""
     return {
         "available": True,
         "payloads": ["fake_assistant"],
@@ -818,7 +897,10 @@ def _ft_diff_payload(
 
 
 class DiffFaketurnTests(unittest.TestCase):
+    """Diff faketurn tests."""
+
     def test_availability(self):
+        """Test availability."""
         both = diffreports.diff_faketurn(_ft_diff_payload(), _ft_diff_payload())
         self.assertEqual(both["available"], "both")
         self.assertFalse(both["changed"])
@@ -830,6 +912,7 @@ class DiffFaketurnTests(unittest.TestCase):
         self.assertFalse(neither["changed"])
 
     def test_hostile_payload_degrades(self):
+        """Test hostile payload degrades."""
         hostile = _ft_diff_payload()
         hostile["per_candidate"]["c"]["cells"]["fake_assistant/0"]["token_source"] = "native"
         diff = diffreports.diff_faketurn(hostile, _ft_diff_payload())
@@ -846,8 +929,11 @@ class DiffFaketurnTests(unittest.TestCase):
         self.assertEqual(diff4["available"], "neither")
 
     def test_diff_feeds_identical(self):
+        """Test diff feeds identical."""
+
         # A faketurn-only change flips identical; asymmetric probe flips it too.
         def report(**kwargs):
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -869,6 +955,7 @@ class DiffFaketurnTests(unittest.TestCase):
         self.assertTrue(diff3["summary"]["identical"])
 
     def _single_cause(self, mutate, expect_key):
+        """Single cause."""
         old = _ft_diff_payload()
         new = _ft_diff_payload()
         mutate(new)
@@ -890,49 +977,71 @@ class DiffFaketurnTests(unittest.TestCase):
                 self.assertFalse(diff[key], f"{key} should not fire (single cause)")
 
     def test_pin_cell_drift_only(self):
+        """Test pin cell drift only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["c"]["cells"]["fake_assistant/0"]["flip_rate"] = 0.0
 
         self._single_cause(mutate, "cell_drift")
 
     def test_pin_gap_drift_only(self):
+        """Test pin gap drift only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["c"]["transfer_gap"] = 0.0
 
         self._single_cause(mutate, "gap_drift")
 
     def test_pin_top_rate_drift_only(self):
+        """Test pin top rate drift only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["c"]["max_flip_rate"] = 0.5
             new["max_flip_rate"] = 0.5
 
         self._single_cause(mutate, "top_rate_drift")
 
     def test_pin_source_drift_only(self):
+        """Test pin source drift only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["c"]["cells"]["fake_assistant/0"]["token_source"] = "cross"
 
         self._single_cause(mutate, "source_drift")
 
     def test_pin_candidates_added_only(self):
+        """Test pin candidates added only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["d"] = _ft_candidate()
 
         self._single_cause(mutate, "candidates_added")
 
     def test_pin_candidates_removed_only(self):
+        """Test pin candidates removed only."""
+
         def mutate(new):
+            """Mutate."""
             del new["per_candidate"]["c"]
 
         self._single_cause(mutate, "candidates_removed")
 
     def test_pin_excluded_added_only(self):
+        """Test pin excluded added only."""
+
         def mutate(new):
+            """Mutate."""
             new["excluded_candidates"] = ["c"]
 
         self._single_cause(mutate, "excluded_added")
 
     def test_pin_excluded_removed_only(self):
+        """Test pin excluded removed only."""
         old = _ft_diff_payload(excluded=["c"])
         new = _ft_diff_payload(excluded=[])
         diff = diffreports.diff_faketurn(old, new)
@@ -956,7 +1065,10 @@ class DiffFaketurnTests(unittest.TestCase):
 
 
 class FaketurnSanitizationTests(unittest.TestCase):
+    """Faketurn sanitization tests."""
+
     def test_stderr_summary_strips_escapes(self):
+        """Test stderr summary strips escapes."""
         old = _ft_diff_payload()
         new = _ft_diff_payload()
         evil = "\x1b[31mc\x07"
@@ -968,6 +1080,7 @@ class FaketurnSanitizationTests(unittest.TestCase):
         self.assertNotIn("\x07", text)
 
     def test_html_section_escapes(self):
+        """Test html section escapes."""
         from model_protocol_lab.reporting import _faketurn_section
 
         payload = {
@@ -988,6 +1101,7 @@ class FaketurnSanitizationTests(unittest.TestCase):
         # separately).
 
     def test_html_section_unavailable(self):
+        """Test html section unavailable."""
         from model_protocol_lab.reporting import _faketurn_section
 
         self.assertEqual(_faketurn_section({}), "")
@@ -1000,7 +1114,10 @@ class FaketurnSanitizationTests(unittest.TestCase):
 
 
 class FaketurnCliTests(unittest.TestCase):
+    """Faketurn cli tests."""
+
     def test_probe_records_payload(self):
+        """Test probe records payload."""
         from model_protocol_lab import cli
         from model_protocol_lab.core import evaluate
 
@@ -1052,6 +1169,7 @@ class FaketurnCliTests(unittest.TestCase):
         self.assertIsNone(payload["per_candidate"]["chatml"]["transfer_gap"])
 
     def test_probe_never_raises_on_broken_backend(self):
+        """Test probe never raises on broken backend."""
         from model_protocol_lab import cli
 
         result = {}
@@ -1068,6 +1186,7 @@ class FaketurnCliTests(unittest.TestCase):
         self.assertEqual(result["faketurn"]["detail"], "faketurn_unavailable")
 
     def test_flag_registered(self):
+        """Test flag registered."""
         from model_protocol_lab import cli as cli_mod
 
         # The registration is pinned by asserting the flag string exists
@@ -1083,8 +1202,11 @@ class FaketurnCliTests(unittest.TestCase):
 
 
 class FaketurnReportingTests(unittest.TestCase):
+    """Faketurn reporting tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {
             "faketurn": {
                 "available": True,
@@ -1117,6 +1239,7 @@ class FaketurnReportingTests(unittest.TestCase):
         }
 
     def test_section_renders_with_anchor(self):
+        """Test section renders with anchor."""
         from model_protocol_lab.reporting import _faketurn_section
 
         html = _faketurn_section(self._result())
@@ -1125,6 +1248,7 @@ class FaketurnReportingTests(unittest.TestCase):
         self.assertIn("chatml", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         from model_protocol_lab.reporting import _faketurn_section
 
         self.assertEqual(_faketurn_section({}), "")
@@ -1132,6 +1256,7 @@ class FaketurnReportingTests(unittest.TestCase):
         self.assertEqual(_faketurn_section({"faketurn": {"available": True}}), "")
 
     def test_section_escapes_hostile_names(self):
+        """Test section escapes hostile names."""
         from model_protocol_lab.reporting import _faketurn_section
 
         result = self._result()
@@ -1144,6 +1269,7 @@ class FaketurnReportingTests(unittest.TestCase):
         self.assertNotIn("<img src=x", html)
 
     def test_toc_links_to_section(self):
+        """Test toc links to section."""
         from model_protocol_lab import reporting
 
         minimal = {

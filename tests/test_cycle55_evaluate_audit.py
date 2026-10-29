@@ -140,6 +140,7 @@ class ScriptBackend:
 
     # -- Backend protocol -------------------------------------------------
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         index = self._encode_calls
         self._encode_calls += 1
         script = self._scripts[index]
@@ -156,6 +157,7 @@ class ScriptBackend:
         return (1000 + index,)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         self._decode_calls_since_generate += 1
         script = self._current_script()
         if script.set_event_at == "decode_answer" and self._decode_calls_since_generate == 1:
@@ -167,6 +169,7 @@ class ScriptBackend:
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         assert input_ids and 1000 <= input_ids[0] < 1000 + len(self._scripts)
         index = input_ids[0] - 1000
         script = self._scripts[index]
@@ -205,6 +208,7 @@ class ScriptBackend:
         raise AssertionError(f"unknown gen_kind {kind!r}")
 
     def _current_script(self) -> CaseScript:
+        """Current script."""
         return self._scripts[self._current_index]
 
 
@@ -217,6 +221,7 @@ class ScriptBackend:
 
 
 def _o_valid_token_ids(value: object, *, nonempty: bool = False) -> bool:
+    """O valid token ids."""
     return (
         type(value) is tuple
         and (not nonempty or bool(value))
@@ -225,6 +230,7 @@ def _o_valid_token_ids(value: object, *, nonempty: bool = False) -> bool:
 
 
 def _o_valid_generation(result: object, cap: int) -> bool:
+    """O valid generation."""
     if type(result) is not Generation or not _o_valid_token_ids(result.token_ids):
         return False
     if len(result.token_ids) > cap or type(result.reason) is not str:
@@ -241,6 +247,7 @@ def _o_valid_generation(result: object, cap: int) -> bool:
 
 
 def _o_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None:
+    """O first boundary."""
     if not stop:
         raise ValueError("A nonempty boundary is required")
     for index in range(len(tokens) - len(stop) + 1):
@@ -255,6 +262,7 @@ def _o_boundary_text_match(
     cut: int | None,
     boundary: tuple[int, ...],
 ) -> bool | None:
+    """O boundary text match."""
     try:
         boundary_text = backend.decode(boundary)
     except Exception:  # noqa: BLE001 -- diagnostic must never fail the run
@@ -272,10 +280,12 @@ def _o_boundary_text_match(
 
 
 def _o_request_seed(seed: int, case_id: str) -> int:
+    """O request seed."""
     material = f"{seed}\0{case_id}".encode("utf-8", errors="surrogatepass")
     return int.from_bytes(sha256(material).digest()[:4], "big")
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_evaluate(
     backend: ScriptBackend,
     candidate: Format,
@@ -316,6 +326,7 @@ def oracle_evaluate(
         boundary_text_match: bool | None = None,
         input_text: str = "",
     ) -> None:
+        """Emit."""
         records.append(
             Observation(
                 candidate=candidate.name,
@@ -334,6 +345,7 @@ def oracle_evaluate(
         )
 
     def done(status: str) -> EvaluationReport:
+        """Done."""
         return EvaluationReport(tuple(records), len(cases), status)  # type: ignore[arg-type]
 
     for case in cases:
@@ -513,19 +525,23 @@ _TOKEN_POOL = list(range(0, 31)) + [901, 902, 903]
 
 
 def _rand_text(rng: random.Random, max_len: int = 10) -> str:
+    """Rand text."""
     return "".join(rng.choice(_TEXT_POOL) for _ in range(rng.randint(0, max_len)))
 
 
 def _rand_tokens(rng: random.Random, length: int) -> tuple[int, ...]:
+    """Rand tokens."""
     return tuple(rng.choice(_TOKEN_POOL) for _ in range(length))
 
 
 def _contains_boundary(tokens: tuple[int, ...], boundary: tuple[int, ...]) -> bool:
+    """Contains boundary."""
     return any(
         tokens[i : i + len(boundary)] == boundary for i in range(len(tokens) - len(boundary) + 1)
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _build_trial(
     rng: random.Random,
 ) -> tuple[list[Fixture], list[CaseScript], tuple[int, ...], int, int]:
@@ -645,6 +661,7 @@ def _run_pair(
     seed: int,
     preset_cancel: bool = False,
 ) -> tuple[EvaluationReport, EvaluationReport, ScriptBackend, ScriptBackend]:
+    """Run pair."""
     event_a, event_b = Event(), Event()
     if preset_cancel:
         event_a.set()
@@ -673,6 +690,7 @@ def _run_pair(
 
 
 def _assert_reports_equal(real: EvaluationReport, expected: EvaluationReport) -> None:
+    """Assert reports equal."""
     assert [asdict(o) for o in real.observations] == [asdict(o) for o in expected.observations]
     assert real.status == expected.status
     assert real.planned_count == expected.planned_count
@@ -685,6 +703,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_differential_fuzz_400_trials():
+        """Test differential fuzz 400 trials."""
         rng = random.Random(20261015)  # noqa: S311 -- deterministic test seed
         for _ in range(400):
             fixtures, scripts, boundary, cap, seed = _build_trial(rng)
@@ -693,6 +712,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_differential_fuzz_preset_cancel():
+        """Test differential fuzz preset cancel."""
         rng = random.Random(99)  # noqa: S311 -- deterministic test seed
         for _ in range(25):
             fixtures, scripts, boundary, cap, seed = _build_trial(rng)
@@ -705,6 +725,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_exact_match_with_boundary_strip():
+        """Test exact match with boundary strip."""
         tokens = (10, 11, 1)
         expected = scripted_decode((10, 11))
         real, oracle = _one_case(tokens=tokens, boundary=(1,), expected=expected, cap=3)
@@ -721,6 +742,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_case_difference_is_not_exact_match():
+        """Test case difference is not exact match."""
         tokens = (10, 11)  # decodes to "kl"
         real, oracle = _one_case(tokens=tokens, boundary=(9,), expected="KL", cap=2)
         _assert_reports_equal(real, oracle)
@@ -731,6 +753,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_boundary_at_position_zero():
+        """Test boundary at position zero."""
         real, oracle = _one_case(tokens=(1, 10), boundary=(1,), expected="", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -740,6 +763,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_boundary_longer_than_output():
+        """Test boundary longer than output."""
         real, oracle = _one_case(tokens=(1, 2), boundary=(1, 2, 3), expected="x", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -748,6 +772,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_overlapping_boundary():
+        """Test overlapping boundary."""
         real, oracle = _one_case(tokens=(3, 3, 3), boundary=(3, 3), expected="", cap=3)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -756,6 +781,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_tokenization_mismatch_flag():
+        """Test tokenization mismatch flag."""
         real, oracle = _one_case(tokens=(7, 901), boundary=(1,), expected="x", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -765,6 +791,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_empty_generation_cancelled():
+        """Test empty generation cancelled."""
         real, oracle = _one_case(tokens=(), boundary=(1,), expected="", gen_kind="cancelled", cap=4)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -777,6 +804,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_unicode_roundtrip():
+        """Test unicode roundtrip."""
         tokens = (1, 2, 3, 810, 811, 812)
         expected = scripted_decode(tokens)
         assert expected == "αβγ→🎉中"
@@ -788,6 +816,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_decode_failure_taxonomy():
+        """Test decode failure taxonomy."""
         real, oracle = _one_case(tokens=(10, _FAIL_TOKEN, 11), boundary=(9,), expected="x", cap=3)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -799,6 +828,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_decode_non_str_taxonomy():
+        """Test decode non str taxonomy."""
         real, oracle = _one_case(tokens=(_NONSTR_TOKEN,), boundary=(9,), expected="x", cap=1)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -807,6 +837,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_diagnostic_decode_failure_gives_none():
+        """Test diagnostic decode failure gives none."""
         real, oracle = _one_case(tokens=(10, 11), boundary=(_FAIL_TOKEN,), expected="kl", cap=2)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -817,6 +848,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_empty_boundary_text_gives_none():
+        """Test empty boundary text gives none."""
         real, oracle = _one_case(tokens=(10,), boundary=(_EMPTY_TEXT_TOKEN,), expected="k", cap=1)
         _assert_reports_equal(real, oracle)
         (obs,) = real.observations
@@ -826,6 +858,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_error_allowlist_passthrough():
+        """Test error allowlist passthrough."""
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_allow", cap=4
         )
@@ -837,6 +870,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_error_text_sanitized():
+        """Test error text sanitized."""
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_text", cap=4
         )
@@ -848,6 +882,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_error_none_sanitized():
+        """Test error none sanitized."""
         real, oracle = _one_case(
             tokens=(5,), boundary=(9,), expected="x", gen_kind="error_none", cap=4
         )
@@ -856,6 +891,7 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error == "backend_reported_error"
 
     def test_failure_taxonomy(self):
+        """Test failure taxonomy."""
         for encode_kind, gen_kind, want_error in [
             ("raise", "limit", "encode_failed"),
             ("invalid_list", "limit", "invalid_input_ids"),
@@ -887,6 +923,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_render_failed():
+        """Test render failed."""
         fixture = Fixture(
             id="renderfail",
             messages=(Message(role="user", content="q"), Message(role="user", content="q2")),
@@ -904,6 +941,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_generate_sets_event_mid_run():
+        """Test generate sets event mid run."""
         real, oracle = _one_case(
             tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="generate"
         )
@@ -918,6 +956,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_encode_sets_event_keeps_input_ids():
+        """Test encode sets event keeps input ids."""
         real, oracle = _one_case(
             tokens=(10, 11), boundary=(9,), expected="kl", cap=2, set_event_at="encode"
         )
@@ -933,6 +972,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_decode_diag_event_then_loop_top_cancel():
+        """Test decode diag event then loop top cancel."""
         fixtures = [
             Fixture(
                 id="c0", messages=(Message(role="user", content="q"),), expected="kl", group="g"
@@ -954,6 +994,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_request_seed_derivation():
+        """Test request seed derivation."""
         fixtures = [
             Fixture(
                 id=f"case-{i}☃",
@@ -971,6 +1012,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_determinism():
+        """Test determinism."""
         rng = random.Random(31337)  # noqa: S311 -- deterministic test seed
         fixtures, scripts, boundary, cap, seed = _build_trial(rng)
         first, _, _, _ = _run_pair(fixtures, scripts, boundary, cap, seed)
@@ -980,6 +1022,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_no_secret_leak():
+        """Test no secret leak."""
         scenarios = [
             {"gen_kind": "error_text"},
             {"gen_kind": "raise"},
@@ -1001,6 +1044,7 @@ class EvaluateAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_observation_field_structure():
+        """Test observation field structure."""
         tokens = (10, 11, 1)
         real, oracle = _one_case(
             tokens=tokens, boundary=(1,), expected=scripted_decode((10, 11)), cap=3
@@ -1019,7 +1063,9 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error is None
         assert obs.status == "completed"
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_validation_parity(self):
+        """Test validation parity."""
         for breakage in [
             "candidate",
             "cases_empty",
@@ -1101,6 +1147,7 @@ def _one_case(
     encode_kind: str = "ok",
     fixture_id: str = "edge",
 ) -> tuple[EvaluationReport, EvaluationReport]:
+    """One case."""
     fixture = Fixture(
         id=fixture_id,
         messages=(Message(role="user", content="q"),),
@@ -1120,6 +1167,7 @@ def _one_case(
 
 
 def _valid_kwargs() -> dict:
+    """Valid kwargs."""
     fixture = Fixture(
         id="v", messages=(Message(role="user", content="q"),), expected="e", group="g"
     )
@@ -1134,7 +1182,10 @@ def _valid_kwargs() -> dict:
 
 
 def _nfc_dup_cases() -> tuple[Fixture, Fixture]:
+    """Nfc dup cases."""
+
     def mk(fid: str) -> Fixture:
+        """Mk."""
         return Fixture(
             id=fid, messages=(Message(role="user", content="q"),), expected="e", group="g"
         )

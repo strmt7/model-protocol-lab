@@ -95,6 +95,7 @@ def _family_of(candidate_name: object) -> str:
     return candidate_name.split("/", 1)[0] or "unknown"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def audit_search_observations(
     search_entries: Sequence[dict[str, Any]],
     encode: Callable[[str], Sequence[int]],

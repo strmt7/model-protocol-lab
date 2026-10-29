@@ -70,15 +70,20 @@ def _simulate_block_hits(prompts, order, block_size):
 
 
 class CacheProfilePredicateTests(unittest.TestCase):
+    """Cache profile predicate tests."""
+
     def test_accepts_lists_and_tuples(self):
+        """Test accepts lists and tuples."""
         self.assertTrue(is_evaluable_prompt([1, 2, 3]))
         self.assertTrue(is_evaluable_prompt((0,)))
 
     def test_rejects_empty(self):
+        """Test rejects empty."""
         self.assertFalse(is_evaluable_prompt([]))
         self.assertFalse(is_evaluable_prompt(()))
 
     def test_rejects_bools_floats_negatives(self):
+        """Test rejects bools floats negatives."""
         # type(True) is int-adjacent: bools are not token ids (R13).
         self.assertFalse(is_evaluable_prompt([True, 2]))
         self.assertFalse(is_evaluable_prompt([1.0, 2]))
@@ -86,6 +91,7 @@ class CacheProfilePredicateTests(unittest.TestCase):
         self.assertFalse(is_evaluable_prompt(["1"]))
 
     def test_rejects_non_sequences(self):
+        """Test rejects non sequences."""
         self.assertFalse(is_evaluable_prompt(None))
         self.assertFalse(is_evaluable_prompt("123"))
         self.assertFalse(is_evaluable_prompt({"a": 1}))
@@ -93,7 +99,10 @@ class CacheProfilePredicateTests(unittest.TestCase):
 
 
 class CacheProfilePureTests(unittest.TestCase):
+    """Cache profile pure tests."""
+
     def test_hand_verified_basic(self):
+        """Test hand verified basic."""
         # Design-phase hand verification (5-case check, 2026-10-20):
         # [(1,2,3,4,5), (1,2,3,9,9), (7,8)]: cacheable 6/12, block(4) 0/12,
         # block(2) 4/12.
@@ -119,6 +128,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertEqual(cell2["achievable_block_fraction"], 2 / 12)
 
     def test_r1_inversion_flips_under_achievable(self):
+        """Test r1 inversion flips under achievable."""
         # Red-team A R1: potential provably misranks these two
         # templates against every request order; achievable ranks
         # them correctly (B > A). This is THE design-defining test.
@@ -135,6 +145,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertLess(ca["achievable_token_fraction"], cb["achievable_token_fraction"])
 
     def test_r1_inversion_at_block_level(self):
+        """Test r1 inversion at block level."""
         a = [[0] * 96 + [1] * 16, [0] * 96 + [2] * 16, [3] * 96 + [4] * 16, [3] * 96 + [5] * 16]
         b = [[7] * 80 + [100 + i] * 32 for i in range(1, 5)]
         ca = candidate_cache_profile(a, block_size=16)
@@ -145,6 +156,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertLess(ca["achievable_block_fraction"], cb["achievable_block_fraction"])
 
     def test_identical_prompts_potential_vs_achievable(self):
+        """Test identical prompts potential vs achievable."""
         # R7 framing guard: potential 1.0, realizable (n-1)/n = 0.5.
         cell = candidate_cache_profile([[1] * 20, [1] * 20])
         self.assertEqual(cell["potential_token_fraction"], 1.0)
@@ -152,6 +164,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertEqual(cell["n_duplicate_prompts"], 2)
 
     def test_single_prompt_zero_sharing_not_none(self):
+        """Test single prompt zero sharing not none."""
         # n_evaluable == 1 is "no sharing" (0.0), not "no data" (None).
         cell = candidate_cache_profile([[1, 2, 3]])
         self.assertEqual(cell["n_evaluable"], 1)
@@ -159,6 +172,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertEqual(cell["potential_block_fraction"], 0.0)
 
     def test_prefix_of_another_prompt(self):
+        """Test prefix of another prompt."""
         cell = candidate_cache_profile([[1, 2], [1, 2, 3, 4]])
         # Shared prefixes: (1,), (1,2); cacheable 2+2=4.
         self.assertEqual(cell["cacheable_tokens"], 4)
@@ -169,6 +183,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertEqual(cell2["achievable_block_fraction"], 2 / 6)
 
     def test_partial_trailing_blocks_never_count(self):
+        """Test partial trailing blocks never count."""
         # vLLM caches full blocks only (S2): a shared 20-token prefix
         # with B=16 contributes exactly one block per prompt.
         cell = candidate_cache_profile([[1] * 20, [1] * 20], block_size=16)
@@ -176,12 +191,14 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertEqual(cell["achievable_block_fraction"], 16 / 40)
 
     def test_shorter_than_block_size(self):
+        """Test shorter than block size."""
         cell = candidate_cache_profile([[1, 2, 3], [1, 2, 3]], block_size=16)
         self.assertEqual(cell["block_cacheable_blocks"], 0)
         self.assertEqual(cell["achievable_block_fraction"], 0.0)
         self.assertEqual(cell["achievable_token_fraction"], 0.5)
 
     def test_block_size_contract(self):
+        """Test block size contract."""
         with self.assertRaises(ValueError):
             candidate_cache_profile([[1]], block_size=0)
         with self.assertRaises(ValueError):
@@ -192,6 +209,7 @@ class CacheProfilePureTests(unittest.TestCase):
             candidate_cache_profile("not-a-list")
 
     def test_all_malformed_is_none_not_zero(self):
+        """Test all malformed is none not zero."""
         # R5: n_evaluable == 0 -> fractions are None (never 0.0/nan).
         cell = candidate_cache_profile([[], "x", [True, 2], None, [-1], [1.5]])
         self.assertEqual(cell["n"], 6)
@@ -204,23 +222,27 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertIsNone(cell["mean_prompt_tokens"])
 
     def test_mixed_malformed_excluded_fail_closed(self):
+        """Test mixed malformed excluded fail closed."""
         cell = candidate_cache_profile([[1, 2, 3], "junk", [1, 2, 3]])
         self.assertEqual(cell["n"], 3)
         self.assertEqual(cell["n_evaluable"], 2)
         self.assertEqual(cell["n_duplicate_prompts"], 2)
 
     def test_empty_records_list(self):
+        """Test empty records list."""
         cell = candidate_cache_profile([])
         self.assertEqual(cell["n"], 0)
         self.assertEqual(cell["n_evaluable"], 0)
         self.assertIsNone(cell["achievable_block_fraction"])
 
     def test_default_block_size_is_vllm_16(self):
+        """Test default block size is vllm 16."""
         self.assertEqual(DEFAULT_BLOCK_SIZE, 16)
         explicit = candidate_cache_profile([[1, 2], [1, 2]])
         self.assertEqual(explicit["block_cacheable_blocks"], 0)
 
     def test_invariants_hold_on_random_sets(self):
+        """Test invariants hold on random sets."""
         rng = random.Random(20261020)  # noqa: S311 -- deterministic test seed
         for _ in range(60):
             prompts = [
@@ -258,6 +280,7 @@ class CacheProfilePureTests(unittest.TestCase):
             self.assertLessEqual(cell["n_duplicate_prompts"], cell["n_evaluable"])
 
     def test_brute_force_agreement_token_level(self):
+        """Test brute force agreement token level."""
         # The R1 exactness proof, pinned in reality: for random prompt
         # sets, the achievable token count equals a simulated
         # exact-prefix cache over EVERY request order.
@@ -279,6 +302,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertGreater(checked, 0)
 
     def test_brute_force_agreement_block_level(self):
+        """Test brute force agreement block level."""
         rng = random.Random(11)  # noqa: S311 -- deterministic test seed
         checked = 0
         for block_size in (2, 3, 4):
@@ -298,6 +322,7 @@ class CacheProfilePureTests(unittest.TestCase):
         self.assertGreater(checked, 0)
 
     def test_deterministic_repeat(self):
+        """Test deterministic repeat."""
         prompts = [[3, 1, 4, 1, 5], [3, 1, 4, 9], [2, 7]]
         first = candidate_cache_profile(prompts)
         second = candidate_cache_profile([list(p) for p in prompts])
@@ -305,8 +330,11 @@ class CacheProfilePureTests(unittest.TestCase):
 
 
 class CacheProfileStageTests(unittest.TestCase):
+    """Cache profile stage tests."""
+
     @staticmethod
     def _obs(candidate, fixture, status, input_ids):
+        """Obs."""
         return {
             "candidate": candidate,
             "fixture": fixture,
@@ -315,6 +343,7 @@ class CacheProfileStageTests(unittest.TestCase):
         }
 
     def _stage(self, block_size=16):
+        """Stage."""
         from model_protocol_lab import experiments
 
         return experiments.cache_profile_stage(
@@ -332,6 +361,7 @@ class CacheProfileStageTests(unittest.TestCase):
         )
 
     def test_stage_groups_and_excludes_fail_closed(self):
+        """Test stage groups and excludes fail closed."""
         stage = self._stage()
         self.assertEqual(stage["n_observations"], 6)
         self.assertEqual(stage["block_size"], 16)
@@ -343,6 +373,7 @@ class CacheProfileStageTests(unittest.TestCase):
         self.assertEqual(cell_a["achievable_tokens"], 3)
 
     def test_stage_cells_pass_validator(self):
+        """Test stage cells pass validator."""
         from model_protocol_lab import experiments
 
         stage = self._stage()
@@ -350,10 +381,12 @@ class CacheProfileStageTests(unittest.TestCase):
             self.assertTrue(experiments._cache_profile_cell_valid(cell), cell)
 
     def test_stage_block_size_recorded(self):
+        """Test stage block size recorded."""
         stage = self._stage(block_size=8)
         self.assertEqual(stage["block_size"], 8)
 
     def test_stage_accepts_list_and_tuple(self):
+        """Test stage accepts list and tuple."""
         from model_protocol_lab import experiments
 
         obs = [self._obs("a", "f1", "completed", (1, 2))]
@@ -363,6 +396,7 @@ class CacheProfileStageTests(unittest.TestCase):
         self.assertEqual(as_list["per_candidate"]["a"]["n_evaluable"], 1)
 
     def test_stage_rejects_bad_inputs(self):
+        """Test stage rejects bad inputs."""
         from model_protocol_lab import experiments
 
         with self.assertRaises(ValueError):
@@ -374,8 +408,11 @@ class CacheProfileStageTests(unittest.TestCase):
 
 
 class CacheProfileProfileTests(unittest.TestCase):
+    """Cache profile profile tests."""
+
     @staticmethod
     def _obs_pair(a_prompts, b_prompts):
+        """Obs pair."""
         from model_protocol_lab import experiments
 
         obs = []
@@ -400,6 +437,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         return experiments.cache_profile_stage(observations=obs)
 
     def test_gap_most_least(self):
+        """Test gap most least."""
         from model_protocol_lab import experiments
 
         # Default block size 16: candidate a's prompts share a full
@@ -419,6 +457,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         self.assertFalse(profile["evaluable_mismatch"])
 
     def test_uniform_exact_zero(self):
+        """Test uniform exact zero."""
         # F1/D5: uniform is an exact 0.0 gap on identical input data.
         from model_protocol_lab import experiments
 
@@ -432,6 +471,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         self.assertEqual(set(profile["least_sharable"]), {"a", "b"})
 
     def test_excluded_candidates(self):
+        """Test excluded candidates."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([[1, 2], [1, 3]], [])
@@ -442,6 +482,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         self.assertEqual(profile["most_sharable"], ["a"])
 
     def test_all_excluded_gap_and_uniform_none(self):
+        """Test all excluded gap and uniform none."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([], [])
@@ -452,6 +493,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         self.assertEqual(set(profile["excluded_candidates"]), {"a", "b"})
 
     def test_evaluable_mismatch_flagged(self):
+        """Test evaluable mismatch flagged."""
         # R14: different denominators across candidates must warn.
         from model_protocol_lab import experiments
 
@@ -460,6 +502,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         self.assertTrue(profile["evaluable_mismatch"])
 
     def test_invalid_candidates(self):
+        """Test invalid candidates."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([[1, 2]], [[1, 3]])
@@ -469,6 +512,7 @@ class CacheProfileProfileTests(unittest.TestCase):
             self.assertEqual(profile["detail"], "invalid_candidates")
 
     def test_stage_invalid_branches(self):
+        """Test stage invalid branches."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([[1, 2]], [[1, 3]])
@@ -496,6 +540,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         )
 
     def test_hostile_cell_rejected(self):
+        """Test hostile cell rejected."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([[1, 2], [1, 3]], [[7, 8], [7, 9]])
@@ -507,6 +552,7 @@ class CacheProfileProfileTests(unittest.TestCase):
         )
 
     def test_profile_non_dict_entry_is_stage_invalid(self):
+        """Test profile non dict entry is stage invalid."""
         from model_protocol_lab import experiments
 
         stage = self._obs_pair([[1, 2]], [[1, 3]])
@@ -518,16 +564,21 @@ class CacheProfileProfileTests(unittest.TestCase):
 
 
 class CacheProfileCellValidTests(unittest.TestCase):
+    """Cache profile cell valid tests."""
+
     @staticmethod
     def _good_cell():
+        """Good cell."""
         return candidate_cache_profile([[1, 2, 3], [1, 2, 4]])
 
     def test_valid_cell(self):
+        """Test valid cell."""
         from model_protocol_lab import experiments
 
         self.assertTrue(experiments._cache_profile_cell_valid(self._good_cell()))
 
     def test_rejections(self):
+        """Test rejections."""
         from model_protocol_lab import experiments
 
         valid = experiments._cache_profile_cell_valid
@@ -560,6 +611,7 @@ class CacheProfileCellValidTests(unittest.TestCase):
         self.assertFalse(valid([1]))
 
     def test_zero_evaluable_none_enforced(self):
+        """Test zero evaluable none enforced."""
         from model_protocol_lab import experiments
 
         valid = experiments._cache_profile_cell_valid
@@ -578,13 +630,17 @@ class _Fmt:
 
 
 class CacheProfileCliTests(unittest.TestCase):
+    """Cache profile cli tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         from dataclasses import asdict
 
         from model_protocol_lab.core import Observation
 
         def _observation(fixture, input_ids):
+            """Observation."""
             return asdict(
                 Observation(
                     candidate="t1",
@@ -615,6 +671,7 @@ class CacheProfileCliTests(unittest.TestCase):
         }
 
     def test_probe_runner_records_payload(self):
+        """Test probe runner records payload."""
         from model_protocol_lab import cli
 
         result = self._result()
@@ -629,6 +686,7 @@ class CacheProfileCliTests(unittest.TestCase):
         self.assertAlmostEqual(payload["per_candidate"]["t1"]["achievable_token_fraction"], 3 / 10)
 
     def test_probe_runner_respects_block_size(self):
+        """Test probe runner respects block size."""
         from model_protocol_lab import cli
 
         result = self._result()
@@ -636,6 +694,7 @@ class CacheProfileCliTests(unittest.TestCase):
         self.assertEqual(result["cache_profile"]["block_size"], 2)
 
     def test_probe_runner_never_raises(self):
+        """Test probe runner never raises."""
         from model_protocol_lab import cli
 
         result = {"search": "not-a-list"}
@@ -644,6 +703,7 @@ class CacheProfileCliTests(unittest.TestCase):
         self.assertEqual(result["cache_profile"]["detail"], "cache_profile_unavailable")
 
     def test_probe_runner_never_raises_on_bad_block_size(self):
+        """Test probe runner never raises on bad block size."""
         from model_protocol_lab import cli
 
         result = self._result()
@@ -651,6 +711,7 @@ class CacheProfileCliTests(unittest.TestCase):
         self.assertFalse(result["cache_profile"]["available"])
 
     def test_probe_never_changes_selection(self):
+        """Test probe never changes selection."""
         # R12: non-interference is mechanical -- the probe reads
         # recorded input_ids only and writes one namespaced key; the
         # run decision and selection keys are bit-identical afterwards.
@@ -666,6 +727,7 @@ class CacheProfileCliTests(unittest.TestCase):
         self.assertIn("cache_profile", result)
 
     def test_probe_skips_non_dict_entries(self):
+        """Test probe skips non dict entries."""
         from model_protocol_lab import cli
 
         result = {
@@ -680,8 +742,11 @@ class CacheProfileCliTests(unittest.TestCase):
 
 
 class CacheProfileReportingTests(unittest.TestCase):
+    """Cache profile reporting tests."""
+
     @staticmethod
     def _result(per_candidate, **overrides):
+        """Result."""
         payload = {
             "available": True,
             "block_size": 16,
@@ -699,9 +764,11 @@ class CacheProfileReportingTests(unittest.TestCase):
 
     @staticmethod
     def _cell():
+        """Cell."""
         return candidate_cache_profile([[1] * 32, [1] * 31 + [2]], block_size=16)
 
     def test_section_renders_sharability(self):
+        """Test section renders sharability."""
         from model_protocol_lab import reporting
 
         result = self._result(
@@ -717,6 +784,7 @@ class CacheProfileReportingTests(unittest.TestCase):
         self.assertIn("not a cost verdict", html)
 
     def test_section_escapes_hostile_names(self):
+        """Test section escapes hostile names."""
         from model_protocol_lab import reporting
 
         evil = 't1"><script>alert(1)</script>'
@@ -726,6 +794,7 @@ class CacheProfileReportingTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         from model_protocol_lab import reporting
 
         self.assertEqual(reporting._cache_profile_section({}), "")
@@ -735,6 +804,7 @@ class CacheProfileReportingTests(unittest.TestCase):
         )
 
     def test_section_mismatch_warning(self):
+        """Test section mismatch warning."""
         from model_protocol_lab import reporting
 
         result = self._result({"t1": self._cell()}, evaluable_mismatch=True)
@@ -742,6 +812,7 @@ class CacheProfileReportingTests(unittest.TestCase):
         self.assertIn("different numbers of evaluable prompts", html)
 
     def test_toc_anchors_resolve_to_body_ids(self):
+        """Test toc anchors resolve to body ids."""
         # Regression test (found during cycle 168): template_robustness
         # and ablation were registered in the TOC but never concatenated
         # into the HTML body, so their TOC links pointed at missing
@@ -792,6 +863,7 @@ class CacheProfileReportingTests(unittest.TestCase):
 
 
 def _cp_diff_payload(name="c", achievable_block=0.25, **overrides):
+    """Cp diff payload."""
     # Producer-consistent stories (cycle 177, wave-7 F6b): the
     # strengthened validator recomputes every fraction from the
     # counts, so a different achievable-block share is a different
@@ -834,7 +906,10 @@ def _cp_diff_payload(name="c", achievable_block=0.25, **overrides):
 
 
 class CacheProfileDiffTests(unittest.TestCase):
+    """Cache profile diff tests."""
+
     def test_identical_payloads(self):
+        """Test identical payloads."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload()
@@ -845,6 +920,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], [])
 
     def test_block_drift_detected(self):
+        """Test block drift detected."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(achievable_block=0.25)
@@ -859,6 +935,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertEqual(diff["potential_drift"], [])
 
     def test_token_and_potential_drift_detected(self):
+        """Test token and potential drift detected."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(achievable_block=0.25)
@@ -887,6 +964,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertEqual(len(diff["potential_drift"]), 1)
 
     def test_candidates_added_removed(self):
+        """Test candidates added removed."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(name="c")
@@ -897,6 +975,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertEqual(diff["candidates_removed"], ["c"])
 
     def test_excluded_added_removed(self):
+        """Test excluded added removed."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(name="c")
@@ -915,6 +994,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertEqual(diff["excluded_removed"], ["c"])
 
     def test_asymmetric_and_neither(self):
+        """Test asymmetric and neither."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload()
@@ -928,6 +1008,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertFalse(neither["changed"])
 
     def test_hostile_payload_rejected(self):
+        """Test hostile payload rejected."""
         from model_protocol_lab import diffreports
 
         valid = _cp_diff_payload()
@@ -965,6 +1046,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertFalse(diffreports._valid_cache_profile(hostile6))
 
     def test_render_summary_lines(self):
+        """Test render summary lines."""
         from model_protocol_lab import diffreports
 
         old = _cp_diff_payload(achievable_block=0.25)
@@ -982,6 +1064,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertTrue(any("unavailable" in line for line in lines), lines)
 
     def test_render_summary_escapes_hostile_names(self):
+        """Test render summary escapes hostile names."""
         from model_protocol_lab import diffreports
 
         evil = "c\rmalicious"
@@ -993,6 +1076,7 @@ class CacheProfileDiffTests(unittest.TestCase):
         self.assertNotIn("\r", joined)
 
     def test_diff_reports_integration(self):
+        """Test diff reports integration."""
         from model_protocol_lab import diffreports
 
         base = diffreports.diff_reports({"decision": "abstain"}, {"decision": "abstain"})
@@ -1018,7 +1102,10 @@ class CacheProfileDiffTests(unittest.TestCase):
 
 
 class CacheProfileFailClosedTests(unittest.TestCase):
+    """Cache profile fail closed tests."""
+
     def test_all_observations_malformed(self):
+        """Test all observations malformed."""
         from model_protocol_lab import experiments
 
         stage = experiments.cache_profile_stage(
@@ -1035,6 +1122,7 @@ class CacheProfileFailClosedTests(unittest.TestCase):
         self.assertIsNone(profile["uniform"])
 
     def test_stage_never_raises_on_observation_data(self):
+        """Test stage never raises on observation data."""
         from model_protocol_lab import experiments
 
         stage = experiments.cache_profile_stage(
@@ -1044,6 +1132,7 @@ class CacheProfileFailClosedTests(unittest.TestCase):
         self.assertEqual(cell["n_evaluable"], 1)
 
     def test_profile_invalidated_by_hostile_payload(self):
+        """Test profile invalidated by hostile payload."""
         # _valid_cache_profile must reject a hostile payload that
         # looks structurally right: fractions inconsistent with counts.
         from model_protocol_lab import diffreports
@@ -1057,6 +1146,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
     """Tempdir mutation gates on the exactness-critical lines of cacheprofile."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -1076,6 +1166,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _r1_scenario(mod):
+        """R1 scenario."""
         # The exactness core: achievable tokens must drop the one
         # unavoidable first miss per shared prefix (R1).
         a = [[0] * 100 + [1] * 10, [0] * 100 + [2] * 10, [3] * 100 + [4] * 10, [3] * 100 + [5] * 10]
@@ -1084,6 +1175,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
         assert cell["achievable_token_fraction"] == 200 / 440, cell
 
     def test_mutant_achievable_drops_first_miss_caught(self):
+        """Test mutant achievable drops first miss caught."""
         self._run_gate(
             "cacheprofile",
             "achievable_no_first_miss",
@@ -1094,12 +1186,14 @@ class CacheProfileMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _r1_block_scenario(mod):
+        """R1 block scenario."""
         b = [[7] * 80 + [100 + i] * 32 for i in range(1, 5)]
         cell = mod.candidate_cache_profile(b, block_size=16)
         assert cell["achievable_blocks"] == 15, cell
         assert cell["achievable_block_fraction"] == 16 * 15 / 448, cell
 
     def test_mutant_achievable_block_drops_first_miss_caught(self):
+        """Test mutant achievable block drops first miss caught."""
         self._run_gate(
             "cacheprofile",
             "achievable_block_no_first_miss",
@@ -1110,6 +1204,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _predicate_scenario(mod):
+        """Predicate scenario."""
         # Empty prompts must be excluded (R5/D1), not counted.
         assert mod.is_evaluable_prompt([1]) is True
         assert mod.is_evaluable_prompt([]) is False
@@ -1117,6 +1212,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
         assert cell["n_evaluable"] == 0, cell
 
     def test_mutant_empty_prompt_accepted_caught(self):
+        """Test mutant empty prompt accepted caught."""
         self._run_gate(
             "cacheprofile",
             "empty_prompt_accepted",
@@ -1131,6 +1227,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _partial_block_scenario(mod):
+        """Partial block scenario."""
         # S2: partial trailing blocks never count, even when the full
         # shared prefix is longer.
         cell = mod.candidate_cache_profile([[1] * 20, [1] * 20], block_size=16)
@@ -1138,6 +1235,7 @@ class CacheProfileMutationGateTests(unittest.TestCase):
         assert cell["achievable_block_fraction"] == 16 / 40, cell
 
     def test_mutant_partial_block_counted_caught(self):
+        """Test mutant partial block counted caught."""
         self._run_gate(
             "cacheprofile",
             "partial_block_counted",

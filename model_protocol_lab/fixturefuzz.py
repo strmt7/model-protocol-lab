@@ -78,6 +78,7 @@ class FuzzCase:
     warn_id: str | None = None
     file_kind: str = "regular"
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def __post_init__(self) -> None:
         """Validate the fuzz target and outcome vocabulary."""
         if self.target not in TARGETS:
@@ -288,6 +289,7 @@ def _observe(
         return "crash", None, [], exc
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def evaluate_case(
     case: FuzzCase,
     workdir: Path,

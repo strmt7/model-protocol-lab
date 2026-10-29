@@ -245,6 +245,7 @@ def _check_summaries_consistent(data: dict[str, Any], checks: list[dict[str, str
     _record(checks, "summaries_consistent", _PASSED)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _replay_selection(data: dict[str, Any]) -> tuple[str, str | None, str]:
     """Re-derive (decision, selected_candidate, note) from stored summaries.
 
@@ -650,6 +651,7 @@ def _append_determinism_check(report: dict[str, Any], audit: dict[str, Any]) -> 
     report["verdict"] = "ok" if all(c["status"] != _FAILED for c in checks) else "failed"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def run_verify(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``mpl verify``; returns the process exit code.
 

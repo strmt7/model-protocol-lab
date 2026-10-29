@@ -1,0 +1,2905 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/PAYLOADSERIALIZATION_DESIGN/">
+      
+      
+        <link rel="prev" href="../NUMFORM_DESIGN/">
+      
+      
+        <link rel="next" href="../PLACEMENT_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Payload serialization - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#payload-serialization-probe-design-round-adjudicated-no-build" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Payload serialization
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ANSWERSYNTAX_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Answer syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bundle (multi-question)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DIRECTIVE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directive ladder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONLANGUAGE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTIQUESTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-question (restated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-35-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #35, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-no-build-the-fatal-defects-each-individually-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why NO-BUILD: the fatal defects (each individually blocking)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why NO-BUILD: the fatal defects (each individually blocking)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — "The task payload" is undefined, and the tree gives it incompatible meanings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-the-same-content-is-false-across-the-named-encodings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — "The same content" is false across the named encodings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — "Serialization" bundles at least six simultaneous treatments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — The byte-exact scorer × output-format priming manufactures and hides flips
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-degenerate-populations-and-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Degenerate populations and arms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F6 — The researcher's design as written does not survive its own amendments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-resubmission-specification-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Resubmission specification (NOT a build order)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Resubmission specification (NOT a build order)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monday-morning-utility-narrowed-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility (narrowed instrument)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arms-frozen-byte-exact-stdlib-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms (frozen, byte-exact, stdlib-only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#population-and-controls-the-attribution-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Population and controls (the attribution contract)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scorer-pins-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scorer pins (binding)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-shape-and-decision-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report shape and decision rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Removals applied (verifier §6 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sources-the-resubmission-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sources the resubmission may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-35-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #35, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-no-build-the-fatal-defects-each-individually-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why NO-BUILD: the fatal defects (each individually blocking)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why NO-BUILD: the fatal defects (each individually blocking)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — "The task payload" is undefined, and the tree gives it incompatible meanings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-the-same-content-is-false-across-the-named-encodings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — "The same content" is false across the named encodings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — "Serialization" bundles at least six simultaneous treatments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — The byte-exact scorer × output-format priming manufactures and hides flips
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-degenerate-populations-and-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Degenerate populations and arms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F6 — The researcher's design as written does not survive its own amendments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-resubmission-specification-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Resubmission specification (NOT a build order)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Resubmission specification (NOT a build order)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monday-morning-utility-narrowed-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility (narrowed instrument)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arms-frozen-byte-exact-stdlib-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms (frozen, byte-exact, stdlib-only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#population-and-controls-the-attribution-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Population and controls (the attribution contract)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scorer-pins-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scorer pins (binding)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-shape-and-decision-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report shape and decision rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Removals applied (verifier §6 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sources-the-resubmission-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sources the resubmission may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="payload-serialization-probe-design-round-adjudicated-no-build">Payload-serialization probe — design round (ADJUDICATED: NO-BUILD)<a class="headerlink" href="#payload-serialization-probe-design-round-adjudicated-no-build" title="Permanent link">&para;</a></h1>
+<h2 id="round-summary-coordinator-35-design-round-only-nothing-built">Round summary (coordinator #35, design round only — nothing built)<a class="headerlink" href="#round-summary-coordinator-35-design-round-only-nothing-built" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Tree at main <code>960b70dcde87</code> (cycle 211 closed green, 8,402 tests, per the
+  round brief). This round was READ-ONLY except for this doc and the briefs;
+  no suite was run, no push was made, no tag was cut or discussed.</li>
+<li>Specialists (blind to each other): researcher
+  (<code>~/workspace/agents_out/payloadformat/research.md</code>), red-team A
+  (<code>redteam_a.md</code>), red-team B (<code>redteam_b.md</code>), verifier/claims auditor
+  (<code>verifier.md</code>). All four briefs landed; the verifier resolved every
+  externally checkable claim against primary sources and spot-checked the
+  load-bearing tree citations.</li>
+<li>Convergence: both red teams independently returned NO-BUILD, and the
+  verifier upheld both verdicts. The coordinator re-executed the
+  load-bearing claims itself (see "Adjudication evidence" below) and
+  concurs.</li>
+<li><strong>Verdict: NO-BUILD</strong> — for the candidate as tentatively framed
+  (<code>run --payload-format</code>: JSON vs plain text vs other encodings of "the
+  same content", verdict flips as headline) AND for the researcher's
+  design as written. The reasons are not implementation gaps; they are
+  defects in the defining claim (see §1). §2 specifies what a
+  resubmission would have to satisfy in full. A resubmission satisfying
+  §2 is a DIFFERENT, narrower instrument and must be reviewed as a new
+  design, not built as "this probe with amendments". Accepting the
+  amendments while keeping the original causal claim does not count as
+  accepting them.</li>
+</ul>
+<h2 id="1-why-no-build-the-fatal-defects-each-individually-blocking">1. Why NO-BUILD: the fatal defects (each individually blocking)<a class="headerlink" href="#1-why-no-build-the-fatal-defects-each-individually-blocking" title="Permanent link">&para;</a></h2>
+<h3 id="f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings">F1 — "The task payload" is undefined, and the tree gives it incompatible meanings<a class="headerlink" href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" title="Permanent link">&para;</a></h3>
+<p>Placement's payload is a prose fact passage (<code>placement.py:267-283</code>
+<code>arm_content</code>); a structured spec's context is prose
+(<code>structured.py:445-458</code> <code>render_prompt</code>); a structured spec's answer
+document is canonical JSON (<code>structured.py:463-480</code>
+<code>build_structured_fixtures</code>); shipped user fixtures are instructions, not
+data (<code>examples/fixtures.json</code>). No module defines a serializable
+task-data record type. A design that leaves the choice to the builder
+does not have a population, a scorer, or a headline — underspecification
+at this level is itself a build-blocker.</p>
+<h3 id="f2-the-same-content-is-false-across-the-named-encodings">F2 — "The same content" is false across the named encodings<a class="headerlink" href="#f2-the-same-content-is-false-across-the-named-encodings" title="Permanent link">&para;</a></h3>
+<p>Typing, loss, and parser-dependence change the content before any model
+runs. Executed in adjudication: <code>json.loads('{"a": 1, "a": 2}')</code> gives
+<code>{'a': 2}</code> (last-wins); JSON <code>349</code> is <code>int</code> while plain-text <code>349</code> is
+<code>str</code>; JSON <code>true</code>/<code>null</code> are boolean/null while plain-text <code>true</code>/<code>null</code>
+are strings; CSV flattens nesting; XML must choose attributes vs
+elements. There is no canonical-equivalence theorem for JSON-vs-prose
+comparable to canonical-form's UAX #15 basis, and prose has no parser to
+be equivalent under. A content-preserving claim needs, per arm, a frozen
+byte-exact renderer, a frozen key order, and a lossless value
+restriction — which the candidate as framed does not supply.</p>
+<h3 id="f3-serialization-bundles-at-least-six-simultaneous-treatments">F3 — "Serialization" bundles at least six simultaneous treatments<a class="headerlink" href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" title="Permanent link">&para;</a></h3>
+<p>Token length, delimiters/punctuation, quoting/escaping, key order,
+whitespace, and output priming all move together. Key order is already
+a shipped probe (<code>run --field-order</code>); whitespace is <code>ws_canonical</code>'s
+territory; length/position are needle/distraction/density/placement
+axes. No paired contrast over such arms attributes a flip to
+"serialization" rather than to the bundle. The only supportable claim
+is descriptive pairwise discordance between named frozen renderings,
+with length and priming stated as bundled, never a causal
+"serialization changes verdicts" headline.</p>
+<h3 id="f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips">F4 — The byte-exact scorer × output-format priming manufactures and hides flips<a class="headerlink" href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" title="Permanent link">&para;</a></h3>
+<p>The verdict is byte-exact with no answer stripping:
+<code>core.py:797</code> (<code>exact_match = status == "completed" and answer ==
+case.expected</code>), conjoined with boundary presence in stage cells
+(<code>experiments.py:9515</code> pattern). A model answering correctly in the
+input arm's idiom (<code>{"code": "amber-1234"}</code> on the JSON arm) scores
+False against a bare expected value; a model failing to parse the JSON
+arm but guessing the bare code scores True on both. The fixes are
+closed: parse-then-compare redefines "verdict" relative to every sibling
+probe and the diff validator's digest identity (the fix canonical-form
+rejected); outcome-dependent exclusion deflates discordance exactly as
+field-order's F6 lesson discloses; the scorer-lens ladder has no
+label-strip operation and cannot rescue JSON-echo answers. The
+researcher's echo diagnostic beside the headline is necessary but does
+not cure this: it explains flips, it never rescues them, and the
+headline still bundles comprehension with priming.</p>
+<h3 id="f5-degenerate-populations-and-arms">F5 — Degenerate populations and arms<a class="headerlink" href="#f5-degenerate-populations-and-arms" title="Permanent link">&para;</a></h3>
+<p>Single-field cases collapse to punctuation differences (executed:
+scalar JSON <code>42</code> is byte-identical to plain <code>42</code>; single-field JSON
+differs from key-value lines only by braces, colon, and quotes).
+Multi-field populations are already partly owned: field-order owns key
+order over 15 specs, structured owns output adherence over 9 specs
+(1–2 fields only — not 1–4, as red-team A misstated; see §4).
+Whitespace-only JSON variants (compact vs spaced vs pretty) are a
+whitespace probe under a serialization name. The researcher's
+multi-record table population is the right <em>shape</em> of answer to F5, but
+it does not cure F1–F4, and its arm set and headline do not survive
+(see §2).</p>
+<h3 id="f6-the-researchers-design-as-written-does-not-survive-its-own-amendments">F6 — The researcher's design as written does not survive its own amendments<a class="headerlink" href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" title="Permanent link">&para;</a></h3>
+<p>Credit where due — the researcher already supplies a frozen multi-record
+population with unique keys and distinct values, frozen field order, a
+value alphabet plus a four-way byte-divergence assert, and an echo
+diagnostic beside the headline. What still kills it as written:</p>
+<ul>
+<li>The YAML arm must go in v1: zero runtime dependencies
+  (<code>pyproject.toml:28</code>, <code>dependencies = []</code>); no stdlib YAML parser;
+  YAML 6.0.1 importing in this VM is an environment accident, not a
+  declared dependency; a hand-rolled mirror parser is new untrusted
+  code whose quoting choices become hidden treatments. TOML has no
+  stdlib writer (<code>tomllib</code> has no <code>dumps</code>, executed); XML escaping
+  rewrites visible text. V1 arms must be stdlib-serializable frozen
+  renderings only.</li>
+<li>The falsification headline must be downgraded from causal to
+  descriptive pairwise discordance with ONE pre-registered primary pair;
+  the researcher's prose-vs-rest framing plus all-pairs matrix, with
+  placement's floors borrowed without operating characteristics for a
+  four-arm panel, does not survive the k(k−1)/2 multiplicity problem
+  (10 pairs at 5 arms).</li>
+<li>The prose "control" framing must go: prose is one encoding among
+  others. The researcher says this, then still computes prose-vs-rest
+  first. The decision rule must pick one framing before building.</li>
+<li>Missing mandatory machinery: a closed-book screen (placement pattern;
+  canonical-form's lack of one is a gap to avoid copying, not a
+  precedent); a boundary-only vs exact-only discordance decomposition;
+  the full selection-vocabulary transplant; per-arm attrition
+  reporting; a frozen fail-closed vocabulary with renderer failure
+  failing the whole stage closed.</li>
+</ul>
+<h2 id="2-resubmission-specification-not-a-build-order">2. Resubmission specification (NOT a build order)<a class="headerlink" href="#2-resubmission-specification-not-a-build-order" title="Permanent link">&para;</a></h2>
+<p>A resubmission is reviewable as a NEW design only if it satisfies ALL
+of the following in full. Partial compliance is still NO-BUILD. The
+resubmission's working name must reflect the narrowed claim (a
+descriptive frozen-renderer discordance probe); do NOT ship
+<code>--payload-format</code> until the naming audit against USAGE §8.46 passes,
+since placement's "payload" sense is reserved.</p>
+<h3 id="monday-morning-utility-narrowed-instrument">Monday-morning utility (narrowed instrument)<a class="headerlink" href="#monday-morning-utility-narrowed-instrument" title="Permanent link">&para;</a></h3>
+<p>A prompt-assembly owner, deciding whether to pin one frozen rendering
+(prose or canonical JSON) in their prompt assembly and re-run template
+selection under that pinned rendering — before a routine upstream
+format change silently flips eval verdicts. The readout answers "these
+two frozen renderings discord on N paired cases on this checkpoint",
+never "serialization is (in)ert in general", and never anything about
+weights.</p>
+<h3 id="arms-frozen-byte-exact-stdlib-only">Arms (frozen, byte-exact, stdlib-only)<a class="headerlink" href="#arms-frozen-byte-exact-stdlib-only" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Exactly one pre-registered primary pair, recommended: prose vs
+  canonical JSON as defined by <code>structured._canonical_json</code>
+  (<code>structured.py:336-343</code>: <code>json.dumps(document, sort_keys=True,
+  separators=(", ", ": "), allow_nan=False)</code>; default
+  <code>ensure_ascii=True</code>). Executed in adjudication: that rendering is
+  byte-unequal to compact <code>json.dumps</code> (<code>'{"age": 36, "name":
+  "Ada Lovelace"}'</code> vs <code>'{"age":36,"name":"Ada Lovelace"}'</code>), so the
+  canonical form must be pinned by name and by test, never assumed.</li>
+<li>Every arm is a named total function with a byte-exact specification
+  and a worked example in the resubmission doc, pinned by a test that
+  its output is byte-identical to the doc's example. "Plain text"
+  without such a function is not an arm name; it is a placeholder.
+  Pretty JSON, flow YAML, Markdown lists, and single-record tables are
+  excluded as duplicates, each with the duplicate it duplicates named.</li>
+<li>CSV stays deferred (loss analysis: CSV flattens nesting and drops
+  types). XML stays deferred (escaping rewrites visible text; no
+  canonical-serialization convention in the tree). YAML stays out of
+  v1 entirely (see F6); it may return only as a separately justified
+  v2 with a declared dependency or a frozen stdlib-only renderer the
+  validator can mirror. No other arms are decision inputs; any further
+  arms are descriptive context only.</li>
+</ul>
+<h3 id="population-and-controls-the-attribution-contract">Population and controls (the attribution contract)<a class="headerlink" href="#population-and-controls-the-attribution-contract" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Generated cases only, stage-local, never entering the user's
+  search/held-out Split (canonical-form invariant 3 pattern; Split
+  compares message inputs by NFC key, <code>core.py:193-214</code>, so variant
+  fixtures would collide — no fixture arm).</li>
+<li>Fresh multi-record tables (4–6 records × 3–4 fields), one key field
+  (unique per table), one answer field, 1–2 distractor fields whose
+  values are distinct from the answer value in every row. Cases whose
+  answer value appears in more than one row, or whose key field is not
+  unique, are excluded pre-generation with counts, never silently
+  dropped.</li>
+<li>Value restriction (v1, strictest form): flat, string-only, ASCII,
+  stem-disjoint, reader-entailed tables. Answer field is a plain
+  <code>word-number</code>-style code in every arm. No null, no nesting, no
+  duplicate keys, no floats, no non-string keys, no YAML-reserved
+  words (<code>yes</code>, <code>no</code>, <code>on</code>, <code>off</code>, <code>null</code>, <code>~</code>), no date-like strings,
+  no leading-digit strings. Non-answer fields are string-shaped too.
+  Integers/booleans are a v2 question with a frozen per-arm
+  type-rendering table, not a v1 entitlement.</li>
+<li>Held constant across arms (each a generator/validator assert):
+  the same record multiset, field values, key field, and answer field;
+  one frozen field order (alphabetical, the
+  <code>structured.describe_schema</code> convention, <code>structured.py:403-443</code>,
+  which sorts properties) in JSON keys, YAML keys (v2), and table
+  columns alike, and the same sentence field order in prose; a
+  byte-identical question and instruction string in the same position
+  relative to the table (question after the table in all arms); a
+  byte-identical output contract ("Answer with ONLY the value." or
+  equivalent, frozen); greedy decoding, the same <code>--max-new-tokens</code>,
+  the same boundary ids, the same seed, the same template family per
+  candidate. Templates are not touched: serialization lives inside
+  the user message content only.</li>
+<li>No format label in the instruction unless the label choice itself
+  is frozen identically across arms and its confound is stated.</li>
+<li>Closed-book screen arm (placement pattern, <code>placement.py:374-380</code>
+  <code>screened()</code>): a case the candidate passes closed-book is excluded
+  from the live populations, with <code>n_screened</code> and
+  <code>n_closed_book_incomplete</code> reported. Without it the headline is
+  dilutable by cases serialization cannot move.</li>
+<li>Answer-embedding audit: no field name, key, topic token, or neutral
+  sentence shares a 4-character prefix with, or is a prefix of, any
+  expected value (placement's stem-disjointness pin, extended to
+  keys). Reader-entailment audit per case: a reader given question +
+  table must derive the answer uniquely, or the case is
+  descriptive-only. If a resubmission instead reuses shipped specs,
+  it inherits field-order's <code>paired: False</code> flags verbatim — all
+  five: route-alert, route-order, classify-sentiment,
+  classify-urgency, classify-language (verified by grep: 5
+  <code>paired: False</code> entries, 10 <code>paired: True</code>, 15 specs total).</li>
+<li>Byte-divergence assert across arms per case, with excluded counts;
+  boundary-containment screen plus <code>audit_special_token_literals</code>
+  (<code>fixtures.py:471</code>) over every frozen renderer output for every
+  family before generation. Screened cases are excluded
+  pre-generation with counts, never silently dropped.</li>
+<li>Generation/record/payload caps and the generation count at the
+  legal maximum of 24 candidates are frozen in the module with
+  derivations and stated in CLI help (field-order precedent: 15
+  specs × 4 arms × 24 candidates = 1,440; canonical-form: 2 × 24 ×
+  24 = 1,152; placement: 4 × 24 × 24 = 2,304).</li>
+</ul>
+<h3 id="scorer-pins-binding">Scorer pins (binding)<a class="headerlink" href="#scorer-pins-binding" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Headline scorer, named before building: byte-exact verdict per
+  <code>core.evaluate</code> (<code>core.py:797</code>). No stripping, no parsing, no
+  normalization is added to the headline path for this probe.</li>
+<li>Beside the headline, never rescuing flips into passes: a
+  parsed-value / echo-substring diagnostic (per arm, the share of
+  byte-exact failures whose decoded answer contains the expected
+  value as a substring or as a parsed field value — the echo rate);
+  scorer-lens R1 (whitespace trim/collapse, <code>scorerlens.py:146-153</code>)
+  and fence-strip (<code>:176-187</code>) regrade rates as sensitivities; and
+  the exact-only vs boundary-only discordance decomposition (a
+  boundary-only discordance is a boundary effect, never a
+  serialization effect, and cannot falsify any claim).</li>
+<li>Expected values are pure ASCII (canonical-form SCORER PIN
+  transplant): decomposable characters live in carrier prose only.</li>
+<li>If byte-exact and parsed-value scorings disagree, the section
+  prints both and says which question each answers; it must not pick
+  the flattering one post hoc.</li>
+</ul>
+<h3 id="fail-closed-vocabulary-frozen-before-building">Fail-closed vocabulary (frozen before building)<a class="headerlink" href="#fail-closed-vocabulary-frozen-before-building" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Stage details exactly: <code>{cancelled,
+  payload_format_record_budget_exceeded,
+  payload_format_screen_failed}</code>. (The <code>payload_format_</code> prefix is
+  retained for the stage-detail pattern only; the CLI flag name is
+  still subject to the naming audit above.)</li>
+<li>Per-cell details exactly: <code>{"", arm_context_exceeded,
+  arm_evaluation_failed}</code>.</li>
+<li>Model parse outcomes exactly field-order's <code>document_kind</code> set
+  (<code>object</code> / <code>non_object</code> / <code>unparseable</code> / <code>""</code>), where
+  <code>unparseable</code> means JSON parse failure of the ANSWER only.</li>
+<li>Model parse failure is scored wrong, never a detail. Any renderer
+  failure, serializer exception, or non-UTF-8 payload degrades the
+  whole stage to <code>{"available": False, "detail":
+  "payload_format_unavailable"}</code> — never to a per-cell verdict.</li>
+<li>No new verdict words. In particular: no <code>arm_parse_failed</code>, no
+  <code>unparseable</code> as a cell detail for stage-produced inputs, no
+  <code>payload_too_large</code>, no per-arm "not applicable".</li>
+<li>Per-arm attrition (<code>n_context_exceeded</code>,
+  <code>n_evaluation_failed</code>) printed beside every paired rate; ungated
+  discordance printed as a sensitivity wherever any gating applies.</li>
+</ul>
+<h3 id="report-shape-and-decision-rule">Report shape and decision rule<a class="headerlink" href="#report-shape-and-decision-rule" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Headline population: both arms completed AND full-render id
+  sequences diverged (canonical-form invariants 9–10). Three-way
+  report per pair: ids-identical / divergent-concordant /
+  divergent-discordant, with the per-case <code>id_length_delta</code> list (in
+  case order) and <code>max_abs_id_delta</code>. Same-ids verdict flips are
+  recorded as determinism findings (<code>n_same_ids_verdict_flips</code>),
+  never as serialization fragility. A run landing 100% in the
+  ids-identical bucket reads "instrument inapplicable to this
+  tokenizer", never "the model is robust to serialization".</li>
+<li>Per-candidate classification over the id-divergent paired
+  population, with the resubmission's OWN operating
+  characteristics printed with the verdict (critical splits, power
+  at a stated gap, expected false falsifications across
+  candidates for its panel size). Borrowed floors are forbidden:
+  placement/canonical-form floors (<code>MIN_PAIRED_EVALUABLE = 6</code>,
+  <code>MIN_DISCORDANT = 2</code>, <code>placement.py:172-173</code>) and field-order
+  floors (6 discordant specs + sign test) may not be transferred
+  to a payload panel without that argument. Below the discordant
+  floor the verdict is <code>insufficient</code> — withheld, never defaulted
+  to acquittal.</li>
+<li>Selection vocabulary transplanted verbatim from canonical-form
+  (<code>canonicalform.py:566-641</code>): a candidate "passes" an arm iff it
+  passes every completed case on that arm; <code>winner_changed</code> only
+  when both arms select and winners differ;
+  <code>winner_abstention_asymmetric</code> for exactly one side selecting;
+  <code>winner_undefined</code> when neither selects or selection is
+  withheld (completed sets differ across candidates or are empty).
+  Selection-vs-abstention is NEVER a winner change. Per-arm
+  accuracy rates sit beside every selection readout; per-arm
+  completion and withheld rates are printed. The per-case
+  discordance classification is the primary readout; the winner
+  headline is secondary and labelled as such. Discordance is never
+  pooled across candidates/templates: per-candidate contrasts only.</li>
+<li>Records carry digests only (per-arm content digests, token
+  counts, <code>ids_identical</code>, <code>id_length_delta</code>, cells, details —
+  canonical-form record shape). The diff validator regenerates
+  every arm's rendering from its own literal renderer copies and
+  checks each digest plus pairwise digest inequality across arms,
+  plus <code>ids_identical</code> implies equal arm token counts. Reports
+  render counts/rates only, no payload/question/answer text, every
+  payload-derived string through <code>_escape_text</code> (<code>reporting.py:28</code>),
+  never bare <code>escape()</code>.</li>
+</ul>
+<h2 id="3-adjudication-evidence-coordinators-own-execution">3. Adjudication evidence (coordinator's own execution)<a class="headerlink" href="#3-adjudication-evidence-coordinators-own-execution" title="Permanent link">&para;</a></h2>
+<p>All snippets read-only; no suite was run.</p>
+<ul>
+<li><code>core.py:797</code>: <code>exact_match = status == "completed" and answer ==
+  case.expected</code> — verified exact line; no answer stripping in the
+  verdict path (only strip hits are field validation and a
+  prefix-trim repair variant, per the verifier's grep).</li>
+<li><code>structured._canonical_json</code> at <code>structured.py:336-343</code>:
+  <code>json.dumps(document, sort_keys=True, separators=(", ", ": "),
+  allow_nan=False)</code> — byte-unequal to compact <code>json.dumps</code>
+  (executed: <code>'{"age": 36, "name": "Ada Lovelace"}'</code> vs
+  <code>'{"age":36,"name":"Ada Lovelace"}'</code>).</li>
+<li>Duplicate-key parse: <code>json.loads('{"a": 1, "a": 2}')</code> →
+  <code>{'a': 2}</code> (last-wins) — executed.</li>
+<li><code>tomllib</code> has no <code>dumps</code> (executed: <code>hasattr(tomllib, 'dumps')</code>
+  is False); YAML 6.0.1 imports in this VM while
+  <code>pyproject.toml:28</code> declares <code>dependencies = []</code> — executed.</li>
+<li>Catalog: 29 <code>Format(</code> entries (<code>catalog.py:26</code>) — executed.</li>
+<li>Placement floors: <code>MIN_PAIRED_EVALUABLE = 6</code>,
+  <code>MIN_DISCORDANT = 2</code> at <code>placement.py:172-173</code> — verified.</li>
+<li>Field-order spec inventory: 15 specs, 10 <code>paired: True</code>, 5
+  <code>paired: False</code> (route-alert, route-order, classify-sentiment,
+  classify-urgency, classify-language) — verified by grep over
+  <code>fieldorder.py</code>.</li>
+<li>Placement <code>arm_content</code> at <code>placement.py:267-283</code> (prose payload,
+  question-position arms) — verified.</li>
+</ul>
+<h2 id="4-removals-applied-verifier-6-none-of-these-enter-any-build-doc">4. Removals applied (verifier §6 — none of these enter any build doc)<a class="headerlink" href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Researcher S2 §3.1 grammar sentence (descriptors, separators,
+  casing functions, itemizers; equivalence by shared rule
+  application): REMOVED until re-resolved from the Sclar primary
+  text. The Sclar headline (up to 76 accuracy points on
+  LLaMA-2-13B, weak cross-model correlation) is verified from the
+  abstract and survives; the grammar detail does not.</li>
+<li>Researcher S2 "(ICLR 2024)" venue tag: REMOVED until re-resolved
+  (the abstract page does not state it).</li>
+<li>Incorrect line ranges corrected, not carried forward:
+  structured canonical JSON 337–343 → 336–343 with
+  <code>allow_nan=False</code> added; placement 251–279 → 250–283; placement
+  50–51 → 50–52; cli 177–926 → 174–938; red-team A's
+  <code>experiments.py:9515-1520</code> range deleted (cell function
+  <code>_canonical_form_cell</code> at 9473–9522, verdict line 9515).</li>
+<li>POML Mistral second format corrected to "HTML (Ugly) (0.348)",
+  not plain HTML (Table 3 values otherwise verified).</li>
+<li>Red-team A F3/M1/M6 length figures (66/69/76/86/59/99/93) and
+  the derived "68% longer" / "25% longer" sentences REMOVED as
+  executed evidence: the brief never states the renderers, so the
+  numbers are not reproducible from the brief. The length-confound
+  argument survives on red-team B's reproducible case (canonical
+  JSON 35 chars vs one plain rendering 27 chars, a 29.6% delta)
+  and on canonical-form's per-case <code>id_length_delta</code> discipline.</li>
+<li>Red-team A F4 "structured spec set … with 1–4 fields" CORRECTED:
+  the shipped structured set is 1–2 fields (9 specs); 3–4-field
+  specs are field-order's six additions.</li>
+<li>Red-team A M4 prose-selection rendering <code>'winner': 'A'→ none</code>
+  REMOVED; correct form is <code>{'decision': 'no_candidate',
+  'winner': None}</code>.</li>
+<li>Red-team B M4 paired-flag sentence CORRECTED to all five
+  <code>paired: False</code> specs (see §2); B's m1 already handles the
+  single-field three, so the combined text must list five.</li>
+<li>Design-level removals: the YAML arm in v1; any causal headline
+  of the form "serialization changes verdicts"; prose as "the
+  control" / "baseline truth" / "natural format"; any new verdict
+  word (see §2); the attribution of <code>input_tokens</code> to
+  <code>placement.py</code> (it lives in <code>experiments.py</code> stage cells);
+  any borrowed floors without the resubmission's own operating
+  characteristics.</li>
+</ul>
+<h2 id="5-sources-the-resubmission-may-safely-cite">5. Sources the resubmission may safely cite<a class="headerlink" href="#5-sources-the-resubmission-may-safely-cite" title="Permanent link">&para;</a></h2>
+<ul>
+<li>He, Rungta, Koleczek, Sekhon, Wang, Hasan,
+  arXiv:2411.10541v1: Abstract (plain text, Markdown, JSON, YAML
+  templates; GPT-3.5-turbo varies by up to 40% on code
+  translation); §2.2 (five prompt components, content of each
+  placeholder stays the same, only structure/syntax differ);
+  §2.3 (OpenAI GPT-3.5/GPT-4 via Azure only); Table 1 / §3 (MMLU
+  59.7 JSON vs 50.0 Markdown on GPT-35-turbo-0613); Figure 1
+  caption ("Accuracy goes up by 42% for JSON compared to
+  Markdown" on MMLU international-law questions). Fencing that
+  must travel with it: He et al. bundle the whole prompt
+  template into one "format" treatment, cross no chat-template
+  family, run no local checkpoint under exact-token discipline,
+  and re-select no winner.</li>
+<li>Sclar, Choi, Tsvetkov, Suhr, arXiv:2310.11324v2: Abstract only
+  (up to 76 accuracy points on LLaMA-2-13B; format performance
+  only weakly correlates between models; meaning-preserving
+  formatting in few-shot settings on open models). The §3.1
+  grammar detail and the ICLR venue tag are REMOVED (see §4).</li>
+<li>Zhang, Chen, Xu, Yang (POML), arXiv:2508.13948v1, §7 Table 3
+  (100 sampled styles, WikiTQ subset): Claude 3 Haiku CSV
+  (0.449) / Markdown (0.424); DeepSeek V3 HTML (0.801) / JSON
+  (0.800); Gemini 2.0 Flash XML (0.791) / HTML (0.788); Mistral
+  AI 8x7B XML (0.365) / HTML (Ugly) (0.348); §7 text on
+  model-specific optimal table formats. Fencing: POML's 100
+  styles bundle table syntax with other styling dimensions; no
+  chat-template crossing or winner re-selection.</li>
+<li>Tam et al., arXiv:2408.02442, §4.1 (via the scoping already in
+  docs/FIELDORDER_DESIGN.md): emitted key order under
+  constrained JSON mode only (100% of GPT-3.5 JSON-mode
+  Last-Letter responses placed the "answer" key first). Fenced
+  off: emitted-order effects are not input-serialization effects.</li>
+<li>JSONSchemaBench, arXiv:2501.10868v2 (via the citation in
+  <code>structured.py:1-60</code>): output adherence only, fenced off on
+  the same ground.</li>
+<li>No "first" is claimed anywhere in this doc. The contribution
+  of any future resubmission is the combination stated in §2,
+  never priority. No fabricated citation was found in this round
+  (unlike the wave-9 round); the failures found were one
+  unresolved detail, one dropped qualifier, and sloppy line
+  ranges, all handled above by removal or correction.</li>
+<li>Two 2026 preprints the researcher saw only as search snippets
+  remain uncited and unrelied on; a resubmission wanting them
+  must verify them from primary text first.</li>
+</ul>
+<h2 id="6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc">6. What a build cycle must NOT do on the basis of this doc<a class="headerlink" href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not build the researcher's four-arm probe, the tentative
+  <code>run --payload-format</code> sketch, or any YAML arm in v1.</li>
+<li>Do not write a causal "serialization changes verdicts"
+  headline, a prose-control framing, or any new verdict word.</li>
+<li>Do not transfer placement/canonical-form or field-order floors
+  to a new panel without printing that panel's own operating
+  characteristics.</li>
+<li>Building, if it ever happens, is a separate cycle, on a fresh
+  design review of a resubmission satisfying §2 in full — and
+  only on a BUILD verdict from that review.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

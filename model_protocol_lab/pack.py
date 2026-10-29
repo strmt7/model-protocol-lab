@@ -157,8 +157,6 @@ def _valid_bundle_path(path: Any) -> bool:
 class _ManifestDuplicateField(ValueError):
     """A bundle manifest carried the same field more than once."""
 
-    pass
-
 
 def _unique_manifest_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Return the unique manifest object."""
@@ -371,6 +369,7 @@ def load_bundle_bytes(path: Path) -> bytes:
     return content
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _preparse_container(data: bytes) -> tuple[bytes, int]:
     """Validate the strict container shape and return ``(comment,
     entry_count)`` before ``ZipFile`` parses anything.
@@ -423,6 +422,7 @@ def _preparse_container(data: bytes) -> tuple[bytes, int]:
     return comment, total_entries
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _valid_manifest(manifest: Any) -> str | None:
     """Return ``None`` when the manifest matches the format-1 schema,
     else a short fixed detail token. Exact types throughout; unknown

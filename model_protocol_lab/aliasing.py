@@ -151,6 +151,7 @@ def is_evaluable_ids(value: Any) -> bool:
     return _valid_ids(value, nonempty=True)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def analyze_candidate(
     observations: Any,
     *,

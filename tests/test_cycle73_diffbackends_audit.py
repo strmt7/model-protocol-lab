@@ -113,6 +113,7 @@ def _outcome(
     ids: tuple[int, ...] = (1,),
     detail: str | None = None,
 ) -> _SynthOutcome:
+    """Outcome."""
     if detail is None:
         detail = f"fired_at_step_{step}" if (fired and step is not None) else "no_stop_within_cap"
     return _SynthOutcome(
@@ -138,6 +139,7 @@ class _FakeBackend:
         self.calls = 0
 
     def decode(self, token_ids: tuple[int, ...]) -> Any:
+        """Decode."""
         self.calls += 1
         if self._raises:
             raise RuntimeError("c73 fake decode failure")
@@ -159,6 +161,7 @@ def _stub_patches(
         stop_text: str,
         token_bytes: Any = None,
     ) -> Any:
+        """Fake hf."""
         return spec.get((HF_STOP_STRING, stop_text), _SynthOutcome())
 
     def fake_vllm(
@@ -168,6 +171,7 @@ def _stub_patches(
         include_stop_str_in_output: bool = False,
         min_tokens: int = 0,
     ) -> Any:
+        """Fake vllm."""
         # The MIN_TOKENS_GATED diagnostic re-run is indistinguishable from
         # a main strip call with min_tokens=0 -- same emulation, same
         # inputs -- so both consult the ungated plan, exactly as reality.
@@ -177,9 +181,11 @@ def _stub_patches(
         return spec.get((key, stop_text), _SynthOutcome())
 
     def fake_sglang(backend: Any, output_ids: tuple[int, ...], stop_text: str) -> Any:
+        """Fake sglang."""
         return spec.get((SGLANG_STOP, stop_text), _SynthOutcome())
 
     def fake_eos(output_ids: tuple[int, ...], eos_id: int | None) -> Any:
+        """Fake eos."""
         # The EOS emulation does not depend on the stop text: one shared
         # synthetic outcome per run.
         return eos_spec.get((EOS_APPENDED, "*"), _SynthOutcome())
@@ -231,6 +237,7 @@ def _oracle_text(decode: Callable[[tuple[int, ...]], Any], snap: _Snap) -> Any:
     return result if type(result) is str else None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_divergences(
     stops: list[str],
     spec: dict[tuple[str, str], Any],
@@ -368,6 +375,7 @@ def _oracle_divergences(
 
 
 def _div_pairs(result: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """Div pairs."""
     return sorted(
         ((finding["class"], finding["stop_text"]) for finding in result["divergences"]),
         key=lambda pair: (pair[0], pair[1] or ""),
@@ -433,8 +441,11 @@ def _check(
 
 
 class ValidatorTests(unittest.TestCase):
+    """Validator tests."""
+
     @staticmethod
     def _good_kwargs() -> dict[str, Any]:
+        """Good kwargs."""
         return {
             "prompt_ids": (1, 2),
             "output_ids": (3,),
@@ -445,6 +456,7 @@ class ValidatorTests(unittest.TestCase):
         }
 
     def _expect_code(self, code: str, **overrides: Any) -> None:
+        """Expect code."""
         kwargs = self._good_kwargs()
         kwargs.update(overrides)
         with self.assertRaises(ValueError) as ctx, contextlib.ExitStack() as stack:
@@ -454,20 +466,24 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), code)
 
     def test_checked_ids_rejects_non_tuple(self) -> None:
+        """Test checked ids rejects non tuple."""
         self._expect_code("invalid_prompt_ids", prompt_ids=[1, 2])
         self._expect_code("invalid_output_ids", output_ids="ab")
 
     def test_checked_ids_rejects_bool_negative_huge(self) -> None:
+        """Test checked ids rejects bool negative huge."""
         self._expect_code("invalid_prompt_ids", prompt_ids=(1, True))
         self._expect_code("invalid_prompt_ids", prompt_ids=(1, -2))
         self._expect_code("invalid_output_ids", output_ids=(2**31,))
         self._expect_code("invalid_prompt_ids", prompt_ids=(1, 2**31 - 1, 2**31))
 
     def test_checked_ids_boundary_values(self) -> None:
+        """Test checked ids boundary values."""
         self.assertEqual(_checked_ids((0, 2**31 - 1), "prompt_ids", cap=8), (0, 2**31 - 1))
         self.assertEqual(_checked_ids((), "output_ids", cap=8), ())
 
     def test_checked_ids_cap_boundary(self) -> None:
+        """Test checked ids cap boundary."""
         at_cap = _checked_ids((0,) * MAX_OUTPUT_IDS, "output_ids", cap=MAX_OUTPUT_IDS)
         self.assertEqual(len(at_cap), MAX_OUTPUT_IDS)
         with self.assertRaises(ValueError) as ctx:
@@ -480,6 +496,7 @@ class ValidatorTests(unittest.TestCase):
         self._expect_code("output_ids_too_long", output_ids=(0,) * (MAX_OUTPUT_IDS + 1))
 
     def test_stop_texts_vocabulary(self) -> None:
+        """Test stop texts vocabulary."""
         self._expect_code("invalid_stop_texts", stop_texts="STOP")
         self._expect_code("invalid_stop_texts", stop_texts={"STOP"})
         self._expect_code("invalid_stop_texts", stop_texts=[""])
@@ -491,12 +508,14 @@ class ValidatorTests(unittest.TestCase):
         self._expect_code("too_many_stop_texts", stop_texts=[f"stop{i}" for i in range(17)])
 
     def test_stop_texts_dedup_and_bounds(self) -> None:
+        """Test stop texts dedup and bounds."""
         self.assertEqual(_checked_stop_texts(["A", "B", "A", "B", "C"]), ("A", "B", "C"))
         self.assertEqual(_checked_stop_texts(("x" * 1024,)), ("x" * 1024,))
         self.assertEqual(len(_checked_stop_texts([f"s{i}" for i in range(16)])), 16)
         self.assertEqual(_checked_stop_texts(["unicode-停止-🔚"]), ("unicode-停止-🔚",))
 
     def test_eos_id_and_min_tokens_vocabulary(self) -> None:
+        """Test eos id and min tokens vocabulary."""
         self._expect_code("invalid_eos_id", eos_id=-1)
         self._expect_code("invalid_eos_id", eos_id=True)
         self._expect_code("invalid_eos_id", eos_id="5")
@@ -505,11 +524,13 @@ class ValidatorTests(unittest.TestCase):
         self._expect_code("invalid_min_tokens", min_tokens=1.5)
 
     def test_backend_vocabulary(self) -> None:
+        """Test backend vocabulary."""
         self._expect_code("invalid_backend", backend=object())
         self._expect_code("invalid_backend", backend=SimpleNamespace(decode=None))
         self._expect_code("invalid_backend", backend=SimpleNamespace(decode="not-callable"))
 
     def test_firing_step_vocabulary(self) -> None:
+        """Test firing step vocabulary."""
         cases = {
             "fired_at_step_1": 1,
             "fired_at_step_0": 0,
@@ -535,6 +556,7 @@ class ValidatorTests(unittest.TestCase):
                 self.assertEqual(_firing_step(detail), expected)
 
     def test_effective_text_paths(self) -> None:
+        """Test effective text paths."""
         from model_protocol_lab.diffbackends import CellResult
 
         boom = _FakeBackend(raises=True)
@@ -553,6 +575,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertIsNone(_effective_text(object(), cell))
 
     def test_observation_ids(self) -> None:
+        """Test observation ids."""
         self.assertEqual(_observation_ids({"output_ids": [1, 2]}, "output_ids"), (1, 2))
         self.assertEqual(_observation_ids({"output_ids": (1, 2)}, "output_ids"), (1, 2))
         self.assertEqual(_observation_ids({"input_ids": []}, "input_ids"), ())
@@ -568,6 +591,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertIsNone(_observation_ids({"input_ids": [0] * (MAX_PROMPT_IDS + 1)}, "input_ids"))
 
     def test_cell_converts_truncated_ids_to_tuple(self) -> None:
+        """Test cell converts truncated ids to tuple."""
         # A malformed (list) truncated_ids is normalized, not fatal.
         bad = SimpleNamespace(
             available=True,
@@ -592,11 +616,15 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(cell["fired"])
 
     def test_tokenizer_backend_decode_validation(self) -> None:
+        """Test tokenizer backend decode validation."""
         from model_protocol_lab.diffbackends import _TokenizerBackend
 
         class _Tok:
+            """Tok."""
+
             @staticmethod
             def decode(ids: list[int], **kwargs: Any) -> str:
+                """Decode."""
                 return "".join(f"<{i}>" for i in ids)
 
         backend = _TokenizerBackend(_Tok(), 8)
@@ -621,7 +649,10 @@ class ValidatorTests(unittest.TestCase):
 
 
 class MinimalPairTests(unittest.TestCase):
+    """Minimal pair tests."""
+
     def test_all_agree_baseline(self) -> None:
+        """Test all agree baseline."""
         decode_map = {(10,): "out", (11,): "x", (12,): "x", (13,): "x"}
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2, ids=(10,)),
@@ -636,6 +667,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(result["output_tokens"], 1)
 
     def test_firing_step_differs_minimal(self) -> None:
+        """Test firing step differs minimal."""
         base = {
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2, text="out"),
             (VLLM_HOLDBACK_KEEP, "S"): _outcome(fired=True, step=2, text="out"),
@@ -649,6 +681,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(_div_pairs(result), [("FIRING_STEP_DIFFERS", "S")])
 
     def test_firing_step_all_none_is_one_value(self) -> None:
+        """Test firing step all none is one value."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(),
@@ -659,6 +692,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "agree")
 
     def test_kept_vs_stripped_one_char_flip(self) -> None:
+        """Test kept vs stripped one char flip."""
         decode_map = {(10,): "out"}
         base = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2, ids=(10,)),
@@ -676,6 +710,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "agree")
 
     def test_kept_text_unavailable_degrades(self) -> None:
+        """Test kept text unavailable degrades."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2, ids=(10,)),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2, text="different"),
@@ -687,6 +722,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn(("KEPT_VS_STRIPPED", "S"), _div_pairs(result))
 
     def test_harness_strip_contains_stop(self) -> None:
+        """Test harness strip contains stop."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2, ids=(10,)),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2, text="xSTOPx"),
@@ -703,6 +739,7 @@ class MinimalPairTests(unittest.TestCase):
         )
 
     def test_harness_sglang_via_decode_path(self) -> None:
+        """Test harness sglang via decode path."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2, ids=(10,)),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2, text="clean"),
@@ -715,6 +752,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn(("HARNESS_NORMALIZATION_RELIED", "S"), _div_pairs(result))
 
     def test_min_tokens_gated_minimal(self) -> None:
+        """Test min tokens gated minimal."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(),  # gated: not fired
@@ -727,6 +765,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn("vLLM PR #22014", result["divergences"][0]["detail"])
 
     def test_no_min_tokens_gate_nested(self) -> None:
+        """Test no min tokens gate nested."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(),
@@ -749,6 +788,7 @@ class MinimalPairTests(unittest.TestCase):
         )
 
     def test_min_tokens_gate_needs_ungated_fire(self) -> None:
+        """Test min tokens gate needs ungated fire."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(),
@@ -761,6 +801,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "agree")
 
     def test_min_tokens_zero_never_gates(self) -> None:
+        """Test min tokens zero never gates."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(),
@@ -771,7 +812,10 @@ class MinimalPairTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "agree")
 
     def test_eos_precedence_at_and_before(self) -> None:
+        """Test eos precedence at and before."""
+
         def spec_with(eos_step: int) -> dict[tuple[str, str], _SynthOutcome]:
+            """Spec with."""
             return {
                 (HF_STOP_STRING, "S"): _outcome(fired=True, step=2),
                 (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2),
@@ -791,6 +835,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn(("EOS_PRECEDENCE", "S"), _div_pairs(result))
 
     def test_eos_precedence_uses_min_over_stop_cells(self) -> None:
+        """Test eos precedence uses min over stop cells."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=5),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2),
@@ -805,6 +850,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn(("EOS_PRECEDENCE", "S"), _div_pairs(result))
 
     def test_str_over_eos_tie(self) -> None:
+        """Test str over eos tie."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2),
@@ -818,6 +864,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn(("EOS_PRECEDENCE", "S"), pairs)  # co-fires on the tie
 
     def test_str_over_eos_without_eos_precedence(self) -> None:
+        """Test str over eos without eos precedence."""
         # HF fires strictly earlier via prompt overhang; sglang and EOS tie
         # at step 2 -> STR_OVER_EOS_PRECEDENCE without EOS_PRECEDENCE.
         spec = {
@@ -833,6 +880,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn(("EOS_PRECEDENCE", "S"), pairs)
 
     def test_multi_stop_selection_diverge(self) -> None:
+        """Test multi stop selection diverge."""
         # SGLang: AAA@2 (list 0) beats B@2 on list order. vLLM: B completes
         # earlier (shorter keep text) -> winners differ.
         spec = {
@@ -853,6 +901,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn("vllm_holdback_strip selects", winners[0]["detail"])
 
     def test_multi_stop_selection_agree(self) -> None:
+        """Test multi stop selection agree."""
         spec = {
             (SGLANG_STOP, "AAA"): _outcome(fired=True, step=2, text="t"),
             (VLLM_HOLDBACK_STRIP, "AAA"): _outcome(fired=True, step=2, text="t"),
@@ -865,6 +914,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn("MULTI_STOP_SELECTION", [p[0] for p in _div_pairs(result)])
 
     def test_multi_stop_sglang_tiebreak_is_list_order(self) -> None:
+        """Test multi stop sglang tiebreak is list order."""
         # Both stops fire at step 2 under sglang; the first-listed must win.
         # vLLM agrees (identical completion keys) -> no divergence.
         spec = {
@@ -879,10 +929,12 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn("MULTI_STOP_SELECTION", [p[0] for p in _div_pairs(result)])
 
     def test_multi_stop_neither_fires(self) -> None:
+        """Test multi stop neither fires."""
         result = _check(self, ("A", "B"), {})
         self.assertNotIn("MULTI_STOP_SELECTION", [p[0] for p in _div_pairs(result)])
 
     def test_multi_stop_vllm_needs_keep_text(self) -> None:
+        """Test multi stop vllm needs keep text."""
         # Strip fired but keep unavailable -> vLLM cannot name a winner;
         # sglang fired -> winners differ (sglang pick vs no stop).
         spec = {
@@ -897,6 +949,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertIn("no stop", winners[0]["detail"])
 
     def test_stop_text_one_char_diff(self) -> None:
+        """Test stop text one char diff."""
         # The strip text contains "STOP" but not "STQP": HARNESS fires for
         # the first stop only -- a one-character stop difference flips it.
         spec = {
@@ -909,6 +962,7 @@ class MinimalPairTests(unittest.TestCase):
         self.assertNotIn(("HARNESS_NORMALIZATION_RELIED", "STQP"), pairs)
 
     def test_result_key_sets(self) -> None:
+        """Test result key sets."""
         result = _check(self, ("S",), {})
         self.assertEqual(
             set(result),
@@ -943,7 +997,10 @@ class MinimalPairTests(unittest.TestCase):
 
 
 class AdversarialCellTests(unittest.TestCase):
+    """Adversarial cell tests."""
+
     def test_fired_without_step_is_none_valued(self) -> None:
+        """Test fired without step is none valued."""
         # Contradictory input the real emulations never emit: fired=True but
         # the detail carries no step. None counts as a distinct step value.
         spec = {
@@ -956,6 +1013,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertIn(("FIRING_STEP_DIFFERS", "S"), _div_pairs(result))
 
     def test_eos_fired_without_step_never_counts(self) -> None:
+        """Test eos fired without step never counts."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(fired=True, step=2),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2),
@@ -969,6 +1027,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertNotIn(("STR_OVER_EOS_PRECEDENCE", "S"), pairs)
 
     def test_unavailable_cells_excluded(self) -> None:
+        """Test unavailable cells excluded."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(available=False, fired=True, step=9),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(fired=True, step=2, text="out"),
@@ -979,6 +1038,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertNotIn(("FIRING_STEP_DIFFERS", "S"), _div_pairs(result))
 
     def test_all_unavailable_agrees(self) -> None:
+        """Test all unavailable agrees."""
         spec = {
             (HF_STOP_STRING, "S"): _outcome(available=False),
             (VLLM_HOLDBACK_STRIP, "S"): _outcome(available=False),
@@ -990,6 +1050,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "agree")
 
     def test_strip_fired_without_returned_text(self) -> None:
+        """Test strip fired without returned text."""
         # kept "x" vs strip.returned_text None: the inequality still fires
         # KEPT_VS_STRIPPED (None is a legitimate "could not establish" only
         # on the kept side).
@@ -1003,6 +1064,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertIn(("KEPT_VS_STRIPPED", "S"), _div_pairs(result))
 
     def test_truthy_non_bool_flags_coerced(self) -> None:
+        """Test truthy non bool flags coerced."""
         bad = SimpleNamespace(
             available=1,
             fired=1,
@@ -1017,6 +1079,7 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertEqual(cell["firing_step"], 2)
 
     def test_unicode_stop_strings(self) -> None:
+        """Test unicode stop strings."""
         spec = {
             (VLLM_HOLDBACK_STRIP, "停止"): _outcome(fired=True, step=2, text="a停止b"),
             (VLLM_HOLDBACK_STRIP, "fin🔚"): _outcome(fired=True, step=2, text="clean"),
@@ -1027,12 +1090,14 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertNotIn(("HARNESS_NORMALIZATION_RELIED", "fin🔚"), pairs)
 
     def test_empty_id_tuples(self) -> None:
+        """Test empty id tuples."""
         result = _check(self, ("S",), {}, prompt_ids=(), output_ids=())
         self.assertEqual(result["prompt_tokens"], 0)
         self.assertEqual(result["output_tokens"], 0)
         self.assertEqual(result["verdict"], "agree")
 
     def test_cap_boundary_id_lengths_accepted(self) -> None:
+        """Test cap boundary id lengths accepted."""
         # Exactly at the caps: valid (stubs keep it fast).
         result, _ = _run(
             ("S",), {}, prompt_ids=(0,) * MAX_PROMPT_IDS, output_ids=(0,) * MAX_OUTPUT_IDS
@@ -1041,15 +1106,18 @@ class AdversarialCellTests(unittest.TestCase):
         self.assertEqual(result["output_tokens"], MAX_OUTPUT_IDS)
 
     def test_stop_dedup_runs_once(self) -> None:
+        """Test stop dedup runs once."""
         result = _check(self, ["A", "B", "A"], {})
         self.assertEqual(result["stop_texts"], ["A", "B"])
         self.assertEqual(len(result["cells"]), 2)
 
     def test_list_stop_texts_accepted(self) -> None:
+        """Test list stop texts accepted."""
         result = _check(self, ["S"], {})
         self.assertEqual(result["stop_texts"], ["S"])
 
     def test_hf_returned_text_preferred_over_decode(self) -> None:
+        """Test hf returned text preferred over decode."""
         # When the HF outcome exposes returned_text directly, a raising
         # decode must not matter.
         spec = {
@@ -1078,6 +1146,7 @@ def _run_section(
     eos_id: int | None = None,
     decode_map: dict[tuple[int, ...], str] | None = None,
 ) -> Any:
+    """Run section."""
     backend = _FakeBackend(decode_map)
     with contextlib.ExitStack() as stack:
         for patcher in _stub_patches(dict(spec), dict(ungated or {}), dict(eos_spec or {})):
@@ -1092,6 +1161,7 @@ def _run_section(
 
 
 def _kept_diverge_spec(stop: str = "S") -> dict[tuple[str, str], _SynthOutcome]:
+    """Kept diverge spec."""
     return {
         (HF_STOP_STRING, stop): _outcome(fired=True, step=2, ids=(10,)),
         (VLLM_HOLDBACK_STRIP, stop): _outcome(fired=True, step=2, text="stripped"),
@@ -1101,7 +1171,10 @@ def _kept_diverge_spec(stop: str = "S") -> dict[tuple[str, str], _SynthOutcome]:
 
 
 class SectionDataTests(unittest.TestCase):
+    """Section data tests."""
+
     def test_aggregation_matrix_and_severities(self) -> None:
+        """Test aggregation matrix and severities."""
         observations = [
             {"fixture": "a", "input_ids": [1], "output_ids": [2]},
             {"fixture": "b", "input_ids": [1], "output_ids": [2]},
@@ -1136,6 +1209,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertFalse(section["observations_truncated"])
 
     def test_pairs_verdict_singular(self) -> None:
+        """Test pairs verdict singular."""
         observations = [{"input_ids": [1], "output_ids": [2]}]
         section = _run_section(
             observations, ("S",), _kept_diverge_spec(), decode_map={(10,): "kept!"}
@@ -1145,6 +1219,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertNotIn("1 divergences", section["pairs_verdict"])
 
     def test_all_agree_verdict(self) -> None:
+        """Test all agree verdict."""
         observations = [{"input_ids": [1], "output_ids": [2]}]
         section = _run_section(observations, ("S",), {})
         assert section is not None
@@ -1157,6 +1232,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(section["severities"], {})
 
     def test_skips_and_fixture_naming(self) -> None:
+        """Test skips and fixture naming."""
         observations: list[Any] = [
             "not-a-dict",
             {"input_ids": [1.5], "output_ids": [2]},  # bad ids
@@ -1176,6 +1252,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(section["observations_processed"], 3)
 
     def test_empty_and_missing_observations(self) -> None:
+        """Test empty and missing observations."""
         # Missing keys -> skipped.
         self.assertIsNone(_run_section([{}], ("S",), {}))
         self.assertIsNone(_run_section([], ("S",), {}))
@@ -1187,11 +1264,13 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(section["per_fixture"][0]["fixture"], "fixture_0")
 
     def test_tuple_observations_accepted(self) -> None:
+        """Test tuple observations accepted."""
         section = _run_section(({"input_ids": [1], "output_ids": [2]},), ("S",), {})
         assert section is not None
         self.assertEqual(section["observations_processed"], 1)
 
     def test_truncation_flags(self) -> None:
+        """Test truncation flags."""
         observations = [
             {"input_ids": [1], "output_ids": [2]} for _ in range(MAX_DIVERGENCE_OBSERVATIONS + 1)
         ]
@@ -1203,6 +1282,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(len(section["per_fixture"]), MAX_DIVERGENCE_OBSERVATIONS)
 
     def test_no_truncation_at_boundary(self) -> None:
+        """Test no truncation at boundary."""
         observations = [
             {"input_ids": [1], "output_ids": [2]} for _ in range(MAX_DIVERGENCE_OBSERVATIONS)
         ]
@@ -1212,6 +1292,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(section["observations_processed"], MAX_DIVERGENCE_OBSERVATIONS)
 
     def test_over_cap_ids_skipped(self) -> None:
+        """Test over cap ids skipped."""
         observations = [
             {"input_ids": [1], "output_ids": [0] * (MAX_OUTPUT_IDS + 1)},
             {"input_ids": [0] * (MAX_PROMPT_IDS + 1), "output_ids": [2]},
@@ -1224,6 +1305,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(section["per_fixture"][0]["fixture"], "fixture_2")
 
     def test_section_validation_vocabulary(self) -> None:
+        """Test section validation vocabulary."""
         good = [{"input_ids": [1], "output_ids": [2]}]
         with self.assertRaises(ValueError) as ctx:
             _run_section({"a": 1}, ("S",), {})  # type: ignore[arg-type]
@@ -1251,6 +1333,7 @@ class SectionDataTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "invalid_backend")
 
     def test_run_parameters_echoed(self) -> None:
+        """Test run parameters echoed."""
         section = _run_section(
             [{"input_ids": [1], "output_ids": [2]}],
             ["S", "T"],
@@ -1272,7 +1355,9 @@ _FUZZ_STOP_POOL = ["STOP", "END", "。", "fin🔚", "x", "STOP "]
 _FUZZ_TEXT_POOL = ["plain output", "has STOP inside", "END", "。", "", "out", "outSTOP", "clean"]
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_case(rng: random.Random) -> dict[str, Any]:
+    """Fuzz case."""
     n_stops = rng.randint(1, 4)
     stops = rng.sample(_FUZZ_STOP_POOL, n_stops)
     spec: dict[tuple[str, str], _SynthOutcome] = {}
@@ -1281,6 +1366,7 @@ def _fuzz_case(rng: random.Random) -> dict[str, Any]:
     counter = [1000]
 
     def fresh_ids(text: str) -> tuple[int, ...]:
+        """Fresh ids."""
         counter[0] += 1
         ids = (counter[0],)
         decode_map[ids] = text
@@ -1358,9 +1444,12 @@ def _fuzz_case(rng: random.Random) -> dict[str, Any]:
 
 
 class FuzzTests(unittest.TestCase):
+    """Fuzz tests."""
+
     FUZZ_CASES = 300
 
     def test_implementation_matches_oracle(self) -> None:
+        """Test implementation matches oracle."""
         for index in range(self.FUZZ_CASES):
             rng = random.Random(f"c73-fuzz-{index}")  # noqa: S311 -- deterministic test seed
             case = _fuzz_case(rng)
@@ -1428,20 +1517,26 @@ class _FakeTokenizer:
         self._encode_raises = encode_raises
 
     def encode(self, text: str, **kwargs: Any) -> tuple[int, ...]:
+        """Encode."""
         if self._encode_raises:
             raise RuntimeError("c73 fake encode failure")
         return self._encodings.get(text, (0,))
 
     def decode(self, token_ids: list[int], **kwargs: Any) -> str:
+        """Decode."""
         return "".join(self._decodings[i] for i in token_ids)
 
     def get_vocab(self) -> dict[str, int]:
+        """Get vocab."""
         return {f"tok{i}": i for i in self._decodings}
 
 
 class RunDiffBackendsTests(unittest.TestCase):
+    """Run diff backends tests."""
+
     @staticmethod
     def _args(**overrides: Any) -> argparse.Namespace:
+        """Args."""
         base: dict[str, Any] = {
             "min_tokens": 0,
             "eos_id": None,
@@ -1455,9 +1550,11 @@ class RunDiffBackendsTests(unittest.TestCase):
 
     @staticmethod
     def _parser() -> argparse.ArgumentParser:
+        """Parser."""
         return argparse.ArgumentParser(prog="mpl diff-backends")
 
     def _run_cli(self, args: argparse.Namespace) -> tuple[int, str, str]:
+        """Run cli."""
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
@@ -1467,20 +1564,24 @@ class RunDiffBackendsTests(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_negative_min_tokens_exits_2(self) -> None:
+        """Test negative min tokens exits 2."""
         code, _, _ = self._run_cli(self._args(min_tokens=-1))
         self.assertEqual(code, 2)
 
     def test_negative_eos_id_exits_2(self) -> None:
+        """Test negative eos id exits 2."""
         code, _, _ = self._run_cli(self._args(eos_id=-1))
         self.assertEqual(code, 2)
 
     def test_empty_stops_exit_2(self) -> None:
+        """Test empty stops exit 2."""
         for stops in ("", "a,,b", ",a"):
             with self.subTest(stops=stops):
                 code, _, _ = self._run_cli(self._args(stops=stops))
                 self.assertEqual(code, 2)
 
     def test_oversize_texts_exit_2(self) -> None:
+        """Test oversize texts exit 2."""
         code, _, _ = self._run_cli(self._args(prompt_text="x" * 1_000_001))
         self.assertEqual(code, 2)
         code, _, _ = self._run_cli(self._args(output_text="x" * 1_000_001))
@@ -1488,11 +1589,13 @@ class RunDiffBackendsTests(unittest.TestCase):
 
     @staticmethod
     def _patch_tokenizer(tokenizer: _FakeTokenizer) -> Any:
+        """Patch tokenizer."""
         import model_protocol_lab.doctor as doctor
 
         return mock.patch.object(doctor, "_build_primary_tokenizer", return_value=tokenizer)
 
     def test_end_to_end_with_fake_tokenizer(self) -> None:
+        """Test end to end with fake tokenizer."""
         tokenizer = _FakeTokenizer(
             {"ab": (0, 1), "abSTOPab": (0, 1, 2, 1, 0)},
             {0: "a", 1: "b", 2: "STOP"},
@@ -1508,6 +1611,7 @@ class RunDiffBackendsTests(unittest.TestCase):
         self.assertEqual(len(result["cells"]), 1)
 
     def test_encode_failure_is_fixed_code(self) -> None:
+        """Test encode failure is fixed code."""
         tokenizer = _FakeTokenizer({}, {}, encode_raises=True)
         with self._patch_tokenizer(tokenizer):
             code, _, err = self._run_cli(self._args())
@@ -1515,6 +1619,7 @@ class RunDiffBackendsTests(unittest.TestCase):
         self.assertIn("diff-backends: encode_failed", err)
 
     def test_loader_failure_sanitized(self) -> None:
+        """Test loader failure sanitized."""
         import model_protocol_lab.doctor as doctor
 
         with mock.patch.object(
@@ -1526,6 +1631,7 @@ class RunDiffBackendsTests(unittest.TestCase):
         self.assertNotIn("raw", err)
 
     def test_loader_fixed_code_passes_through(self) -> None:
+        """Test loader fixed code passes through."""
         import model_protocol_lab.doctor as doctor
 
         with mock.patch.object(
@@ -1538,6 +1644,7 @@ class RunDiffBackendsTests(unittest.TestCase):
         self.assertIn("diff-backends: oversized_tokenizer_file", err)
 
     def test_diff_backends_value_error_is_fixed_code(self) -> None:
+        """Test diff backends value error is fixed code."""
         # A 2000-char stop passes CLI splitting but fails diff_backends
         # validation -> exit 1 with the fixed vocabulary, no traceback.
         tokenizer = _FakeTokenizer({"ab": (1,)}, {1: "a"})
@@ -1576,8 +1683,11 @@ _MUTANTS = [
 
 
 class SensitivityTests(unittest.TestCase):
+    """Sensitivity tests."""
+
     @contextlib.contextmanager
     def _scratch(self) -> Any:
+        """Scratch."""
         path = Path(tempfile.mkdtemp(prefix=f"mpl_c73_{os.getpid()}_"))
         try:
             yield path
@@ -1586,6 +1696,7 @@ class SensitivityTests(unittest.TestCase):
 
     @staticmethod
     def _copy_package(dest: Path) -> None:
+        """Copy package."""
         shutil.copytree(
             REPO_ROOT / "model_protocol_lab",
             dest / "model_protocol_lab",
@@ -1594,6 +1705,7 @@ class SensitivityTests(unittest.TestCase):
 
     @staticmethod
     def _run_suite(pkg_parent: Path) -> subprocess.CompletedProcess[str]:
+        """Run suite."""
         env = dict(os.environ)
         env["PYTHONPATH"] = str(pkg_parent) + os.pathsep + env.get("PYTHONPATH", "")
         cmd = [
@@ -1619,6 +1731,7 @@ class SensitivityTests(unittest.TestCase):
         )
 
     def test_pristine_copy_passes(self) -> None:
+        """Test pristine copy passes."""
         with self._scratch() as parent:
             self._copy_package(parent)
             proc = self._run_suite(parent)
@@ -1626,6 +1739,7 @@ class SensitivityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, msg=f"pristine copy failed:\n{tail}")
 
     def test_mutants_killed(self) -> None:
+        """Test mutants killed."""
         for name, old, new in _MUTANTS:
             with self.subTest(mutant=name):
                 with self._scratch() as parent:

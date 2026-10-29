@@ -124,10 +124,12 @@ _BOUNDARY = (9001,)
 
 
 def _enc(text: str) -> tuple[int, ...]:
+    """Enc."""
     return tuple(ord(char) + _OFFSET for char in text)
 
 
 def _dec(token_ids: tuple[int, ...]) -> str:
+    """Dec."""
     return "".join(chr(token - _OFFSET) for token in token_ids)
 
 
@@ -135,6 +137,7 @@ _FORMAT = Format(name="cycle91", bos="", user_prefix="", assistant_prefix="", tu
 
 
 def _fixture(fid: str, content: str, expected: str, group: str = "g") -> Fixture:
+    """Fixture."""
     return Fixture(id=fid, messages=(Message("user", content),), expected=expected, group=group)
 
 
@@ -158,11 +161,13 @@ class HostileBackend:
         self._encode = encode
 
     def encode(self, text: str) -> Any:
+        """Encode."""
         if self._encode is not None:
             return self._encode(text)
         return _enc(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> Any:
+        """Decode."""
         if self._decode is not None:
             return self._decode(token_ids)
         return _dec(token_ids)
@@ -170,6 +175,7 @@ class HostileBackend:
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         if self._generate is not None:
             return self._generate(
                 input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
@@ -184,10 +190,12 @@ def _ids(text: str, cap: int = _CAP) -> tuple[int, ...]:
 
 
 def _run(backend: HostileBackend, cases: tuple[Fixture, ...] = _ONE) -> Any:
+    """Run."""
     return evaluate(backend, _FORMAT, cases, boundary=_BOUNDARY, max_new_tokens=_CAP, seed=7)
 
 
 def _failed_with(report: Any, code: str) -> None:
+    """Failed with."""
     assert report.status == "failed", report.status
     assert len(report.observations) == 1
     obs = report.observations[0]
@@ -200,16 +208,20 @@ class HostileGenerationShapeTest(unittest.TestCase):
 
     @staticmethod
     def _gen(value: Any) -> Any:
+        """Gen."""
         return _run(HostileBackend(generate=lambda *a, **k: value))
 
     def test_empty_ids_with_limit(self) -> None:
+        """Test empty ids with limit."""
         _failed_with(self._gen(Generation((), "limit")), "invalid_generation")
 
     def test_negative_id(self) -> None:
+        """Test negative id."""
         _failed_with(self._gen(Generation((1001, -5, 1003, 1004), "limit")), "invalid_generation")
 
     @staticmethod
     def test_huge_id_survives_validation() -> None:
+        """Test huge id survives validation."""
         # 2**200 is a valid nonnegative int: it passes _valid_generation and
         # reaches decode; a tolerant decode completes with no corruption.
         backend = HostileBackend(
@@ -221,19 +233,27 @@ class HostileGenerationShapeTest(unittest.TestCase):
         assert report.observations[0].answer == f"<{2**200}>"
 
     def test_ten_x_tokens_over_cap(self) -> None:
+        """Test ten x tokens over cap."""
         gen = Generation(tuple(range(10 * _CAP)), "limit")
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_list_token_ids(self) -> None:
+        """Test list token ids."""
         gen = Generation([1001, 1002, 1003, 1004], "limit")  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_generator_token_ids(self) -> None:
+        """Test generator token ids."""
         gen = Generation((t for t in (1001, 1002, 1003, 1004)), "limit")  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_tuple_subclass_token_ids(self) -> None:
-        class Ids(tuple):  # noqa: F841
+        """Test tuple subclass token ids."""
+
+        class Ids(tuple):
+            """Ids."""
+
+            # noqa: F841
             pass
 
         _failed_with(
@@ -241,22 +261,30 @@ class HostileGenerationShapeTest(unittest.TestCase):
         )
 
     def test_float_ids(self) -> None:
+        """Test float ids."""
         gen = Generation((1001.0, 1002, 1003, 1004), "limit")  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_str_ids(self) -> None:
+        """Test str ids."""
         gen = Generation(("1001", 1002, 1003, 1004), "limit")  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_none_id(self) -> None:
+        """Test none id."""
         gen = Generation((1001, None, 1003, 1004), "limit")  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_bool_id(self) -> None:
+        """Test bool id."""
         _failed_with(self._gen(Generation((True, 1002, 1003, 1004), "limit")), "invalid_generation")
 
     def test_generation_subclass_rejected(self) -> None:
+        """Test generation subclass rejected."""
+
         class SubGeneration(Generation):
+            """Sub generation."""
+
             pass
 
         _failed_with(
@@ -264,60 +292,74 @@ class HostileGenerationShapeTest(unittest.TestCase):
         )
 
     def test_non_generation_tuple_return(self) -> None:
+        """Test non generation tuple return."""
         _failed_with(self._gen((1001, 1002, 1003, 1004)), "invalid_generation")
 
     def test_none_return(self) -> None:
+        """Test none return."""
         _failed_with(self._gen(None), "invalid_generation")
 
     def test_str_return(self) -> None:
+        """Test str return."""
         _failed_with(self._gen("oops"), "invalid_generation")
 
     def test_bool_reason(self) -> None:
+        """Test bool reason."""
         gen = Generation((1001, 1002, 1003, 1004), True)  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_short_ids_with_limit(self) -> None:
+        """Test short ids with limit."""
         _failed_with(self._gen(Generation((1001, 1002), "limit")), "invalid_generation")
 
     def test_error_set_with_limit_reason(self) -> None:
+        """Test error set with limit reason."""
         _failed_with(
             self._gen(Generation((1001, 1002, 1003, 1004), "limit", "")), "invalid_generation"
         )
 
     def test_error_reason_with_empty_string_error(self) -> None:
+        """Test error reason with empty string error."""
         _failed_with(self._gen(Generation((), "error", "")), "backend_reported_error")
 
     def test_error_reason_with_none_error(self) -> None:
+        """Test error reason with none error."""
         _failed_with(self._gen(Generation((), "error", None)), "backend_reported_error")
 
     def test_error_reason_with_hostile_text_collapses(self) -> None:
+        """Test error reason with hostile text collapses."""
         report = self._gen(Generation((), "error", "<script>alert('xss')</script>"))
         _failed_with(report, "backend_reported_error")
         # The hostile text never enters the records.
         assert "<script>" not in repr(report.observations[0])
 
     def test_error_reason_with_huge_hostile_text_dropped(self) -> None:
+        """Test error reason with huge hostile text dropped."""
         report = self._gen(Generation((), "error", "X" * 10_000))
         _failed_with(report, "backend_reported_error")
         assert report.observations[0].error == "backend_reported_error"
 
     def test_error_reason_with_non_str_error(self) -> None:
+        """Test error reason with non str error."""
         gen = Generation((), "error", 12345)  # type: ignore[arg-type]
         _failed_with(self._gen(gen), "invalid_generation")
 
     def test_error_reason_with_allowlisted_code_passes_through(self) -> None:
+        """Test error reason with allowlisted code passes through."""
         _failed_with(
             self._gen(Generation((), "error", "context_limit_exceeded")),
             "context_limit_exceeded",
         )
 
     def test_empty_ids_with_cancelled(self) -> None:
+        """Test empty ids with cancelled."""
         report = self._gen(Generation((), "cancelled"))
         assert report.status == "cancelled"
         assert report.observations[0].status == "cancelled"
         assert report.observations[0].error is None
 
     def test_cancelled_with_valid_ids(self) -> None:
+        """Test cancelled with valid ids."""
         report = self._gen(Generation((1001, 1002, 1003, 1004), "cancelled"))
         assert report.status == "cancelled"
         assert report.observations[0].output_ids == (1001, 1002, 1003, 1004)
@@ -328,43 +370,61 @@ class HostileGenerateRaisesTest(unittest.TestCase):
 
     @staticmethod
     def _raising(exc: BaseException) -> HostileBackend:
+        """Raising."""
+
         def generate(*a: Any, **k: Any) -> Generation:
+            """Generate."""
             raise exc
 
         return HostileBackend(generate=generate)
 
     def test_runtime_error(self) -> None:
+        """Test runtime error."""
         _failed_with(_run(self._raising(RuntimeError("boom"))), "generate_failed")
 
     def test_memory_error(self) -> None:
+        """Test memory error."""
         _failed_with(_run(self._raising(MemoryError("no mem"))), "generate_failed")
 
     def test_custom_exception_subclass(self) -> None:
+        """Test custom exception subclass."""
+
         class WeirdError(Exception):
+            """Weird error."""
+
             pass
 
         _failed_with(_run(self._raising(WeirdError("x"))), "generate_failed")
 
     def test_stop_iteration(self) -> None:
+        """Test stop iteration."""
         _failed_with(_run(self._raising(StopIteration())), "generate_failed")
 
     def test_keyboard_interrupt_propagates(self) -> None:
+        """Test keyboard interrupt propagates."""
         with self.assertRaises(KeyboardInterrupt):
             _run(self._raising(KeyboardInterrupt()))
 
     def test_system_exit_propagates(self) -> None:
+        """Test system exit propagates."""
         with self.assertRaises(SystemExit):
             _run(self._raising(SystemExit(3)))
 
     @staticmethod
     def test_encode_raising() -> None:
+        """Test encode raising."""
+
         def encode(text: str) -> tuple[int, ...]:
+            """Encode."""
             raise RuntimeError("enc boom")
 
         _failed_with(_run(HostileBackend(encode=encode)), "encode_failed")
 
     def test_encode_keyboard_interrupt_propagates(self) -> None:
+        """Test encode keyboard interrupt propagates."""
+
         def encode(text: str) -> tuple[int, ...]:
+            """Encode."""
             raise KeyboardInterrupt()
 
         with self.assertRaises(KeyboardInterrupt):
@@ -372,10 +432,12 @@ class HostileGenerateRaisesTest(unittest.TestCase):
 
     @staticmethod
     def test_encode_non_tuple() -> None:
+        """Test encode non tuple."""
         _failed_with(_run(HostileBackend(encode=lambda text: "not-a-tuple")), "invalid_input_ids")
 
     @staticmethod
     def test_encode_bad_ids() -> None:
+        """Test encode bad ids."""
         _failed_with(_run(HostileBackend(encode=lambda text: (1, -2, 3))), "invalid_input_ids")
 
 
@@ -384,43 +446,59 @@ class HostileDecodeTest(unittest.TestCase):
 
     @staticmethod
     def _decode_backend(decode: Callable[[tuple[int, ...]], Any]) -> HostileBackend:
+        """Decode backend."""
         return HostileBackend(
             generate=lambda *a, **k: Generation(_ids("ok"), "limit"),
             decode=decode,
         )
 
     def _decode_case(self, decode: Callable[[tuple[int, ...]], Any]) -> Any:
+        """Decode case."""
         return _run(self._decode_backend(decode))
 
     def test_decode_returns_bytes(self) -> None:
+        """Test decode returns bytes."""
         _failed_with(self._decode_case(lambda tids: b"nope"), "decode_failed")
 
     def test_decode_returns_int(self) -> None:
+        """Test decode returns int."""
         _failed_with(self._decode_case(lambda tids: 42), "decode_failed")
 
     def test_decode_returns_none(self) -> None:
+        """Test decode returns none."""
         _failed_with(self._decode_case(lambda tids: None), "decode_failed")
 
     def test_decode_returns_str_subclass(self) -> None:
+        """Test decode returns str subclass."""
+
         class Text(str):
+            """Text."""
+
             pass
 
         _failed_with(self._decode_case(lambda tids: Text("ok")), "decode_failed")
 
     def test_decode_raises(self) -> None:
+        """Test decode raises."""
+
         def decode(tids: tuple[int, ...]) -> str:
+            """Decode."""
             raise ValueError("bad decode")
 
         _failed_with(self._decode_case(decode), "decode_failed")
 
     def test_decode_keyboard_interrupt_propagates(self) -> None:
+        """Test decode keyboard interrupt propagates."""
+
         def decode(tids: tuple[int, ...]) -> str:
+            """Decode."""
             raise KeyboardInterrupt()
 
         with self.assertRaises(KeyboardInterrupt):
             _run(self._decode_backend(decode))
 
     def test_decode_lone_surrogates_accepted(self) -> None:
+        """Test decode lone surrogates accepted."""
         # Lone surrogates are valid Python str: they pass through as-is and
         # the observation dict stays JSON-serializable.
         report = _run(self._decode_backend(lambda tids: "a\ud800b"))
@@ -429,15 +507,19 @@ class HostileDecodeTest(unittest.TestCase):
         json.dumps(report.observations[0].__dict__)
 
     def test_decode_10mb_string_accepted(self) -> None:
+        """Test decode 10mb string accepted."""
         big = "x" * 10_000_000
         report = _run(self._decode_backend(lambda tids: big))
         assert report.status == "completed"
         assert len(report.observations[0].answer) == 10_000_000
 
     def test_decode_failing_only_on_boundary_degrades_diagnostic(self) -> None:
+        """Test decode failing only on boundary degrades diagnostic."""
+
         # The main answer decode succeeds; only the boundary-text diagnostic
         # decode fails -> boundary_text_match degrades to None, run completes.
         def decode(tids: tuple[int, ...]) -> str:
+            """Decode."""
             if tuple(tids) == _BOUNDARY:
                 raise ValueError("boundary undecodable")
             return _dec(tids)
@@ -452,9 +534,11 @@ class NonDeterministicBackendTest(unittest.TestCase):
 
     @staticmethod
     def test_valid_then_invalid() -> None:
+        """Test valid then invalid."""
         calls = {"n": 0}
 
         def generate(*a: Any, **k: Any) -> Generation:
+            """Generate."""
             calls["n"] += 1
             if calls["n"] == 1:
                 return Generation(_ids("ok"), "limit")
@@ -478,6 +562,8 @@ class HostileLogprobTest(unittest.TestCase):
     _TARGET = (1004, 1005)
 
     class _LogprobBackend:
+        """Logprob backend."""
+
         fingerprint = "cycle91-logprob"
         vocab_size = 2000
 
@@ -486,13 +572,16 @@ class HostileLogprobTest(unittest.TestCase):
 
         @staticmethod
         def encode(text: str) -> tuple[int, ...]:
+            """Encode."""
             return tuple(ord(c) - _OFFSET for c in text)
 
         @staticmethod
         def decode(token_ids: tuple[int, ...]) -> str:
+            """Decode."""
             return "".join(chr(t + _OFFSET) for t in token_ids)
 
         def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Forward logits."""
             assert self._forward is not None
             result: torch.Tensor = self._forward(input_ids)
             return result
@@ -501,28 +590,36 @@ class HostileLogprobTest(unittest.TestCase):
         def generate(  # noqa: ANN401 -- Backend protocol member; never called here
             input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
         ) -> Generation:
+            """Generate."""
             raise NotImplementedError("logprob probe never generates")
 
     def _score(self, forward: Callable[[tuple[int, ...]], Any] | None) -> Any:
+        """Score."""
         backend = self._LogprobBackend(forward)
         return score_target_logprobs(backend, self._PROMPT, self._TARGET)
 
     def _unavailable(self, forward: Callable[[tuple[int, ...]], Any] | None, reason: str) -> None:
+        """Unavailable."""
         score = self._score(forward)
         assert score.status == "unavailable", (score.status, score.reason)
         assert score.reason == reason, score.reason
         assert score.scored_token_count == 0
 
     def _good(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Good."""
         return torch.zeros(len(input_ids), self._VOCAB)
 
     def test_sane_backend_scores(self) -> None:
+        """Test sane backend scores."""
         score = self._score(self._good)
         assert score.status == "ok"
         assert score.scored_token_count == 2
 
     def test_nan_logits(self) -> None:
+        """Test nan logits."""
+
         def forward(input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             logits = self._good(input_ids)
             logits[0, 0] = float("nan")
             return logits
@@ -530,7 +627,10 @@ class HostileLogprobTest(unittest.TestCase):
         self._unavailable(forward, "non_finite_logits")
 
     def test_positive_inf_logits(self) -> None:
+        """Test positive inf logits."""
+
         def forward(input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             logits = self._good(input_ids)
             logits[1, 2] = float("inf")
             return logits
@@ -538,7 +638,10 @@ class HostileLogprobTest(unittest.TestCase):
         self._unavailable(forward, "non_finite_logits")
 
     def test_negative_inf_logits(self) -> None:
+        """Test negative inf logits."""
+
         def forward(input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             logits = self._good(input_ids)
             logits[2, 3] = float("-inf")
             return logits
@@ -546,59 +649,83 @@ class HostileLogprobTest(unittest.TestCase):
         self._unavailable(forward, "non_finite_logits")
 
     def test_1d_tensor(self) -> None:
+        """Test 1d tensor."""
         self._unavailable(lambda iids: torch.zeros(len(iids)), "logits_must_be_2d")
 
     def test_3d_tensor(self) -> None:
+        """Test 3d tensor."""
         self._unavailable(lambda iids: torch.zeros(len(iids), self._VOCAB, 2), "logits_must_be_2d")
 
     def test_wrong_sequence_length(self) -> None:
+        """Test wrong sequence length."""
         self._unavailable(
             lambda iids: torch.zeros(len(iids) + 2, self._VOCAB), "logits_length_mismatch"
         )
 
     def test_zero_width_vocab(self) -> None:
+        """Test zero width vocab."""
         self._unavailable(lambda iids: torch.zeros(len(iids), 0), "empty_vocabulary")
 
     def test_non_tensor_return(self) -> None:
+        """Test non tensor return."""
         self._unavailable(lambda iids: [[0.0] * self._VOCAB for _ in iids], "logits_must_be_tensor")
 
     def test_none_return(self) -> None:
+        """Test none return."""
         self._unavailable(lambda iids: None, "logits_must_be_tensor")
 
     def test_forward_raises_runtime_error(self) -> None:
+        """Test forward raises runtime error."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise RuntimeError("fwd boom")
 
         self._unavailable(forward, "forward_failed")
 
     def test_forward_raises_memory_error(self) -> None:
+        """Test forward raises memory error."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise MemoryError("no mem")
 
         self._unavailable(forward, "forward_failed")
 
     def test_forward_raises_keyboard_interrupt_propagates(self) -> None:
+        """Test forward raises keyboard interrupt propagates."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise KeyboardInterrupt()
 
         with self.assertRaises(KeyboardInterrupt):
             self._score(forward)
 
     def test_forward_raises_system_exit_propagates(self) -> None:
+        """Test forward raises system exit propagates."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise SystemExit(3)
 
         with self.assertRaises(SystemExit):
             self._score(forward)
 
     def test_forward_allowlisted_code_passes_through(self) -> None:
+        """Test forward allowlisted code passes through."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise ValueError("context_limit_exceeded")
 
         self._unavailable(forward, "context_limit_exceeded")
 
     def test_forward_arbitrary_text_collapses(self) -> None:
+        """Test forward arbitrary text collapses."""
+
         def forward(iids: tuple[int, ...]) -> torch.Tensor:
+            """Forward."""
             raise ValueError("<script>pwned</script>")
 
         score = self._score(forward)
@@ -607,21 +734,28 @@ class HostileLogprobTest(unittest.TestCase):
         assert "<script>" not in repr(score)
 
     def test_missing_forward_logits(self) -> None:
+        """Test missing forward logits."""
+
         class NoLogits:
+            """No logits."""
+
             fingerprint = "x"
 
             @staticmethod
             def encode(text: str) -> tuple[int, ...]:
+                """Encode."""
                 return tuple(ord(c) - _OFFSET for c in text)
 
             @staticmethod
             def decode(token_ids: tuple[int, ...]) -> str:
+                """Decode."""
                 return "".join(chr(t + _OFFSET) for t in token_ids)
 
             @staticmethod
             def generate(
                 input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
             ) -> Generation:
+                """Generate."""
                 raise NotImplementedError("logprob probe never generates")
 
         score = score_target_logprobs(NoLogits(), self._PROMPT, self._TARGET)
@@ -634,15 +768,20 @@ class MixedHostileTaxonomyTest(unittest.TestCase):
 
     @staticmethod
     def test_counts_sum_with_no_double_counting_or_loss() -> None:
+        """Test counts sum with no double counting or loss."""
+
         # One scheduled backend, hostile only for cand-b (keyed on its "<b>"
         # BOS marker): cand-a runs all four fixtures well-behaved, cand-b
         # fails on its first fixture and terminates. Both candidates'
         # taxonomy counts must sum exactly to their non-passing observations.
         class Scheduled(HostileBackend):
+            """Scheduled."""
+
             @staticmethod
             def generate(
                 input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
             ) -> Generation:
+                """Generate."""
                 prompt = _dec(input_ids)
                 if "<b>" in prompt:
                     raise RuntimeError("boom")

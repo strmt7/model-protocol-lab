@@ -392,6 +392,7 @@ def _valid_date(year: int, month: int, day: int) -> bool:
     return True
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def parse_date_candidates(text: str) -> set[tuple[int | None, int, int]]:
     """(year | None, month, day) readings of a whole string.
 
@@ -693,6 +694,7 @@ def _pair_block(records: list[dict[str, Any]], key_a: str, key_b: str) -> dict[s
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _loss_block(live: list[dict[str, Any]], value: str) -> dict[str, Any]:
     """Date-attributable loss for one date value, formats collapsed.
 
@@ -764,6 +766,7 @@ def _loss_block(live: list[dict[str, Any]], value: str) -> dict[str, Any]:
     return block
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

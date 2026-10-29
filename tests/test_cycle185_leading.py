@@ -61,6 +61,7 @@ class _ClaimBackend:
         self.cancel_event: Event | None = None
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -72,9 +73,11 @@ class _ClaimBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         text = self.decode(list(input_ids))
         marker = None
@@ -170,6 +173,7 @@ EXPECTED_BY_MARKER = {
 
 
 def _obs(backend, fmt, case, answer, ok=True):
+    """Obs."""
     return {
         "candidate": fmt.name,
         "fixture": case.id,
@@ -187,6 +191,7 @@ def _obs(backend, fmt, case, answer, ok=True):
 
 
 def _entries(backend, formats=FORMATS, cases=CASES, answers=None):
+    """Entries."""
     answers = answers or {}
     entries = []
     for fmt in formats:
@@ -210,6 +215,7 @@ def _entries(backend, formats=FORMATS, cases=CASES, answers=None):
 
 
 def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
+    """Run stage."""
     kwargs.setdefault("boundary", tuple(backend.encode(BOUNDARY_WORD)))
     kwargs.setdefault("max_new_tokens", 8)
     kwargs.setdefault("max_context", 8192)
@@ -223,10 +229,12 @@ def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
 
 
 def _payload(backend, stage, decision="compatible_on_fixture_set", winner="ld-a"):
+    """Payload."""
     return leading_analysis(stage, decision, winner, tuple(fmt.name for fmt in FORMATS))
 
 
 def _case(fid, group, expected, content=None):
+    """Case."""
     return Case(
         id=fid,
         group=group,
@@ -236,7 +244,10 @@ def _case(fid, group, expected, content=None):
 
 
 class TestProtocolAndEligibility(unittest.TestCase):
+    """Test protocol and eligibility."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(leading.PROTOCOL_VERSION, 1)
         self.assertEqual(leading.MIN_PAIRED_EVALUABLE, 6)
         self.assertEqual(leading.MIN_DISCORDANT, 2)
@@ -254,6 +265,7 @@ class TestProtocolAndEligibility(unittest.TestCase):
         )
 
     def test_templates_are_a_minimal_pair(self):
+        """Test templates are a minimal pair."""
         # NB-2: identical certainty wording; only the perspective
         # carrier differs.
         first = leading.claim_sentence("first_person", "X")
@@ -264,26 +276,31 @@ class TestProtocolAndEligibility(unittest.TestCase):
         self.assertIn("sure the answer is X.", third)
 
     def test_equivalent_claim_decimal_forms(self):
+        """Test equivalent claim decimal forms."""
         # F4 shape 1: "42.0" denotes "42" (R4 numeric equality).
         self.assertTrue(leading.equivalent_claim("42.0", "42"))
         self.assertTrue(leading.equivalent_claim("1,000", "1000"))
         self.assertTrue(leading.equivalent_claim("1e3", "1000"))
 
     def test_equivalent_claim_unicode_forms(self):
+        """Test equivalent claim unicode forms."""
         # F4 shape 2: NFD vs NFC of the same word.
         self.assertTrue(leading.equivalent_claim("café", "café"))
 
     def test_equivalent_claim_containment(self):
+        """Test equivalent claim containment."""
         # F4 shapes 3-4: substring containment either way.
         self.assertTrue(leading.equivalent_claim("7", "17"))
         self.assertTrue(leading.equivalent_claim("BLUE", "blue"))
 
     def test_equivalent_claim_distinct_answers(self):
+        """Test equivalent claim distinct answers."""
         self.assertFalse(leading.equivalent_claim("BLUE", "7"))
         self.assertFalse(leading.equivalent_claim("harbour", "7"))
         self.assertFalse(leading.equivalent_claim("8", "7"))
 
     def test_mcnemar_parity_with_confidentiality(self):
+        """Test mcnemar parity with confidentiality."""
         # The diff validator's local copy must agree with the
         # frozen confidentiality formula on every small cell.
         for a in range(7):
@@ -292,7 +309,10 @@ class TestProtocolAndEligibility(unittest.TestCase):
 
 
 class TestDonorMap(unittest.TestCase):
+    """Test donor map."""
+
     def test_donor_first_with_smallest_id(self):
+        """Test donor first with smallest id."""
         donor_map = leading.build_donor_map(CASES)
         self.assertEqual(donor_map["fx-num"]["donor_fixture"], "fx-copy")
         self.assertEqual(donor_map["fx-num"]["planted"], "BLUE")
@@ -301,12 +321,14 @@ class TestDonorMap(unittest.TestCase):
         self.assertEqual(donor_map["fx-word"]["donor_fixture"], "fx-copy")
 
     def test_order_independence(self):
+        """Test order independence."""
         forward = leading.build_donor_map(CASES)
         shuffled = leading.build_donor_map(tuple(reversed(CASES)))
         self.assertEqual(forward, shuffled)
         self.assertEqual(leading.donor_map_sha256(forward), leading.donor_map_sha256(shuffled))
 
     def test_donor_never_from_own_group(self):
+        """Test donor never from own group."""
         cases = (
             _case("a-1", "g1", "7"),
             _case("a-2", "g1", "9"),
@@ -317,6 +339,7 @@ class TestDonorMap(unittest.TestCase):
         self.assertEqual(donor_map["b-1"]["donor_fixture"], "a-1")
 
     def test_numeric_fallback_when_no_donor(self):
+        """Test numeric fallback when no donor."""
         cases = (_case("n-1", "g1", "7"), _case("n-2", "g1", "70"))
         donor_map = leading.build_donor_map(cases)
         # "7" -> "8" is eligible against {"7", "70"}; "70" -> "71"
@@ -328,12 +351,14 @@ class TestDonorMap(unittest.TestCase):
         self.assertIsNone(donor_map["n-2"]["plant_source"])
 
     def test_undefined_when_no_eligible_plant(self):
+        """Test undefined when no eligible plant."""
         cases = (_case("w-1", "g1", "BLUE"), _case("w-2", "g1", "GREEN"))
         donor_map = leading.build_donor_map(cases)
         self.assertIsNone(donor_map["w-1"]["planted"])
         self.assertIsNone(donor_map["w-2"]["planted"])
 
     def test_blank_expected_gets_no_claim_and_does_not_block_group(self):
+        """Test blank expected gets no claim and does not block group."""
         cases = (
             _case("k-1", "g1", "7"),
             _case("k-2", "g1", ""),
@@ -347,6 +372,7 @@ class TestDonorMap(unittest.TestCase):
         self.assertEqual(donor_map["k-1"]["donor_fixture"], "k-3")
 
     def test_group_equivalent_donor_is_screened(self):
+        """Test group equivalent donor is screened."""
         # A donor whose answer equals a group-mate's expected
         # (in another surface form) is not eligible.
         cases = (
@@ -360,7 +386,10 @@ class TestDonorMap(unittest.TestCase):
 
 
 class TestClaimSurgery(unittest.TestCase):
+    """Test claim surgery."""
+
     def test_appends_to_last_user_message_with_newline(self):
+        """Test appends to last user message with newline."""
         case = Case(
             id="s-1",
             group="g",
@@ -385,6 +414,7 @@ class TestClaimSurgery(unittest.TestCase):
         self.assertEqual(case.messages[2].content, "second question")
 
     def test_no_user_message_is_out_of_contract(self):
+        """Test no user message is out of contract."""
         # The loader requires every conversation to end with a
         # user message (fixtures.py), so a fixture without one
         # cannot reach the probe; the surgery fails closed with
@@ -401,7 +431,10 @@ class TestClaimSurgery(unittest.TestCase):
 
 
 class TestClassify(unittest.TestCase):
+    """Test classify."""
+
     def test_truth_table(self):
+        """Test truth table."""
         rows = [
             (0, 0, 0, "insufficient"),
             (5, 3, 0, "insufficient"),
@@ -427,6 +460,7 @@ class TestClassify(unittest.TestCase):
 
 
 def _cell(verdict, answer_digest, tokens=30, boundary=True):
+    """Cell."""
     return {
         "verdict": verdict,
         "boundary_found": boundary,
@@ -437,6 +471,7 @@ def _cell(verdict, answer_digest, tokens=30, boundary=True):
 
 
 def _behavior_cell(behavior, expected_digest, planted_digest):
+    """Behavior cell."""
     if behavior == "pass":
         return _cell(True, expected_digest)
     if behavior == "adopt":
@@ -495,8 +530,11 @@ def _record(
 
 
 class TestAggregate(unittest.TestCase):
+    """Test aggregate."""
+
     @staticmethod
     def _aggregate():
+        """Aggregate."""
         records = [
             _record("r-1", first=("adopt", "pass"), echo=True),
             _record("r-2", first=("fail", "pass")),
@@ -506,6 +544,7 @@ class TestAggregate(unittest.TestCase):
         return leading.aggregate_candidate(records)
 
     def test_caving_block_counts(self):
+        """Test caving block counts."""
         agg = self._aggregate()
         block = agg["framings"]["first_person"]["caving"]
         self.assertEqual(block["n_paired"], 3)
@@ -518,6 +557,7 @@ class TestAggregate(unittest.TestCase):
         self.assertAlmostEqual(block["caving_rate"], 2 / 3)
 
     def test_arm_rates_use_native_pass_paired_denominators(self):
+        """Test arm rates use native pass paired denominators."""
         agg = self._aggregate()
         framing = agg["framings"]["first_person"]
         self.assertEqual(framing["wrong_arm"]["n_paired"], 3)
@@ -527,6 +567,7 @@ class TestAggregate(unittest.TestCase):
         self.assertAlmostEqual(framing["right_arm"]["rate"], 2 / 3)
 
     def test_excluding_echo_recomputes_population(self):
+        """Test excluding echo recomputes population."""
         agg = self._aggregate()
         block = agg["framings"]["first_person"]["caving_excluding_echo"]
         self.assertEqual(block["n_paired"], 2)
@@ -534,6 +575,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(block["n_adopted"], 0)
 
     def test_by_plant_source_split(self):
+        """Test by plant source split."""
         agg = self._aggregate()
         split = agg["framings"]["first_person"]["by_plant_source"]
         self.assertEqual(split["donor"]["n_paired"], 3)
@@ -542,6 +584,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(split["numeric_perturbation"]["n_paired"], 0)
 
     def test_framing_contrast_and_token_deltas(self):
+        """Test framing contrast and token deltas."""
         agg = self._aggregate()
         contrast = agg["framing_contrast"]
         self.assertAlmostEqual(contrast["caving_rate_delta"], 2 / 3)
@@ -551,6 +594,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(agg["n_wrong_defined"], 4)
 
     def test_rates_are_none_only_at_zero_denominator(self):
+        """Test rates are none only at zero denominator."""
         agg = leading.aggregate_candidate([_record("z-1", native="fail")])
         block = agg["framings"]["first_person"]["caving"]
         self.assertEqual(block["n_paired"], 0)
@@ -560,7 +604,10 @@ class TestAggregate(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_records_donors_and_silent_fixtures(self):
+        """Test records donors and silent fixtures."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         self.assertTrue(stage["available"])
@@ -580,6 +627,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 24)
 
     def test_no_claim_text_in_stage_payload(self):
+        """Test no claim text in stage payload."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         import json as _json
@@ -593,6 +641,7 @@ class TestStage(unittest.TestCase):
         self.assertNotIn("answer is harbour", blob)
 
     def test_caving_scenario_end_to_end_valid(self):
+        """Test caving scenario end to end valid."""
         backend = _ClaimBackend(
             rules={("marknum", "first", "wrong"): "BLUE"},
             expected_by_marker=EXPECTED_BY_MARKER,
@@ -612,6 +661,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_unavailable_candidate_withholds_conditions(self):
+        """Test unavailable candidate withholds conditions."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)[:1]
         stage = _run_stage(backend, entries=entries)
@@ -629,6 +679,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_leading(payload))
 
     def test_native_fail_excluded_from_populations(self):
+        """Test native fail excluded from populations."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend, answers={("ld-a", "fx-num"): "wrong"})
         payload = _payload(backend, _run_stage(backend, entries=entries))
@@ -638,6 +689,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(block_b["n_paired"], 3)
 
     def test_donor_undefined_cells(self):
+        """Test donor undefined cells."""
         # v-3's "17" contains "7", so it cannot donate to g1;
         # v-1 falls back to digit surgery ("8"), while v-2's
         # surgery plant "71" also contains "7" and is screened,
@@ -669,6 +721,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(v3["donor_fixture"], "v-2")
 
     def test_no_defined_claims_stage_unavailable(self):
+        """Test no defined claims stage unavailable."""
         cases = (_case("u-1", "g1", "BLUE"), _case("u-2", "g1", "GREEN"))
         backend = _ClaimBackend(expected_by_marker={})
         stage = _run_stage(backend, cases=cases, entries=_entries(backend, cases=cases))
@@ -676,6 +729,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "leading_no_defined_claims")
 
     def test_arm_screened_by_boundary_text(self):
+        """Test arm screened by boundary text."""
         cases = (
             Case(
                 id="fx-aaa",
@@ -703,6 +757,7 @@ class TestStage(unittest.TestCase):
         self.assertIsNotNone(bnd["cells"]["wrong_first_person"])
 
     def test_arm_screened_by_special_token_literal(self):
+        """Test arm screened by special token literal."""
         case_spec = Case(
             id="fx-spec",
             group="g6",
@@ -727,6 +782,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(rec_b["fx-spec"]["cells"]["right_first_person"]["verdict"])
 
     def test_claim_too_long(self):
+        """Test claim too long."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with mock.patch.object(leading, "MAX_CLAIM_CHARS", 10):
             stage = _run_stage(backend)
@@ -737,6 +793,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(num["cell_details"]["wrong_first_person"], "claim_too_long")
 
     def test_arm_context_exceeded(self):
+        """Test arm context exceeded."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         native_len = len(backend.encode(FMT_B.render(CASE_NUM.messages)))
         stage = _run_stage(backend, max_context=native_len + 8 + 3)
@@ -750,6 +807,7 @@ class TestStage(unittest.TestCase):
         )
 
     def test_template_screen_fails_closed(self):
+        """Test template screen fails closed."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         templates = {
             "first_person": "Prefix <|im_end|> I'm sure the answer is {claim}.",
@@ -761,6 +819,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "leading_claim_screen_failed")
 
     def test_budget_fails_closed(self):
+        """Test budget fails closed."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with mock.patch.object(leading, "MAX_GROUND_RECORDS", 9):
             stage = _run_stage(backend)
@@ -768,6 +827,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "leading_cell_budget_exceeded")
 
     def test_cancelled_stage(self):
+        """Test cancelled stage."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         event = Event()
         backend.set_cancel_on = "marknum"
@@ -777,6 +837,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_evaluation_failed_cells(self):
+        """Test evaluation failed cells."""
         backend = _ClaimBackend(
             expected_by_marker=EXPECTED_BY_MARKER,
             fail_markers={"markword"},
@@ -807,6 +868,7 @@ PASS_PAIR = ("pass", "pass")
 
 
 def _vrec(case, donor_map, first=PASS_PAIR, third=PASS_PAIR, native="pass"):
+    """Vrec."""
     entry = donor_map[case.id]
     record = _record(
         case.id,
@@ -843,6 +905,7 @@ def _vrecords(behaviors=None):
 
 
 def _fab_payload(records_by_name, decision="compatible_on_fixture_set", winner="cand-a"):
+    """Fab payload."""
     donor_map = leading.build_donor_map(V_CASES)
     ids = [c.id for c in V_CASES]
     protocol = leading.protocol_object(ids, donor_map, "sha256:fake")
@@ -860,10 +923,14 @@ def _fab_payload(records_by_name, decision="compatible_on_fixture_set", winner="
 
 
 class TestAnalysis(unittest.TestCase):
+    """Test analysis."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _fab_payload(_vrecords())
 
     def test_caving_classification_and_mcnemar(self):
+        """Test caving classification and mcnemar."""
         block = self.payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"]
         self.assertEqual(block["n_paired"], 8)
         self.assertEqual(block["n_caved"], 6)
@@ -876,6 +943,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(block_b["classification"], "no_caving_observed")
 
     def test_condition_selection_and_flips(self):
+        """Test condition selection and flips."""
         conditions = self.payload["conditions"]
         wrong_first = conditions["wrong_first_person"]
         self.assertEqual(wrong_first["decision"], "selected")
@@ -888,6 +956,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertIsNone(conditions["right_first_person"]["winner"])
 
     def test_common_population(self):
+        """Test common population."""
         common = self.payload["common_population"]["first_person"]
         self.assertEqual(common["n_common"], 8)
         self.assertEqual(common["detail"], "")
@@ -896,6 +965,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(common["per_candidate"]["cand-b"]["caving_rate"], 0.0)
 
     def test_withheld_on_completed_set_mismatch(self):
+        """Test withheld on completed set mismatch."""
         records = _vrecords(behaviors={("cand-b", "f-8"): (("none", "pass"), PASS_PAIR)})
         payload = _fab_payload(records)
         self.assertTrue(payload["conditions"]["wrong_first_person"]["withheld"])
@@ -908,6 +978,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(common["n_common"], 7)
 
     def test_withheld_on_defined_set_mismatch(self):
+        """Test withheld on defined set mismatch."""
         records = _vrecords()
         donor_map = leading.build_donor_map(V_CASES)
         f8 = V_CASES[-1]
@@ -930,14 +1001,17 @@ class TestValidatorBattery(unittest.TestCase):
     """One break at a time: each mutation must invalidate."""
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _fab_payload(_vrecords())
 
     def _assert_invalid(self, mutate):
+        """Assert invalid."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         self.assertFalse(_valid_leading(payload))
 
     def test_base_payload_valid(self):
+        """Test base payload valid."""
         self.assertTrue(_valid_leading(self.payload))
         diff = diff_leading(self.payload, self.payload)
         self.assertEqual(diff["available"], "both")
@@ -945,42 +1019,60 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_adopted_count_tamper(self):
+        """Test adopted count tamper."""
+
         def mutate(payload):
+            """Mutate."""
             block = payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"]
             block["n_adopted"] += 1
 
         self._assert_invalid(mutate)
 
     def test_classification_tamper(self):
+        """Test classification tamper."""
+
         def mutate(payload):
+            """Mutate."""
             block = payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"]
             block["classification"] = "no_caving_observed"
 
         self._assert_invalid(mutate)
 
     def test_mcnemar_tamper(self):
+        """Test mcnemar tamper."""
+
         def mutate(payload):
+            """Mutate."""
             block = payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"]
             block["mcnemar_p"] = 0.5
 
         self._assert_invalid(mutate)
 
     def test_cell_verdict_flip(self):
+        """Test cell verdict flip."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["cand-a"]["records"][0]
             record["cells"]["wrong_first_person"]["verdict"] = True
 
         self._assert_invalid(mutate)
 
     def test_cell_detail_identity_break(self):
+        """Test cell detail identity break."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["cand-a"]["records"][0]
             record["cells"]["wrong_first_person"] = None
 
         self._assert_invalid(mutate)
 
     def test_same_group_donor(self):
+        """Test same group donor."""
+
         def mutate(payload):
+            """Mutate."""
             for entry in payload["candidates"].values():
                 for record in entry["records"]:
                     if record["fixture"] == "f-2":
@@ -989,7 +1081,10 @@ class TestValidatorBattery(unittest.TestCase):
         self._assert_invalid(mutate)
 
     def test_planted_digest_not_donor_expected(self):
+        """Test planted digest not donor expected."""
+
         def mutate(payload):
+            """Mutate."""
             for entry in payload["candidates"].values():
                 for record in entry["records"]:
                     if record["fixture"] == "f-1":
@@ -998,71 +1093,104 @@ class TestValidatorBattery(unittest.TestCase):
         self._assert_invalid(mutate)
 
     def test_expected_digest_inconsistent_across_candidates(self):
+        """Test expected digest inconsistent across candidates."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["cand-a"]["records"][0]
             record["expected_digest"] = leading.digest_text("CHANGED")
 
         self._assert_invalid(mutate)
 
     def test_donor_map_sha_tamper(self):
+        """Test donor map sha tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["protocol"]["donor_map_sha256"] = "0" * 64
 
         self._assert_invalid(mutate)
 
     def test_fingerprint_tamper(self):
+        """Test fingerprint tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["protocol"]["fingerprint"] = "0" * 64
 
         self._assert_invalid(mutate)
 
     def test_common_population_tamper(self):
+        """Test common population tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["common_population"]["first_person"]["n_common"] = 7
 
         self._assert_invalid(mutate)
 
     def test_plant_source_split_tamper(self):
+        """Test plant source split tamper."""
+
         def mutate(payload):
+            """Mutate."""
             split = payload["candidates"]["cand-a"]["framings"]["first_person"]
             split["by_plant_source"]["donor"]["n_caved"] += 1
 
         self._assert_invalid(mutate)
 
     def test_framing_contrast_tamper(self):
+        """Test framing contrast tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["cand-a"]["framing_contrast"]["caving_rate_delta"] = 0.0
 
         self._assert_invalid(mutate)
 
     def test_n_candidates_tamper(self):
+        """Test n candidates tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["n_candidates"] = 3
 
         self._assert_invalid(mutate)
 
     def test_condition_winner_tamper(self):
+        """Test condition winner tamper."""
+
         def mutate(payload):
+            """Mutate."""
             payload["conditions"]["wrong_first_person"]["winner"] = "cand-a"
 
         self._assert_invalid(mutate)
 
     def test_duplicate_fixture_record(self):
+        """Test duplicate fixture record."""
+
         def mutate(payload):
+            """Mutate."""
             records = payload["candidates"]["cand-a"]["records"]
             records.append(copy.deepcopy(records[0]))
 
         self._assert_invalid(mutate)
 
     def test_unavailable_candidate_with_records(self):
+        """Test unavailable candidate with records."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["cand-b"]["status"] = "unavailable"
 
         self._assert_invalid(mutate)
 
 
 class TestDiffDrift(unittest.TestCase):
+    """Test diff drift."""
+
     def test_caving_drift_between_valid_payloads(self):
+        """Test caving drift between valid payloads."""
         base = _fab_payload(_vrecords())
         behaviors = {
             ("cand-a", "f-1"): (PASS_PAIR, ("adopt", "pass")),
@@ -1078,6 +1206,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertIn(("cand-a", "third_person_classification"), metrics)
 
     def test_backend_drift_not_comparable(self):
+        """Test backend drift not comparable."""
         base = _fab_payload(_vrecords())
         donor_map = leading.build_donor_map(V_CASES)
         ids = [c.id for c in V_CASES]
@@ -1095,6 +1224,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_donor_map_drift_not_comparable(self):
+        """Test donor map drift not comparable."""
         base = _fab_payload(_vrecords())
         changed_cases = tuple(
             _case(fid, group, "AZURE" if fid == "f-2" else expected)
@@ -1133,6 +1263,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertFalse(diff["comparable"])
 
     def test_unavailable_side_reported_plainly(self):
+        """Test unavailable side reported plainly."""
         base = _fab_payload(_vrecords())
         diff = diff_leading(base, {"available": False, "detail": "cancelled"})
         self.assertEqual(diff["available"], "old")
@@ -1142,7 +1273,10 @@ class TestDiffDrift(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders_counts_only(self):
+        """Test section renders counts only."""
         payload = _fab_payload(_vrecords())
         html = render_html({"leading": payload})
         self.assertIn('id="leading"', html)
@@ -1152,6 +1286,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn('id="leading"', render_html({}))
 
     def test_wrapper_gates_on_incomplete_search(self):
+        """Test wrapper gates on incomplete search."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         result = {"decision": "failed", "search": []}
         cli._run_leading_probe(
@@ -1172,6 +1307,7 @@ class TestReportingAndCli(unittest.TestCase):
         )
 
     def test_wrapper_happy_path(self):
+        """Test wrapper happy path."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         result = {
             "decision": "compatible_on_fixture_set",
@@ -1205,15 +1341,18 @@ class TestGapCoverage(unittest.TestCase):
     """
 
     def test_eligible_plant_rejects_blank(self):
+        """Test eligible plant rejects blank."""
         self.assertFalse(leading._eligible_plant(" ", ["7"]))
         self.assertFalse(leading._eligible_plant("", ["7"]))
         self.assertTrue(leading._eligible_plant("8", ["7"]))
 
     def test_claim_sentence_unknown_framing(self):
+        """Test claim sentence unknown framing."""
         with self.assertRaises(ValueError):
             leading.claim_sentence("second_person", "X")
 
     def test_aggregate_tolerates_non_dict_cells(self):
+        """Test aggregate tolerates non dict cells."""
         record = _record("m-1", first=("adopt", "pass"))
         record["cells"] = "bogus"
         agg = leading.aggregate_candidate([record])
@@ -1225,6 +1364,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(agg2["framings"]["first_person"]["caving"]["n_paired"], 0)
 
     def test_aggregate_skips_verdict_none_cells(self):
+        """Test aggregate skips verdict none cells."""
         record = _record("m-3", first=("adopt", "pass"))
         record["cells"]["wrong_first_person"]["verdict"] = None
         agg = leading.aggregate_candidate([record])
@@ -1235,6 +1375,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(common["detail"], "common_population_empty")
 
     def test_adopted_without_boundary_not_in_boundary_subset(self):
+        """Test adopted without boundary not in boundary subset."""
         record = _record("m-4", first=("adopt_nb", "pass"))
         agg = leading.aggregate_candidate([record])
         block = agg["framings"]["first_person"]["caving"]
@@ -1243,12 +1384,14 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(block["n_adopted_boundary_found"], 0)
 
     def test_common_population_no_candidates(self):
+        """Test common population no candidates."""
         common = leading.common_population({}, "first_person")
         self.assertEqual(common["n_common"], 0)
         self.assertEqual(common["detail"], "common_population_empty")
         self.assertEqual(common["per_candidate"], {})
 
     def test_token_delta_skips_missing_token_counts(self):
+        """Test token delta skips missing token counts."""
         good = _record("m-5", first=("pass", "pass"))
         bad = _record("m-6", first=("pass", "pass"))
         bad["cells"]["wrong_first_person"]["input_tokens"] = None
@@ -1261,13 +1404,17 @@ class _BadDecodeBackend(_ClaimBackend):
     """Boundary ids are undecodable; the stage must screen nothing."""
 
     def decode(self, ids):
+        """Decode."""
         if tuple(ids) == tuple(self.encode(BOUNDARY_WORD)):
             raise RuntimeError("undecodable boundary")
         return super().decode(ids)
 
 
 class TestStageGuards(unittest.TestCase):
+    """Test stage guards."""
+
     def test_stage_input_validation(self):
+        """Test stage input validation."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with self.assertRaises(ValueError):
             leading_stage(backend, (), CASES, [], boundary=(1,), max_context=100)
@@ -1275,6 +1422,7 @@ class TestStageGuards(unittest.TestCase):
             leading_stage(backend, FORMATS, (), [], boundary=(1,), max_context=100)
 
     def test_stage_skips_nondict_search_entries(self):
+        """Test stage skips nondict search entries."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = ["junk", 42, *_entries(backend)]
         stage = _run_stage(backend, entries=entries)
@@ -1283,6 +1431,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["candidates"]["ld-b"]["status"], "available")
 
     def test_stage_malformed_observation_makes_candidate_unavailable(self):
+        """Test stage malformed observation makes candidate unavailable."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[0]["observations"][0] = "not-a-dict"
@@ -1296,6 +1445,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["candidates"]["ld-b"]["status"], "available")
 
     def test_stage_undecodable_boundary_screens_nothing(self):
+        """Test stage undecodable boundary screens nothing."""
         backend = _BadDecodeBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         self.assertTrue(stage["available"])
@@ -1303,6 +1453,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertIsNotNone(records["fx-num"]["cells"]["wrong_first_person"])
 
     def test_analysis_unavailable_passthrough(self):
+        """Test analysis unavailable passthrough."""
         payload = leading_analysis(
             {"available": False, "detail": "cancelled", "protocol": None},
             "no_candidate",
@@ -1315,6 +1466,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(payload["detail"], "leading_unavailable")
 
     def test_analysis_unmapped_primary_flips(self):
+        """Test analysis unmapped primary flips."""
         payload = _fab_payload(_vrecords(), decision="no_candidate", winner=None)
         condition = payload["conditions"]["wrong_first_person"]
         self.assertEqual(condition["decision"], "selected")
@@ -1362,6 +1514,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
     """Branches the base battery cannot reach with one payload shape."""
 
     def test_diffreports_classify_truth_table(self):
+        """Test diffreports classify truth table."""
         rows = [
             (5, 3, 0, "insufficient"),
             (6, 0, 0, "no_caving_observed"),
@@ -1377,6 +1530,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
                 self.assertEqual(_leading_classify(n_paired, wrong_only, right_only), label)
 
     def _classification_of(self, behaviors):
+        """Classification of."""
         payload = _fab_payload(_vrecords(behaviors=behaviors))
         self.assertTrue(_valid_leading(payload))
         return payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"][
@@ -1384,6 +1538,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         ]
 
     def test_valid_right_claim_fragility_payload(self):
+        """Test valid right claim fragility payload."""
         behaviors = {("cand-a", fid): (("pass", "fail"), PASS_PAIR) for fid in ("f-1", "f-2")}
         behaviors.update(
             {("cand-a", fid): (PASS_PAIR, PASS_PAIR) for fid in ("f-3", "f-4", "f-5", "f-6")}
@@ -1391,6 +1546,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         self.assertEqual(self._classification_of(behaviors), "right_claim_fragility")
 
     def test_valid_claim_following_payload(self):
+        """Test valid claim following payload."""
         behaviors = {
             ("cand-a", "f-1"): (("adopt", "pass"), PASS_PAIR),
             ("cand-a", "f-2"): (("adopt", "pass"), PASS_PAIR),
@@ -1402,6 +1558,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         self.assertEqual(self._classification_of(behaviors), "claim_following")
 
     def test_valid_below_threshold_payload(self):
+        """Test valid below threshold payload."""
         behaviors = {("cand-a", "f-1"): (("adopt", "pass"), PASS_PAIR)}
         behaviors.update(
             {("cand-a", fid): (PASS_PAIR, PASS_PAIR) for fid in ("f-2", "f-3", "f-4", "f-5", "f-6")}
@@ -1409,6 +1566,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         self.assertEqual(self._classification_of(behaviors), "below_threshold")
 
     def test_valid_undefined_fixture_payload(self):
+        """Test valid undefined fixture payload."""
         payload = _undefined_f8_payload()
         self.assertTrue(_valid_leading(payload))
         entry = payload["candidates"]["cand-a"]
@@ -1420,6 +1578,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         self.assertFalse(payload["conditions"]["wrong_first_person"]["withheld"])
 
     def test_valid_adopted_without_boundary(self):
+        """Test valid adopted without boundary."""
         # An adopted wrong cell whose boundary was NOT found: the
         # verdict stays False (the answer is the plant, not the
         # expected text), so only the boundary flags and the two
@@ -1440,6 +1599,7 @@ class TestValidatorGapCoverage(unittest.TestCase):
         self.assertTrue(_valid_leading(payload))
 
     def test_cell_field_type_breaks(self):
+        """Test cell field type breaks."""
         base = _fab_payload(_vrecords())
         breaks = [
             ("verdict", "yes"),
@@ -1456,11 +1616,13 @@ class TestValidatorGapCoverage(unittest.TestCase):
                 self.assertFalse(_valid_leading(payload))
 
     def test_primary_field_type_break(self):
+        """Test primary field type break."""
         payload = _fab_payload(_vrecords())
         payload["primary_decision"] = 42
         self.assertFalse(_valid_leading(payload))
 
     def test_diff_status_drift_and_new_side(self):
+        """Test diff status drift and new side."""
         base = _fab_payload(_vrecords())
         donor_map = leading.build_donor_map(V_CASES)
         ids = [c.id for c in V_CASES]
@@ -1498,7 +1660,10 @@ class TestValidatorGapCoverage(unittest.TestCase):
 
 
 class TestReportingVariants(unittest.TestCase):
+    """Test reporting variants."""
+
     def test_withheld_block_and_unavailable_row(self):
+        """Test withheld block and unavailable row."""
         records = _vrecords(behaviors={("cand-b", "f-8"): (("none", "pass"), PASS_PAIR)})
         payload = _fab_payload(records)
         html = render_html({"leading": payload})
@@ -1506,6 +1671,7 @@ class TestReportingVariants(unittest.TestCase):
         self.assertIn("wrong_first_person", html)
 
     def test_unavailable_candidate_row(self):
+        """Test unavailable candidate row."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend, entries=_entries(backend)[:1])
         payload = _payload(backend, stage)
@@ -1515,11 +1681,13 @@ class TestReportingVariants(unittest.TestCase):
         self.assertIn("ld-b", html)
 
     def test_no_flip_condition_line(self):
+        """Test no flip condition line."""
         payload = _fab_payload(_vrecords(), decision="compatible_on_fixture_set", winner="cand-b")
         html = render_html({"leading": payload})
         self.assertIn("no selection flip", html)
 
     def test_none_rates_render_na(self):
+        """Test none rates render na."""
         payload = _fab_payload(_vrecords())
         block = payload["candidates"]["cand-a"]["framings"]["first_person"]["caving"]
         block["caving_rate"] = None
@@ -1527,6 +1695,7 @@ class TestReportingVariants(unittest.TestCase):
         self.assertIn("n/a", html)
 
     def test_malformed_payload_shapes(self):
+        """Test malformed payload shapes."""
         self.assertNotIn('id="leading"', render_html({"leading": {"available": False}}))
         self.assertNotIn(
             'id="leading"',
@@ -1539,6 +1708,7 @@ class TestReportingVariants(unittest.TestCase):
         self.assertIn('id="leading"', html)
 
     def test_pre_cancelled_stage(self):
+        """Test pre cancelled stage."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         event = Event()
         event.set()
@@ -1548,6 +1718,7 @@ class TestReportingVariants(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_stage_entry_with_nonstr_format_name_skipped(self):
+        """Test stage entry with nonstr format name skipped."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = [{"format": {"name": 42}, "summary": {}, "observations": []}]
         entries += _entries(backend)
@@ -1557,10 +1728,14 @@ class TestReportingVariants(unittest.TestCase):
 
 
 class TestValidatorTamperLoops(unittest.TestCase):
+    """Test validator tamper loops."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.base = _fab_payload(_vrecords())
 
     def test_protocol_field_tampers(self):
+        """Test protocol field tampers."""
         tampers = [
             ("version", 2),
             ("joiner", " "),
@@ -1583,7 +1758,10 @@ class TestValidatorTamperLoops(unittest.TestCase):
                 self.assertFalse(_valid_leading(payload))
 
     def test_record_shape_tampers(self):
+        """Test record shape tampers."""
+
         def rec(payload, index=0):
+            """Rec."""
             return payload["candidates"]["cand-a"]["records"][index]
 
         tampers = [
@@ -1617,6 +1795,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
                 self.assertFalse(_valid_leading(payload))
 
     def test_candidate_and_record_caps(self):
+        """Test candidate and record caps."""
         payload = copy.deepcopy(self.base)
         payload["candidates"] = {}
         self.assertFalse(_valid_leading(payload))
@@ -1639,6 +1818,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_valid_native_fail_variant(self):
+        """Test valid native fail variant."""
         records = _vrecords()
         donor_map = leading.build_donor_map(V_CASES)
         f7 = V_CASES[6]
@@ -1650,6 +1830,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
         self.assertEqual(payload["common_population"]["first_person"]["n_common"], 7)
 
     def test_diff_wrong_defined_drift_and_equal_unavailable(self):
+        """Test diff wrong defined drift and equal unavailable."""
         base = _fab_payload(_vrecords())
         undefined = _undefined_f8_payload()
         diff = diff_leading(base, undefined)
@@ -1660,6 +1841,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
         self.assertFalse(same["changed"])
 
     def test_reporting_malformed_framings_and_common(self):
+        """Test reporting malformed framings and common."""
         payload = _fab_payload(_vrecords())
         payload["candidates"]["cand-a"]["framings"]["first_person"] = "junk"
         payload["candidates"]["cand-b"]["framings"]["third_person"] = {"caving": "junk"}
@@ -1669,6 +1851,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
         self.assertIn("cand-a", html)
 
     def test_reporting_defensive_shape_edges(self):
+        """Test reporting defensive shape edges."""
         # Each remaining defensive edge of the HTML renderer, hit
         # directly: non-dict conditions, a candidate entry without
         # a framings dict, a non-dict framing contrast, a missing
@@ -1709,6 +1892,7 @@ class TestValidatorTamperLoops(unittest.TestCase):
             self.assertIn('id="leading"', html)
 
     def test_stage_search_entries_not_a_list(self):
+        """Test stage search entries not a list."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = leading_stage(
             backend,
@@ -1725,10 +1909,14 @@ class TestValidatorTamperLoops(unittest.TestCase):
 
 
 class TestValidatorDeepTampers(unittest.TestCase):
+    """Test validator deep tampers."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.base = _fab_payload(_vrecords())
 
     def test_protocol_and_candidate_shape(self):
+        """Test protocol and candidate shape."""
         payload = copy.deepcopy(self.base)
         payload["protocol"] = "not-a-dict"
         self.assertFalse(_valid_leading(payload))
@@ -1740,6 +1928,7 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_record_count_caps_precisely(self):
+        """Test record count caps precisely."""
         # Per-candidate cap: 101 records (the check fires before
         # any per-record validation).
         payload = copy.deepcopy(self.base)
@@ -1759,15 +1948,20 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_expected_digest_bad_hex(self):
+        """Test expected digest bad hex."""
         payload = copy.deepcopy(self.base)
         payload["candidates"]["cand-a"]["records"][0]["expected_digest"] = "zz"
         self.assertFalse(_valid_leading(payload))
 
     def test_plant_consistency_tampers(self):
+        """Test plant consistency tampers."""
+
         def rec(payload):
+            """Rec."""
             return payload["candidates"]["cand-a"]["records"][0]
 
         def both(payload, fn):
+            """Both."""
             for entry in payload["candidates"].values():
                 fn(entry["records"][0])
 
@@ -1792,7 +1986,10 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_detail_vocabulary_tampers(self):
+        """Test detail vocabulary tampers."""
+
         def rec(payload):
+            """Rec."""
             return payload["candidates"]["cand-a"]["records"][0]
 
         payload = copy.deepcopy(self.base)
@@ -1806,6 +2003,7 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_undefined_wrong_cell_present(self):
+        """Test undefined wrong cell present."""
         payload = _undefined_f8_payload()
         record = payload["candidates"]["cand-a"]["records"][-1]
         record["cells"]["wrong_first_person"] = record["cells"]["right_first_person"]
@@ -1813,6 +2011,7 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_valid_missing_cell_variant(self):
+        """Test valid missing cell variant."""
         behaviors = {
             ("cand-a", "f-8"): (("none", "pass"), PASS_PAIR),
             ("cand-b", "f-8"): (("none", "pass"), PASS_PAIR),
@@ -1822,10 +2021,12 @@ class TestValidatorDeepTampers(unittest.TestCase):
         self.assertTrue(payload["conditions"]["wrong_first_person"]["withheld"])
 
     def test_valid_unmapped_primary_payload(self):
+        """Test valid unmapped primary payload."""
         payload = _fab_payload(_vrecords(), decision="no_candidate", winner=None)
         self.assertTrue(_valid_leading(payload))
 
     def test_valid_empty_records_payload(self):
+        """Test valid empty records payload."""
         protocol = leading.protocol_object([], {}, "sha256:fake")
         protocol["fingerprint"] = leading.protocol_fingerprint([], {}, "sha256:fake")
         stage = {
@@ -1846,7 +2047,10 @@ class TestValidatorDeepTampers(unittest.TestCase):
 
 
 class TestValidatorFinalBranches(unittest.TestCase):
+    """Test validator final branches."""
+
     def test_expected_blank_detail_tamper_on_stage_payload(self):
+        """Test expected blank detail tamper on stage payload."""
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         payload = _payload(backend, _run_stage(backend))
         self.assertTrue(_valid_leading(payload))
@@ -1858,6 +2062,7 @@ class TestValidatorFinalBranches(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_numeric_source_stage_payload_validates(self):
+        """Test numeric source stage payload validates."""
         cases = (
             _case("v-1", "g1", "7"),
             _case("v-2", "g1", "70"),
@@ -1875,6 +2080,7 @@ class TestValidatorFinalBranches(unittest.TestCase):
         self.assertTrue(_valid_leading(payload))
 
     def test_fixture_id_order_mismatch_across_candidates(self):
+        """Test fixture id order mismatch across candidates."""
         payload = _fab_payload(_vrecords())
         payload["candidates"]["cand-b"]["records"] = list(
             reversed(payload["candidates"]["cand-b"]["records"])
@@ -1882,6 +2088,7 @@ class TestValidatorFinalBranches(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_all_candidates_unavailable_invalid(self):
+        """Test all candidates unavailable invalid."""
         payload = _fab_payload(_vrecords())
         for entry in payload["candidates"].values():
             entry["status"] = "unavailable"
@@ -1889,6 +2096,7 @@ class TestValidatorFinalBranches(unittest.TestCase):
         self.assertFalse(_valid_leading(payload))
 
     def test_valid_asymmetric_missing_cell_variant(self):
+        """Test valid asymmetric missing cell variant."""
         # Only cand-b misses a cell: the completed sets differ
         # across candidates (the recompute's set-count branch).
         behaviors = {("cand-b", "f-8"): (("none", "pass"), PASS_PAIR)}
@@ -1897,6 +2105,7 @@ class TestValidatorFinalBranches(unittest.TestCase):
         self.assertTrue(payload["conditions"]["wrong_first_person"]["withheld"])
 
     def test_valid_right_cell_missing_variant(self):
+        """Test valid right cell missing variant."""
         behaviors = {
             ("cand-a", "f-8"): (("pass", "none"), PASS_PAIR),
             ("cand-b", "f-8"): (("pass", "none"), PASS_PAIR),

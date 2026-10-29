@@ -72,13 +72,16 @@ class _FakeStringTokenizer:
         return None
 
     def get_vocab(self) -> dict[str, int]:
+        """Get vocab."""
         return dict(self._vocab)
 
     def _convert_id_to_token(self, index: int) -> str:
+        """Convert id to token."""
         return self._tokens[index]
 
     @staticmethod
     def convert_tokens_to_string(tokens: list[str]) -> str:
+        """Convert tokens to string."""
         return "".join(tokens)
 
     def __call__(self, text: str, add_special_tokens: bool = False) -> dict[str, list[int]]:
@@ -93,6 +96,7 @@ class _FakeByteTokenizer(_FakeStringTokenizer):
         return SimpleNamespace(decoder=type("ByteLevel", (), {})())
 
     def convert_ids_to_tokens(self, index: int) -> str:
+        """Convert ids to tokens."""
         return self._tokens[index]
 
 
@@ -106,9 +110,11 @@ class _TextBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         raise AssertionError("encode unused in stop tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
     @staticmethod
@@ -119,6 +125,7 @@ class _TextBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         raise AssertionError("generate unused in stop tests")
 
 
@@ -208,6 +215,7 @@ class HfDocstringCasesTests(unittest.TestCase):
     ]
 
     def test_docstring_positive_cases_fire(self) -> None:
+        """Test docstring positive cases fire."""
         for tokens in (
             ["st", "op"],
             ["stop"],
@@ -221,6 +229,7 @@ class HfDocstringCasesTests(unittest.TestCase):
                 _check_agreement(self, self.TOKENS, "stop", (), ids)
 
     def test_docstring_negative_cases_stay_silent(self) -> None:
+        """Test docstring negative cases stay silent."""
         # The stop string does not overlap the final token: upstream
         # deliberately does not fire.
         for tokens in (["stop", "at"], ["st", "op", "at"], ["st", "opera", "tion"]):
@@ -234,6 +243,7 @@ class HfStopDispositionTests(unittest.TestCase):
     """HF keeps the stop string; prompt/output boundary behavior."""
 
     def test_stop_kept_not_stripped(self) -> None:
+        """Test stop kept not stripped."""
         tokens = ["a", "b", "STOP", "c"]
         backend = _TextBackend(_with_prefix_tokens(tokens))
         full = _with_prefix_tokens(tokens)
@@ -247,9 +257,11 @@ class HfStopDispositionTests(unittest.TestCase):
         self.assertEqual(backend.decode(outcome.truncated_ids), "abSTOP")
 
     def test_stop_at_position_zero(self) -> None:
+        """Test stop at position zero."""
         _check_agreement(self, ["STOP", "x"], "STOP", (), (0, 1))
 
     def test_empty_output_never_fires(self) -> None:
+        """Test empty output never fires."""
         tokens = _with_prefix_tokens(["STOP"])
         backend = _TextBackend(tokens)
         outcome = emulate_hf_stop_string(backend, (), (), "STOP")
@@ -258,32 +270,41 @@ class HfStopDispositionTests(unittest.TestCase):
         self.assertEqual(outcome.detail, "no_stop_within_cap")
 
     def test_stop_inside_prompt_does_not_fire(self) -> None:
+        """Test stop inside prompt does not fire."""
         # The stop must overlap the final *generated* token.
         _check_agreement(self, ["stop", "x"], "stop", (0,), (1,))
 
     def test_stop_spanning_prompt_boundary_fires(self) -> None:
+        """Test stop spanning prompt boundary fires."""
         # Prompt supplies overhang context, like HF's full-input_ids check.
         _check_agreement(self, ["st", "op"], "stop", (0,), (1,))
 
     def test_overhang_off_prompt_start(self) -> None:
+        """Test overhang off prompt start."""
         _check_agreement(self, ["s", "to", "pped"], "stop", (0, 1), (2,))
 
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class HfEdgeCaseTests(unittest.TestCase):
+    """Hf edge case tests."""
+
     def test_unicode_multibyte(self) -> None:
+        """Test unicode multibyte."""
         _check_agreement(self, ["caf", "é", "x"], "café", (), (0, 1, 2))
         _check_agreement(self, ["😀", "x"], "😀", (), (0, 1))
 
     def test_overlapping_stops(self) -> None:
+        """Test overlapping stops."""
         _check_agreement(self, ["aaa"], "aa", (), (0,))
         _check_agreement(self, ["xaa", "aab"], "aab", (), (0, 1))
 
     def test_stop_longer_than_output(self) -> None:
+        """Test stop longer than output."""
         _check_agreement(self, ["stop"], "stopstop", (), (0,))
         _check_agreement(self, ["st", "op"], "stopstop!", (), (0, 1))
 
     def test_mid_token_occurrence_fires(self) -> None:
+        """Test mid token occurrence fires."""
         # The stop need only occur in the final token ("or" in " world").
         _check_agreement(self, [" world"], "or", (), (0,))
         _check_agreement(self, ["xstopper"], "stop", (), (0,))
@@ -299,15 +320,18 @@ class HfEmptyTokenRegressionTests(unittest.TestCase):
     """
 
     def test_empty_token_is_transparent(self) -> None:
+        """Test empty token is transparent."""
         # ["s", "", "topper"] matches "stop": upstream fires at step 3.
         _check_agreement(self, ["s", "", "topper"], "stop", (), (0, 1, 2))
 
     def test_window_bound_with_empty_tokens(self) -> None:
+        """Test window bound with empty tokens."""
         # Upstream truncates to the last len(stop) tokens before matching,
         # so the "a" three empties back cannot participate: no fire.
         _check_agreement(self, ["a", "", "", "", "b"], "ab", (), (0, 1, 2, 3, 4))
 
     def test_empty_final_token_never_starts_a_match(self) -> None:
+        """Test empty final token never starts a match."""
         _check_agreement(self, ["s", ""], "stop", (), (0, 1))
 
 
@@ -318,13 +342,16 @@ class HfOOVByteTests(unittest.TestCase):
     TOKENS = ["a", "b"]
 
     def test_oov_kills_walk(self) -> None:
+        """Test oov kills walk."""
         # ["a", OOV, "b"] with stop "ab": the walk from "b" dies at OOV.
         _check_agreement(self, self.TOKENS, "ab", (), (0, 2, 1), byte_mode=True)
 
     def test_oov_as_final_token_never_fires(self) -> None:
+        """Test oov as final token never fires."""
         _check_agreement(self, self.TOKENS, "ab", (), (0, 2), byte_mode=True)
 
     def test_oov_far_from_stop_is_inert(self) -> None:
+        """Test oov far from stop is inert."""
         _check_agreement(self, self.TOKENS, "ab", (), (2, 0, 1), byte_mode=True)
 
 
@@ -333,6 +360,7 @@ class HfMultiStopTests(unittest.TestCase):
     """Upstream has no first-listed-wins rule: any-match bool per sequence."""
 
     def test_earliest_completing_stop_wins(self) -> None:
+        """Test earliest completing stop wins."""
         tokens = _with_prefix_tokens(["ab", "q", "b"])
         backend = _TextBackend(tokens)
         tokenizer = _FakeStringTokenizer(tokens)
@@ -359,6 +387,7 @@ class HfMultiStopTests(unittest.TestCase):
         )
 
     def test_tied_stops_are_outcome_identical(self) -> None:
+        """Test tied stops are outcome identical."""
         tokens = _with_prefix_tokens(["ab"])
         backend = _TextBackend(tokens)
         tokenizer = _FakeStringTokenizer(tokens)
@@ -377,6 +406,7 @@ class HfByteSpaceTests(unittest.TestCase):
     """Byte-space matching: UTF-8 fragments fire where the string path is silent."""
 
     def test_fragment_stop_fires_in_byte_space(self) -> None:
+        """Test fragment stop fires in byte space."""
         # "ä" = b"\xc3\xa4" split across "Ã" (U+00C3) and "¤" (U+00A4).
         tokens = ["Ã", "¤", "x"]
         full = _with_prefix_tokens(tokens)
@@ -394,6 +424,7 @@ class HfByteSpaceTests(unittest.TestCase):
         self.assertEqual(_reference_first_step(tokenizer, ["ä"], (), output), 2)
 
     def test_byte_fallback_hex_tokens(self) -> None:
+        """Test byte fallback hex tokens."""
         import json
 
         tokens = ["<0x41>", "x"]
@@ -481,6 +512,7 @@ class HfDifferentialFuzzTests(unittest.TestCase):
     BYTE_STOPS = ["café", "a", "ab", "😀", " ", "é", "caf", "AA", "A"]
 
     def test_string_path_fuzz(self) -> None:
+        """Test string path fuzz."""
         rng = random.Random(20261015)  # noqa: S311 -- deterministic test seed
         tokens = _with_prefix_tokens(self.STRING_TOKENS)
         tokenizer = _FakeStringTokenizer(tokens)
@@ -505,6 +537,7 @@ class HfDifferentialFuzzTests(unittest.TestCase):
         self.assertEqual(trials, len(self.STRING_STOPS) * 25)
 
     def test_byte_path_fuzz(self) -> None:
+        """Test byte path fuzz."""
         rng = random.Random(20261016)  # noqa: S311 -- deterministic test seed
         tokens = _with_prefix_tokens(self.BYTE_TOKENS)
         tokenizer = _FakeByteTokenizer(tokens)

@@ -35,6 +35,7 @@ MCP_SERVER_CMD = [sys.executable, "-m", "model_protocol_lab.mcp_server"]
 
 
 def _valid_bundle(tmpdir: Path) -> bytes:
+    """Valid bundle."""
     report = Path(tmpdir) / "report"
     report.mkdir()
     for name in ("results.json", "report.html"):
@@ -82,6 +83,7 @@ class TestPackCodecNormalisation(unittest.TestCase):
     """F1: corrupt compressed entries map to bundle_entry_read_failed."""
 
     def test_corrupt_codec_manifest_fails_closed_with_fixed_code(self) -> None:
+        """Test corrupt codec manifest fails closed with fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             bundle = _valid_bundle(Path(tmp))
             for codec in (zipfile.ZIP_DEFLATED, zipfile.ZIP_LZMA, zipfile.ZIP_BZIP2):
@@ -95,6 +97,7 @@ class TestPackCodecNormalisation(unittest.TestCase):
                     self.assertIn("bundle_entry_read_failed", details)
 
     def test_corrupt_codec_bundle_cli_path_returns_failure_not_traceback(self) -> None:
+        """Test corrupt codec bundle cli path returns failure not traceback."""
         with tempfile.TemporaryDirectory() as tmp:
             bundle = _valid_bundle(Path(tmp))
             hostile = _garble_entry_stream(
@@ -112,6 +115,7 @@ class TestPackSymlinkConsistency(unittest.TestCase):
     """F11: both pack readers refuse symlinks (O_NOFOLLOW)."""
 
     def test_load_bundle_bytes_refuses_symlink(self) -> None:
+        """Test load bundle bytes refuses symlink."""
         with tempfile.TemporaryDirectory() as tmp:
             real = Path(tmp) / "real.bundle.zip"
             real.write_bytes(b"bundle-bytes")
@@ -127,15 +131,25 @@ class TestFingerprintGuard(unittest.TestCase):
     """F2: stages enforce the Backend protocol's fingerprint type."""
 
     def test_helper_rejects_non_string_fingerprints(self) -> None:
+        """Test helper rejects non string fingerprints."""
+
         class MethodBackend:
+            """Method backend."""
+
             @staticmethod
-            def fingerprint() -> dict:  # the cycle-195 fake shape
+            def fingerprint() -> dict:
+                """Fingerprint."""
+                # the cycle-195 fake shape
                 return {"model": "fake"}
 
         class IntBackend:
+            """Int backend."""
+
             fingerprint = 7
 
         class MissingBackend:
+            """Missing backend."""
+
             pass
 
         for backend in (MethodBackend(), IntBackend(), MissingBackend()):
@@ -145,12 +159,17 @@ class TestFingerprintGuard(unittest.TestCase):
                 self.assertEqual(str(ctx.exception), "Backend fingerprint must be a string")
 
     def test_helper_passes_conforming_fingerprint_through(self) -> None:
+        """Test helper passes conforming fingerprint through."""
+
         class GoodBackend:
+            """Good backend."""
+
             fingerprint = "sha256:good"
 
         self.assertEqual(_backend_fingerprint(GoodBackend()), "sha256:good")  # type: ignore[arg-type]
 
     def test_stage_raises_on_method_fingerprint(self) -> None:
+        """Test stage raises on method fingerprint."""
         from model_protocol_lab.experiments import distraction_stage
         from tests.test_cycle184_distraction import (
             BOUNDARY_WORD,
@@ -161,8 +180,12 @@ class TestFingerprintGuard(unittest.TestCase):
         )
 
         class MethodFingerprintBackend(_WordBackend):
+            """Method fingerprint backend."""
+
             @staticmethod
-            def fingerprint() -> dict:  # type: ignore[override]
+            def fingerprint() -> dict:
+                """Fingerprint."""
+                # type: ignore[override]
                 return {"model": "fake"}
 
         backend = MethodFingerprintBackend()
@@ -179,6 +202,7 @@ class TestFingerprintGuard(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "Backend fingerprint must be a string")
 
     def test_stage_payload_carries_the_protocol_string(self) -> None:
+        """Test stage payload carries the protocol string."""
         from model_protocol_lab import distraction
         from model_protocol_lab.experiments import distraction_stage
         from tests.test_cycle184_distraction import (
@@ -207,6 +231,7 @@ class TestFingerprintGuard(unittest.TestCase):
         )
 
     def test_no_stage_stringifies_the_fingerprint(self) -> None:
+        """Test no stage stringifies the fingerprint."""
         # Source audit: the stringify patterns are gone, and every
         # stage that builds a protocol from a backend routes the read
         # through the guard (the enumeration the wave-9 briefs counted
@@ -244,12 +269,14 @@ class TestIntegerLimitVocabulary(unittest.TestCase):
     BIG = b"9" * 5000
 
     def test_parse_results_bytes_maps_int_limit_to_results_invalid_json(self) -> None:
+        """Test parse results bytes maps int limit to results invalid json."""
         payload = b'{"decision":"x","search":[],"held_out":null,"seed":' + self.BIG + b"}"
         with self.assertRaises(ValueError) as ctx:
             diffreports.parse_results_bytes(payload)
         self.assertEqual(str(ctx.exception), "results_invalid_json")
 
     def test_parse_results_bytes_keeps_its_own_fixed_codes(self) -> None:
+        """Test parse results bytes keeps its own fixed codes."""
         # The broadened ValueError clause must not swallow the codes
         # the module's own hooks raise.
         with self.assertRaises(ValueError) as ctx:
@@ -260,6 +287,7 @@ class TestIntegerLimitVocabulary(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "results_nonfinite_number")
 
     def test_backends_read_json_maps_int_limit_to_invalid_asset_json(self) -> None:
+        """Test backends read json maps int limit to invalid asset json."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "asset.json"
             path.write_bytes(b'{"a": ' + self.BIG + b"}")
@@ -268,6 +296,7 @@ class TestIntegerLimitVocabulary(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "invalid_asset_json")
 
     def test_doctor_fails_the_check_instead_of_raising(self) -> None:
+        """Test doctor fails the check instead of raising."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "config.json").write_bytes(b"{}")
@@ -279,6 +308,7 @@ class TestIntegerLimitVocabulary(unittest.TestCase):
             found: list[dict] = []
 
             def walk(node: object) -> None:
+                """Walk."""
                 if type(node) is dict:
                     if "weight_headers" in node:
                         found.append(node["weight_headers"])
@@ -295,12 +325,14 @@ class TestNonfiniteFloatRejection(unittest.TestCase):
     """F4: overflow float literals are rejected at the results loader."""
 
     def test_overflow_float_maps_to_results_nonfinite_number(self) -> None:
+        """Test overflow float maps to results nonfinite number."""
         payload = b'{"decision":"x","search":[],"held_out":null,"seed":1e999}'
         with self.assertRaises(ValueError) as ctx:
             diffreports.parse_results_bytes(payload)
         self.assertEqual(str(ctx.exception), "results_nonfinite_number")
 
     def test_finite_floats_still_parse(self) -> None:
+        """Test finite floats still parse."""
         payload = b'{"decision":"x","search":[],"held_out":null,"seed":1.5e3}'
         parsed = diffreports.parse_results_bytes(payload)
         self.assertEqual(parsed["seed"], 1500.0)
@@ -310,11 +342,13 @@ class TestChangelogMentionBoundaries(unittest.TestCase):
     """F5: gate mentions are whole tokens, not substrings."""
 
     def test_flag_inside_longer_flag_is_not_a_mention(self) -> None:
+        """Test flag inside longer flag is not a mention."""
         self.assertFalse(_mentioned("--include", "flags: `--include-evidence`"))
         self.assertFalse(_mentioned("--seed", "the --seeded-output option"))
         self.assertTrue(_mentioned("--include", "the `--include` option"))
 
     def test_cycle_inside_longer_number_is_not_a_mention(self) -> None:
+        """Test cycle inside longer number is not a mention."""
         self.assertFalse(_mentioned("cycle 202", "the cycle 2025 retrospective"))
         self.assertTrue(_mentioned("cycle 202", "### Fixed (cycle 202 — wave-9)"))
 
@@ -325,6 +359,7 @@ class TestMcpFrameDiscipline(unittest.TestCase):
     """
 
     def _serve(self, lines: str) -> str:
+        """Serve."""
         proc = subprocess.run(
             MCP_SERVER_CMD, input=lines, capture_output=True, text=True, timeout=60, check=False
         )
@@ -332,6 +367,7 @@ class TestMcpFrameDiscipline(unittest.TestCase):
         return proc.stdout
 
     def test_nan_id_is_a_parse_error_and_never_echoed(self) -> None:
+        """Test nan id is a parse error and never echoed."""
         out = self._serve('{"jsonrpc":"2.0","id":NaN,"method":"ping"}\n')
         self.assertNotIn("NaN", out)
         response = json.loads(out.strip().splitlines()[0])
@@ -339,12 +375,14 @@ class TestMcpFrameDiscipline(unittest.TestCase):
         self.assertIsNone(response["id"])
 
     def test_overflow_float_id_is_a_parse_error(self) -> None:
+        """Test overflow float id is a parse error."""
         out = self._serve('{"jsonrpc":"2.0","id":1e999,"method":"ping"}\n')
         self.assertNotIn("Infinity", out)
         response = json.loads(out.strip().splitlines()[0])
         self.assertEqual(response["error"]["code"], -32700)
 
     def test_non_object_backend_is_invalid_params(self) -> None:
+        """Test non object backend is invalid params."""
         import importlib
 
         module = importlib.import_module("model_protocol_lab.mcp_server")
@@ -367,6 +405,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
     """F8/F9 + leads L2/L5: release_build refuses cleanly."""
 
     def test_symlinks_are_found_and_refused(self) -> None:
+        """Test symlinks are found and refused."""
         from tools import release_build
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -387,6 +426,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
             self.assertFalse(out.exists())
 
     def test_expect_version_mismatch_is_refused_before_building(self) -> None:
+        """Test expect version mismatch is refused before building."""
         from tools import release_build
 
         self.assertEqual(release_build._package_version(REPO_ROOT), "0.1.0")
@@ -406,6 +446,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
             self.assertEqual(code, 2)
 
     def test_absurd_epoch_is_a_clean_usage_error(self) -> None:
+        """Test absurd epoch is a clean usage error."""
         from tools import release_build
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -423,6 +464,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 2)
 
     def test_missing_artifact_is_a_named_failure(self) -> None:
+        """Test missing artifact is a named failure."""
         from tools import release_build
 
         with self.assertRaises(SystemExit) as ctx:
@@ -430,6 +472,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
         self.assertIn("no sdist artifact", str(ctx.exception))
 
     def test_workflow_binds_tag_to_version(self) -> None:
+        """Test workflow binds tag to version."""
         workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("--expect-version", workflow)
         self.assertIn("GITHUB_REF_NAME#v", workflow)
@@ -439,6 +482,7 @@ class TestReportingControlStrip(unittest.TestCase):
     """F10: conformance + transfer sections strip C0 controls."""
 
     def test_conformance_section_strips_controls(self) -> None:
+        """Test conformance section strips controls."""
         result = {
             "template_conformance": {
                 "status": "ok",
@@ -463,12 +507,14 @@ class TestReportingControlStrip(unittest.TestCase):
         self.assertIn("fmt[31mRED[0m", html)
 
     def test_conformance_detail_path_strips_controls(self) -> None:
+        """Test conformance detail path strips controls."""
         result = {"template_conformance": {"status": "broken", "detail": "bad\x1bdetail"}}
         html = reporting._conformance_section(result)
         self.assertNotIn("\x1b", html)
         self.assertIn("baddetail", html)
 
     def test_transfer_section_strips_controls(self) -> None:
+        """Test transfer section strips controls."""
         transfer = {
             "available": True,
             "primary_winner": "alpha",

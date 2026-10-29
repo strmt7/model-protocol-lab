@@ -78,6 +78,7 @@ class CompatibilityProbeTests(unittest.TestCase):
     """core.template_tokenizer_compatibility with stub encode callables."""
 
     def test_compatible_when_registered_atomic_id_consistent(self):
+        """Test compatible when registered atomic id consistent."""
         result = template_tokenizer_compatibility(
             "chatml",
             CHATML_TOKENS,
@@ -92,6 +93,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertIn("predicts nothing", result["detail"])
 
     def test_incompatible_when_token_missing(self):
+        """Test incompatible when token missing."""
         result = template_tokenizer_compatibility("llama3", ("<|eot_id|>",), {}, lambda text: (9,))
         self.assertEqual(result["verdict"], "incompatible")
         self.assertEqual(result["reason"], "unregistered")
@@ -102,6 +104,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertTrue(row["single_token"])
 
     def test_incompatible_when_token_fragments(self):
+        """Test incompatible when token fragments."""
         result = template_tokenizer_compatibility(
             "chatml", ("<|im_start|>",), {"<|im_start|>": 3}, lambda text: (1, 2)
         )
@@ -113,6 +116,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertIsNone(row["id_match"])
 
     def test_incompatible_on_id_mismatch(self):
+        """Test incompatible on id mismatch."""
         result = template_tokenizer_compatibility(
             "chatml", ("<|im_start|>",), {"<|im_start|>": 3}, lambda text: (7,)
         )
@@ -126,6 +130,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertEqual(row["registered_id"], 3)
 
     def test_unknown_on_empty_inventory(self):
+        """Test unknown on empty inventory."""
         # A format with no token-shaped control literals cannot be judged
         # -- "unknown", never "compatible".
         result = template_tokenizer_compatibility("plain", (), {}, lambda text: (1,))
@@ -134,7 +139,10 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertEqual(result["tokens"], [])
 
     def test_unknown_when_encode_raises(self):
+        """Test unknown when encode raises."""
+
         def hostile(text):
+            """Hostile."""
             raise RuntimeError("boom")
 
         result = template_tokenizer_compatibility(
@@ -145,10 +153,12 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertIn("cannot be judged", result["detail"])
 
     def test_unknown_when_encode_returns_garbage(self):
+        """Test unknown when encode returns garbage."""
         for bad in (["not-a-tuple"], (1, -2), ()):
             with self.subTest(bad=bad):
-
+                # skipcq: PYL-W0102 - bad=bad binds the loop value at def time by design.
                 def encode(text, bad=bad):
+                    """Encode."""
                     return bad
 
                 result = template_tokenizer_compatibility(
@@ -158,6 +168,7 @@ class CompatibilityProbeTests(unittest.TestCase):
                 self.assertEqual(result["reason"], "encode_invalid")
 
     def test_first_failure_in_inventory_order_wins(self):
+        """Test first failure in inventory order wins."""
         result = template_tokenizer_compatibility(
             "f",
             ("<a>", "<b>"),
@@ -170,7 +181,10 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertIn("<a>", result["detail"])
 
     def test_degraded_probe_beats_incompatible(self):
+        """Test degraded probe beats incompatible."""
+
         def flaky(text):
+            """Flaky."""
             if text == "<a>":
                 raise RuntimeError("boom")
             return (9,)
@@ -181,6 +195,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         self.assertEqual(result["reason"], "encode_failed")
 
     def test_token_row_schema(self):
+        """Test token row schema."""
         result = template_tokenizer_compatibility("f", ("<t>",), {"<t>": 5}, lambda text: (5,))
         self.assertEqual(
             set(result),
@@ -200,7 +215,10 @@ class CompatibilityProbeTests(unittest.TestCase):
         )
 
     def test_rejects_bad_inputs(self):
+        """Test rejects bad inputs."""
+
         def encode(text):
+            """Encode."""
             return (1,)
 
         with self.assertRaises(ValueError):
@@ -221,12 +239,16 @@ class CompatibilityProbeTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
 class PortabilityMatrixTests(unittest.TestCase):
+    """Portability matrix tests."""
+
     @staticmethod
     def _chatml_section(tmp: str) -> dict:
+        """Chatml section."""
         second = write_tokenizer_checkpoint(Path(tmp) / "second", CHATML_TOKENS)
         return portability_matrix(second)
 
     def test_matrix_covers_full_mutate_candidate_space(self):
+        """Test matrix covers full mutate candidate space."""
         from model_protocol_lab.catalog import CATALOG, candidates
 
         expected = [
@@ -241,6 +263,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             )
 
     def test_chatml_family_compatible_on_chatml_tokens(self):
+        """Test chatml family compatible on chatml tokens."""
         with TemporaryDirectory() as tmp:
             section = self._chatml_section(tmp)
             by_name = {row["format"]: row for row in section["rows"]}
@@ -249,6 +272,7 @@ class PortabilityMatrixTests(unittest.TestCase):
                     self.assertEqual(by_name[name]["verdict"], "compatible")
 
     def test_foreign_tokens_yield_incompatible(self):
+        """Test foreign tokens yield incompatible."""
         with TemporaryDirectory() as tmp:
             section = self._chatml_section(tmp)
             by_name = {row["format"]: row for row in section["rows"]}
@@ -258,6 +282,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             self.assertFalse(row["bos_skipped"])
 
     def test_bos_less_formats_skip_the_bos_requirement(self):
+        """Test bos less formats skip the bos requirement."""
         from model_protocol_lab.catalog import CATALOG, candidates
 
         expected_skip = {
@@ -285,6 +310,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             self.assertEqual(row["reason"], "unregistered")
 
     def test_token_less_checkpoint_is_all_incompatible(self):
+        """Test token less checkpoint is all incompatible."""
         with TemporaryDirectory() as tmp:
             second = write_tokenizer_checkpoint(Path(tmp) / "second")
             section = portability_matrix(second)
@@ -293,6 +319,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             self.assertEqual(verdicts, {"incompatible"})
 
     def test_compatible_makes_no_transfer_claim(self):
+        """Test compatible makes no transfer claim."""
         with TemporaryDirectory() as tmp:
             section = self._chatml_section(tmp)
             self.assertIn("predicts NOTHING", section["asymmetry"])
@@ -300,6 +327,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             forbidden = ("score", "prediction", "transfer", "will_succeed", "success")
 
             def check_keys(node, path="section"):
+                """Check keys."""
                 if isinstance(node, dict):
                     for key, value in node.items():
                         self.assertFalse(
@@ -322,6 +350,7 @@ class PortabilityMatrixTests(unittest.TestCase):
                 self.assertIn("predicts nothing", row["detail"])
 
     def test_section_and_row_schema(self):
+        """Test section and row schema."""
         with TemporaryDirectory() as tmp:
             section = self._chatml_section(tmp)
             self.assertEqual(
@@ -351,6 +380,7 @@ class PortabilityMatrixTests(unittest.TestCase):
                         )
 
     def test_matrix_is_deterministic(self):
+        """Test matrix is deterministic."""
         with TemporaryDirectory() as tmp:
             second = write_tokenizer_checkpoint(Path(tmp) / "second", CHATML_TOKENS)
             first = json.dumps(portability_matrix(second), sort_keys=True)
@@ -358,6 +388,7 @@ class PortabilityMatrixTests(unittest.TestCase):
             self.assertEqual(first, again)
 
     def test_matrix_never_fails_the_doctor_verdict(self):
+        """Test matrix never fails the doctor verdict."""
         with TemporaryDirectory() as tmp:
             primary = write_primary_model(tmp)
             second = write_tokenizer_checkpoint(Path(tmp) / "second")
@@ -369,12 +400,14 @@ class PortabilityMatrixTests(unittest.TestCase):
             self.assertEqual(verdicts, {"incompatible"})
 
     def test_doctor_omits_section_without_flag(self):
+        """Test doctor omits section without flag."""
         with TemporaryDirectory() as tmp:
             primary = write_primary_model(tmp)
             report = doctor(primary)
             self.assertNotIn("portability_matrix", report)
 
     def test_unloadable_tokenizer_doc_is_sanitized(self):
+        """Test unloadable tokenizer doc is sanitized."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "second"
             root.mkdir()
@@ -392,12 +425,14 @@ class HostileSecondCheckpointTests(unittest.TestCase):
     """Fixed-vocabulary, fail-closed handling of hostile second checkpoints."""
 
     def test_missing_directory_is_unavailable(self):
+        """Test missing directory is unavailable."""
         section = portability_matrix("/definitely/not/here-12345")
         self.assertEqual(section["status"], "unavailable")
         self.assertEqual(section["detail"], "not_a_readable_directory")
         self.assertEqual(section["rows"], [])
 
     def test_file_path_is_unavailable(self):
+        """Test file path is unavailable."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "file"
             target.write_text("x", encoding="utf-8")
@@ -405,6 +440,7 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertEqual(section["detail"], "not_a_readable_directory")
 
     def test_oversized_tokenizer_is_rejected_without_reading(self):
+        """Test oversized tokenizer is rejected without reading."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "second"
             root.mkdir()
@@ -418,6 +454,7 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertEqual(section["detail"], "oversized_tokenizer_file")
 
     def test_malformed_tokenizer_json_is_sanitized(self):
+        """Test malformed tokenizer json is sanitized."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "second"
             root.mkdir()
@@ -429,6 +466,7 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertNotIn(marker, json.dumps(section))
 
     def test_missing_tokenizer_json_is_unavailable(self):
+        """Test missing tokenizer json is unavailable."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "second"
             root.mkdir()
@@ -437,6 +475,7 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertEqual(section["detail"], "tokenizer_load_failed")
 
     def test_non_dict_tokenizer_json_is_unavailable(self):
+        """Test non dict tokenizer json is unavailable."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "second"
             root.mkdir()
@@ -445,10 +484,12 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertEqual(section["detail"], "tokenizer_load_failed")
 
     def test_non_path_input_raises(self):
+        """Test non path input raises."""
         with self.assertRaises(ValueError):
             portability_matrix(123)
 
     def test_doctor_survives_hostile_second_checkpoint(self):
+        """Test doctor survives hostile second checkpoint."""
         with TemporaryDirectory() as tmp:
             primary = write_primary_model(tmp)
             report = doctor(primary, portability_matrix_path=Path(tmp) / "missing")
@@ -456,7 +497,11 @@ class HostileSecondCheckpointTests(unittest.TestCase):
             self.assertEqual(report["portability_matrix"]["status"], "unavailable")
 
     def test_secondary_registered_skips_malformed_entries(self):
+        """Test secondary registered skips malformed entries."""
+
         class BareTokenizer:
+            """Bare tokenizer."""
+
             pass
 
         doc = {
@@ -471,11 +516,16 @@ class HostileSecondCheckpointTests(unittest.TestCase):
         self.assertEqual(_secondary_registered(BareTokenizer(), doc), {"<t>": 7})
 
     def test_secondary_registered_degrades_on_hostile_tokenizer(self):
+        """Test secondary registered degrades on hostile tokenizer."""
+
         class HostileTokenizer:
+            """Hostile tokenizer."""
+
             bos_token = "<s>"
 
             @staticmethod
             def convert_tokens_to_ids(token):
+                """Convert tokens to ids."""
                 raise RuntimeError("boom")
 
         doc = {"added_tokens": [{"content": "<t>", "id": 7}]}
@@ -483,19 +533,24 @@ class HostileSecondCheckpointTests(unittest.TestCase):
 
 
 class RenderTableTests(unittest.TestCase):
+    """Render table tests."""
+
     def test_table_renders_unavailable(self):
+        """Test table renders unavailable."""
         table = render_portability_table(portability_matrix("/definitely/not/here-12345"))
         self.assertIn("unavailable", table)
         self.assertIn("not_a_readable_directory", table)
         self.assertIn("ASYMMETRY WARNING", table)
 
     def test_table_has_no_trailing_whitespace(self):
+        """Test table has no trailing whitespace."""
         table = render_portability_table(portability_matrix("/definitely/not/here-12345"))
         for line in table.splitlines():
             self.assertEqual(line, line.rstrip(), f"trailing whitespace: {line!r}")
 
     @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
     def test_table_lists_every_candidate_with_verdict(self):
+        """Test table lists every candidate with verdict."""
         from model_protocol_lab.catalog import CATALOG, candidates
 
         expected = [
@@ -512,7 +567,10 @@ class RenderTableTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
 class CliWiringTests(unittest.TestCase):
+    """Cli wiring tests."""
+
     def test_cli_flag_adds_matrix_and_stderr_table(self):
+        """Test cli flag adds matrix and stderr table."""
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -544,6 +602,7 @@ class CliWiringTests(unittest.TestCase):
             self.assertIn("ASYMMETRY WARNING", table)
 
     def test_cli_without_flag_has_no_section(self):
+        """Test cli without flag has no section."""
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -555,6 +614,7 @@ class CliWiringTests(unittest.TestCase):
             self.assertNotIn("portability_matrix", json.loads(stdout.getvalue()))
 
     def test_cli_unavailable_second_checkpoint_still_exits_zero(self):
+        """Test cli unavailable second checkpoint still exits zero."""
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:

@@ -106,6 +106,7 @@ CANARY_ID_ARRAY = "[" + ",".join(str(ord(char)) for char in CANARY) + "]"
 
 
 def _no_ws(text: str) -> str:
+    """No ws."""
     return "".join(text.split())
 
 
@@ -166,16 +167,19 @@ class _CanaryBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(
         input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
@@ -200,6 +204,7 @@ class DiffReportsLeakSweep(LeakAsserts):
 
     @staticmethod
     def _decoded_observation_text(report: dict) -> str:
+        """Decoded observation text."""
         decode = _CanaryBackend.decode
         chunks = []
         for entry in report["search"]:
@@ -220,6 +225,7 @@ class DiffReportsLeakSweep(LeakAsserts):
         self.assertIn(CANARY, self._decoded_observation_text(report))
 
     def test_self_diff_emits_no_canary(self) -> None:
+        """Test self diff emits no canary."""
         with tempfile.TemporaryDirectory() as tmp:
             report = _evidence_report(Path(tmp) / "run")
         self.assertTrue(report["search"][0]["observations"])  # evidence present
@@ -269,10 +275,12 @@ class _OrdTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
 
@@ -289,6 +297,7 @@ class DebugReplContract(LeakAsserts):
 
     @staticmethod
     def _session(commands: list[str], tokenizer=None) -> str:
+        """Session."""
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(split, dataset_label="canary-fixtures", tokenizer=tokenizer, stdout=out)
@@ -336,15 +345,18 @@ class DebugReplContract(LeakAsserts):
         self.assertNoCanary(out, "debug .audit")
 
     def test_fixtures_lists_ids_only(self) -> None:
+        """Test fixtures lists ids only."""
         out = self._session([".fixtures", ".quit"])
         self.assertNoCanary(out, "debug .fixtures")
 
     def test_tokens_without_tokenizer_prints_reminder_not_ids(self) -> None:
+        """Test tokens without tokenizer prints reminder not ids."""
         out = self._session([".tokens", ".quit"])
         self.assertNoCanary(out, "debug .tokens (no tokenizer)")
         self.assertIn("no tokenizer attached", out)
 
     def test_step_with_typed_ids_prints_no_content(self) -> None:
+        """Test step with typed ids prints no content."""
         out = self._session([".boundary 1,2", ".step 1,2", ".quit"])
         self.assertNoCanary(out, "debug .step")
         self.assertIn("overhang=", out)
@@ -385,11 +397,13 @@ class DoctorLeakSweep(LeakAsserts):
 
     @staticmethod
     def _dataset_path(tmp: str, literal: str | None = None) -> Path:
+        """Dataset path."""
         path = Path(tmp) / "dataset.json"
         path.write_text(json.dumps(_hostile_document(literal=literal)), encoding="utf-8")
         return path
 
     def test_examine_dataset_emits_no_fixture_text(self) -> None:
+        """Test examine dataset emits no fixture text."""
         with tempfile.TemporaryDirectory() as tmp:
             report = examine_dataset(self._dataset_path(tmp))
         text = json.dumps(report, ensure_ascii=True)
@@ -415,6 +429,7 @@ class DoctorLeakSweep(LeakAsserts):
         self.assertNoCanary(text, "doctor full report")
 
     def test_suggestion_contains_only_paths_counts_and_names(self) -> None:
+        """Test suggestion contains only paths counts and names."""
         with tempfile.TemporaryDirectory() as tmp:
             report = doctor(
                 _write_checkpoint(Path(tmp) / "ckpt", real_tokenizer=True),
@@ -448,6 +463,7 @@ class DoctorLeakSweep(LeakAsserts):
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run cli."""
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
         cwd=REPO_ROOT,
@@ -462,6 +478,7 @@ class CliSurfaceSweep(LeakAsserts):
     """catalog / inspect / diff-backends: no fixture-derived content."""
 
     def test_catalog_output_is_lab_owned_hypotheses(self) -> None:
+        """Test catalog output is lab owned hypotheses."""
         proc = _run_cli("catalog")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         entries = json.loads(proc.stdout)
@@ -473,6 +490,7 @@ class CliSurfaceSweep(LeakAsserts):
         self.assertNoCanary(proc.stdout, "mpl catalog")
 
     def test_inspect_output_is_counts_only(self) -> None:
+        """Test inspect output is counts only."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "dataset.json"
             path.write_text(json.dumps(_hostile_document()), encoding="utf-8")
@@ -491,8 +509,11 @@ class CliSurfaceSweep(LeakAsserts):
         """
 
         class _Backend:
+            """Backend."""
+
             @staticmethod
             def decode(token_ids: tuple[int, ...]) -> str:
+                """Decode."""
                 return "".join(map(chr, token_ids))
 
         result = diff_backends(
@@ -521,6 +542,7 @@ class CliSurfaceSweep(LeakAsserts):
 
 
 def _walk_keys(value: object, seen: set[str]) -> None:
+    """Walk keys."""
     if isinstance(value, dict):
         for key, item in value.items():
             seen.add(str(key))
@@ -534,6 +556,7 @@ class SampleReportPublicHygiene(LeakAsserts):
     """The committed examples/sample-report/ is synthetic and evidence-free."""
 
     def test_committed_json_has_no_observations(self) -> None:
+        """Test committed json has no observations."""
         raw = (REPO_ROOT / "examples" / "sample-report" / "results.json").read_bytes()
         report = json.loads(raw)
         self.assertFalse(report["raw_evidence_included"])

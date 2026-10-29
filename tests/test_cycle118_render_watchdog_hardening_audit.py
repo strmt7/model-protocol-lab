@@ -25,15 +25,21 @@ import unittest
 
 
 class _OkTokenizer:
+    """Ok tokenizer."""
+
     @staticmethod
     def apply_chat_template(
         conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
+        """Apply chat template."""
         return "<|user|>hi<|assistant|>"
 
 
 class TestWatchdogHardening(unittest.TestCase):
+    """Test watchdog hardening."""
+
     def test_infinite_budget_disables_watchdog(self) -> None:
+        """Test infinite budget disables watchdog."""
         # setitimer(inf) raises OverflowError, which the old except clause
         # did not catch. inf now means "no budget", like budget_s <= 0.
         from model_protocol_lab.doctor import _render_with_time_budget
@@ -46,6 +52,7 @@ class TestWatchdogHardening(unittest.TestCase):
         )
 
     def test_nan_budget_disables_watchdog(self) -> None:
+        """Test nan budget disables watchdog."""
         # nan cannot arm setitimer either; it must not raise.
         from model_protocol_lab.doctor import _render_with_time_budget
 
@@ -57,6 +64,7 @@ class TestWatchdogHardening(unittest.TestCase):
         )
 
     def test_signal_mask_not_leaked(self) -> None:
+        """Test signal mask not leaked."""
         # The pthread_sigmask used across teardown must be restored; the
         # process must not leave SIGALRM blocked.
         import signal
@@ -72,6 +80,7 @@ class TestWatchdogHardening(unittest.TestCase):
         self.assertNotIn(signal.SIGALRM, after, "SIGALRM left blocked after teardown")
 
     def test_stale_alarm_mid_render_restores_handler(self) -> None:
+        """Test stale alarm mid render restores handler."""
         # A SIGALRM that becomes pending during the render (e.g. a stale
         # alarm, not the watchdog's own) is delivered to the watchdog
         # handler and must not corrupt the handler restoration.
@@ -90,12 +99,15 @@ class TestWatchdogHardening(unittest.TestCase):
         try:
 
             class StaleAlarmTokenizer:
+                """Stale alarm tokenizer."""
+
                 @staticmethod
                 def apply_chat_template(
                     conversation: object,
                     tokenize: bool = False,
                     add_generation_prompt: bool = True,
                 ) -> str:
+                    """Apply chat template."""
                     os.kill(os.getpid(), signal.SIGALRM)
                     return "ok"
 

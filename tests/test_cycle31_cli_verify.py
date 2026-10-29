@@ -107,6 +107,7 @@ def write_fixture_file(directory):
 
 
 def write_csv(directory, name="authoring.csv"):
+    """Write csv."""
     path = Path(directory) / name
     path.write_text(
         "id,group,partition,expected,user_1\ns1,g1,search,yo,hi\nh1,g2,held_out,yo,hey\n"
@@ -135,27 +136,36 @@ def run_argv(family="chatml", **overrides):
 
 
 class TestParseBoundary(unittest.TestCase):
+    """Test parse boundary."""
+
     def test_single(self):
+        """Test single."""
         self.assertEqual(parse_boundary("198"), (198,))
 
     def test_multiple(self):
+        """Test multiple."""
         self.assertEqual(parse_boundary("1,2,3"), (1, 2, 3))
 
     def test_whitespace_tolerated(self):
+        """Test whitespace tolerated."""
         self.assertEqual(parse_boundary(" 12 , 34 "), (12, 34))
 
     def test_sixteen_ids_ok(self):
+        """Test sixteen ids ok."""
         self.assertEqual(parse_boundary(",".join(["7"] * 16)), (7,) * 16)
 
     def test_zero_allowed(self):
+        """Test zero allowed."""
         self.assertEqual(parse_boundary("0"), (0,))
 
     def test_max_value_boundary(self):
+        """Test max value boundary."""
         self.assertEqual(parse_boundary(str(2**31 - 1)), (2**31 - 1,))
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_boundary(str(2**31))
 
     def test_rejects(self):
+        """Test rejects."""
         bad = [
             "",
             " ",
@@ -183,53 +193,71 @@ class TestParseBoundary(unittest.TestCase):
                 parse_boundary(value)
 
     def test_leading_zeros_ok(self):
+        """Test leading zeros ok."""
         self.assertEqual(parse_boundary("007"), (7,))
 
     def test_returns_tuple_of_int(self):
+        """Test returns tuple of int."""
         result = parse_boundary("3,4")
         self.assertIs(type(result), tuple)
         self.assertTrue(all(type(v) is int for v in result))
 
 
 class TestParseBoundaryMap(unittest.TestCase):
+    """Test parse boundary map."""
+
     def test_simple(self):
+        """Test simple."""
         self.assertEqual(parse_boundary_map("chatml=198"), ("chatml", (198,)))
 
     def test_name_with_slash(self):
+        """Test name with slash."""
         name, ids = parse_boundary_map("chatml/toggle-bos=1,2")
         self.assertEqual((name, ids), ("chatml/toggle-bos", (1, 2)))
 
     def test_split_on_first_equals(self):
+        """Test split on first equals."""
         # Names never contain "=", ids never contain it either; the first
         # "=" is the separator and the rest goes to parse_boundary.
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_boundary_map("a=b=1")
 
     def test_name_stripped(self):
+        """Test name stripped."""
         self.assertEqual(parse_boundary_map("  chatml =198"), ("chatml", (198,)))
 
     def test_rejects(self):
+        """Test rejects."""
         for value in ["", "=198", "chatml", "chatml=", "chatml=abc", "= ", "chatml=1,,2"]:
             with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
                 parse_boundary_map(value)
 
 
 class TestDisplayId(unittest.TestCase):
+    """Test display id."""
+
     def test_strips_control_chars(self):
+        """Test strips control chars."""
         self.assertEqual(_display_id("s1\x1b[2Jm\x00x\x7f"), "s1[2Jmx")
 
     def test_plain_unchanged(self):
+        """Test plain unchanged."""
         self.assertEqual(_display_id("fixture-12"), "fixture-12")
 
     def test_unicode_kept(self):
+        """Test unicode kept."""
         self.assertEqual(_display_id("fïxturé"), "fïxturé")
 
 
 class TestParserContract(unittest.TestCase):
+    """Test parser contract."""
+
     def test_prog_name(self):
+        """Test prog name."""
         self.assertEqual(build_parser().prog, "model-protocol-lab")
 
     def test_all_subcommands_registered(self):
+        """Test all subcommands registered."""
         parser = build_parser()
         actions = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
         self.assertEqual(len(actions), 1)
@@ -251,11 +279,13 @@ class TestParserContract(unittest.TestCase):
         )
 
     def test_command_required(self):
+        """Test command required."""
         kind, code, _out, err = run_cli([])
         self.assertEqual((kind, code), ("exit", 2))
         self.assertIn("the following arguments are required: command", err)
 
     def test_abbreviations_rejected(self):
+        """Test abbreviations rejected."""
         # allow_abbrev=False: prefixes must not resolve to subcommands.
         for argv in (["cat"], ["insp"], ["ru"], ["deb"], ["diff"]):
             with self.subTest(argv=argv):
@@ -264,6 +294,7 @@ class TestParserContract(unittest.TestCase):
                 self.assertIn("invalid choice", err)
 
     def test_option_abbreviations_rejected(self):
+        """Test option abbreviations rejected."""
         # allow_abbrev=False on the main parser and on every subparser:
         # unambiguous option prefixes must not resolve.
         argv = run_argv()
@@ -280,11 +311,13 @@ class TestParserContract(unittest.TestCase):
                 self.assertEqual((kind, code), ("exit", 2))
 
     def test_unknown_command(self):
+        """Test unknown command."""
         kind, code, _out, err = run_cli(["frobnicate"])
         self.assertEqual((kind, code), ("exit", 2))
         self.assertIn("invalid choice", err)
 
     def test_run_defaults(self):
+        """Test run defaults."""
         ns = build_parser().parse_args(run_argv())
         self.assertEqual(ns.max_new_tokens, 64)
         self.assertEqual(ns.max_context, 2048)
@@ -298,6 +331,7 @@ class TestParserContract(unittest.TestCase):
         self.assertIsNone(ns.boundary_map)
 
     def test_run_types(self):
+        """Test run types."""
         ns = build_parser().parse_args(run_argv())
         self.assertIsInstance(ns.model, Path)
         self.assertIsInstance(ns.dataset, Path)
@@ -305,6 +339,7 @@ class TestParserContract(unittest.TestCase):
         self.assertEqual(ns.boundary_ids, (198,))
 
     def test_doctor_defaults(self):
+        """Test doctor defaults."""
         ns = build_parser().parse_args(["doctor", "--model", "m"])
         self.assertIsNone(ns.dataset)
         self.assertIsNone(ns.boundary_ids)
@@ -313,6 +348,7 @@ class TestParserContract(unittest.TestCase):
         self.assertIsNone(ns.portability_matrix)
 
     def test_diff_backends_types(self):
+        """Test diff backends types."""
         ns = build_parser().parse_args(
             [
                 "diff-backends",
@@ -351,6 +387,7 @@ class TestParserContract(unittest.TestCase):
         )
 
     def test_help_exits_zero_everywhere(self):
+        """Test help exits zero everywhere."""
         argvs = [
             ["--help"],
             ["catalog", "--help"],
@@ -370,17 +407,20 @@ class TestParserContract(unittest.TestCase):
                 self.assertIn("model-protocol-lab", out)
 
     def test_help_text_matches_enforced_ranges(self):
+        """Test help text matches enforced ranges."""
         # --max-drop-bytes help advertises "(1-8)"; the validator enforces
         # exactly 1..8.
         _kind, _code, out, _err = run_cli(["run", "--help"])
         self.assertIn("1-8", out)
 
     def test_fixtures_requires_subcommand(self):
+        """Test fixtures requires subcommand."""
         kind, code, _out, err = run_cli(["fixtures"])
         self.assertEqual((kind, code), ("exit", 2))
         self.assertIn("the following arguments are required", err)
 
     def test_parse_deterministic(self):
+        """Test parse deterministic."""
         argv = run_argv()
         first = build_parser().parse_args(argv)
         second = build_parser().parse_args(argv)
@@ -388,7 +428,10 @@ class TestParserContract(unittest.TestCase):
 
 
 class TestCatalogDispatch(unittest.TestCase):
+    """Test catalog dispatch."""
+
     def test_catalog_returns_zero_and_json(self):
+        """Test catalog returns zero and json."""
         kind, code, out, _err = run_cli(["catalog"])
         self.assertEqual((kind, code), ("return", 0))
         payload = json.loads(out)
@@ -397,13 +440,17 @@ class TestCatalogDispatch(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
 
     def test_catalog_deterministic(self):
+        """Test catalog deterministic."""
         first = run_cli(["catalog"])[2]
         second = run_cli(["catalog"])[2]
         self.assertEqual(first, second)
 
 
 class TestHandlerDispatch(unittest.TestCase):
+    """Test handler dispatch."""
+
     def test_doctor_dispatch(self):
+        """Test doctor dispatch."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = write_fixture_file(tmp)
             seen = {}
@@ -417,6 +464,7 @@ class TestHandlerDispatch(unittest.TestCase):
                 portability_matrix_path=None,
                 template_probe=False,
             ):
+                """Fake doctor."""
                 seen.update(
                     model=model,
                     dataset=dataset,
@@ -455,14 +503,17 @@ class TestHandlerDispatch(unittest.TestCase):
             self.assertEqual(json.loads(out)["verdict"], "ok")
 
     def test_doctor_verdict_not_ok_returns_one(self):
+        """Test doctor verdict not ok returns one."""
         with mock.patch.object(doctor_mod, "doctor", return_value={"verdict": "bad"}):
             kind, code, _out, _err = run_cli(["doctor", "--model", "m"])
         self.assertEqual((kind, code), ("return", 1))
 
     def test_doctor_portability_matrix_renders_to_stderr(self):
+        """Test doctor portability matrix renders to stderr."""
         section = {"rows": []}
 
         def fake_doctor(model, dataset, **kwargs):
+            """Fake doctor."""
             return {"verdict": "ok", "portability_matrix": section}
 
         with (
@@ -481,6 +532,7 @@ class TestHandlerDispatch(unittest.TestCase):
         json.loads(out)
 
     def test_doctor_duplicate_boundary_map_exits_two(self):
+        """Test doctor duplicate boundary map exits two."""
         kind, code, _out, err = run_cli(
             [
                 "doctor",
@@ -496,9 +548,11 @@ class TestHandlerDispatch(unittest.TestCase):
         self.assertIn("Duplicate --boundary-map", err)
 
     def test_diff_reports_dispatch(self):
+        """Test diff reports dispatch."""
         seen = {}
 
         def fake(args, parser):
+            """Fake."""
             seen.update(args=args, parser=parser)
             return 7
 
@@ -513,9 +567,11 @@ class TestHandlerDispatch(unittest.TestCase):
         self.assertEqual(seen["parser"].prog, "model-protocol-lab")
 
     def test_diff_backends_dispatch(self):
+        """Test diff backends dispatch."""
         seen = {}
 
         def fake(args, parser):
+            """Fake."""
             seen["args"] = args
             return 0
 
@@ -546,9 +602,11 @@ class TestHandlerDispatch(unittest.TestCase):
         self.assertEqual(args.min_tokens, 1)
 
     def test_debug_dispatch(self):
+        """Test debug dispatch."""
         seen = {}
 
         def fake(args):
+            """Fake."""
             seen["args"] = args
             return 3
 
@@ -565,16 +623,21 @@ class TestHandlerDispatch(unittest.TestCase):
         self.assertEqual(args.script, Path("s.read"))
 
     def test_debug_missing_dataset_exits_two(self):
+        """Test debug missing dataset exits two."""
         kind, code, _out, _err = run_cli(["debug"])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_diff_reports_missing_positional_exits_two(self):
+        """Test diff reports missing positional exits two."""
         kind, code, _out, _err = run_cli(["diff-reports", "old-results"])
         self.assertEqual((kind, code), ("exit", 2))
 
 
 class TestInspect(unittest.TestCase):
+    """Test inspect."""
+
     def test_valid_fixture(self):
+        """Test valid fixture."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = write_fixture_file(tmp)
             kind, code, out, _err = run_cli(["inspect", str(fixture)])
@@ -591,10 +654,12 @@ class TestInspect(unittest.TestCase):
         )
 
     def test_missing_positional_exits_two(self):
+        """Test missing positional exits two."""
         kind, code, _out, _err = run_cli(["inspect"])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_invalid_json_returns_one(self):
+        """Test invalid json returns one."""
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("{not json")
@@ -603,16 +668,19 @@ class TestInspect(unittest.TestCase):
         self.assertIn("inspect: invalid fixture file:", err)
 
     def test_missing_file_returns_one(self):
+        """Test missing file returns one."""
         kind, code, _out, err = run_cli(["inspect", "/nonexistent/f.json"])
         self.assertEqual((kind, code), ("return", 1))
         self.assertIn("inspect: invalid fixture file:", err)
 
     def test_directory_returns_one(self):
+        """Test directory returns one."""
         with tempfile.TemporaryDirectory() as tmp:
             kind, code, _out, _err = run_cli(["inspect", tmp])
         self.assertEqual((kind, code), ("return", 1))
 
     def test_empty_expected_warns_and_sanitizes(self):
+        """Test empty expected warns and sanitizes."""
         # A hostile fixture id with terminal escapes must be stripped in
         # the stderr warning (no ESC byte may reach the terminal).
         with tempfile.TemporaryDirectory() as tmp:
@@ -647,13 +715,17 @@ class TestInspect(unittest.TestCase):
         self.assertEqual(json.loads(out)["valid"], True)
 
     def test_nul_byte_path_returns_one(self):
+        """Test nul byte path returns one."""
         kind, code, _out, err = run_cli(["inspect", "a\x00b"])
         self.assertEqual((kind, code), ("return", 1))
         self.assertIn("inspect: invalid fixture file:", err)
 
 
 class TestFixturesBuild(unittest.TestCase):
+    """Test fixtures build."""
+
     def test_build_succeeds(self):
+        """Test build succeeds."""
         with tempfile.TemporaryDirectory() as tmp:
             src = write_csv(tmp)
             out = Path(tmp) / "f.json"
@@ -677,10 +749,12 @@ class TestFixturesBuild(unittest.TestCase):
             self.assertTrue(Path(str(out) + ".audit.json").exists())
 
     def test_build_missing_args_exit_two(self):
+        """Test build missing args exit two."""
         kind, code, _out, _err = run_cli(["fixtures", "build"])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_existing_output_never_overwritten(self):
+        """Test existing output never overwritten."""
         with tempfile.TemporaryDirectory() as tmp:
             src = write_csv(tmp)
             out = Path(tmp) / "f.json"
@@ -691,6 +765,7 @@ class TestFixturesBuild(unittest.TestCase):
             self.assertEqual(out.read_text(), "sentinel")
 
     def test_existing_sidecar_blocks_build(self):
+        """Test existing sidecar blocks build."""
         with tempfile.TemporaryDirectory() as tmp:
             src = write_csv(tmp)
             out = Path(tmp) / "f.json"
@@ -701,6 +776,7 @@ class TestFixturesBuild(unittest.TestCase):
             self.assertFalse(out.exists())
 
     def test_invalid_csv_returns_one(self):
+        """Test invalid csv returns one."""
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "bad.csv"
             src.write_text("id,group,partition,expected,user_1\ns1,g1,search,yo\n")
@@ -711,6 +787,7 @@ class TestFixturesBuild(unittest.TestCase):
         self.assertIn("fixtures: invalid authoring source:", err)
 
     def test_missing_source_returns_one(self):
+        """Test missing source returns one."""
         with tempfile.TemporaryDirectory() as tmp:
             kind, code, _out, err = run_cli(
                 [
@@ -725,6 +802,7 @@ class TestFixturesBuild(unittest.TestCase):
         self.assertIn("fixtures: invalid authoring source:", err)
 
     def test_nonexistent_parent_dir_returns_one(self):
+        """Test nonexistent parent dir returns one."""
         with tempfile.TemporaryDirectory() as tmp:
             src = write_csv(tmp)
             kind, code, _out, err = run_cli(
@@ -738,6 +816,7 @@ class TestRunValidation(unittest.TestCase):
     """All validation failures must exit 2 *before* any model work."""
 
     def test_missing_required_flags(self):
+        """Test missing required flags."""
         base = ["run", "--model", "m", "--dataset", "d", "--family", "chatml"]
         cases = [
             base,  # missing --boundary-ids and --output
@@ -784,6 +863,7 @@ class TestRunValidation(unittest.TestCase):
                 self.assertIn("required", err)
 
     def test_invalid_choices(self):
+        """Test invalid choices."""
         for argv in (run_argv(family="nope"), run_argv(device="tpu")):
             with self.subTest(argv=argv[-2:]):
                 kind, code, _out, err = run_cli(argv)
@@ -791,6 +871,7 @@ class TestRunValidation(unittest.TestCase):
                 self.assertIn("invalid choice", err)
 
     def test_numeric_ranges(self):
+        """Test numeric ranges."""
         cases = [
             ("--max-new-tokens", "0", "Token/context limits are outside supported ranges"),
             ("--max-new-tokens", "4097", "Token/context limits are outside supported ranges"),
@@ -811,6 +892,7 @@ class TestRunValidation(unittest.TestCase):
                 self.assertIn(message, err)
 
     def test_numeric_range_edges_accepted_at_parse(self):
+        """Test numeric range edges accepted at parse."""
         # Parsing itself must accept the edges; the run block then fails
         # only on the missing output/model fixtures, not on validation.
         ns = build_parser().parse_args(run_argv() + ["--max-new-tokens", "4096"])
@@ -821,6 +903,7 @@ class TestRunValidation(unittest.TestCase):
         self.assertEqual(ns.max_drop_bytes, 8)
 
     def test_non_integer_values_exit_two(self):
+        """Test non integer values exit two."""
         for flag in ("--max-new-tokens", "--max-context", "--seed", "--max-drop-bytes"):
             with self.subTest(flag=flag):
                 kind, code, _out, err = run_cli(run_argv() + [flag, "abc"])
@@ -828,22 +911,26 @@ class TestRunValidation(unittest.TestCase):
                 self.assertIn("invalid int value", err)
 
     def test_bad_boundary_ids_exit_two(self):
+        """Test bad boundary ids exit two."""
         kind, code, _out, err = run_cli(run_argv()[:-2] + ["--boundary-ids", "abc"])
         self.assertEqual((kind, code), ("exit", 2))
         self.assertIn("Use 1-16 comma-separated ASCII token IDs", err)
 
     def test_existing_output_exits_two(self):
+        """Test existing output exits two."""
         with tempfile.TemporaryDirectory() as tmp:
             kind, code, _out, err = run_cli(run_argv()[:-2] + ["--output", tmp])
             self.assertEqual((kind, code), ("exit", 2))
             self.assertIn("Output path already exists", err)
 
     def test_unknown_boundary_map_name_exits_two(self):
+        """Test unknown boundary map name exits two."""
         kind, code, _out, err = run_cli(run_argv() + ["--boundary-map", "nope=1"])
         self.assertEqual((kind, code), ("exit", 2))
         self.assertIn("unknown candidate", err)
 
     def test_duplicate_boundary_map_exits_two(self):
+        """Test duplicate boundary map exits two."""
         kind, code, _out, err = run_cli(
             run_argv() + ["--boundary-map", "chatml=1", "--boundary-map", "chatml=2"]
         )
@@ -851,6 +938,7 @@ class TestRunValidation(unittest.TestCase):
         self.assertIn("Duplicate --boundary-map", err)
 
     def test_malformed_boundary_map_exits_two(self):
+        """Test malformed boundary map exits two."""
         kind, code, _out, _err = run_cli(run_argv() + ["--boundary-map", "chatml"])
         self.assertEqual((kind, code), ("exit", 2))
 
@@ -867,8 +955,11 @@ class _FakeBackend:
 
 
 class TestRunDispatch(unittest.TestCase):
+    """Test run dispatch."""
+
     @staticmethod
     def _run_with(result, argv_extra=()):
+        """Run with."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
@@ -891,6 +982,7 @@ class TestRunDispatch(unittest.TestCase):
             )
 
             def fake_prepare(path):
+                """Fake prepare."""
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 
@@ -918,6 +1010,7 @@ class TestRunDispatch(unittest.TestCase):
             return outcome, result_doc
 
     def test_run_dispatches_and_returns_zero(self):
+        """Test run dispatches and returns zero."""
         (kind, code, out, _err), _ = self._run_with(
             {
                 "decision": "compatible_on_fixture_set",
@@ -932,6 +1025,7 @@ class TestRunDispatch(unittest.TestCase):
         self.assertEqual(payload["decision"], "compatible_on_fixture_set")
 
     def test_decision_to_exit_code(self):
+        """Test decision to exit code."""
         mapping = {
             "compatible_on_fixture_set": 0,
             "failed": 1,
@@ -948,9 +1042,11 @@ class TestRunDispatch(unittest.TestCase):
                 self.assertEqual((kind, code), ("return", expected))
 
     def test_parsed_args_reach_handlers(self):
+        """Test parsed args reach handlers."""
         seen = {}
 
         def fake_experiment(backend, formats, split, **kwargs):
+            """Fake experiment."""
             seen.update(backend=backend, formats=formats, split=split, kwargs=kwargs)
             return {
                 "decision": "compatible_on_fixture_set",
@@ -1024,6 +1120,7 @@ class TestRunDispatch(unittest.TestCase):
         self.assertTrue(any("/" in name for name in names))
 
     def test_empty_expected_warning_on_run(self):
+        """Test empty expected warning on run."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = Path(tmp) / "empty.json"
             fixture.write_text(
@@ -1101,7 +1198,10 @@ class TestRunDispatch(unittest.TestCase):
 
 
 class TestHostileArgv(unittest.TestCase):
+    """Test hostile argv."""
+
     def test_unicode_digit_boundary_ids_rejected(self):
+        """Test unicode digit boundary ids rejected."""
         for value in ["１２３", "١٢٣", "²"]:
             with self.subTest(value=value):
                 kind, code, _out, err = run_cli(["doctor", "--model", "m", "--boundary-ids", value])
@@ -1109,20 +1209,24 @@ class TestHostileArgv(unittest.TestCase):
                 self.assertIn("ASCII token IDs", err)
 
     def test_seventeen_ids_rejected(self):
+        """Test seventeen ids rejected."""
         kind, code, _out, _err = run_cli(
             ["doctor", "--model", "m", "--boundary-ids", ",".join(["1"] * 17)]
         )
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_dash_dash_terminator(self):
+        """Test dash dash terminator."""
         kind, code, _out, _err = run_cli(["--"])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_option_as_positional_value(self):
+        """Test option as positional value."""
         kind, code, _out, _err = run_cli(["inspect", "--dataset"])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_repeated_boundary_map_doctor(self):
+        """Test repeated boundary map doctor."""
         # doctor has no candidate set: duplicates still fail, distinct
         # names accumulate.
         argv = ["doctor", "--model", "m"]
@@ -1137,29 +1241,39 @@ class TestHostileArgv(unittest.TestCase):
         )
 
     def test_very_long_token_id_rejected(self):
+        """Test very long token id rejected."""
         kind, code, _out, _err = run_cli(["doctor", "--model", "m", "--boundary-ids", "9" * 5000])
         self.assertEqual((kind, code), ("exit", 2))
 
     def test_boundary_map_name_with_equals_inside_ids(self):
+        """Test boundary map name with equals inside ids."""
         kind, code, _out, _err = run_cli(["doctor", "--model", "m", "--boundary-map", "x=1=2"])
         self.assertEqual((kind, code), ("exit", 2))
 
 
 class TestDeterminism(unittest.TestCase):
+    """Test determinism."""
+
     def test_catalog_byte_identical(self):
+        """Test catalog byte identical."""
         self.assertEqual(run_cli(["catalog"])[2], run_cli(["catalog"])[2])
 
     def test_repeated_parse_identical(self):
+        """Test repeated parse identical."""
         argv = run_argv()
         self.assertEqual(build_parser().parse_args(argv), build_parser().parse_args(argv))
 
 
 class TestMainModule(unittest.TestCase):
+    """Test main module."""
+
     @staticmethod
     def _pkg_root():
+        """Pkg root."""
         return Path(model_protocol_lab.__file__).resolve().parent.parent
 
     def _run_module(self, argv):
+        """Run module."""
         root = self._pkg_root()
         env = dict(os.environ, PYTHONPATH=str(root))
         return subprocess.run(
@@ -1173,17 +1287,20 @@ class TestMainModule(unittest.TestCase):
         )
 
     def test_module_help(self):
+        """Test module help."""
         proc = self._run_module(["--help"])
         self.assertEqual(proc.returncode, 0)
         self.assertIn("model-protocol-lab", proc.stdout)
 
     def test_module_catalog(self):
+        """Test module catalog."""
         proc = self._run_module(["catalog"])
         self.assertEqual(proc.returncode, 0)
         payload = json.loads(proc.stdout)
         self.assertEqual(len(payload), len(CATALOG))
 
     def test_module_unknown_command_exits_two(self):
+        """Test module unknown command exits two."""
         proc = self._run_module(["frobnicate"])
         self.assertEqual(proc.returncode, 2)
 

@@ -56,15 +56,20 @@ class TableBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
 class DivergenceSectionDataTests(unittest.TestCase):
+    """Divergence section data tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # 1->"a", 2->"b", 3->"STOP", 4->"c": stop "STOP" completes at step 3.
         self.backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
 
     def _section(self, **kwargs: Any) -> dict[str, Any] | None:
+        """Section."""
         base: dict[str, Any] = {
             "observations": [{"fixture": "fx-1", "input_ids": (), "output_ids": (1, 2, 4)}],
             "stop_texts": ("STOP",),
@@ -76,6 +81,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         return divergence_section_data(**base)
 
     def test_agree_when_no_stop_fires(self) -> None:
+        """Test agree when no stop fires."""
         section = self._section()
         self.assertIsNotNone(section)
         assert section is not None
@@ -95,6 +101,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         self.assertEqual(section["min_tokens"], 0)
 
     def test_diverge_kept_vs_stripped(self) -> None:
+        """Test diverge kept vs stripped."""
         observations = [
             {"fixture": "fx-agree", "input_ids": (), "output_ids": (1, 2, 4)},
             {"fixture": "fx-div", "input_ids": (), "output_ids": (1, 2, 3, 4)},
@@ -127,6 +134,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         json.dumps(section, ensure_ascii=True, allow_nan=False)
 
     def test_observation_ids_accept_lists(self) -> None:
+        """Test observation ids accept lists."""
         # Recorded observations come back JSON-round-tripped: ids as lists.
         observations = [{"fixture": "fx-list", "input_ids": [], "output_ids": [1, 2, 4]}]
         section = self._section(observations=observations)
@@ -136,6 +144,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         self.assertEqual(section["per_fixture"][0]["fixture"], "fx-list")
 
     def test_none_when_no_observations_usable(self) -> None:
+        """Test none when no observations usable."""
         self.assertIsNone(self._section(observations=[]))
         self.assertIsNone(self._section(observations=[{"fixture": "no-ids"}]))
         self.assertIsNone(
@@ -161,6 +170,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         self.assertEqual(section["per_fixture"][0]["fixture"], "good")
 
     def test_strict_validation(self) -> None:
+        """Test strict validation."""
         with self.assertRaises(ValueError):
             self._section(stop_texts=("",))
         with self.assertRaises(ValueError):
@@ -175,6 +185,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
             self._section(observations="not-a-sequence")
 
     def test_severity_mapping_pinned(self) -> None:
+        """Test severity mapping pinned."""
         self.assertEqual(
             DIVERGENCE_SEVERITY,
             {
@@ -190,6 +201,7 @@ class DivergenceSectionDataTests(unittest.TestCase):
         )
 
     def test_deterministic(self) -> None:
+        """Test deterministic."""
         observations = [
             {"fixture": "fx-agree", "input_ids": (), "output_ids": (1, 2, 4)},
             {"fixture": "fx-div", "input_ids": (), "output_ids": (1, 2, 3, 4)},
@@ -203,18 +215,24 @@ class DivergenceSectionDataTests(unittest.TestCase):
 
 
 class BackendDivergenceReportTests(unittest.TestCase):
+    """Backend divergence report tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
 
     @staticmethod
     def _render(result: dict[str, Any]) -> str:
+        """Render."""
         return render_html(result)
 
     @staticmethod
     def _section_result(section: dict[str, Any]) -> dict[str, Any]:
+        """Section result."""
         return {"decision": "compatible_on_fixture_set", "backend_divergences": section}
 
     def _diverge_section(self) -> dict[str, Any]:
+        """Diverge section."""
         section = divergence_section_data(
             observations=[
                 {"fixture": "fx-agree", "input_ids": (), "output_ids": (1, 2, 4)},
@@ -230,11 +248,13 @@ class BackendDivergenceReportTests(unittest.TestCase):
         return section
 
     def test_section_absent_without_key(self) -> None:
+        """Test section absent without key."""
         html = self._render({"decision": "compatible_on_fixture_set"})
         self.assertNotIn('id="backend-divergence"', html)
         self.assertNotIn("Backend divergence", html)
 
     def test_section_renders_verdict_matrix_and_callouts(self) -> None:
+        """Test section renders verdict matrix and callouts."""
         html = self._render(self._section_result(self._diverge_section()))
         # TOC entry + section id + title.
         self.assertIn('href="#backend-divergence"', html)
@@ -258,6 +278,7 @@ class BackendDivergenceReportTests(unittest.TestCase):
         self.assertIn("[stop text and diagnostic detail withheld from this HTML view]", html)
 
     def test_hostile_strings_escaped(self) -> None:
+        """Test hostile strings escaped."""
         hostile_fixture = "<img src=x onerror=alert(1)>"
         hostile_stop = "<script>alert(1)</script>"
         hostile_detail = 'detail with "quotes" & <tags> and \u00e9'
@@ -313,20 +334,25 @@ class BackendDivergenceReportTests(unittest.TestCase):
         self.assertIn(escape(hostile_fixture), builder_html)
 
     def test_report_byte_deterministic(self) -> None:
+        """Test report byte deterministic."""
         first = self._render(self._section_result(self._diverge_section()))
         second = self._render(self._section_result(self._diverge_section()))
         self.assertEqual(first, second)
 
     def test_no_remote_references(self) -> None:
+        """Test no remote references."""
         html = self._render(self._section_result(self._diverge_section()))
         self.assertNotIn("http://", html)
         self.assertNotIn("https://", html)
 
 
 class SampleReportUnchangedTests(unittest.TestCase):
+    """Sample report unchanged tests."""
+
     def test_sample_report_regenerates_byte_identically_without_divergence_section(
         self,
     ) -> None:
+        """Test sample report regenerates byte identically without divergence section."""
         spec = importlib.util.spec_from_file_location("make_sample_report", SCRIPT)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

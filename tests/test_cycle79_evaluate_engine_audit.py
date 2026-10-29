@@ -110,6 +110,7 @@ FIXED_ERRORS = ALLOWLISTED_CODES | {
 
 
 def _ids(text: str) -> tuple[int, ...]:
+    """Ids."""
     return tuple(ord(c) for c in text)
 
 
@@ -135,12 +136,14 @@ def _emit_ids(answer_text: str, pos: str, cap: int) -> tuple[int, ...]:
 
 
 def _gen(token_ids: tuple[int, ...], reason: Any, error: Any = None) -> Generation:
+    """Gen."""
     # Generation is a frozen dataclass: construct it directly (the constructor
     # performs no validation, so invalid payloads can be built on purpose).
     return Generation(token_ids=token_ids, reason=reason, error=error)
 
 
 def make_candidate(name: str = "cand") -> Format:
+    """Make candidate."""
     return Format(
         name=name,
         bos="<bos>",
@@ -151,6 +154,7 @@ def make_candidate(name: str = "cand") -> Format:
 
 
 def make_fixture(fid: str, expected: str, content: str | None = None) -> Fixture:
+    """Make fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=content or f"probe <fx:{fid}>"),),
@@ -160,6 +164,7 @@ def make_fixture(fid: str, expected: str, content: str | None = None) -> Fixture
 
 
 def make_render_failure_fixture(fid: str) -> Fixture:
+    """Make render failure fixture."""
     # render() requires a final user turn; this fixture fails it.
     return Fixture(
         id=fid,
@@ -211,13 +216,16 @@ class ScriptedBackend:
 
     @staticmethod
     def _fixture_of_text(text: str) -> str | None:
+        """Fixture of text."""
         match = re.search(r"<fx:([^>]+)>", text)
         return match.group(1) if match else None
 
     def _outcome(self, fid: str | None) -> tuple[Any, ...]:
+        """Outcome."""
         return self.script.get(fid or "", ("emit", ("?", "after_answer")))
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         outcome = self._outcome(self._fixture_of_text(text))
         if outcome[0] == "raise" and outcome[1] == "encode":
             raise RuntimeError(outcome[2])
@@ -229,6 +237,7 @@ class ScriptedBackend:
         return _ids(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         if self.raise_on_boundary_decode and BOUNDARY[0] in token_ids:
             raise RuntimeError("diag SECRET-BOUNDARY-DECODE")
         outcome = self._outcome(self._current)
@@ -241,9 +250,11 @@ class ScriptedBackend:
             return cast(str, 12345)
         return "".join(chr(i) for i in token_ids)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         fid = self._fixture_of_text("".join(chr(i) for i in input_ids))
         self._current = fid
         outcome = self._outcome(fid)
@@ -288,7 +299,10 @@ class ScriptedBackend:
 
 # skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class EvaluateHarness(unittest.TestCase):
+    """Evaluate harness."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.candidate = make_candidate()
 
     def run_report(
@@ -302,6 +316,7 @@ class EvaluateHarness(unittest.TestCase):
         cancel: Event | None = None,
         backend_kw: dict[str, Any] | None = None,
     ) -> EvaluationReport:
+        """Run report."""
         backend = ScriptedBackend(script, **(backend_kw or {}))
         return evaluate(
             backend,
@@ -314,6 +329,7 @@ class EvaluateHarness(unittest.TestCase):
         )
 
     def expected_input_ids(self, case: Fixture) -> tuple[int, ...]:
+        """Expected input ids."""
         return _ids(self.candidate.render(case.messages))
 
 
@@ -321,6 +337,7 @@ class EvaluateValidation(EvaluateHarness):
     """Every validation branch raises ValueError."""
 
     def test_candidate_must_be_format(self) -> None:
+        """Test candidate must be format."""
         cases = (make_fixture("v0", "A"),)
         bad_values: list[Any] = ["nope", None, 42, make_fixture("v1", "B")]
         for bad in bad_values:
@@ -328,6 +345,7 @@ class EvaluateValidation(EvaluateHarness):
                 evaluate(ScriptedBackend({}), bad, cases, boundary=BOUNDARY)
 
     def test_cases_must_be_nonempty_tuple_of_fixtures(self) -> None:
+        """Test cases must be nonempty tuple of fixtures."""
         good = make_fixture("v0", "A")
         bad_cases: list[Any] = [
             [good],
@@ -342,11 +360,13 @@ class EvaluateValidation(EvaluateHarness):
                 evaluate(ScriptedBackend({}), self.candidate, bad, boundary=BOUNDARY)
 
     def test_duplicate_fixture_ids_rejected(self) -> None:
+        """Test duplicate fixture ids rejected."""
         cases = (make_fixture("dup", "A"), make_fixture("dup", "B"))
         with self.assertRaises(ValueError):
             evaluate(ScriptedBackend({}), self.candidate, cases, boundary=BOUNDARY)
 
     def test_nfc_colliding_fixture_ids_rejected(self) -> None:
+        """Test nfc colliding fixture ids rejected."""
         # "caf\u00e9" (NFC) vs "cafe\u0301" (NFD): canonically equivalent.
         cases = (
             make_fixture("caf\u00e9", "A"),
@@ -356,6 +376,7 @@ class EvaluateValidation(EvaluateHarness):
             evaluate(ScriptedBackend({}), self.candidate, cases, boundary=BOUNDARY)
 
     def test_cap_bounds(self) -> None:
+        """Test cap bounds."""
         cases = (make_fixture("v0", "A"),)
         bad_values: list[Any] = [0, -1, 4097, 5000, "64", 64.0, True, None]
         for bad_cap in bad_values:
@@ -369,6 +390,7 @@ class EvaluateValidation(EvaluateHarness):
                 )
 
     def test_boundary_must_be_nonempty_valid_token_ids(self) -> None:
+        """Test boundary must be nonempty valid token ids."""
         cases = (make_fixture("v0", "A"),)
         bad_values: list[Any] = [(), [], (1.5,), (-1,), (True,), "999", (999, 1.5), None]
         for bad in bad_values:
@@ -376,6 +398,7 @@ class EvaluateValidation(EvaluateHarness):
                 evaluate(ScriptedBackend({}), self.candidate, cases, boundary=bad)
 
     def test_seed_range(self) -> None:
+        """Test seed range."""
         cases = (make_fixture("v0", "A"),)
         bad_values: list[Any] = [-1, 2**64, "0", 2.0, None, True]
         for bad_seed in bad_values:
@@ -389,6 +412,7 @@ class EvaluateValidation(EvaluateHarness):
                 )
 
     def test_cancel_type(self) -> None:
+        """Test cancel type."""
         cases = (make_fixture("v0", "A"),)
         bad_values: list[Any] = ["event", 123, object()]
         for bad in bad_values:
@@ -402,6 +426,7 @@ class EvaluateValidation(EvaluateHarness):
                 )
 
     def test_edge_values_accepted(self) -> None:
+        """Test edge values accepted."""
         # cap=1: boundary alone fills the cap; answer is empty == expected.
         report = self.run_report({"e1": ("emit", ("", "start"))}, (make_fixture("e1", ""),), cap=1)
         self.assertEqual(report.status, "completed")
@@ -432,6 +457,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
     """Hand-derived expected observation fields per scripted outcome."""
 
     def test_pass_full_fidelity(self) -> None:
+        """Test pass full fidelity."""
         case = make_fixture("f0", "OK-1")
         report = self.run_report({"f0": ("emit", ("OK-1", "after_answer"))}, (case,))
         self.assertEqual(report.status, "completed")
@@ -451,6 +477,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertTrue(report.aggregate_eligible)
 
     def test_wrong_answer(self) -> None:
+        """Test wrong answer."""
         case = make_fixture("f0", "OK-1")
         report = self.run_report({"f0": ("emit", ("NOPE", "after_answer"))}, (case,))
         (obs,) = report.observations
@@ -462,6 +489,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertTrue(report.aggregate_eligible)
 
     def test_no_boundary_exact_match(self) -> None:
+        """Test no boundary exact match."""
         # No boundary anywhere: cut is None, so the whole cap-length output is
         # the answer; the fixture's expected is exactly cap chars long.
         case = make_fixture("g0", "A" * CAP)
@@ -474,6 +502,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertEqual(obs.status, "completed")
 
     def test_wrong_answer_and_no_boundary(self) -> None:
+        """Test wrong answer and no boundary."""
         case = make_fixture("g0", "A" * CAP)
         report = self.run_report({"g0": ("emit", ("B" * CAP, "none"))}, (case,))
         (obs,) = report.observations
@@ -482,6 +511,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertEqual(obs.status, "completed")
 
     def test_truncation_at_cap(self) -> None:
+        """Test truncation at cap."""
         # Expected answer is longer than the cap; the boundary lands on the
         # final id, so the decoded answer is a strict prefix of expected.
         case = make_fixture("t0", "ABCDEFGHIJ")
@@ -494,6 +524,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertEqual(obs.raw_reason, "limit")
 
     def test_boundary_at_generation_start(self) -> None:
+        """Test boundary at generation start."""
         # cut == 0: the answer is empty, which matches the empty expected.
         case = make_fixture("s0", "")
         report = self.run_report({"s0": ("emit", ("", "start"))}, (case,))
@@ -505,6 +536,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertTrue(obs.boundary_text_match)
 
     def test_boundary_at_generation_end(self) -> None:
+        """Test boundary at generation end."""
         case = make_fixture("s1", "E" * (CAP - 1))
         report = self.run_report({"s1": ("emit", ("E" * (CAP - 1), "end"))}, (case,))
         (obs,) = report.observations
@@ -514,6 +546,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertTrue(obs.boundary_text_match)
 
     def test_empty_cancelled_generation(self) -> None:
+        """Test empty cancelled generation."""
         case = make_fixture("c0", "X")
         report = self.run_report({"c0": ("cancelled", ())}, (case,))
         (obs,) = report.observations
@@ -529,6 +562,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_error_allowlisted_code_passes_through(self) -> None:
+        """Test error allowlisted code passes through."""
         case = make_fixture("e0", "X")
         report = self.run_report({"e0": ("error", "context_limit_exceeded")}, (case,))
         (obs,) = report.observations
@@ -542,6 +576,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_error_arbitrary_text_sanitized(self) -> None:
+        """Test error arbitrary text sanitized."""
         secret = "ARBITRARY-SECRET-leak-1"
         case = make_fixture("e0", "X")
         report = self.run_report({"e0": ("error", secret)}, (case,))
@@ -551,6 +586,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertNotIn(secret, repr(report))
 
     def test_error_none_and_empty_string_sanitized(self) -> None:
+        """Test error none and empty string sanitized."""
         for value in (None, ""):
             with self.subTest(error=value):
                 case = make_fixture("e0", "X")
@@ -559,6 +595,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
                 self.assertEqual(obs.error, "backend_reported_error")
 
     def test_raise_at_encode(self) -> None:
+        """Test raise at encode."""
         secret = "ENC-SECRET-9"
         case = make_fixture("r0", "X")
         report = self.run_report({"r0": ("raise", "encode", secret)}, (case,))
@@ -573,6 +610,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertNotIn(secret, repr(report))
 
     def test_raise_at_generate(self) -> None:
+        """Test raise at generate."""
         secret = "GEN-SECRET-9"
         case = make_fixture("r0", "X")
         report = self.run_report({"r0": ("raise", "generate", secret)}, (case,))
@@ -586,6 +624,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertNotIn(secret, repr(report))
 
     def test_raise_at_decode(self) -> None:
+        """Test raise at decode."""
         secret = "DEC-SECRET-9"
         case = make_fixture("r0", "OK-1")
         report = self.run_report({"r0": ("raise", "decode", secret)}, (case,))
@@ -603,6 +642,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertNotIn(secret, repr(report))
 
     def test_encode_bad_ids(self) -> None:
+        """Test encode bad ids."""
         case = make_fixture("b0", "X")
         report = self.run_report({"b0": ("encode_bad",)}, (case,))
         (obs,) = report.observations
@@ -613,6 +653,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertIsNone(obs.raw_reason)
 
     def test_invalid_generations(self) -> None:
+        """Test invalid generations."""
         for sub in ("too_long", "bad_reason", "error_non_str", "limit_with_error"):
             with self.subTest(sub=sub):
                 case = make_fixture("i0", "X")
@@ -626,6 +667,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
                 self.assertIsNone(obs.raw_reason)
 
     def test_decode_non_str(self) -> None:
+        """Test decode non str."""
         case = make_fixture("d0", "X")
         report = self.run_report({"d0": ("decode_non_str",)}, (case,))
         (obs,) = report.observations
@@ -633,6 +675,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertEqual(obs.error, "decode_failed")
 
     def test_render_failure(self) -> None:
+        """Test render failure."""
         case = make_render_failure_fixture("rf0")
         report = self.run_report({}, (case,))
         (obs,) = report.observations
@@ -645,6 +688,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertFalse(obs.exact_match)
 
     def test_boundary_text_match_none_when_diagnostic_fails(self) -> None:
+        """Test boundary text match none when diagnostic fails."""
         # decode() raises on the boundary ids: the diagnostic degrades to
         # None instead of failing the run.
         case = make_fixture("n0", "ABC" + " " * (CAP - 3))
@@ -660,6 +704,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertIsNone(obs.boundary_text_match)
 
     def test_error_observation_records_cut(self) -> None:
+        """Test error observation records cut."""
         # reason="error": cut is computed before the error branch, so
         # boundary_found follows cut even on a failed observation.
         case = make_fixture("e0", "X")
@@ -673,6 +718,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
     """One-id flips move exactly one observation field."""
 
     def test_one_id_flip_moves_exact_match_only(self) -> None:
+        """Test one id flip moves exact match only."""
         case = make_fixture("p0", "AB")
         run1 = self.run_report({"p0": ("emit", ("AB", "after_answer"))}, (case,))
         run2 = self.run_report({"p0": ("emit", ("AC", "after_answer"))}, (case,))
@@ -687,6 +733,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertTrue(o2.boundary_found)
 
     def test_one_id_flip_moves_boundary_found_only(self) -> None:
+        """Test one id flip moves boundary found only."""
         case = make_fixture("q0", "AB")
         flipped = _ids("ZZ") + (PAD,) + (PAD,) * (CAP - 3)
         run1 = self.run_report({"q0": ("emit", ("ZZ", "after_answer"))}, (case,))
@@ -702,6 +749,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertFalse(o2.boundary_found)
 
     def test_cancellation_preset_before_loop(self) -> None:
+        """Test cancellation preset before loop."""
         cases = tuple(make_fixture(f"k{j}", "A") for j in range(3))
         event = Event()
         event.set()
@@ -713,6 +761,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_cancellation_mid_loop(self) -> None:
+        """Test cancellation mid loop."""
         cases = tuple(make_fixture(f"m{j}", f"A{j}") for j in range(3))
         script = {
             "m0": ("emit", ("A0", "after_answer")),
@@ -739,6 +788,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_cancellation_set_during_final_generate(self) -> None:
+        """Test cancellation set during final generate."""
         # All fixtures attempted, but the report is cancelled: not eligible
         # even though attempted_count == planned_count.
         cases = tuple(make_fixture(f"z{j}", f"A{j}") for j in range(2))
@@ -757,6 +807,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertEqual(report.observations[1].answer, "")
 
     def test_cancellation_during_decode_keeps_answer(self) -> None:
+        """Test cancellation during decode keeps answer."""
         # The event is set by decode() itself: the answer was already decoded,
         # so the cancelled observation keeps it -- but exact_match is still
         # False because the status is not "completed".
@@ -780,6 +831,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_cancellation_after_encode(self) -> None:
+        """Test cancellation after encode."""
         # The backend sets the event from encode(); evaluate notices before
         # generate and terminates cancelled with the prompt evidence kept.
         case = make_fixture("ce0", "X")
@@ -805,6 +857,7 @@ class EvaluateAggregateSemantics(EvaluateHarness):
     """Which report statuses are eligible; planned_count accounting."""
 
     def test_completed_all_pass_eligible(self) -> None:
+        """Test completed all pass eligible."""
         cases = tuple(make_fixture(f"a{j}", f"A{j}") for j in range(3))
         script = {f"a{j}": ("emit", (f"A{j}", "after_answer")) for j in range(3)}
         report = self.run_report(script, cases)
@@ -815,6 +868,7 @@ class EvaluateAggregateSemantics(EvaluateHarness):
         self.assertTrue(report.aggregate_eligible)
 
     def test_failed_report_not_eligible(self) -> None:
+        """Test failed report not eligible."""
         cases = tuple(make_fixture(f"b{j}", f"A{j}") for j in range(3))
         script = {
             "b0": ("emit", ("A0", "after_answer")),
@@ -831,12 +885,14 @@ class EvaluateAggregateSemantics(EvaluateHarness):
         self.assertFalse(report.aggregate_eligible)
 
     def test_single_fixture_report(self) -> None:
+        """Test single fixture report."""
         case = make_fixture("s0", "A")
         report = self.run_report({"s0": ("emit", ("A", "after_answer"))}, (case,))
         self.assertTrue(report.aggregate_eligible)
         self.assertEqual(report.planned_count, 1)
 
     def test_observations_follow_fixture_order(self) -> None:
+        """Test observations follow fixture order."""
         cases = tuple(make_fixture(f"o{j}", f"A{j}") for j in range(4))
         script = {f"o{j}": ("emit", (f"A{j}", "after_answer")) for j in range(4)}
         report = self.run_report(script, cases)
@@ -844,6 +900,7 @@ class EvaluateAggregateSemantics(EvaluateHarness):
         self.assertTrue(all(o.candidate == "cand" for o in report.observations))
 
     def test_deterministic_across_runs(self) -> None:
+        """Test deterministic across runs."""
         cases = tuple(make_fixture(f"d{j}", f"A{j}") for j in range(2))
         script = {f"d{j}": ("emit", (f"A{j}", "after_answer")) for j in range(2)}
         first = self.run_report(script, cases, seed=12345)
@@ -855,6 +912,7 @@ class EvaluateNoLeak(EvaluateHarness):
     """Raw backend text must never appear in a report."""
 
     def test_exception_text_never_leaks(self) -> None:
+        """Test exception text never leaks."""
         secrets = {
             "r0": ("raise", "encode", "LEAK-ENC-111"),
             "r1": ("raise", "generate", "LEAK-GEN-222"),
@@ -869,6 +927,7 @@ class EvaluateNoLeak(EvaluateHarness):
                 self.assertNotIn(secret, repr(report))
 
     def test_recorded_errors_are_fixed_vocabulary(self) -> None:
+        """Test recorded errors are fixed vocabulary."""
         script = {
             "v0": ("raise", "encode", "x"),
             "v1": ("raise", "generate", "x"),

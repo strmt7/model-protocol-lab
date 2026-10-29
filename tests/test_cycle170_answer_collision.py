@@ -26,6 +26,7 @@ CANDIDATES = ("alpha", "beta")
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -42,14 +43,17 @@ class OrdinalBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
@@ -61,6 +65,7 @@ class SpecialBackend:
 
     @classmethod
     def encode(cls, text):
+        """Encode."""
         out, i = [], 0
         while i < len(text):
             if text.startswith(cls.MARKER, i):
@@ -73,15 +78,20 @@ class SpecialBackend:
 
     @classmethod
     def decode(cls, ids):
+        """Decode."""
         return "".join(cls.MARKER if x == 7 else chr(x) for x in ids)
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
 class FixtureTests(unittest.TestCase):
+    """Fixture tests."""
+
     def test_build_yields_frozen_set(self):
+        """Test build yields frozen set."""
         specs = col.build_answer_fixtures("<|im_end|>")
         self.assertEqual(len(specs), 21)
         self.assertEqual(len(specs), col.n_fixtures_per_config())
@@ -91,6 +101,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(positions.count("clean"), 1)
 
     def test_position_semantics(self):
+        """Test position semantics."""
         by_id = {s["id"]: s for s in col.build_answer_fixtures("<|im_end|>")}
         start = by_id["own/start"]["expected"]
         self.assertTrue(start.startswith("<|im_end|>"))
@@ -110,6 +121,7 @@ class FixtureTests(unittest.TestCase):
             self.assertNotIn(hostile, clean)
 
     def test_hostile_fixtures_embed_each_hostile_string(self):
+        """Test hostile fixtures embed each hostile string."""
         specs = col.build_answer_fixtures("<|im_end|>")
         hostile_markers = [s["marker"] for s in specs if s["position"] == "hostile"]
         self.assertEqual(hostile_markers, list(HOSTILE_MARKER_STRINGS))
@@ -118,6 +130,7 @@ class FixtureTests(unittest.TestCase):
                 self.assertIn(spec["marker"], spec["expected"])
 
     def test_marker_inside_clean_text_rejected(self):
+        """Test marker inside clean text rejected."""
         # The clean template mentions "marker": a config whose marker
         # text is the word "marker" makes the clean fixture unusable,
         # and the protocol refuses it fail-closed.
@@ -125,6 +138,7 @@ class FixtureTests(unittest.TestCase):
             col.build_answer_fixtures("marker")
 
     def test_malformed_specs_rejected(self):
+        """Test malformed specs rejected."""
         good = col.build_answer_fixtures("<|im_end|>")
         for bad in (
             (),
@@ -143,6 +157,7 @@ class FixtureTests(unittest.TestCase):
                 col.build_answer_fixtures(bad_marker)
 
     def test_fingerprint_stable_and_protocol_shape(self):
+        """Test fingerprint stable and protocol shape."""
         fp = col.protocol_fingerprint()
         self.assertEqual(fp, col.protocol_fingerprint())
         self.assertEqual(len(fp), 64)
@@ -156,7 +171,10 @@ class FixtureTests(unittest.TestCase):
 
 
 class ClassifyTests(unittest.TestCase):
+    """Classify tests."""
+
     def test_total_order(self):
+        """Test total order."""
         self.assertEqual(col.classify_observation(False, False), "intact")
         self.assertEqual(col.classify_observation(False, True), "intact")
         self.assertEqual(col.classify_observation(True, True), "collision")
@@ -165,6 +183,7 @@ class ClassifyTests(unittest.TestCase):
 
 
 def _scored(cls, occurrences=1):
+    """Scored."""
     return {
         "class": cls,
         "cut": 3,
@@ -175,6 +194,7 @@ def _scored(cls, occurrences=1):
 
 
 def _fixture(fid, reserved, subword, reserved_state="scored", subword_state="no_pair"):
+    """Fixture."""
     return {
         "id": fid,
         "reserved": reserved,
@@ -184,7 +204,10 @@ def _fixture(fid, reserved, subword, reserved_state="scored", subword_state="no_
 
 
 class CellTests(unittest.TestCase):
+    """Cell tests."""
+
     def test_aggregation_and_rates(self):
+        """Test aggregation and rates."""
         per_fixture = [
             _fixture("a", _scored("collision"), None),
             _fixture("b", _scored("ends_at_marker"), None),
@@ -210,6 +233,7 @@ class CellTests(unittest.TestCase):
         self.assertEqual(cell["boundary_ids"], 2)
 
     def test_anomalous_excluded_from_rates(self):
+        """Test anomalous excluded from rates."""
         per_fixture = [
             _fixture("a", _scored("collision"), None),
             _fixture("b", _scored("anomalous"), None),
@@ -220,6 +244,7 @@ class CellTests(unittest.TestCase):
         self.assertEqual(cell["reserved"]["collision_rate"], 1.0)
 
     def test_no_scored_observations_vacate_rates(self):
+        """Test no scored observations vacate rates."""
         per_fixture = [_fixture("a", None, None, reserved_state="failed")]
         cell = col.collision_cell(per_fixture, n_fixtures=1, boundary_len=1)
         self.assertIsNone(cell["reserved"]["collision_rate"])
@@ -228,6 +253,7 @@ class CellTests(unittest.TestCase):
         self.assertFalse(cell["uniform_intact"])  # vacuous truth refused
 
     def test_uniform_intact(self):
+        """Test uniform intact."""
         per_fixture = [
             _fixture("a", _scored("intact"), _scored("intact"), subword_state="scored"),
             _fixture("b", _scored("intact"), None),
@@ -237,6 +263,7 @@ class CellTests(unittest.TestCase):
         self.assertFalse(cell["any_collision"])
 
     def test_bad_shape_arguments_rejected(self):
+        """Test bad shape arguments rejected."""
         with self.assertRaises(ValueError):
             col.collision_cell([], n_fixtures=0, boundary_len=1)
         with self.assertRaises(ValueError):
@@ -244,23 +271,31 @@ class CellTests(unittest.TestCase):
 
 
 class EmissionTests(unittest.TestCase):
+    """Emission tests."""
+
     def test_reserved_emission_roundtrips(self):
+        """Test reserved emission roundtrips."""
         ids = col.reserved_emission(OrdinalBackend.encode, OrdinalBackend.decode, "abc")
         self.assertEqual(ids, (97, 98, 99))
 
     def test_reserved_emission_fail_closed(self):
+        """Test reserved emission fail closed."""
+
         def lossy_decode(ids):
+            """Lossy decode."""
             return "".join(chr(x) for x in ids if x != 98)
 
         self.assertIsNone(col.reserved_emission(OrdinalBackend.encode, lossy_decode, "abc"))
         self.assertIsNone(col.reserved_emission(lambda t: (), OrdinalBackend.decode, "abc"))
 
         def boom(text):
+            """Boom."""
             raise RuntimeError("encode boom")
 
         self.assertIsNone(col.reserved_emission(boom, OrdinalBackend.decode, "abc"))
 
     def test_subword_emission_control_arm(self):
+        """Test subword emission control arm."""
         expected = "The marker is <|im_end|> in text."
         ids = col.subword_emission(
             SpecialBackend.encode, SpecialBackend.decode, expected, "<|im_end|>", (7,)
@@ -271,6 +306,7 @@ class EmissionTests(unittest.TestCase):
         self.assertEqual(core.first_boundary(ids, (7,)), None)
 
     def test_subword_emission_no_pair_cases(self):
+        """Test subword emission no pair cases."""
         # Char-ordinals: the marker's native encoding is not one token.
         self.assertIsNone(
             col.subword_emission(
@@ -291,6 +327,7 @@ class EmissionTests(unittest.TestCase):
         )
 
     def test_subword_emission_replaces_every_occurrence(self):
+        """Test subword emission replaces every occurrence."""
         expected = "<|im_end|> and <|im_end|> again"
         ids = col.subword_emission(
             SpecialBackend.encode, SpecialBackend.decode, expected, "<|im_end|>", (7,)
@@ -301,7 +338,10 @@ class EmissionTests(unittest.TestCase):
 
 
 class ScoreTests(unittest.TestCase):
+    """Score tests."""
+
     def test_unevaluable_returns_none(self):
+        """Test unevaluable returns none."""
         self.assertIsNone(
             col.score_observation(
                 status_ok=False,
@@ -315,6 +355,7 @@ class ScoreTests(unittest.TestCase):
         )
 
     def test_anomalous_paths(self):
+        """Test anomalous paths."""
         not_verbatim = col.score_observation(
             status_ok=True,
             boundary_found=False,
@@ -337,6 +378,7 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(mismatch_no_cut["class"], "anomalous")
 
     def test_scored_record_fields(self):
+        """Test scored record fields."""
         rec = col.score_observation(
             status_ok=True,
             boundary_found=True,
@@ -352,12 +394,16 @@ class ScoreTests(unittest.TestCase):
 
 
 class PureProfileTests(unittest.TestCase):
+    """Pure profile tests."""
+
     @staticmethod
     def _cell(cls_list):
+        """Cell."""
         per_fixture = [_fixture(f"f{i}", _scored(c), None) for i, c in enumerate(cls_list)]
         return col.collision_cell(per_fixture, n_fixtures=len(cls_list), boundary_len=1)
 
     def test_unavailable_without_measurable_cells(self):
+        """Test unavailable without measurable cells."""
         prof = col.answer_collision_profile(("a",), {"a": None}, col.protocol_dict())
         self.assertFalse(prof["available"])
         self.assertEqual(prof["detail"], "answer_collision_unavailable")
@@ -365,6 +411,7 @@ class PureProfileTests(unittest.TestCase):
         self.assertIsNone(prof["worst_candidate"])
 
     def test_colliding_profile(self):
+        """Test colliding profile."""
         cells = {"a": self._cell(["collision", "intact"]), "b": self._cell(["intact"])}
         prof = col.answer_collision_profile(("a", "b"), cells, col.protocol_dict())
         self.assertTrue(prof["available"])
@@ -376,6 +423,7 @@ class PureProfileTests(unittest.TestCase):
         self.assertEqual(prof["n_measurable"], 2)
 
     def test_uniform_intact_profile_is_the_publishable_negative(self):
+        """Test uniform intact profile is the publishable negative."""
         cells = {"a": self._cell(["intact", "intact"])}
         prof = col.answer_collision_profile(("a",), cells, col.protocol_dict())
         self.assertTrue(prof["available"])
@@ -384,7 +432,10 @@ class PureProfileTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    """Stage tests."""
+
     def test_ordinal_boundary_pipe_counts(self):
+        """Test ordinal boundary pipe counts."""
         # Boundary = decode((124,)) = "|": every marker-bearing hostile
         # string containing "|" collides interior; the six without it
         # and the clean fixture stay intact; own/end ends at the marker.
@@ -406,6 +457,7 @@ class StageTests(unittest.TestCase):
         self.assertAlmostEqual(profile["max_collision_rate"], 13 / 21)
 
     def test_special_boundary_reserved_counts_and_subword_control(self):
+        """Test special boundary reserved counts and subword control."""
         # Boundary = (7,) = "<|im_end|>": F1 -- the reserved arm yields
         # interior collisions; F2 -- the subword arm never collides.
         fmt = _format("alpha")
@@ -427,6 +479,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(subword["n_no_pair"], 15)
 
     def test_shared_boundary_identical_cells(self):
+        """Test shared boundary identical cells."""
         # R5 evidence: candidates sharing a boundary produce identical
         # cells -- the configuration is the unit, not the template.
         fmts = (_format("alpha"), _format("beta"))
@@ -434,6 +487,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(stage["per_candidate"]["alpha"], stage["per_candidate"]["beta"])
 
     def test_boundary_map_gives_per_configuration_cells(self):
+        """Test boundary map gives per configuration cells."""
         fmts = (_format("alpha"), _format("beta"))
         stage = experiments.answer_collision_stage(
             OrdinalBackend(),
@@ -454,19 +508,25 @@ class StageTests(unittest.TestCase):
         self.assertEqual(beta["reserved"]["n_collision"], 13)
 
     def test_encode_regime_blind_configuration_is_intact(self):
+        """Test encode regime blind configuration is intact."""
+
         # R3's other regime: the boundary decodes to "<|im_end|>" but the
         # tokenizer NEVER emits the reserved id from text (spells it in
         # ordinals), so the detector is blind to the marker at text
         # level and every verbatim answer survives intact.
         class BlindBackend:
+            """Blind backend."""
+
             fingerprint = "cycle170-blind"
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 return tuple(map(ord, text))
 
             @staticmethod
             def decode(ids):
+                """Decode."""
                 return "".join("<|im_end|>" if x == 7 else chr(x) for x in ids)
 
         fmt = _format("alpha")
@@ -476,6 +536,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(cell["uniform_intact"])
 
     def test_stage_guards(self):
+        """Test stage guards."""
         fmt = _format("alpha")
         with self.assertRaises(ValueError):
             experiments.answer_collision_stage(None, (fmt,), boundary=(7,))
@@ -487,9 +548,14 @@ class StageTests(unittest.TestCase):
             experiments.answer_collision_stage(OrdinalBackend(), (fmt,), boundary=(7,), seed=-1)
 
     def test_undecodable_boundary_degrades_cell(self):
+        """Test undecodable boundary degrades cell."""
+
         class BadDecodeBackend(OrdinalBackend):
+            """Bad decode backend."""
+
             @staticmethod
             def decode(ids):
+                """Decode."""
                 if tuple(ids) == (7,):
                     raise RuntimeError("decode boom")
                 return "".join(map(chr, ids))
@@ -503,11 +569,16 @@ class StageTests(unittest.TestCase):
         self.assertFalse(profile["available"])
 
     def test_roundtrip_exclusion_axis(self):
+        """Test roundtrip exclusion axis."""
+
         # R7: a lossy decode excludes fixtures from the reserved arm's
         # denominators instead of scoring them against the detector.
         class LossyBackend(OrdinalBackend):
+            """Lossy backend."""
+
             @staticmethod
             def decode(ids):
+                """Decode."""
                 return "".join(chr(x) for x in ids if x != 109)  # drop "m"
 
         fmt = _format("alpha")
@@ -520,7 +591,10 @@ class StageTests(unittest.TestCase):
 
 
 class ExperimentsProfileGuardTests(unittest.TestCase):
+    """Experiments profile guard tests."""
+
     def test_invalid_candidates(self):
+        """Test invalid candidates."""
         self.assertEqual(
             experiments.answer_collision_profile((), {})["detail"], "invalid_candidates"
         )
@@ -533,6 +607,7 @@ class ExperimentsProfileGuardTests(unittest.TestCase):
         )
 
     def test_invalid_stage(self):
+        """Test invalid stage."""
         self.assertEqual(
             experiments.answer_collision_profile(("a",), "junk")["detail"], "stage_invalid"
         )
@@ -542,6 +617,7 @@ class ExperimentsProfileGuardTests(unittest.TestCase):
         )
 
     def test_tampered_cell_rejected(self):
+        """Test tampered cell rejected."""
         fmt = _format("alpha")
         stage = experiments.answer_collision_stage(
             OrdinalBackend(), (fmt,), boundary=(124,), seed=1
@@ -554,7 +630,10 @@ class ExperimentsProfileGuardTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    """Cli tests."""
+
     def test_probe_records_payload(self):
+        """Test probe records payload."""
         result = {}
         cli._run_answer_collision_probe(
             result,
@@ -569,6 +648,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["colliding_candidates"], ["alpha"])
 
     def test_probe_never_raises(self):
+        """Test probe never raises."""
         result = {}
         cli._run_answer_collision_probe(
             result,
@@ -585,8 +665,11 @@ class CliTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
+    """Reporting tests."""
+
     @staticmethod
     def _payload(backend=None, boundary=(124,)):
+        """Payload."""
         fmt = _format("alpha")
         stage = experiments.answer_collision_stage(
             backend or OrdinalBackend(), (fmt,), boundary=boundary, seed=1
@@ -594,6 +677,7 @@ class ReportingTests(unittest.TestCase):
         return experiments.answer_collision_profile(("alpha",), stage)
 
     def test_section_renders_counts(self):
+        """Test section renders counts."""
         section = reporting._answer_collision_section({"answer_collision": self._payload()})
         self.assertIn('id="answer-collision"', section)
         self.assertIn("alpha", section)
@@ -601,6 +685,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("provably truncated", section)
 
     def test_section_absent_when_unavailable(self):
+        """Test section absent when unavailable."""
         self.assertEqual(
             reporting._answer_collision_section({"answer_collision": {"available": False}}),
             "",
@@ -608,6 +693,7 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(reporting._answer_collision_section({}), "")
 
     def test_marker_text_never_rendered(self):
+        """Test marker text never rendered."""
         # R11: the marker text is hostile input to the report path; the
         # section shows counts and rates only.
         section = reporting._answer_collision_section(
@@ -616,6 +702,7 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("<|im_end|>", section)
 
     def test_hostile_candidate_name_escaped(self):
+        """Test hostile candidate name escaped."""
         fmt = _format("a<b>bold</b>")
         stage = experiments.answer_collision_stage(
             OrdinalBackend(), (fmt,), boundary=(124,), seed=1
@@ -627,6 +714,7 @@ class ReportingTests(unittest.TestCase):
 
 
 def _hand_payload(colliding: bool):
+    """Hand payload."""
     cls_list = ["collision", "intact"] if colliding else ["intact", "intact"]
     per_fixture = [_fixture(f"f{i}", _scored(c), None) for i, c in enumerate(cls_list)]
     cell = col.collision_cell(per_fixture, n_fixtures=2, boundary_len=1)
@@ -637,13 +725,17 @@ def _hand_payload(colliding: bool):
 
 
 class DiffTests(unittest.TestCase):
+    """Diff tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         result = diffreports.diff_answer_collision(_hand_payload(True), _hand_payload(True))
         self.assertEqual(result["available"], "both")
         self.assertFalse(result["changed"])
         self.assertEqual(result["rate_drift"], [])
 
     def test_rate_drift_and_colliding_added(self):
+        """Test rate drift and colliding added."""
         result = diffreports.diff_answer_collision(_hand_payload(False), _hand_payload(True))
         self.assertTrue(result["changed"])
         self.assertEqual(len(result["rate_drift"]), 1)
@@ -653,6 +745,7 @@ class DiffTests(unittest.TestCase):
         self.assertTrue(result["uniform_changed"])
 
     def test_protocol_drift_detected(self):
+        """Test protocol drift detected."""
         new = _hand_payload(False)
         proto = dict(col.protocol_dict())
         proto["fingerprint"] = "0" * 64
@@ -662,16 +755,19 @@ class DiffTests(unittest.TestCase):
         self.assertTrue(result["changed"])
 
     def test_stale_rate_rejected(self):
+        """Test stale rate rejected."""
         bad = _hand_payload(True)
         bad["per_candidate"]["cand"]["reserved"]["collision_rate"] = 0.99
         self.assertFalse(diffreports._valid_answer_collision(bad))
 
     def test_bool_counts_rejected(self):
+        """Test bool counts rejected."""
         bad = _hand_payload(True)
         bad["per_candidate"]["cand"]["reserved"]["n_collision"] = True
         self.assertFalse(diffreports._valid_answer_collision(bad))
 
     def test_inconsistent_profile_fields_rejected(self):
+        """Test inconsistent profile fields rejected."""
         bad = _hand_payload(True)
         bad["colliding_candidates"] = []
         self.assertFalse(diffreports._valid_answer_collision(bad))
@@ -680,6 +776,7 @@ class DiffTests(unittest.TestCase):
         self.assertFalse(diffreports._valid_answer_collision(bad2))
 
     def test_availability_sides(self):
+        """Test availability sides."""
         self.assertEqual(
             diffreports.diff_answer_collision(_hand_payload(True), None)["available"], "old"
         )
@@ -689,6 +786,7 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(diffreports.diff_answer_collision(None, None)["available"], "neither")
 
     def test_summary_lines(self):
+        """Test summary lines."""
         lines = diffreports._render_answer_collision_summary(
             diffreports.diff_answer_collision(_hand_payload(False), _hand_payload(True))
         )
@@ -710,6 +808,7 @@ class MutationGateTests(unittest.TestCase):
     """Tempdir mutation gates on the exactness-critical lines."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -731,10 +830,12 @@ class MutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _classify_scenario(mod):
+        """Classify scenario."""
         assert mod.classify_observation(True, True) == "collision"
         assert mod.classify_observation(True, False) == "ends_at_marker"
 
     def test_mutant_classify_order_swapped_caught(self):
+        """Test mutant classify order swapped caught."""
         self._run_gate(
             "collision",
             "classify_swap",
@@ -745,6 +846,7 @@ class MutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _rate_scenario(mod):
+        """Rate scenario."""
         per_fixture = [
             _fixture("a", _scored("collision"), None),
             _fixture("b", _scored("intact"), None),
@@ -753,6 +855,7 @@ class MutationGateTests(unittest.TestCase):
         assert cell["reserved"]["collision_rate"] == 0.5
 
     def test_mutant_rate_denominator_caught(self):
+        """Test mutant rate denominator caught."""
         self._run_gate(
             "collision",
             "rate_denominator",
@@ -764,7 +867,10 @@ class MutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _diff_scenario(mod):
+        """Diff scenario."""
+
         def payload(n_coll):
+            """Payload."""
             per_fixture = [
                 _fixture(f"f{i}", _scored("collision" if i < n_coll else "intact"), None)
                 for i in range(4)
@@ -780,6 +886,7 @@ class MutationGateTests(unittest.TestCase):
         assert len(result["rate_drift"]) == 1
 
     def test_mutant_diff_rate_disjunct_dropped_caught(self):
+        """Test mutant diff rate disjunct dropped caught."""
         self._run_gate(
             "diffreports",
             "diff_rate_disjunct",

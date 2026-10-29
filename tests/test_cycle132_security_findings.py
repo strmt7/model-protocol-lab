@@ -28,6 +28,7 @@ from model_protocol_lab.reporting import (
 
 
 def _frontier(**overrides):
+    """Frontier."""
     base = {
         "max_new_tokens": 8,
         "candidates": {
@@ -47,6 +48,7 @@ class TestFrontierCrashSites(unittest.TestCase):
     """Finding 1: hostile frontier payloads must degrade, never crash."""
 
     def test_mixed_type_candidate_keys_chart(self):
+        """Test mixed type candidate keys chart."""
         frontier = _frontier()
         frontier["candidates"][3] = {
             "fixture_ids": ["f1"],
@@ -57,6 +59,7 @@ class TestFrontierCrashSites(unittest.TestCase):
         self.assertIn("<svg", html)
 
     def test_mixed_type_candidate_keys_series(self):
+        """Test mixed type candidate keys series."""
         frontier = _frontier()
         frontier["candidates"][3] = {
             "fixture_ids": ["f1"],
@@ -66,16 +69,19 @@ class TestFrontierCrashSites(unittest.TestCase):
         self.assertEqual(_frontier_series(frontier), (["a"], 8))
 
     def test_int_fixture_ids_chart(self):
+        """Test int fixture ids chart."""
         frontier = _frontier()
         frontier["candidates"]["a"]["fixture_ids"] = 3
         self.assertEqual(_frontier_chart_svg(frontier), "")
 
     def test_int_fixture_ids_series(self):
+        """Test int fixture ids series."""
         frontier = _frontier()
         frontier["candidates"]["a"]["fixture_ids"] = 3
         self.assertIsNone(_frontier_series(frontier))
 
     def test_int_fixture_ids_spark_table(self):
+        """Test int fixture ids spark table."""
         # Degrades to a zeroed row, never crashes.
         frontier = _frontier()
         frontier["candidates"]["a"]["fixture_ids"] = 3
@@ -84,12 +90,14 @@ class TestFrontierCrashSites(unittest.TestCase):
         self.assertIn("a", html)
 
     def test_int_min_budget_per_fixture(self):
+        """Test int min budget per fixture."""
         frontier = _frontier()
         frontier["candidates"]["a"]["min_budget_per_fixture"] = 7
         html = _frontier_spark_table(frontier)
         self.assertIn("Pass curves by candidate", html)
 
     def test_string_count_in_winner_curve_skipped(self):
+        """Test string count in winner curve skipped."""
         from model_protocol_lab.reporting import _frontier_section
 
         frontier = _frontier(native_winner="a")
@@ -100,6 +108,7 @@ class TestFrontierCrashSites(unittest.TestCase):
         self.assertIn("Winner pass curve", html)
 
     def test_string_budget_in_winner_curve_skipped(self):
+        """Test string budget in winner curve skipped."""
         from model_protocol_lab.reporting import _frontier_section
 
         frontier = _frontier(native_winner="a")
@@ -110,6 +119,7 @@ class TestFrontierCrashSites(unittest.TestCase):
         self.assertIn("Winner pass curve", html)
 
     def test_margin_trajectory_int_fixture_ids(self):
+        """Test margin trajectory int fixture ids."""
         frontier = _frontier()
         frontier["candidates"]["a"]["fixture_ids"] = 3
         self.assertEqual(reporting.margin_trajectory(frontier), [])
@@ -120,6 +130,7 @@ class TestRateFormatting(unittest.TestCase):
 
     @staticmethod
     def _search_result(rate):
+        """Search result."""
         return {
             "search": [
                 {
@@ -136,32 +147,39 @@ class TestRateFormatting(unittest.TestCase):
         }
 
     def test_string_rate_search_rows(self):
+        """Test string rate search rows."""
         html = _search_rows(self._search_result("high"))
         self.assertIn("incomplete", html)
 
     def test_nan_rate_search_rows(self):
+        """Test nan rate search rows."""
         html = _search_rows(self._search_result(float("nan")))
         self.assertIn("incomplete", html)
         self.assertNotIn("nan%", html)
 
     def test_inf_rate_search_rows(self):
+        """Test inf rate search rows."""
         html = _search_rows(self._search_result(math.inf))
         self.assertIn("incomplete", html)
 
     def test_bool_rate_search_rows(self):
+        """Test bool rate search rows."""
         html = _search_rows(self._search_result(True))
         self.assertIn("incomplete", html)
 
     def test_string_rate_held_out(self):
+        """Test string rate held out."""
         html = _held_out_section({"held_out": {"summary": {"rate": "high"}}})
         self.assertIn("incomplete", html)
 
     def test_nan_rate_held_out(self):
+        """Test nan rate held out."""
         html = _held_out_section({"held_out": {"summary": {"rate": float("nan")}}})
         self.assertIn("incomplete", html)
         self.assertNotIn("nan%", html)
 
     def test_valid_rates_unchanged(self):
+        """Test valid rates unchanged."""
         html = _search_rows(self._search_result(0.5))
         self.assertIn("50%", html)
         html = _search_rows(self._search_result(1))
@@ -173,6 +191,7 @@ class TestSymlinkReportDir(unittest.TestCase):
     """Finding 3: a symlinked leaf is never claimed, even when empty."""
 
     def test_symlinked_leaf_rejected_with_allow_empty(self):
+        """Test symlinked leaf rejected with allow empty."""
         with TemporaryDirectory() as tmp:
             evil = Path(tmp) / "evil"
             evil.mkdir()
@@ -184,6 +203,7 @@ class TestSymlinkReportDir(unittest.TestCase):
             self.assertEqual(list(evil.iterdir()), [])
 
     def test_symlinked_leaf_rejected_without_flag(self):
+        """Test symlinked leaf rejected without flag."""
         with TemporaryDirectory() as tmp:
             evil = Path(tmp) / "evil"
             evil.mkdir()
@@ -193,6 +213,7 @@ class TestSymlinkReportDir(unittest.TestCase):
                 prepare_report_dir(link)
 
     def test_empty_real_dir_still_claimable(self):
+        """Test empty real dir still claimable."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "report"
             target.mkdir()
@@ -201,8 +222,11 @@ class TestSymlinkReportDir(unittest.TestCase):
 
 
 class FakeTokenizer:
+    """Fake tokenizer."""
+
     @staticmethod
     def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
+        """Apply chat template."""
         return "hello"
 
 
@@ -211,10 +235,12 @@ class TestRlimitRestoreRace(unittest.TestCase):
     """Finding 2: a budget alarm landing mid-restore must not be swallowed."""
 
     def test_budget_exception_during_restore_propagates(self):
+        """Test budget exception during restore propagates."""
         calls = []
         real_setrlimit = resource.setrlimit
 
         def spy(which, limits):
+            """Spy."""
             calls.append(limits)
             if len(calls) == 2:
                 # Simulate the SIGALRM handler firing inside the restore:
@@ -232,6 +258,7 @@ class TestRlimitRestoreRace(unittest.TestCase):
         self.assertEqual(len(calls), 3)
 
     def test_normal_path_restores_limit(self):
+        """Test normal path restores limit."""
         old_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
         doctor._render_with_memory_cap(FakeTokenizer(), [{"role": "user", "content": "x"}])
         new_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
@@ -242,12 +269,14 @@ class TestBackendFailureAllowlist(unittest.TestCase):
     """Finding 7: only fixed local_* codes echo; the prefix match is gone."""
 
     def test_all_known_codes_render_tersely(self):
+        """Test all known codes render tersely."""
         for code in cli._KNOWN_LOCAL_FAILURE_CODES:
             with self.subTest(code=code):
                 msg = cli._backend_failure_message(code)
                 self.assertIn(f"[{code}]", msg)
 
     def test_known_codes_match_backends_raise_sites(self):
+        """Test known codes match backends raise sites."""
         import re
 
         source = Path(doctor.__file__).parent.joinpath("backends.py").read_text()
@@ -255,11 +284,13 @@ class TestBackendFailureAllowlist(unittest.TestCase):
         self.assertEqual(set(cli._KNOWN_LOCAL_FAILURE_CODES), raised)
 
     def test_local_prefixed_evil_stays_generic(self):
+        """Test local prefixed evil stays generic."""
         msg = cli._backend_failure_message("local_evil_injected")
         self.assertNotIn("local_evil_injected", msg)
         self.assertIn("Operation failed.", msg)
 
     def test_arbitrary_text_stays_generic(self):
+        """Test arbitrary text stays generic."""
         msg = cli._backend_failure_message("oops'; rm -rf / #")
         self.assertNotIn("rm -rf", msg)
 
@@ -268,6 +299,7 @@ class TestPortabilityTableSanitization(unittest.TestCase):
     """Finding 8: escape sequences in table fields cannot reach stderr."""
 
     def test_hostile_fields_stripped(self):
+        """Test hostile fields stripped."""
         section = {
             "status": "ok",
             "second_checkpoint": "ckpt-dir\x1b[31m",
@@ -286,6 +318,7 @@ class TestPortabilityTableSanitization(unittest.TestCase):
         self.assertIn("chatml", rendered)
 
     def test_normal_values_unchanged(self):
+        """Test normal values unchanged."""
         section = {
             "status": "ok",
             "second_checkpoint": "ckpt-dir",
@@ -297,6 +330,7 @@ class TestPortabilityTableSanitization(unittest.TestCase):
         self.assertIn("compatible", rendered)
 
     def test_non_string_fields_do_not_crash(self):
+        """Test non string fields do not crash."""
         section = {
             "status": "ok",
             "second_checkpoint": "ckpt-dir",
@@ -306,6 +340,7 @@ class TestPortabilityTableSanitization(unittest.TestCase):
         self.assertIn("5", rendered)
 
     def test_failed_status_sanitized(self):
+        """Test failed status sanitized."""
         section = {"status": "failed\x1b[2J", "detail": "bad\x07detail"}
         rendered = doctor.render_portability_table(section)
         self.assertNotIn("\x1b", rendered)

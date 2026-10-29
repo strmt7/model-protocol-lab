@@ -122,6 +122,7 @@ class Ling30OfficialLiteralsTests(unittest.TestCase):
     """The entry's frames equal the officially-documented template strings."""
 
     def test_fields_match_official_30(self) -> None:
+        """Test fields match official 30."""
         fmt = CATALOG["ling"]
         self.assertEqual(fmt.bos, _OFFICIAL_BOS)
         self.assertEqual(fmt.user_prefix, _OFFICIAL_USER_PREFIX)
@@ -130,6 +131,7 @@ class Ling30OfficialLiteralsTests(unittest.TestCase):
         self.assertEqual(fmt.open_suffix, _OFFICIAL_GEN_PROMPT_ON)
 
     def test_thinking_off_suffix_matches_official_30(self) -> None:
+        """Test thinking off suffix matches official 30."""
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         self.assertEqual(off.open_suffix, _OFFICIAL_GEN_PROMPT_OFF)
@@ -139,6 +141,7 @@ class Ling30RenderAuditTests(unittest.TestCase):
     """Repo renders vs the official template, byte-level (no-system scope)."""
 
     def test_single_turn_render_matches_official_tail(self) -> None:
+        """Test single turn render matches official tail."""
         rendered = CATALOG["ling"].render(_SINGLE)
         self.assertEqual(rendered, _OFFICIAL_BOS + _OFFICIAL_30_SINGLE_TAIL)
         # And the repo render is exactly the official full render with the
@@ -149,10 +152,12 @@ class Ling30RenderAuditTests(unittest.TestCase):
         )
 
     def test_multi_turn_render_matches_official_tail(self) -> None:
+        """Test multi turn render matches official tail."""
         rendered = CATALOG["ling"].render(_MULTI)
         self.assertEqual(rendered, _OFFICIAL_BOS + _OFFICIAL_30_MULTI_TAIL)
 
     def test_thinking_off_render_tail_matches_official(self) -> None:
+        """Test thinking off render tail matches official."""
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         rendered = off.render(_SINGLE)
@@ -171,6 +176,7 @@ class Ling30VerdictTests(unittest.TestCase):
     """The audit verdict pin: MATCH -- zero DOCUMENTED -> ACTUAL diffs."""
 
     def test_verdict_match_no_documented_actual_diffs(self) -> None:
+        """Test verdict match no documented actual diffs."""
         fmt = CATALOG["ling"]
         diffs: list[str] = []
         pairs = [
@@ -202,6 +208,7 @@ class Ling30VerdictTests(unittest.TestCase):
         self.assertEqual(diffs, [], f"DIVERGED: {diffs}")
 
     def test_system_block_outside_modeled_scope(self) -> None:
+        """Test system block outside modeled scope."""
         # The official template always emits the system block; Format never
         # renders system turns (lab convention). Guard the scope so a future
         # reader does not mistake the convention for a divergence.

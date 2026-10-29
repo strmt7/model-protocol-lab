@@ -180,6 +180,7 @@ class _OracleFormat:
         self.assistant_turn_end = assistant_turn_end
         self.open_suffix = open_suffix
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def spec_render(self, messages: object) -> str:
         """Render per the render() docstring + code-pinned acceptance rules."""
         # Docstring is silent on acceptance; code pins exact tuple,
@@ -234,6 +235,7 @@ class _StrSub(str):
 
 
 def _format_field_tuple(fmt) -> tuple:
+    """Format field tuple."""
     return (
         fmt.name,
         fmt.bos,
@@ -280,6 +282,7 @@ _HOSTILE_SCALARS = [123, 4.5, b"x", ["x"], ("x",), {"x": 1}, _StrSub("x")]
 
 
 def _valid_format_kwargs() -> dict:
+    """Valid format kwargs."""
     return {
         "name": "f",
         "bos": "<bos>",
@@ -402,9 +405,13 @@ def _render_container_probes(core_mod, fmt) -> list:
     msg = core_mod.Message("user", "x")
 
     class _MessageSub(core_mod.Message):
+        """Message sub."""
+
         pass
 
     class _TupleSub(tuple):
+        """Tuple sub."""
+
         pass
 
     return [
@@ -599,28 +606,33 @@ class TestOracleDifferentialFuzz(unittest.TestCase):
     """Oracle vs implementation agreement on generated inputs."""
 
     def test_fuzz_construction(self):
+        """Test fuzz construction."""
         for seed in (f"cycle32-construct-{i}" for i in range(8)):
             with self.subTest(seed=seed):
                 divs = _construction_divergences(real_core, seed, 30)
                 self.assertEqual(divs, [], "divergences:\n" + "\n".join(divs[:5]))
 
     def test_fuzz_render(self):
+        """Test fuzz render."""
         for seed in (f"cycle32-render-{i}" for i in range(8)):
             with self.subTest(seed=seed):
                 divs = _render_divergences(real_core, seed, 40)
                 self.assertEqual(divs, [], "divergences:\n" + "\n".join(divs[:5]))
 
     def test_fuzz_override_sweep(self):
+        """Test fuzz override sweep."""
         # 3^3 optionals x repeat_bos x {1-turn, 3-turn} = 108 deterministic cases.
         divs = _override_sweep_divergences(real_core)
         self.assertEqual(divs, [], "divergences:\n" + "\n".join(divs[:5]))
 
     def test_fuzz_catalog(self):
+        """Test fuzz catalog."""
         # Every real catalog family through BOTH oracle and implementation.
         divs = _catalog_divergences(real_core, catalog_mod.CATALOG)
         self.assertEqual(divs, [], "divergences:\n" + "\n".join(divs[:5]))
 
     def test_catalog_has_expected_families(self):
+        """Test catalog has expected families."""
         for name in (
             "chatml",
             "llama3",
@@ -638,6 +650,7 @@ class TestPinnedRenders(unittest.TestCase):
     """Byte-exact pinned renders for real catalog families (1-turn + 3-turn)."""
 
     def _check(self, family: str, expected_1t: str, expected_3t: str):
+        """Check."""
         fmt = catalog_mod.CATALOG[family]
         one = (real_core.Message("user", "Hello"),)
         three = (
@@ -649,6 +662,7 @@ class TestPinnedRenders(unittest.TestCase):
         self.assertEqual(fmt.render(three), expected_3t, f"{family} 3-turn")
 
     def test_chatml(self):
+        """Test chatml."""
         self._check(
             "chatml",
             "<|im_start|>user\nHello<|im_end|>\n<|im_start|>assistant\n",
@@ -659,6 +673,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_llama3(self):
+        """Test llama3."""
         self._check(
             "llama3",
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
@@ -670,6 +685,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_deepseek(self):
+        """Test deepseek."""
         # Per-role ends: user turns unterminated (""), assistant ends with
         # <end of sentence>; open suffix falls back to assistant_prefix.
         self._check(
@@ -682,6 +698,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_mistral(self):
+        """Test mistral."""
         self._check(
             "mistral",
             "<s>[INST] Hello [/INST]",
@@ -689,6 +706,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_glm4(self):
+        """Test glm4."""
         # open_suffix="<|assistant|>" (bare, no frame newline) overrides the
         # assistant_prefix fallback.
         self._check(
@@ -698,6 +716,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_mistral_large(self):
+        """Test mistral large."""
         # open_suffix="" is honored (D5): the render ends with the empty
         # string, NOT with assistant_prefix (" ").
         self._check(
@@ -710,6 +729,7 @@ class TestPinnedRenders(unittest.TestCase):
         self.assertNotEqual(fmt.assistant_prefix, "")
 
     def test_kimi3(self):
+        """Test kimi3."""
         self._check(
             "kimi3",
             '<|open|>message role="user"<|sep|>Hello<|close|>message<|sep|>'
@@ -723,6 +743,7 @@ class TestPinnedRenders(unittest.TestCase):
         )
 
     def test_repeat_bos_synthetic_pin(self):
+        """Test repeat bos synthetic pin."""
         # Docstring: "repeat_bos means BOS before every message, including
         # the open reply" (D4) -- pinned literally.
         fmt = real_core.Format("rb", "<B>", "[U]", "[A]", "<E>", repeat_bos=True)
@@ -738,12 +759,14 @@ class TestPinnedRenders(unittest.TestCase):
         self.assertEqual(fmt.render(three).count("<B>"), 4)
 
     def test_repeat_bos_false_contrast(self):
+        """Test repeat bos false contrast."""
         fmt = real_core.Format("norb", "<B>", "[U]", "[A]", "<E>", repeat_bos=False)
         one = (real_core.Message("user", "H"),)
         self.assertEqual(fmt.render(one), "<B>[U]H<E>[A]")
         self.assertEqual(fmt.render(one).count("<B>"), 1)
 
     def test_repeat_bos_with_empty_bos_is_noop(self):
+        """Test repeat bos with empty bos is noop."""
         fmt = real_core.Format("emptybos", "", "[U]", "[A]", "<E>", repeat_bos=True)
         one = (real_core.Message("user", "H"),)
         self.assertEqual(fmt.render(one), "[U]H<E>[A]")
@@ -753,6 +776,7 @@ class TestMessageValidation(unittest.TestCase):
     """Adversarial probes of Message's constructor (D1)."""
 
     def test_valid_messages(self):
+        """Test valid messages."""
         cases = [("user", ""), ("user", "x"), ("assistant", ""), ("assistant", "y" * 1000)]
         for role, content in cases:
             with self.subTest(role=role, content=content[:8]):
@@ -760,6 +784,7 @@ class TestMessageValidation(unittest.TestCase):
                 self.assertEqual((msg.role, msg.content), (role, content))
 
     def test_invalid_roles_rejected(self):
+        """Test invalid roles rejected."""
         bad_roles = [
             "User",
             "USER",
@@ -780,12 +805,14 @@ class TestMessageValidation(unittest.TestCase):
                 real_core.Message(bad, "x")
 
     def test_str_subclass_role_accepted(self):
+        """Test str subclass role accepted."""
         # Code-pinned (D1): the role check is equality-based, NOT exact-type.
         msg = real_core.Message(_StrSub("user"), "x")
         self.assertEqual(msg.role, "user")
         self.assertIs(type(msg.role), _StrSub)
 
     def test_content_exact_str_required(self):
+        """Test content exact str required."""
         bad_contents = [
             _StrSub("x"),
             b"x",
@@ -802,11 +829,13 @@ class TestMessageValidation(unittest.TestCase):
                 real_core.Message("user", bad)
 
     def test_message_is_frozen(self):
+        """Test message is frozen."""
         msg = real_core.Message("user", "x")
         with self.assertRaises(dataclasses.FrozenInstanceError):
             msg.content = "y"  # type: ignore[misc]
 
     def test_message_equality_and_hash(self):
+        """Test message equality and hash."""
         self.assertEqual(real_core.Message("user", "x"), real_core.Message("user", "x"))
         self.assertNotEqual(real_core.Message("user", "x"), real_core.Message("assistant", "x"))
         self.assertEqual(len({real_core.Message("user", "x"), real_core.Message("user", "x")}), 1)
@@ -817,6 +846,7 @@ class TestFormatValidation(unittest.TestCase):
 
     @staticmethod
     def _base() -> dict:
+        """Base."""
         return {
             "name": "f",
             "bos": "<b>",
@@ -826,6 +856,7 @@ class TestFormatValidation(unittest.TestCase):
         }
 
     def test_valid_format(self):
+        """Test valid format."""
         fmt = real_core.Format(**self._base())
         self.assertEqual(_format_field_tuple(fmt)[:5], ("f", "<b>", "<u>", "<a>", "<e>"))
         self.assertIs(fmt.repeat_bos, False)
@@ -834,6 +865,7 @@ class TestFormatValidation(unittest.TestCase):
         self.assertIsNone(fmt.open_suffix)
 
     def test_text_fields_exact_str(self):
+        """Test text fields exact str."""
         for field in ("name", "bos", "user_prefix", "assistant_prefix", "turn_end"):
             for bad in [123, 4.5, None, b"x", ["x"], ("x",), _StrSub("x")]:
                 with self.subTest(field=field, bad=type(bad).__name__):
@@ -843,6 +875,7 @@ class TestFormatValidation(unittest.TestCase):
                         real_core.Format(**kw)
 
     def test_blank_names_rejected(self):
+        """Test blank names rejected."""
         for blank in ["", " ", "\t", "\n", "\r\n", " ", " ", " "]:
             with self.subTest(name=repr(blank)):
                 kw = self._base()
@@ -851,6 +884,7 @@ class TestFormatValidation(unittest.TestCase):
                     real_core.Format(**kw)
 
     def test_nonblank_names_accepted(self):
+        """Test nonblank names accepted."""
         for name in ["f", " x ", "ünï", "a/b", "x" * 200, "0"]:
             with self.subTest(name=name[:12]):
                 kw = self._base()
@@ -858,6 +892,7 @@ class TestFormatValidation(unittest.TestCase):
                 self.assertEqual(real_core.Format(**kw).name, name)
 
     def test_repeat_bos_exact_bool(self):
+        """Test repeat bos exact bool."""
         for bad in [1, 0, "yes", "", None, 2.5, [True]]:
             with self.subTest(bad=repr(bad)):
                 kw = self._base()
@@ -870,6 +905,7 @@ class TestFormatValidation(unittest.TestCase):
             self.assertIs(real_core.Format(**kw).repeat_bos, good)
 
     def test_optional_overrides_none_or_exact_str(self):
+        """Test optional overrides none or exact str."""
         for field in ("user_turn_end", "assistant_turn_end", "open_suffix"):
             for bad in [123, 4.5, b"x", ["x"], _StrSub("x")]:
                 with self.subTest(field=field, bad=type(bad).__name__):
@@ -884,11 +920,13 @@ class TestFormatValidation(unittest.TestCase):
                     self.assertEqual(getattr(real_core.Format(**kw), field), good)
 
     def test_format_is_frozen(self):
+        """Test format is frozen."""
         fmt = real_core.Format(**self._base())
         with self.assertRaises(dataclasses.FrozenInstanceError):
             fmt.bos = "y"  # type: ignore[misc]
 
     def test_format_replace_and_hash(self):
+        """Test format replace and hash."""
         fmt = real_core.Format(**self._base())
         variant = dataclasses.replace(fmt, name="f2", repeat_bos=True)
         self.assertEqual(variant.name, "f2")
@@ -904,6 +942,7 @@ class TestRenderValidation(unittest.TestCase):
 
     @staticmethod
     def _fmt(**kw) -> real_core.Format:
+        """Fmt."""
         base = {
             "name": "f",
             "bos": "<b>",
@@ -915,13 +954,18 @@ class TestRenderValidation(unittest.TestCase):
         return real_core.Format(**base)
 
     def test_container_must_be_nonempty_exact_tuple(self):
+        """Test container must be nonempty exact tuple."""
         fmt = self._fmt()
         msg = real_core.Message("user", "x")
 
         class _TupleSub(tuple):
+            """Tuple sub."""
+
             pass
 
         class _MessageSub(real_core.Message):
+            """Message sub."""
+
             pass
 
         bad_containers = [
@@ -943,6 +987,7 @@ class TestRenderValidation(unittest.TestCase):
                 fmt.render(container)
 
     def test_final_turn_must_be_user(self):
+        """Test final turn must be user."""
         fmt = self._fmt()
         u = real_core.Message("user", "u")
         a = real_core.Message("assistant", "a")
@@ -951,6 +996,7 @@ class TestRenderValidation(unittest.TestCase):
                 fmt.render(msgs)
 
     def test_alternation_starting_with_user(self):
+        """Test alternation starting with user."""
         fmt = self._fmt()
         u = real_core.Message("user", "u")
         a = real_core.Message("assistant", "a")
@@ -959,6 +1005,7 @@ class TestRenderValidation(unittest.TestCase):
                 fmt.render(msgs)
 
     def test_valid_multiturn_renders(self):
+        """Test valid multiturn renders."""
         fmt = self._fmt()
         one = (real_core.Message("user", "H"),)
         self.assertEqual(fmt.render(one), "<b><u>H<e><a>")
@@ -978,6 +1025,7 @@ class TestRenderValidation(unittest.TestCase):
         self.assertEqual(fmt.render(five), "<b><u>1<e><a>2<e><u>3<e><a>4<e><u>5<e><a>")
 
     def test_hostile_contents_render_verbatim(self):
+        """Test hostile contents render verbatim."""
         fmt = self._fmt()
         hostile = ["", " ", "\x00", "\ud800", "\U0001f600", "{content}", "%s", "\\n", "x" * 100000]
         for content in hostile:
@@ -986,6 +1034,7 @@ class TestRenderValidation(unittest.TestCase):
                 self.assertEqual(out, f"<b><u>{content}<e><a>")
 
     def test_per_role_ends_and_open_suffix_fallbacks(self):
+        """Test per role ends and open suffix fallbacks."""
         # All three optionals None -> turn_end / assistant_prefix fallbacks.
         fmt = self._fmt()
         msgs = (
@@ -1005,6 +1054,7 @@ class TestRenderValidation(unittest.TestCase):
         self.assertTrue(fmt4.render((real_core.Message("user", "U"),)).endswith("<a>"))
 
     def test_repeat_bos_counts(self):
+        """Test repeat bos counts."""
         for n in (1, 3, 5):
             with self.subTest(n=n):
                 fmt = real_core.Format("rb", "<B>", "[U]", "[A]", "<E>", repeat_bos=True)
@@ -1123,6 +1173,7 @@ MUTANTS: list[tuple[str, str, str, int]] = [
 
 
 def _load_mutant(name: str, old: str, new: str, count: int):
+    """Load mutant."""
     src = CORE_SRC.read_text(encoding="utf-8")
     found = src.count(old)
     if found != count:
@@ -1146,7 +1197,10 @@ def _load_mutant(name: str, old: str, new: str, count: int):
 
 
 class TestMutantSensitivity(unittest.TestCase):
+    """Test mutant sensitivity."""
+
     def test_all_mutants_caught(self):
+        """Test all mutants caught."""
         self.addCleanup(shutil.rmtree, MUTANT_DIR, True)
         caught: list[str] = []
         for name, old, new, count in MUTANTS:

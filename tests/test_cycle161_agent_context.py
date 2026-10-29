@@ -16,6 +16,8 @@ from tools import agent_context as context
 
 
 class AgentContextTests(unittest.TestCase):
+    """Agent context tests."""
+
     def setUp(self):
         """Purpose: Isolate state
         Inputs: temporary filesystem

@@ -189,6 +189,7 @@ class _Child:
 
     @staticmethod
     def _pump(pipe, buf: bytearray) -> None:
+        """Pump."""
         try:
             while True:
                 chunk = pipe.read(65536)
@@ -207,14 +208,17 @@ class _Child:
         return time.monotonic() - self._t0
 
     def stdout_bytes(self) -> bytes:
+        """Stdout bytes."""
         with self._lock:
             return bytes(self._stdout)
 
     def stderr_bytes(self) -> bytes:
+        """Stderr bytes."""
         with self._lock:
             return bytes(self._stderr)
 
     def wait(self, timeout: float) -> int:
+        """Wait."""
         try:
             return self._proc.wait(timeout=timeout)
         finally:
@@ -222,6 +226,7 @@ class _Child:
                 thread.join(timeout=5)
 
     def kill(self) -> None:
+        """Kill."""
         # Safe after wait(): Popen.kill skips signalling a reaped process,
         # and send_signal swallows ProcessLookupError for the narrow race.
         self._proc.kill()
@@ -249,7 +254,10 @@ def _send(pid: int, sig: int) -> bool:
 
 @unittest.skipUnless(_POSIX, "sends POSIX signals")
 class DebugScriptSignalTests(unittest.TestCase):
+    """Debug script signal tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.tmp = _scratch("dbg")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         _write_fixture(self.tmp)
@@ -257,6 +265,7 @@ class DebugScriptSignalTests(unittest.TestCase):
         (self.tmp / "long.script").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _spawn(self) -> _Child:
+        """Spawn."""
         return _Child(
             [
                 sys.executable,
@@ -272,11 +281,13 @@ class DebugScriptSignalTests(unittest.TestCase):
         )
 
     def _in_window(self, child: _Child) -> _Child:
+        """In window."""
         ready = _wait_until(lambda: len(child.stdout_bytes()) > 0, 60)
         self.assertTrue(ready, "child printed nothing; no interruptible window observed")
         return child
 
     def _finish(self, child: _Child, timeout: float = 60) -> tuple[int, str]:
+        """Finish."""
         try:
             rc = child.wait(timeout)
         except subprocess.TimeoutExpired:
@@ -286,6 +297,7 @@ class DebugScriptSignalTests(unittest.TestCase):
         return rc, child.stderr_bytes().decode("utf-8", errors="replace")
 
     def test_sigint_exit_130_clean_stderr_no_traceback(self) -> None:
+        """Test sigint exit 130 clean stderr no traceback."""
         child = self._in_window(self._spawn())
         _send(child.pid, signal.SIGINT)
         rc, err = self._finish(child)
@@ -294,6 +306,7 @@ class DebugScriptSignalTests(unittest.TestCase):
         self.assertEqual(err.strip().splitlines()[-1], _INTERRUPTED_LINE)
 
     def test_double_sigint_still_terminates_no_hang_no_traceback(self) -> None:
+        """Test double sigint still terminates no hang no traceback."""
         child = self._in_window(self._spawn())
         _send(child.pid, signal.SIGINT)
         time.sleep(0.05)
@@ -304,6 +317,7 @@ class DebugScriptSignalTests(unittest.TestCase):
         self.assertNotIn("Traceback", err)
 
     def test_sigterm_default_disposition_pinned(self) -> None:
+        """Test sigterm default disposition pinned."""
         child = self._in_window(self._spawn())
         _send(child.pid, signal.SIGTERM)
         rc, err = self._finish(child)
@@ -319,6 +333,7 @@ class DebugScriptSignalTests(unittest.TestCase):
 
 
 def _heavy_deps_available() -> bool:
+    """Heavy deps available."""
     return all(
         importlib.util.find_spec(name) is not None
         for name in ("torch", "transformers", "safetensors", "tokenizers")
@@ -360,8 +375,11 @@ def _build_tiny_gpt2(root: Path) -> None:
     "run explicitly with MPL_RUN_SLOW_SIGNAL_TESTS=1",
 )
 class RunSignalTests(unittest.TestCase):
+    """Run signal tests."""
+
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         cls.tmp = _scratch("run")
         _write_fixture(cls.tmp, search_cases=4)
         cls.model_dir = cls.tmp / "tiny-gpt2"
@@ -370,9 +388,11 @@ class RunSignalTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        """Tear down the test fixture."""
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def _spawn_run(self, outdir: Path) -> tuple[_Child, Path]:
+        """Spawn run."""
         # Deterministic readiness: the child writes the marker file right
         # after installing its SIGINT/SIGTERM handlers (see the
         # MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE hook in cli.py), so the test signals
@@ -410,6 +430,7 @@ class RunSignalTests(unittest.TestCase):
         return child, marker
 
     def _in_generation_window(self, child: _Child, outdir: Path, marker: Path) -> _Child:
+        """In generation window."""
         # The CLI claims the output dir before backend init: its appearance
         # proves we are at-or-past the claim.
         claimed = _wait_until(outdir.exists, 120)
@@ -428,6 +449,7 @@ class RunSignalTests(unittest.TestCase):
         return child
 
     def _assert_no_partial_report(self, outdir: Path) -> None:
+        """Assert no partial report."""
         results = outdir / "results.json"
         report = outdir / "report.html"
         if not outdir.exists():
@@ -443,6 +465,7 @@ class RunSignalTests(unittest.TestCase):
         self.assertTrue(report.is_file())
 
     def test_sigint_during_run_exit_130_no_partial_output(self) -> None:
+        """Test sigint during run exit 130 no partial output."""
         outdir = self.tmp / "sigint-out"
         child, marker = self._spawn_run(outdir)
         child = self._in_generation_window(child, outdir, marker)
@@ -459,6 +482,7 @@ class RunSignalTests(unittest.TestCase):
         self._assert_no_partial_report(outdir)
 
     def test_sigterm_during_run_drives_cooperative_cancel(self) -> None:
+        """Test sigterm during run drives cooperative cancel."""
         outdir = self.tmp / "sigterm-out"
         child, marker = self._spawn_run(outdir)
         child = self._in_generation_window(child, outdir, marker)
@@ -497,13 +521,16 @@ class _SignallingBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return (1, 2, 3)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "yo"
 
     def generate(self, input_ids, *, max_new_tokens: int, seed: int, cancel: Event) -> Generation:
+        """Generate."""
         self.calls += 1
         if self.mode == "sigint-once":
             os.kill(os.getpid(), signal.SIGINT)
@@ -522,6 +549,7 @@ class _SignallingBackend:
 
 
 def _backend_with(mode: str):
+    """Backend with."""
     cls = type(f"_Backend_{mode}", (_SignallingBackend,), {"mode": mode})
     return cls
 
@@ -530,11 +558,13 @@ class RunMainSignalTests(unittest.TestCase):
     """Real signals through the real cli.main handler installation."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.tmp = _scratch("main")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.fixture = _write_fixture(self.tmp)
 
     def _run_main(self, backend_cls) -> tuple[int, Path, str, str]:
+        """Run main."""
         outdir = self.tmp / "report"
         argv = [
             "run",
@@ -561,6 +591,7 @@ class RunMainSignalTests(unittest.TestCase):
         return rc, outdir, stdout.getvalue(), stderr.getvalue()
 
     def _assert_cancelled_report(self, outdir: Path, err: str) -> None:
+        """Assert cancelled report."""
         self.assertNotIn("Traceback", err)
         doc = json.loads((outdir / "results.json").read_text(encoding="utf-8"))
         self.assertEqual(doc["decision"], "cancelled")
@@ -568,16 +599,19 @@ class RunMainSignalTests(unittest.TestCase):
         self.assertTrue((outdir / "report.html").is_file())
 
     def test_sigint_during_generate_yields_cancelled_report_and_130(self) -> None:
+        """Test sigint during generate yields cancelled report and 130."""
         rc, outdir, _out, err = self._run_main(_backend_with("sigint-once"))
         self.assertEqual(rc, 130)
         self._assert_cancelled_report(outdir, err)
 
     def test_double_sigint_during_generate_no_hang(self) -> None:
+        """Test double sigint during generate no hang."""
         rc, outdir, _out, err = self._run_main(_backend_with("sigint-twice"))
         self.assertEqual(rc, 130)
         self._assert_cancelled_report(outdir, err)
 
     def test_sigterm_during_generate_drives_cooperative_cancel(self) -> None:
+        """Test sigterm during generate drives cooperative cancel."""
         # Without the cycle-89 SIGTERM wiring this would kill the test
         # process itself; with it, SIGTERM behaves exactly like SIGINT.
         rc, outdir, _out, err = self._run_main(_backend_with("sigterm-once"))
@@ -585,6 +619,7 @@ class RunMainSignalTests(unittest.TestCase):
         self._assert_cancelled_report(outdir, err)
 
     def test_keyboardinterrupt_in_generate_cleans_claimed_dir(self) -> None:
+        """Test keyboardinterrupt in generate cleans claimed dir."""
         rc, outdir, _out, err = self._run_main(_backend_with("raise-ki"))
         self.assertEqual(rc, 130)
         self.assertNotIn("Traceback", err)
@@ -595,7 +630,10 @@ class RunMainSignalTests(unittest.TestCase):
 
 
 class RunExperimentPropagationTests(unittest.TestCase):
+    """Run experiment propagation tests."""
+
     def test_keyboardinterrupt_in_generate_propagates_unchanged(self) -> None:
+        """Test keyboardinterrupt in generate propagates unchanged."""
         tmp = _scratch("propexp")
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         split = load_dataset(str(_write_fixture(tmp)))
@@ -619,11 +657,13 @@ class SaveReportAtomicityTests(unittest.TestCase):
     """Fault-injecting writer: KeyboardInterrupt mid-write must leave nothing."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.tmp = _scratch("report")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     @staticmethod
     def _result() -> dict:
+        """Result."""
         return {
             "schema_version": 1,
             "decision": "cancelled",
@@ -635,16 +675,19 @@ class SaveReportAtomicityTests(unittest.TestCase):
 
     @staticmethod
     def _boom_fdopen(fail_on: int):
+        """Boom fdopen."""
         real_fdopen = os.fdopen
         state = {"calls": 0}
 
         def fdopen(fd, *args, **kwargs):
+            """Fdopen."""
             handle = real_fdopen(fd, *args, **kwargs)
             state["calls"] += 1
             if state["calls"] == fail_on:
                 original_write = handle.write
 
                 def write_and_boom(text: str) -> None:
+                    """Write and boom."""
                     original_write(text[:16])
                     raise KeyboardInterrupt("injected mid-write")
 
@@ -654,12 +697,14 @@ class SaveReportAtomicityTests(unittest.TestCase):
         return fdopen
 
     def _assert_no_report_files(self, target: Path) -> None:
+        """Assert no report files."""
         self.assertFalse(
             (target / "results.json").exists(), "half-written results.json left behind"
         )
         self.assertFalse((target / "report.html").exists(), "half-written report.html left behind")
 
     def test_keyboardinterrupt_during_results_json_write_leaves_no_partial(self) -> None:
+        """Test keyboardinterrupt during results json write leaves no partial."""
         target = self.tmp / "report"
         with (
             mock.patch.object(os, "fdopen", self._boom_fdopen(fail_on=1)),
@@ -669,6 +714,7 @@ class SaveReportAtomicityTests(unittest.TestCase):
         self._assert_no_report_files(target)
 
     def test_keyboardinterrupt_during_report_html_write_removes_pair(self) -> None:
+        """Test keyboardinterrupt during report html write removes pair."""
         target = self.tmp / "report"
         with (
             mock.patch.object(os, "fdopen", self._boom_fdopen(fail_on=2)),

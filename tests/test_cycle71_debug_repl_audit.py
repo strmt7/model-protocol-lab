@@ -64,10 +64,12 @@ class OrdTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token_id) for token_id in token_ids)
 
 
@@ -76,10 +78,12 @@ class ExplodingTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         raise RuntimeError("encode exploded")
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         raise RuntimeError("decode exploded")
 
 
@@ -90,14 +94,17 @@ class CountTokenizer:
         self._count = count
 
     def encode(self, text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         return tuple(range(self._count))
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         return ""
 
 
 def _make_split() -> Split:
+    """Make split."""
     search = (
         Fixture(
             id="s1",
@@ -162,6 +169,7 @@ def _run(shell: DebugShell, buf: io.StringIO, *commands: str) -> str:
 
 
 def _transcript(shell: DebugShell) -> str:
+    """Transcript."""
     return "".join(shell._transcript)
 
 
@@ -217,6 +225,7 @@ class _Deterministic:
         self._state = seed
 
     def below(self, n: int) -> int:
+        """Below."""
         self._state = (self._state * 6364136223846793005 + 1442695040888963407) % 2**64
         return self._state % n
 
@@ -226,9 +235,11 @@ class TestIdListGrammar(unittest.TestCase):
 
     @staticmethod
     def _parse(value: str, what: str = "x", max_len: int = 16) -> tuple[int, ...]:
+        """Parse."""
         return debug_module._parse_id_list(value, what=what, max_len=max_len)
 
     def test_valid_cases(self) -> None:
+        """Test valid cases."""
         self.assertEqual(self._parse("5"), (5,))
         self.assertEqual(self._parse("1,2,3"), (1, 2, 3))
         self.assertEqual(self._parse("007"), (7,))
@@ -238,6 +249,7 @@ class TestIdListGrammar(unittest.TestCase):
         self.assertEqual(self._parse("1,\t2"), (1, 2))
 
     def test_rejects_malformed(self) -> None:
+        """Test rejects malformed."""
         for bad in (
             "",
             "   ",
@@ -260,11 +272,13 @@ class TestIdListGrammar(unittest.TestCase):
                 self._parse(bad)
 
     def test_rejects_over_int31(self) -> None:
+        """Test rejects over int31."""
         with self.assertRaises(ValueError) as ctx:
             self._parse("2147483648")
         self.assertIn("token IDs must be < 2^31", str(ctx.exception))
 
     def test_error_names_what_and_max_len(self) -> None:
+        """Test error names what and max len."""
         with self.assertRaises(ValueError) as ctx:
             self._parse("nope", what="boundary", max_len=16)
         self.assertEqual(
@@ -279,6 +293,7 @@ class TestIdListGrammar(unittest.TestCase):
         )
 
     def test_max_len_enforced(self) -> None:
+        """Test max len enforced."""
         self.assertEqual(self._parse(",".join(["1"] * 16), max_len=16), (1,) * 16)
         with self.assertRaises(ValueError):
             self._parse(",".join(["1"] * 17), max_len=16)
@@ -288,6 +303,7 @@ class TestIdListCommandBounds(unittest.TestCase):
     """Minimal pairs at the command level: 16 vs 17, 4096 vs 4097."""
 
     def test_boundary_16_ok_17_rejected(self) -> None:
+        """Test boundary 16 ok 17 rejected."""
         shell, buf = _make_shell()
         stop, out = _one(shell, buf, ".boundary " + ",".join(str(i) for i in range(16)))
         self.assertFalse(stop)
@@ -297,6 +313,7 @@ class TestIdListCommandBounds(unittest.TestCase):
         self.assertIn("error: boundary: expected 1-16 comma-separated ASCII token IDs", out)
 
     def test_stream_4096_ok_4097_rejected(self) -> None:
+        """Test stream 4096 ok 4097 rejected."""
         shell, buf = _make_shell()
         stop, out = _one(shell, buf, ".stream " + ",".join(str(i) for i in range(4096)))
         self.assertFalse(stop)
@@ -306,6 +323,7 @@ class TestIdListCommandBounds(unittest.TestCase):
         self.assertIn("error: stream: expected 1-4096 comma-separated ASCII token IDs", out)
 
     def test_step_typed_4096_ok(self) -> None:
+        """Test step typed 4096 ok."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1")
         _, out = _one(shell, buf, ".step " + ",".join(["2"] * 4096))
@@ -316,6 +334,7 @@ class TestStepWalkOracle(unittest.TestCase):
     """Differential: every .step line must match the brute-force oracles."""
 
     def test_hand_computed_walk(self) -> None:
+        """Test hand computed walk."""
         # boundary=(5,6,7), typed stream=(5,6,5,6,7): overhangs and the
         # boundary position below are computed by hand, not from the code.
         shell, buf = _make_shell(tokenizer="none")
@@ -333,6 +352,7 @@ class TestStepWalkOracle(unittest.TestCase):
         )
 
     def test_random_walks_match_brute_force(self) -> None:
+        """Test random walks match brute force."""
         rng = _Deterministic(20261016)
         for _ in range(25):
             boundary = tuple(rng.below(5) for _ in range(rng.below(4) + 1))
@@ -350,6 +370,7 @@ class TestStepWalkOracle(unittest.TestCase):
             self.assertEqual(out.splitlines(), expected)
 
     def test_recorded_walk_matches_brute_force(self) -> None:
+        """Test recorded walk matches brute force."""
         shell, buf = _make_shell(tokenizer="none")
         boundary = (3, 1, 3)
         stream = (3, 1, 2, 3, 1, 3)
@@ -365,6 +386,7 @@ class TestStepWalkOracle(unittest.TestCase):
             )
 
     def test_single_token_boundary(self) -> None:
+        """Test single token boundary."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 9")
         _, out = _one(shell, buf, ".step 4,9")
@@ -377,6 +399,7 @@ class TestStepWalkOracle(unittest.TestCase):
         )
 
     def test_typed_stream_does_not_touch_recorded_walk(self) -> None:
+        """Test typed stream does not touch recorded walk."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1")
         _one(shell, buf, ".stream 7,8")
@@ -386,6 +409,7 @@ class TestStepWalkOracle(unittest.TestCase):
         self.assertIn("token 2/2 id=8", out)
 
     def test_positions_are_1_based(self) -> None:
+        """Test positions are 1 based."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1")
         _one(shell, buf, ".stream 2,3")
@@ -397,6 +421,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
     """State carried across commands in one session; failures keep state."""
 
     def test_long_scripted_session_via_cmdloop(self) -> None:
+        """Test long scripted session via cmdloop."""
         shell, buf = _make_shell(tokenizer="none")
         out = _run(
             shell,
@@ -441,6 +466,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("...> .\n", transcript)
 
     def test_same_session_twice_is_byte_identical(self) -> None:
+        """Test same session twice is byte identical."""
         commands = (
             ".families",
             ".use llama3",
@@ -463,6 +489,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertEqual(out1, out2)
 
     def test_say_buffer_survives_fixture_switch(self) -> None:
+        """Test say buffer survives fixture switch."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _one(shell, buf, "user: hi")
@@ -472,6 +499,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("buffered messages=1", out)
 
     def test_say_buffer_survives_use_switch(self) -> None:
+        """Test say buffer survives use switch."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _one(shell, buf, "user: hi")
@@ -481,6 +509,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertTrue(out.startswith("render: family=llama3 buffered messages=1"))
 
     def test_failed_use_keeps_family(self) -> None:
+        """Test failed use keeps family."""
         shell, buf = _make_shell()
         _one(shell, buf, ".use llama3")
         _, out = _one(shell, buf, ".use nosuchfamily")
@@ -490,6 +519,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertTrue(out.startswith("render: family=llama3 "))
 
     def test_failed_fixture_keeps_index(self) -> None:
+        """Test failed fixture keeps index."""
         shell, buf = _make_shell()
         _one(shell, buf, ".fixture 2")
         _, out = _one(shell, buf, ".fixture 99")
@@ -499,6 +529,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("2: s2 *", out)
 
     def test_failed_boundary_keeps_old_boundary(self) -> None:
+        """Test failed boundary keeps old boundary."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 7")
         _, out = _one(shell, buf, ".boundary notanid")
@@ -508,6 +539,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("boundary_at=0", out)
 
     def test_failed_stream_keeps_stream_and_position(self) -> None:
+        """Test failed stream keeps stream and position."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 9")
         _one(shell, buf, ".stream 1,2,3")
@@ -518,6 +550,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("token 2/3 id=2", out)
 
     def test_new_stream_resets_walk(self) -> None:
+        """Test new stream resets walk."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1")
         _one(shell, buf, ".stream 1,2")
@@ -527,6 +560,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("token 1/2 id=9", out)
 
     def test_boundary_change_does_not_reset_walk(self) -> None:
+        """Test boundary change does not reset walk."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1")
         _one(shell, buf, ".stream 5,6")
@@ -536,6 +570,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn("token 2/2 id=6", out)
 
     def test_nested_say_line_is_content_buffer_kept(self) -> None:
+        """Test nested say line is content buffer kept."""
         # Via dispatch, a ".say" line during entry is message content (the
         # "already entering" guard in _cmd_say is direct-call-only); the
         # buffer must keep both lines, unclobbered.
@@ -556,6 +591,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn(expected_body, out)
 
     def test_direct_double_say_call_rejected_buffer_untouched(self) -> None:
+        """Test direct double say call rejected buffer untouched."""
         shell, _ = _make_shell()
         with contextlib.redirect_stdout(io.StringIO()):
             shell._cmd_say("")
@@ -565,6 +601,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertEqual(shell._say_buffer, [])
 
     def test_say_roles_alternate_starting_with_user(self) -> None:
+        """Test say roles alternate starting with user."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _one(shell, buf, "first")
@@ -582,6 +619,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn(expected_body, out)
 
     def test_quit_line_inside_say_is_content(self) -> None:
+        """Test quit line inside say is content."""
         # Dot-commands are unavailable during .say: even ".quit" is content.
         shell, buf = _make_shell()
         stop, _ = _one(shell, buf, ".say")
@@ -597,6 +635,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertTrue(stop)
 
     def test_dot_read_line_inside_say_is_content(self) -> None:
+        """Test dot read line inside say is content."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _one(shell, buf, ".read /tmp/does_not_exist_xyz")
@@ -606,6 +645,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn(".read /tmp/does_not_exist_xyz", out)
 
     def test_comment_line_inside_say_is_content_blank_line_dropped(self) -> None:
+        """Test comment line inside say is content blank line dropped."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _one(shell, buf, "")  # blank lines never reach the buffer (onecmd drops them)
@@ -625,6 +665,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertIn(expected_body, out)
 
     def test_eof_line_inside_say_ends_session(self) -> None:
+        """Test eof line inside say ends session."""
         # Pinned behavior: a literal "EOF" line always ends the session, even
         # mid-.say. This is the safe choice -- cmd maps a real stdin EOF
         # (Ctrl-D) to the "EOF" line, and swallowing it as buffer content
@@ -636,6 +677,7 @@ class TestMultiTurnSessionState(unittest.TestCase):
         self.assertTrue(stop)
 
     def test_eof_line_in_script_ends_session(self) -> None:
+        """Test eof line in script ends session."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
@@ -645,38 +687,47 @@ class TestMultiTurnSessionState(unittest.TestCase):
 
 
 class TestCommandParsingEdges(unittest.TestCase):
+    """Test command parsing edges."""
+
     def test_uppercase_dot_command_rejected(self) -> None:
+        """Test uppercase dot command rejected."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".HELP")
         self.assertIn("error: unknown dot-command '.HELP' (try .help)", out)
 
     def test_uppercase_bare_word_rejected(self) -> None:
+        """Test uppercase bare word rejected."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, "QUIT")
         self.assertIn("error: unknown command 'QUIT'; dot-commands start with '.'", out)
 
     def test_tab_between_command_and_arg(self) -> None:
+        """Test tab between command and arg."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".fixture\t2")
         self.assertIn("selected fixture 2: s2", out)
         self.assertEqual(shell.prompt, "mpl:chatml fixture-2 > ")
 
     def test_dotted_suffix_is_unknown(self) -> None:
+        """Test dotted suffix is unknown."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".help.extra")
         self.assertIn("error: unknown dot-command '.help.extra'", out)
 
     def test_double_dot_is_unknown(self) -> None:
+        """Test double dot is unknown."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, "..")
         self.assertIn("error: unknown dot-command '..'", out)
 
     def test_unicode_dot_command_error_keeps_unicode(self) -> None:
+        """Test unicode dot command error keeps unicode."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".\u00fc\u00f1\u00eec\u00f8de")
         self.assertIn("error: unknown dot-command '.\u00fc\u00f1\u00eec\u00f8de'", out)
 
     def test_very_long_unknown_command_does_not_crash(self) -> None:
+        """Test very long unknown command does not crash."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, "." + "x" * 20000)
         self.assertIn("error: unknown dot-command", out)
@@ -684,24 +735,28 @@ class TestCommandParsingEdges(unittest.TestCase):
         self.assertTrue(stop)
 
     def test_help_pattern_is_case_insensitive(self) -> None:
+        """Test help pattern is case insensitive."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".help TOKEN")
         self.assertIn("matching commands:", out)
         self.assertIn(".tokens", out)
 
     def test_help_dotted_abbreviation(self) -> None:
+        """Test help dotted abbreviation."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".help .ren")
         self.assertIn(".render:", out)
         self.assertIn("Usage: .render", out)
 
     def test_help_with_blank_arg_lists_all(self) -> None:
+        """Test help with blank arg lists all."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".help ")
         self.assertIn(".audit", out)
         self.assertIn(".quit", out)
 
     def test_help_lists_exactly_16_commands(self) -> None:
+        """Test help lists exactly 16 commands."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".help")
         names = [line.split()[0] for line in out.splitlines() if line.strip()]
@@ -728,11 +783,13 @@ class TestCommandParsingEdges(unittest.TestCase):
         )
 
     def test_lone_dot_is_ambiguous(self) -> None:
+        """Test lone dot is ambiguous."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".")
         self.assertIn("error: ambiguous command '.'; matches:", out)
 
     def test_fixture_zero_negative_and_overflow_rejected(self) -> None:
+        """Test fixture zero negative and overflow rejected."""
         shell, buf = _make_shell()
         for bad in ("0", "-1", "4", "1 2"):
             _, out = _one(shell, buf, f".fixture {bad}")
@@ -740,6 +797,7 @@ class TestCommandParsingEdges(unittest.TestCase):
         self.assertEqual(shell.prompt, "mpl:chatml fixture-1 > ")
 
     def test_fixture_superscript_digit_rejected(self) -> None:
+        """Test fixture superscript digit rejected."""
         # "\u00b9".isdigit() is True but isascii() is False: must not parse
         # as a number, and must not crash the session.
         shell, buf = _make_shell()
@@ -747,6 +805,7 @@ class TestCommandParsingEdges(unittest.TestCase):
         self.assertIn("error: unknown fixture", out)
 
     def test_fixture_nul_byte_id_rejected_cleanly(self) -> None:
+        """Test fixture nul byte id rejected cleanly."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".fixture \x00")
         self.assertIn("error: unknown fixture", out)
@@ -754,11 +813,13 @@ class TestCommandParsingEdges(unittest.TestCase):
         self.assertTrue(stop)
 
     def test_use_blank_arg_is_usage_error(self) -> None:
+        """Test use blank arg is usage error."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".use ")
         self.assertIn("error: usage: .use <family> (see .families)", out)
 
     def test_q_with_trailing_space_still_quits(self) -> None:
+        """Test q with trailing space still quits."""
         shell, buf = _make_shell()
         stop, _ = _one(shell, buf, ".q ")
         self.assertTrue(stop)
@@ -768,6 +829,7 @@ class TestErrorRecovery(unittest.TestCase):
     """Bad input prints ``error: ...``; session state stays valid."""
 
     def test_render_with_exploding_tokenizer_recovers(self) -> None:
+        """Test render with exploding tokenizer recovers."""
         shell, buf = _make_shell(tokenizer="boom")
         _, out = _one(shell, buf, ".render")
         self.assertIn("error: encode exploded", out)
@@ -779,6 +841,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertTrue(stop)
 
     def test_tokens_with_exploding_tokenizer_recovers(self) -> None:
+        """Test tokens with exploding tokenizer recovers."""
         shell, buf = _make_shell(tokenizer="boom")
         _, out = _one(shell, buf, ".tokens")
         self.assertIn("error: encode exploded", out)
@@ -786,6 +849,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertNotIn("error:", out)
 
     def test_step_decode_of_huge_id_degrades(self) -> None:
+        """Test step decode of huge id degrades."""
         # chr(2**31 - 1) raises in the synthetic tokenizer: _print_step must
         # degrade to no text= part, still reporting overhang/boundary.
         shell, buf = _make_shell(tokenizer="ord")
@@ -795,6 +859,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertNotIn("text=", out)
 
     def test_step_without_tokenizer_has_no_text_part(self) -> None:
+        """Test step without tokenizer has no text part."""
         shell, buf = _make_shell(tokenizer="none")
         _one(shell, buf, ".boundary 1,2")
         _, out = _one(shell, buf, ".step 1,2")
@@ -802,6 +867,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIn("token 2/2 id=2 overhang=2/2 boundary_at=0", out)
 
     def test_say_byte_overflow_discards_buffer_and_recovers(self) -> None:
+        """Test say byte overflow discards buffer and recovers."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         _, out = _one(shell, buf, "x" * 1_000_001)
@@ -823,6 +889,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIn("buffered 1 message(s)", out)
 
     def test_say_exactly_1mb_accepted(self) -> None:
+        """Test say exactly 1mb accepted."""
         # Minimal pair: exactly 1_000_000 bytes is accepted (> is the trigger).
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
@@ -832,6 +899,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIn("buffered 1 message(s)", out)
 
     def test_say_line_cap_error_keeps_buffer_then_finalizes(self) -> None:
+        """Test say line cap error keeps buffer then finalizes."""
         shell, buf = _make_shell()
         _one(shell, buf, ".say")
         for i in range(10_000):
@@ -846,6 +914,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIn("buffered 10000 message(s)", out)
 
     def test_error_inside_read_script_then_session_continues(self) -> None:
+        """Test error inside read script then session continues."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
@@ -862,6 +931,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIn("chatml", out)
 
     def test_read_missing_then_valid_script(self) -> None:
+        """Test read missing then valid script."""
         shell, buf = _make_shell()
         _, out = _one(shell, buf, ".read /tmp/definitely_missing_xyz_123")
         self.assertIn("error: unreadable script file", out)
@@ -877,11 +947,13 @@ class TestTranscriptBoundaries(unittest.TestCase):
 
     @staticmethod
     def _overflow(shell: DebugShell, buf: io.StringIO, cap: int, renders: int = 15) -> None:
+        """Overflow."""
         with mock.patch.object(debug_module, "_MAX_SAVE_BYTES", cap):
             for _ in range(renders):
                 _one(shell, buf, ".render")
 
     def test_truncation_invariants_with_small_cap(self) -> None:
+        """Test truncation invariants with small cap."""
         shell, buf = _make_shell()
         self._overflow(shell, buf, 2000)
         chunks = shell._transcript
@@ -895,12 +967,14 @@ class TestTranscriptBoundaries(unittest.TestCase):
         self.assertTrue(_transcript(shell).endswith("using family llama3\n"))
 
     def test_no_truncation_below_cap(self) -> None:
+        """Test no truncation below cap."""
         shell, buf = _make_shell()
         _one(shell, buf, ".fixtures")
         self.assertFalse(shell._transcript_truncated)
         self.assertNotIn("truncated", _transcript(shell))
 
     def test_truncated_transcript_saves_marker_first_and_fits(self) -> None:
+        """Test truncated transcript saves marker first and fits."""
         shell, buf = _make_shell()
         self._overflow(shell, buf, 2000)
         with tempfile.TemporaryDirectory() as tmp:
@@ -913,6 +987,7 @@ class TestTranscriptBoundaries(unittest.TestCase):
             self.assertIn("saved ", out)
 
     def test_format_ids_exactly_512_not_capped(self) -> None:
+        """Test format ids exactly 512 not capped."""
         shell, buf = _make_shell(tokenizer=CountTokenizer(512))
         _, out = _one(shell, buf, ".tokens")
         ids_line = out.splitlines()[1]
@@ -920,6 +995,7 @@ class TestTranscriptBoundaries(unittest.TestCase):
         self.assertNotIn("...", ids_line)
 
     def test_format_ids_513_capped_with_exact_total(self) -> None:
+        """Test format ids 513 capped with exact total."""
         shell, buf = _make_shell(tokenizer=CountTokenizer(513))
         _, out = _one(shell, buf, ".tokens")
         ids_line = out.splitlines()[1]
@@ -929,6 +1005,7 @@ class TestTranscriptBoundaries(unittest.TestCase):
         )
 
     def test_transcript_echo_order_matches_command_order(self) -> None:
+        """Test transcript echo order matches command order."""
         shell, buf = _make_shell()
         _one(shell, buf, ".families")
         _one(shell, buf, ".fixtures")
@@ -940,13 +1017,17 @@ class TestTranscriptBoundaries(unittest.TestCase):
 
 
 class TestReadScriptEdges(unittest.TestCase):
+    """Test read script edges."""
+
     @staticmethod
     def _write(tmp: str, name: str, text: str) -> Path:
+        """Write."""
         path = Path(tmp) / name
         path.write_text(text, encoding="utf-8")
         return path
 
     def test_read_script_with_say_block(self) -> None:
+        """Test read script with say block."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(
@@ -958,6 +1039,7 @@ class TestReadScriptEdges(unittest.TestCase):
         self.assertIn("messages=3", buf.getvalue())
 
     def test_read_script_crlf_line_endings(self) -> None:
+        """Test read script crlf line endings."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(tmp, "s.txt", ".say\r\nuser: hi\r\n.\r\n")
@@ -966,12 +1048,14 @@ class TestReadScriptEdges(unittest.TestCase):
             self.assertIn("buffered 1 message(s)", out)
 
     def test_read_empty_script(self) -> None:
+        """Test read empty script."""
         shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(tmp, "s.txt", "")
             self.assertFalse(shell.read_commands(script))
 
     def test_read_tilde_expands(self) -> None:
+        """Test read tilde expands."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
@@ -982,6 +1066,7 @@ class TestReadScriptEdges(unittest.TestCase):
         self.assertIn("chatml", out)
 
     def test_read_depth_restored_after_nested_read(self) -> None:
+        """Test read depth restored after nested read."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             inner = self._write(tmp, "inner.txt", ".families\n")
@@ -996,6 +1081,7 @@ class TestReadScriptEdges(unittest.TestCase):
             self.assertIn("s1", out)
 
     def test_read_depth_restored_after_failed_nested_read(self) -> None:
+        """Test read depth restored after failed nested read."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             # Self-recursive: terminates at the depth cap with an error.
@@ -1005,6 +1091,7 @@ class TestReadScriptEdges(unittest.TestCase):
         self.assertEqual(shell._read_depth, 0)
 
     def test_script_ending_mid_say_abandons_buffer_without_crash(self) -> None:
+        """Test script ending mid say abandons buffer without crash."""
         shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(tmp, "s.txt", ".say\nuser: hi\n")
@@ -1014,6 +1101,7 @@ class TestReadScriptEdges(unittest.TestCase):
 
 
 def _write_wordlevel_tokenizer_json(path: Path) -> None:
+    """Write wordlevel tokenizer json."""
     from tokenizers import Tokenizer, models, pre_tokenizers
 
     tok = Tokenizer(models.WordLevel(vocab={"hello": 0, "world": 1, "[UNK]": 2}, unk_token="[UNK]"))
@@ -1022,12 +1110,14 @@ def _write_wordlevel_tokenizer_json(path: Path) -> None:
 
 
 def _write_dataset(tmp: str) -> Path:
+    """Write dataset."""
     path = Path(tmp) / "ds.json"
     path.write_text(split_to_json_text(_make_split()), encoding="utf-8")
     return path
 
 
 def _namespace(**kwargs: Any) -> argparse.Namespace:
+    """Namespace."""
     base = {"dataset": None, "model": None, "script": None}
     base.update(kwargs)
     return argparse.Namespace(**base)
@@ -1038,10 +1128,12 @@ class TestFailClosedBackends(unittest.TestCase):
     """--model is tokenizer-only: synthetic backends, garbage weights."""
 
     def test_attach_tokenizer_missing_dir_raises_valueerror(self) -> None:
+        """Test attach tokenizer missing dir raises valueerror."""
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             attach_tokenizer(str(Path(tmp) / "nope"))
 
     def test_attach_tokenizer_file_path_raises_valueerror(self) -> None:
+        """Test attach tokenizer file path raises valueerror."""
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "file.bin"
             target.write_bytes(b"junk")
@@ -1049,6 +1141,7 @@ class TestFailClosedBackends(unittest.TestCase):
                 attach_tokenizer(target)
 
     def test_attach_tokenizer_never_reads_weight_files(self) -> None:
+        """Test attach tokenizer never reads weight files."""
         # The checkpoint dir carries garbage where weights would live. If
         # the loader touched anything but tokenizer.json, it would fail.
         with tempfile.TemporaryDirectory() as tmp:
@@ -1062,6 +1155,7 @@ class TestFailClosedBackends(unittest.TestCase):
             )
 
     def test_attach_tokenizer_import_error_before_filesystem(self) -> None:
+        """Test attach tokenizer import error before filesystem."""
         # With transformers unavailable, the ImportError surfaces before any
         # checkpoint parsing -- even for a perfectly valid directory.
         with (
@@ -1072,6 +1166,7 @@ class TestFailClosedBackends(unittest.TestCase):
             attach_tokenizer(tmp)
 
     def test_run_debug_oversized_tokenizer_json_collapses_to_fixed_code(self) -> None:
+        """Test run debug oversized tokenizer json collapses to fixed code."""
         with tempfile.TemporaryDirectory() as tmp:
             dataset = _write_dataset(tmp)
             ckpt = Path(tmp) / "ckpt"
@@ -1085,6 +1180,7 @@ class TestFailClosedBackends(unittest.TestCase):
             self.assertIn("debug: oversized_tokenizer_file", err.getvalue())
 
     def test_run_debug_bad_model_collapses_and_never_echoes_path(self) -> None:
+        """Test run debug bad model collapses and never echoes path."""
         with tempfile.TemporaryDirectory() as tmp:
             dataset = _write_dataset(tmp)
             err = io.StringIO()
@@ -1095,6 +1191,7 @@ class TestFailClosedBackends(unittest.TestCase):
             self.assertNotIn("nonexistent_ckpt_xyz", err.getvalue())
 
     def test_shell_with_real_attached_tokenizer_renders_exact_ids(self) -> None:
+        """Test shell with real attached tokenizer renders exact ids."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_wordlevel_tokenizer_json(root / "tokenizer.json")
@@ -1114,6 +1211,7 @@ class TestCliWiring(unittest.TestCase):
     """cli.py wires `mpl debug` to run_debug with dataset/model/script."""
 
     def test_debug_parser_flags(self) -> None:
+        """Test debug parser flags."""
         args = build_parser().parse_args(["debug", "--dataset", "ds.json"])
         self.assertEqual(args.command, "debug")
         self.assertEqual(args.dataset, Path("ds.json"))
@@ -1121,6 +1219,7 @@ class TestCliWiring(unittest.TestCase):
         self.assertIsNone(args.script)
 
     def test_debug_parser_model_and_script_flags(self) -> None:
+        """Test debug parser model and script flags."""
         args = build_parser().parse_args(
             ["debug", "--dataset", "ds.json", "--model", "ckpt", "--script", "s.txt"]
         )
@@ -1128,10 +1227,12 @@ class TestCliWiring(unittest.TestCase):
         self.assertEqual(args.script, Path("s.txt"))
 
     def test_debug_dataset_is_required(self) -> None:
+        """Test debug dataset is required."""
         with self.assertRaises(SystemExit):
             build_parser().parse_args(["debug"])
 
     def test_main_dispatches_debug_to_run_debug(self) -> None:
+        """Test main dispatches debug to run debug."""
         from model_protocol_lab import cli as cli_module
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1145,6 +1246,7 @@ class TestCliWiring(unittest.TestCase):
         self.assertEqual(namespace.dataset, dataset)
 
     def test_version_banner_matches_package(self) -> None:
+        """Test version banner matches package."""
         shell, _ = _make_shell(tokenizer="none")
         self.assertTrue((shell.intro or "").startswith(f"model-protocol-lab debug {__version__}\n"))
 

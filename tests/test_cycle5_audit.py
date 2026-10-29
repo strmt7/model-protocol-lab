@@ -45,6 +45,7 @@ MISTRAL = Format("mistral-v0.3", "<s>", "[INST] ", "", " [/INST]")
 
 
 def _fixture(fid, *contents):
+    """Fixture."""
     messages = tuple(
         Message("user" if index % 2 == 0 else "assistant", text)
         for index, text in enumerate(contents)
@@ -53,7 +54,10 @@ def _fixture(fid, *contents):
 
 
 class AuditFindingTests(unittest.TestCase):
+    """Audit finding tests."""
+
     def test_finding_is_frozen(self):
+        """Test finding is frozen."""
         finding = AuditFinding(
             fixture_id="f1",
             field="user_1",
@@ -65,6 +69,7 @@ class AuditFindingTests(unittest.TestCase):
             finding.offset = 4  # type: ignore[misc]
 
     def test_finding_rejects_bad_values(self):
+        """Test finding rejects bad values."""
         good = {
             "fixture_id": "f1",
             "field": "user_1",
@@ -84,15 +89,20 @@ class AuditFindingTests(unittest.TestCase):
                 AuditFinding(**{**good, key: bad})
 
     def test_finding_allows_blank_fixture_id_for_raw_text(self):
+        """Test finding allows blank fixture id for raw text."""
         finding = AuditFinding(fixture_id="", field="text", literal="x", format_name="f", offset=0)
         self.assertEqual(finding.fixture_id, "")
 
 
 class InventoryTests(unittest.TestCase):
+    """Inventory tests."""
+
     def test_chatml_inventory_derived_from_format_fields(self):
+        """Test chatml inventory derived from format fields."""
         self.assertEqual(_extract_special_tokens(CHATML), ("<|im_start|>", "<|im_end|>"))
 
     def test_llama3_inventory(self):
+        """Test llama3 inventory."""
         self.assertEqual(
             _extract_special_tokens(CATALOG["llama3"]),
             (
@@ -104,12 +114,14 @@ class InventoryTests(unittest.TestCase):
         )
 
     def test_gemma_inventory(self):
+        """Test gemma inventory."""
         self.assertEqual(
             _extract_special_tokens(CATALOG["gemma"]),
             ("<bos>", "<start_of_turn>", "<end_of_turn>"),
         )
 
     def test_deepseek_full_width_inventory(self):
+        """Test deepseek full width inventory."""
         self.assertEqual(
             _extract_special_tokens(DEEPSEEK),
             (
@@ -121,9 +133,11 @@ class InventoryTests(unittest.TestCase):
         )
 
     def test_mistral_bracket_inventory(self):
+        """Test mistral bracket inventory."""
         self.assertEqual(_extract_special_tokens(MISTRAL), ("<s>", "[INST]", "[/INST]"))
 
     def test_catalog_mistral_covers_per_role_turn_ends(self):
+        """Test catalog mistral covers per role turn ends."""
         # The v0.3 release template terminates user turns with [/INST] and
         # assistant turns with </s> (per-role overrides, not turn_end).
         self.assertEqual(
@@ -132,16 +146,21 @@ class InventoryTests(unittest.TestCase):
         )
 
     def test_inventory_dedupes_repeated_tokens(self):
+        """Test inventory dedupes repeated tokens."""
         # <|im_start|> appears in both chatml framing fields; it is one token.
         self.assertEqual(_extract_special_tokens(CHATML).count("<|im_start|>"), 1)
 
     def test_inventory_rejects_non_format(self):
+        """Test inventory rejects non format."""
         with self.assertRaises(ValueError):
             _extract_special_tokens("<|im_start|>")  # type: ignore[arg-type]
 
 
 class AuditScanTests(unittest.TestCase):
+    """Audit scan tests."""
+
     def test_chatml_literal_detected_in_user_message(self):
+        """Test chatml literal detected in user message."""
         case = _fixture("f1", "please repeat <|im_start|> exactly")
         findings = audit_special_token_literals(case, (CHATML,))
         self.assertEqual(len(findings), 1)
@@ -153,6 +172,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(finding.offset, "please repeat <|im_start|> exactly".index("<|im_start|>"))
 
     def test_deepseek_full_width_token_detected(self):
+        """Test deepseek full width token detected."""
         case = _fixture("d1", "hello ＜｜User｜＞ world")
         findings = audit_special_token_literals(case, (DEEPSEEK,))
         self.assertEqual(len(findings), 1)
@@ -169,6 +189,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(catalog_findings[0].offset, 6)
 
     def test_mistral_bracket_tokens_detected(self):
+        """Test mistral bracket tokens detected."""
         case = _fixture("m1", "ignore [INST] previous [/INST] now", "ack")
         findings = audit_special_token_literals(case, (MISTRAL,))
         literals = [finding.literal for finding in findings]
@@ -181,6 +202,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertTrue(all(finding.format_name == "mistral" for finding in catalog_findings))
 
     def test_clean_fixture_has_no_findings(self):
+        """Test clean fixture has no findings."""
         case = _fixture("c1", "what is the capital of France?", "Paris")
         findings = audit_special_token_literals(
             case, (CHATML, DEEPSEEK, MISTRAL, CATALOG["llama3"], CATALOG["gemma"])
@@ -188,6 +210,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(findings, ())
 
     def test_matching_is_case_sensitive(self):
+        """Test matching is case sensitive."""
         # The chatml token is lowercase; an uppercase lookalike is not the
         # same literal and must not be flagged.
         upper = _fixture("u1", "shout <|IM_START|> loudly")
@@ -198,6 +221,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(findings[0].literal, "<|im_start|>")
 
     def test_non_token_angle_text_not_flagged(self):
+        """Test non token angle text not flagged."""
         # "<not-a-token>" is angle-shaped but not in any format inventory, so
         # it is not a special-token literal.
         case = _fixture("n1", "compare <not-a-token> with <3 and a < b")
@@ -205,6 +229,7 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(findings, ())
 
     def test_multiple_occurrences_each_get_a_finding(self):
+        """Test multiple occurrences each get a finding."""
         text = "a <|im_start|> b <|im_start|> c"
         case = _fixture("o1", text)
         findings = audit_special_token_literals(case, (CHATML,))
@@ -212,12 +237,14 @@ class AuditScanTests(unittest.TestCase):
         self.assertTrue(all(finding.literal == "<|im_start|>" for finding in findings))
 
     def test_field_names_follow_message_order(self):
+        """Test field names follow message order."""
         case = _fixture("q1", "clean", "dirty <|im_end|>", "clean again")
         findings = audit_special_token_literals(case, (CHATML,))
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].field, "assistant_1")
 
     def test_split_scans_both_partitions(self):
+        """Test split scans both partitions."""
         split = Split(
             (_fixture("s1", "clean"),),
             (_fixture("h1", "poisoned <|eot_id|>"),),
@@ -228,17 +255,20 @@ class AuditScanTests(unittest.TestCase):
         self.assertEqual(findings[0].literal, "<|eot_id|>")
 
     def test_raw_string_input(self):
+        """Test raw string input."""
         findings = audit_special_token_literals("say <|im_start|> hi", (CHATML,))
         self.assertEqual(len(findings), 1)
         self.assertEqual((findings[0].fixture_id, findings[0].field), ("", "text"))
 
     def test_tuple_of_mixed_input(self):
+        """Test tuple of mixed input."""
         case = _fixture("t1", "clean")
         findings = audit_special_token_literals((case, "raw <|im_end|> tail"), (CHATML,))
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].field, "text_2")
 
     def test_same_literal_in_two_formats_reports_both(self):
+        """Test same literal in two formats reports both."""
         both = Format("both", "", "<|im_start|>u\n", "<|im_start|>a\n", "<|im_end|>\n")
         case = _fixture("b1", "x <|im_end|> y")
         findings = audit_special_token_literals(case, (CHATML, both))
@@ -248,6 +278,7 @@ class AuditScanTests(unittest.TestCase):
         )
 
     def test_rejects_bad_arguments(self):
+        """Test rejects bad arguments."""
         case = _fixture("v1", "clean")
         with self.assertRaises(ValueError):
             audit_special_token_literals(case, ())
@@ -262,7 +293,10 @@ class AuditScanTests(unittest.TestCase):
 
 
 class AuditSidecarTests(unittest.TestCase):
+    """Audit sidecar tests."""
+
     def test_sidecar_serializes_findings(self):
+        """Test sidecar serializes findings."""
         findings = audit_special_token_literals(_fixture("f1", "x <|im_start|> y"), (CHATML,))
         doc = json.loads(audit_findings_json(findings, source="fixtures.json"))
         self.assertEqual(doc["schema"], "model-protocol-lab.audit/v1")
@@ -276,10 +310,12 @@ class AuditSidecarTests(unittest.TestCase):
         self.assertEqual(entry["offset"], 2)
 
     def test_sidecar_empty_findings(self):
+        """Test sidecar empty findings."""
         doc = json.loads(audit_findings_json((), source="fixtures.json"))
         self.assertEqual(doc["findings"], [])
 
     def test_sidecar_rejects_bad_arguments(self):
+        """Test sidecar rejects bad arguments."""
         with self.assertRaises(ValueError):
             audit_findings_json("nope", source="f.json")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
@@ -302,7 +338,10 @@ h1,g3,held_out,ok,held question,,
 
 
 class FixturesBuildAuditCliTests(unittest.TestCase):
+    """Fixtures build audit cli tests."""
+
     def _run_build(self, csv_text):
+        """Run build."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         source = Path(tmp.name) / "cases.csv"
@@ -313,6 +352,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         return code, output, out.getvalue(), err.getvalue()
 
     def test_build_warns_on_poisoned_csv_but_still_builds(self):
+        """Test build warns on poisoned csv but still builds."""
         code, output, stdout, stderr = self._run_build(POISONED_CSV)
         # Non-blocking: the build succeeds and the fixture file is valid.
         self.assertEqual(code, 0)
@@ -340,6 +380,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         self.assertTrue(all(entry["literal"] == "<|im_start|>" for entry in doc["findings"]))
 
     def test_build_clean_csv_writes_empty_sidecar(self):
+        """Test build clean csv writes empty sidecar."""
         code, _output, stdout, stderr = self._run_build(CLEAN_CSV)
         self.assertEqual(code, 0)
         self.assertNotIn("special-token literal", stderr)
@@ -349,6 +390,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         self.assertEqual(doc["findings"], [])
 
     def test_build_refuses_existing_sidecar(self):
+        """Test build refuses existing sidecar."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         source = Path(tmp.name) / "cases.csv"
@@ -362,6 +404,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         self.assertFalse(output.exists())
 
     def test_build_sidecar_race_unlinks_fixture_and_reports_distinctly(self):
+        """Test build sidecar race unlinks fixture and reports distinctly."""
         # Simulates the TOCTOU race: a concurrent writer creates the sidecar
         # between our exists() pre-check and the O_EXCL create. The fixture
         # file must not be left orphaned, and the error must not blame the
@@ -379,6 +422,7 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
         real_open = os.open
 
         def racing_open(path, flags, *args, **kwargs):
+            """Racing open."""
             if str(path).endswith(".audit.json"):
                 raise FileExistsError(str(path))
             return real_open(path, flags, *args, **kwargs)
@@ -397,8 +441,11 @@ class FixturesBuildAuditCliTests(unittest.TestCase):
 
 
 class DoctorAuditTests(unittest.TestCase):
+    """Doctor audit tests."""
+
     @staticmethod
     def _write_dataset(tmp, *contents_per_fixture):
+        """Write dataset."""
         split = Split(
             tuple(_fixture(f"s{i}", text) for i, text in enumerate(contents_per_fixture[:1])),
             tuple(_fixture(f"h{i}", text) for i, text in enumerate(contents_per_fixture[1:])),
@@ -408,6 +455,7 @@ class DoctorAuditTests(unittest.TestCase):
         return path
 
     def test_doctor_warns_on_poisoned_fixture_file(self):
+        """Test doctor warns on poisoned fixture file."""
         with TemporaryDirectory() as tmp:
             path = self._write_dataset(tmp, "clean", "say <|im_start|> now")
             report = examine_dataset(path)
@@ -431,6 +479,7 @@ class DoctorAuditTests(unittest.TestCase):
         self.assertEqual(finding["format_name"], "chatml")
 
     def test_doctor_clean_fixture_file_is_ok(self):
+        """Test doctor clean fixture file is ok."""
         with TemporaryDirectory() as tmp:
             path = self._write_dataset(tmp, "clean one", "clean two")
             report = examine_dataset(path)
@@ -440,6 +489,7 @@ class DoctorAuditTests(unittest.TestCase):
         self.assertEqual(audit["findings"], [])
 
     def test_doctor_still_fails_unreadable_dataset(self):
+        """Test doctor still fails unreadable dataset."""
         with TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("{}", encoding="utf-8")

@@ -57,7 +57,10 @@ SECRET = "synthetic-secret-must-never-leak"
 
 
 def fixture_json(search_count=2, held_count=2):
+    """Fixture json."""
+
     def item(prefix, index):
+        """Item."""
         return {
             "id": f"{prefix}-{index}",
             "group": f"{prefix}-group-{index}",
@@ -72,7 +75,10 @@ def fixture_json(search_count=2, held_count=2):
 
 
 class DatasetEdgeTests(unittest.TestCase):
+    """Dataset edge tests."""
+
     def test_blank_identifiers_rejected(self):
+        """Test blank identifiers rejected."""
         for field in ("id", "group"):
             with self.subTest(field=field):
                 value = dataset_object()
@@ -81,6 +87,7 @@ class DatasetEdgeTests(unittest.TestCase):
                     parse_dataset(json.dumps(value))
 
     def test_oversized_text_field_rejected(self):
+        """Test oversized text field rejected."""
         value = dataset_object()
         value["search"][0]["messages"][0]["content"] = "x" * (MAX_TEXT + 1)
         with self.assertRaises(ValueError):
@@ -89,7 +96,10 @@ class DatasetEdgeTests(unittest.TestCase):
         self.assertEqual(len(parse_dataset(json.dumps(value)).search), 2)
 
     def test_message_count_boundaries(self):
+        """Test message count boundaries."""
+
         def messages(count):
+            """Messages."""
             return [
                 {"role": "user" if i % 2 == 0 else "assistant", "content": "m"}
                 for i in range(count)
@@ -103,6 +113,7 @@ class DatasetEdgeTests(unittest.TestCase):
             parse_dataset(json.dumps(value))
 
     def test_fixture_count_boundaries(self):
+        """Test fixture count boundaries."""
         parsed = parse_dataset(json.dumps(fixture_json(MAX_CASES_PER_SPLIT, 1)))
         self.assertEqual(len(parsed.search), MAX_CASES_PER_SPLIT)
         with self.assertRaises(ValueError):
@@ -111,6 +122,7 @@ class DatasetEdgeTests(unittest.TestCase):
             parse_dataset(json.dumps({"search": [], "held_out": fixture_json(1, 1)["held_out"]}))
 
     def test_non_list_partitions_rejected(self):
+        """Test non list partitions rejected."""
         for partitions in (
             {"search": {}, "held_out": []},
             {"search": "x", "held_out": []},
@@ -120,18 +132,21 @@ class DatasetEdgeTests(unittest.TestCase):
                 parse_dataset(json.dumps(partitions))
 
     def test_duplicate_ids_across_partitions_rejected(self):
+        """Test duplicate ids across partitions rejected."""
         value = dataset_object()
         value["held_out"][0]["id"] = value["search"][0]["id"]
         with self.assertRaises(ValueError):
             parse_dataset(json.dumps(value))
 
     def test_group_leakage_across_partitions_rejected(self):
+        """Test group leakage across partitions rejected."""
         value = dataset_object()
         value["held_out"][0]["group"] = value["search"][1]["group"]
         with self.assertRaises(ValueError):
             parse_dataset(json.dumps(value))
 
     def test_load_dataset_rejects_oversized_file(self):
+        """Test load dataset rejects oversized file."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "big.json"
             path.write_bytes(b'{"search": [], "held_out": []}'.ljust(MAX_BYTES + 1, b" "))
@@ -139,12 +154,14 @@ class DatasetEdgeTests(unittest.TestCase):
                 load_dataset(path)
 
     def test_expected_may_be_empty_string(self):
+        """Test expected may be empty string."""
         value = dataset_object()
         value["search"][0]["expected"] = ""
         parsed = parse_dataset(json.dumps(value))
         self.assertEqual(parsed.search[0].expected, "")
 
     def test_fixture_with_wrong_item_type_rejected(self):
+        """Test fixture with wrong item type rejected."""
         value = dataset_object()
         value["search"][0] = "not-a-fixture"
         with self.assertRaises(ValueError):
@@ -152,7 +169,10 @@ class DatasetEdgeTests(unittest.TestCase):
 
 
 class BoundaryEdgeTests(unittest.TestCase):
+    """Boundary edge tests."""
+
     def test_overlapping_and_repeated_matches(self):
+        """Test overlapping and repeated matches."""
         cases = [
             ((1, 1, 1), (1, 1), 0),
             ((1, 1, 2), (1, 2), 1),
@@ -168,6 +188,7 @@ class BoundaryEdgeTests(unittest.TestCase):
                 self.assertEqual(first_boundary(tokens, stop), expected)
 
     def test_boundary_at_output_start_truncates_everything(self):
+        """Test boundary at output start truncates everything."""
         backend = FakeBackend(Generation(ids("|tail"), "limit"))
         obs = evaluate(
             backend, BASE, (case(expected=""),), boundary=ids("|"), max_new_tokens=5
@@ -177,6 +198,7 @@ class BoundaryEdgeTests(unittest.TestCase):
         self.assertTrue(obs.exact_match)
 
     def test_multi_token_boundary(self):
+        """Test multi token boundary."""
         stop = (11, 22, 33)
         raw = ids("ok") + stop + ids("junk")
         backend = FakeBackend(Generation(raw, "limit"))
@@ -191,6 +213,7 @@ class BoundaryEdgeTests(unittest.TestCase):
     )
     @settings(max_examples=300, suppress_health_check=[HealthCheck.differing_executors])
     def test_first_boundary_matches_naive_reference(self, tokens, stop):
+        """Test first boundary matches naive reference."""
         tokens_t, stop_t = tuple(tokens), tuple(stop)
         expected = None
         for index in range(len(tokens_t) - len(stop_t) + 1):
@@ -201,6 +224,8 @@ class BoundaryEdgeTests(unittest.TestCase):
 
 
 class RenderPropertyTests(unittest.TestCase):
+    """Render property tests."""
+
     @given(
         bos=st.text(max_size=8),
         user_prefix=st.text(max_size=8),
@@ -212,6 +237,7 @@ class RenderPropertyTests(unittest.TestCase):
     def test_render_preserves_content_verbatim(
         self, bos, user_prefix, assistant_prefix, turn_end, contents
     ):
+        """Test render preserves content verbatim."""
         fmt = Format("prop", bos, user_prefix, assistant_prefix, turn_end)
         messages = tuple(
             Message("user" if i % 2 == 0 else "assistant", text) for i, text in enumerate(contents)
@@ -240,6 +266,7 @@ class RenderPropertyTests(unittest.TestCase):
     def test_local_repairs_bounded_unique_and_stable(
         self, bos, user_prefix, assistant_prefix, turn_end, repeat_bos
     ):
+        """Test local repairs bounded unique and stable."""
         base = Format("base", bos, user_prefix, assistant_prefix, turn_end, repeat_bos)
         before = replace(base)
         variants = local_repairs(base)
@@ -252,7 +279,10 @@ class RenderPropertyTests(unittest.TestCase):
 
 
 class SelectionRuleTests(unittest.TestCase):
+    """Selection rule tests."""
+
     def test_three_way_tie_abstains_without_held_out(self):
+        """Test three way tie abstains without held out."""
         backend = FakeBackend()
         names = [BASE, replace(BASE, name="b"), replace(BASE, name="c")]
         result = run_experiment(
@@ -264,6 +294,7 @@ class SelectionRuleTests(unittest.TestCase):
         self.assertFalse(any("question:h" in prompt for prompt in backend.encoded))
 
     def test_search_failure_records_decision_and_selects_nothing(self):
+        """Test search failure records decision and selects nothing."""
         backend = FakeBackend(Generation((), "error", "boom"))
         result = run_experiment(
             backend, (BASE,), split(), boundary=ids("|"), max_new_tokens=len(RAW)
@@ -273,18 +304,22 @@ class SelectionRuleTests(unittest.TestCase):
         self.assertIsNone(result["held_out"])
 
     def test_cancellation_between_search_and_held_out_abstains(self):
+        """Test cancellation between search and held out abstains."""
         # A counting event that trips only after the search phase completed:
         # evaluate() must have returned an eligible report, then the
         # post-search cancellation check in run_experiment fires.
         real_is_set = Event.is_set
 
         class CountingEvent(Event):
+            """Counting event."""
+
             def __init__(self, trip_after):
                 super().__init__()
                 self.calls = 0
                 self.trip_after = trip_after
 
             def is_set(self):
+                """Is set."""
                 self.calls += 1
                 if self.calls > self.trip_after:
                     return True
@@ -308,6 +343,7 @@ class SelectionRuleTests(unittest.TestCase):
         self.assertFalse(any("question:h" in prompt for prompt in backend.encoded))
 
     def test_winner_must_pass_every_search_fixture(self):
+        """Test winner must pass every search fixture."""
         script = [GOOD, Generation(ids("wrong!|"), "limit")]  # 7 tokens == len(RAW)
         backend = FakeBackend(generate_script=script)
         result = run_experiment(
@@ -317,6 +353,7 @@ class SelectionRuleTests(unittest.TestCase):
         self.assertIsNone(result["held_out"])
 
     def test_experiment_rejects_non_format_candidates_and_non_split(self):
+        """Test experiment rejects non format candidates and non split."""
         backend = FakeBackend()
         with self.assertRaises(ValueError):
             run_experiment(backend, (object(),), split(), boundary=ids("|"))
@@ -324,6 +361,7 @@ class SelectionRuleTests(unittest.TestCase):
             run_experiment(backend, (BASE,), object(), boundary=ids("|"))
 
     def test_experiment_rejects_oversized_partitions(self):
+        """Test experiment rejects oversized partitions."""
         # Split itself has no fixture-count limit (that lives in datasets.py);
         # run_experiment enforces the experiment-level guard instead.
         small = Split((case("s", group="gs"),), (case("h", group="gh"),))
@@ -333,14 +371,20 @@ class SelectionRuleTests(unittest.TestCase):
 
 
 class SanitizationTests(unittest.TestCase):
+    """Sanitization tests."""
+
     def test_encode_exception_text_never_leaves_evaluate(self):
+        """Test encode exception text never leaves evaluate."""
         backend = FakeBackend(encode_script=[RuntimeError(SECRET)])
         report = evaluate(backend, BASE, (case(),), boundary=ids("|"))
         self.assertEqual(report.observations[0].error, "encode_failed")
         self.assertNotIn(SECRET, repr(report))
 
     def test_render_exception_text_never_leaves_evaluate(self):
+        """Test render exception text never leaves evaluate."""
+
         def bad_render(_messages):
+            """Bad render."""
             raise RuntimeError(SECRET)
 
         with patch.object(Format, "render", side_effect=bad_render):
@@ -349,6 +393,7 @@ class SanitizationTests(unittest.TestCase):
         self.assertNotIn(SECRET, repr(report))
 
     def test_sanitized_failure_survives_json_serialization(self):
+        """Test sanitized failure survives json serialization."""
         backend = FakeBackend(Generation(ids("ok|"), "error", SECRET))
         result = run_experiment(
             backend, (BASE,), split(), boundary=ids("|"), max_new_tokens=len(RAW)
@@ -360,8 +405,13 @@ class SanitizationTests(unittest.TestCase):
 
 
 class DeterminismTests(unittest.TestCase):
+    """Determinism tests."""
+
     def test_repeated_runs_produce_byte_identical_reports(self):
+        """Test repeated runs produce byte identical reports."""
+
         def build():
+            """Build."""
             return run_experiment(
                 FakeBackend(),
                 (BASE,),
@@ -379,6 +429,7 @@ class DeterminismTests(unittest.TestCase):
             self.assertEqual(first_html.read_bytes(), second_html.read_bytes())
 
     def test_catalog_rendering_is_deterministic(self):
+        """Test catalog rendering is deterministic."""
         for family in CATALOG:
             first = [f.render((Message("user", "q"),)) for f in candidates(family, mutate=True)]
             second = [f.render((Message("user", "q"),)) for f in candidates(family, mutate=True)]
@@ -386,18 +437,23 @@ class DeterminismTests(unittest.TestCase):
 
 
 class CLIEdgeTests(unittest.TestCase):
+    """Cli edge tests."""
+
     def test_boundary_parser_rejects_superscript_digits(self):
+        """Test boundary parser rejects superscript digits."""
         # Superscript two is not a decimal digit: rejected by the first check.
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_boundary("\u00b2")
 
     def test_boundary_parser_rejects_unparseable_decimal_digits(self):
+        """Test boundary parser rejects unparseable decimal digits."""
         # 5000 decimal digits pass isdecimal() but int() refuses (digit limit):
         # the conversion failure must still fail closed as an argument error.
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_boundary("9" * 5000)
 
     def test_boundary_parser_rejects_unicode_digits(self):
+        """Test boundary parser rejects unicode digits."""
         # Token IDs are ASCII by convention; Unicode digits are rejected
         # rather than silently coerced.
         for text in ("\u0663", "1\uff123", "\u00b2"):
@@ -405,11 +461,13 @@ class CLIEdgeTests(unittest.TestCase):
                 parse_boundary(text)
 
     def test_no_command_is_an_argument_error(self):
+        """Test no command is an argument error."""
         with self.assertRaises(SystemExit) as ctx:
             main([])
         self.assertEqual(ctx.exception.code, 2)
 
     def test_run_rejects_out_of_range_token_limits(self):
+        """Test run rejects out of range token limits."""
         base = [
             "run",
             "--model",
@@ -434,6 +492,7 @@ class CLIEdgeTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 2)
 
     def test_run_rejects_bad_seed(self):
+        """Test run rejects bad seed."""
         with self.assertRaises(SystemExit) as ctx:
             main(
                 [
@@ -455,6 +514,7 @@ class CLIEdgeTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_run_rejects_existing_output_directory(self):
+        """Test run rejects existing output directory."""
         with TemporaryDirectory() as tmp:
             with self.assertRaises(SystemExit) as ctx:
                 main(
@@ -475,6 +535,7 @@ class CLIEdgeTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 2)
 
     def test_run_rejects_unknown_family(self):
+        """Test run rejects unknown family."""
         with self.assertRaises(SystemExit) as ctx:
             main(
                 [
@@ -494,6 +555,7 @@ class CLIEdgeTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_inspect_rejects_malformed_dataset(self):
+        """Test inspect rejects malformed dataset."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "bad.json"
             path.write_text('{"search": [], "held_out": []}', encoding="utf-8")
@@ -501,6 +563,7 @@ class CLIEdgeTests(unittest.TestCase):
                 self.assertEqual(main(["inspect", str(path)]), 1)
 
     def test_catalog_lists_all_families(self):
+        """Test catalog lists all families."""
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertEqual(main(["catalog"]), 0)
@@ -509,7 +572,10 @@ class CLIEdgeTests(unittest.TestCase):
 
 
 class ReportEdgeTests(unittest.TestCase):
+    """Report edge tests."""
+
     def test_html_handles_empty_search_and_missing_held_out(self):
+        """Test html handles empty search and missing held out."""
         result = {
             "decision": "not_started",
             "search": [],
@@ -520,12 +586,14 @@ class ReportEdgeTests(unittest.TestCase):
         self.assertIn("default-src 'none'", html)
 
     def test_public_view_never_contains_nan_or_infinity(self):
+        """Test public view never contains nan or infinity."""
         result = experiment()
         result["search"][0]["summary"]["rate"] = float("nan")
         with TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             save_report(result, Path(tmp) / "bad")
 
     def test_report_summary_rate_none_renders_incomplete(self):
+        """Test report summary rate none renders incomplete."""
         result = experiment(FakeBackend(Generation((), "cancelled")))
         html = render_html(result)
         self.assertIn("incomplete", html)
@@ -536,13 +604,17 @@ if __name__ == "__main__":
 
 
 class RunDecisionExitTests(unittest.TestCase):
+    """Run decision exit tests."""
+
     @staticmethod
     def _dataset_file(tmp):
+        """Dataset file."""
         path = Path(tmp) / "f.json"
         path.write_text(json.dumps(dataset_object()), encoding="utf-8")
         return path
 
     def test_run_exit_follows_returned_decision(self):
+        """Test run exit follows returned decision."""
         from unittest.mock import MagicMock
 
         for decision, code in (
@@ -598,7 +670,10 @@ class RunDecisionExitTests(unittest.TestCase):
 
 
 class HeldOutFailureTests(unittest.TestCase):
+    """Held out failure tests."""
+
     def test_search_winner_with_failing_held_out_records_failed(self):
+        """Test search winner with failing held out records failed."""
         script = [GOOD, GOOD, Generation((), "error", "x")]
         backend = FakeBackend(generate_script=script)
         result = run_experiment(
@@ -610,7 +685,10 @@ class HeldOutFailureTests(unittest.TestCase):
 
 
 class MainModuleTests(unittest.TestCase):
+    """Main module tests."""
+
     def test_main_module_delegates_to_cli(self):
+        """Test main module delegates to cli."""
         import runpy
         import sys
 
@@ -625,14 +703,18 @@ class MainModuleTests(unittest.TestCase):
 
 
 class BoundaryTextMatchTests(unittest.TestCase):
+    """Boundary text match tests."""
+
     @staticmethod
     def _case():
+        """Case."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tests.test_workflows import split
 
         return split().search[0]
 
     def test_found_boundary_matches_text(self):
+        """Test found boundary matches text."""
         # Normal case: ID-level hit implies the text cross-check holds.
         backend = FakeBackend(generate_script=[GOOD])
         report = evaluate(
@@ -643,6 +725,7 @@ class BoundaryTextMatchTests(unittest.TestCase):
         self.assertTrue(obs.boundary_text_match)
 
     def test_tokenization_mismatch_flagged(self):
+        """Test tokenization mismatch flagged."""
         # The model emits the boundary TEXT ("|") as token 2000 while the
         # configured boundary is token 1000: the ID-level match misses, but
         # the text cross-check catches it.
@@ -650,8 +733,11 @@ class BoundaryTextMatchTests(unittest.TestCase):
         from model_protocol_lab.core import Generation
 
         class MismatchBackend(FakeBackend):
+            """Mismatch backend."""
+
             @staticmethod
             def decode(token_ids):
+                """Decode."""
                 if token_ids == (1000,):
                     return "|"
                 return "".join("|" if t == 2000 else chr(t) for t in token_ids)
@@ -666,6 +752,7 @@ class BoundaryTextMatchTests(unittest.TestCase):
         self.assertFalse(obs.exact_match and obs.boundary_found)
 
     def test_genuine_miss_has_no_text_match(self):
+        """Test genuine miss has no text match."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
@@ -676,9 +763,14 @@ class BoundaryTextMatchTests(unittest.TestCase):
         self.assertFalse(obs.boundary_text_match)
 
     def test_decode_failure_degrades_to_none(self):
+        """Test decode failure degrades to none."""
+
         class FlakyBackend(FakeBackend):
+            """Flaky backend."""
+
             # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def decode(self, token_ids):
+                """Decode."""
                 if token_ids == (1000,):
                     raise RuntimeError("decode exploded")
                 return super().decode(token_ids)
@@ -690,6 +782,7 @@ class BoundaryTextMatchTests(unittest.TestCase):
         self.assertEqual(obs.status, "completed")
 
     def test_terminated_observations_carry_none(self):
+        """Test terminated observations carry none."""
         backend = FakeBackend(generate_script=[Generation((), "error", "x")])
         report = evaluate(
             backend, BASE, (self._case(),), boundary=ids("|"), max_new_tokens=len(RAW)
@@ -698,6 +791,8 @@ class BoundaryTextMatchTests(unittest.TestCase):
 
 
 class AdversarialLoaderTests(unittest.TestCase):
+    """Adversarial loader tests."""
+
     @given(
         data=st.recursive(
             st.none() | st.booleans() | st.integers() | st.text(max_size=30),
@@ -710,6 +805,7 @@ class AdversarialLoaderTests(unittest.TestCase):
     )
     @settings(max_examples=500, suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_never_crashes_on_adversarial_json(self, data):
+        """Test loader never crashes on adversarial json."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
@@ -753,6 +849,7 @@ class AdversarialLoaderTests(unittest.TestCase):
     )
     @settings(suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_rejects_garbage_bytes(self, payload):
+        """Test loader rejects garbage bytes."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
@@ -764,7 +861,10 @@ class AdversarialLoaderTests(unittest.TestCase):
 
 
 class SecurityFixTests(unittest.TestCase):
+    """Security fix tests."""
+
     def test_deeply_nested_json_raises_value_error(self):
+        """Test deeply nested json raises value error."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import parse_dataset
 
@@ -774,6 +874,7 @@ class SecurityFixTests(unittest.TestCase):
             parse_dataset(payload)
 
     def test_character_device_fixture_rejected(self):
+        """Test character device fixture rejected."""
         import os
 
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -786,6 +887,7 @@ class SecurityFixTests(unittest.TestCase):
             load_dataset("/dev/null")
 
     def test_fifo_fixture_rejected_without_hanging(self):
+        """Test fifo fixture rejected without hanging."""
         # A named FIFO with no writer must be refused, not block forever.
         # The test itself would hang (not fail) on a regression, so bound it
         # with a watchdog thread.
@@ -801,6 +903,7 @@ class SecurityFixTests(unittest.TestCase):
             outcome = {}
 
             def attempt():
+                """Attempt."""
                 try:
                     load_dataset(fifo)
                 except ValueError as exc:
@@ -816,6 +919,7 @@ class SecurityFixTests(unittest.TestCase):
             self.assertNotIn("unexpected", outcome)
 
     def test_missing_fixture_file_is_value_error(self):
+        """Test missing fixture file is value error."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
@@ -826,6 +930,7 @@ class SecurityFixTests(unittest.TestCase):
             load_dataset(Path(tmp) / "does-not-exist.json")
 
     def test_report_files_have_restrictive_permissions(self):
+        """Test report files have restrictive permissions."""
         import os as _os
         import stat as _stat
 
@@ -843,6 +948,7 @@ class SecurityFixTests(unittest.TestCase):
             self.assertEqual(_stat.S_IMODE(_os.stat(html_path).st_mode), 0o600)
 
     def test_report_refuses_to_overwrite(self):
+        """Test report refuses to overwrite."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.reporting import save_report
 
@@ -858,7 +964,10 @@ class SecurityFixTests(unittest.TestCase):
 
 
 class InspectDiagnosticTests(unittest.TestCase):
+    """Inspect diagnostic tests."""
+
     def test_inspect_reports_validation_reason(self):
+        """Test inspect reports validation reason."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
@@ -871,6 +980,7 @@ class InspectDiagnosticTests(unittest.TestCase):
             self.assertIn("Invalid fixture count", err.getvalue())
 
     def test_inspect_missing_file_reports_clearly(self):
+        """Test inspect missing file reports clearly."""
         with TemporaryDirectory() as tmp:
             with redirect_stdout(io.StringIO()), patch("sys.stderr", io.StringIO()) as err:
                 code = main(["inspect", str(Path(tmp) / "missing.json")])
@@ -879,11 +989,15 @@ class InspectDiagnosticTests(unittest.TestCase):
 
 
 class RenderRobustnessTests(unittest.TestCase):
+    """Render robustness tests."""
+
     def test_none_search_renders(self):
+        """Test none search renders."""
         html = render_html({"decision": "x", "search": None, "held_out": None})
         self.assertIn("No candidates were evaluated", html)
 
     def test_malformed_runs_render_safely(self):
+        """Test malformed runs render safely."""
         html = render_html(
             {
                 "decision": "x",
@@ -901,6 +1015,7 @@ class RenderRobustnessTests(unittest.TestCase):
         self.assertNotIn("<script>", scrubbed)
 
     def test_cli_shows_sanitized_error_code(self):
+        """Test cli shows sanitized error code."""
         with TemporaryDirectory() as tmp:
             with patch("sys.stderr", io.StringIO()) as err:
                 code = main(
@@ -923,6 +1038,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertIn("local_backend_initialization_failed", err.getvalue())
 
     def test_output_dir_claimed_before_backend_init_and_released_on_failure(self):
+        """Test output dir claimed before backend init and released on failure."""
         # M1: an unwritable output path must fail before model loading, and a
         # claimed-but-unused directory must not block a retry.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -957,6 +1073,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertFalse(out.exists())
 
     def test_output_through_regular_file_fails_before_backend_init(self):
+        """Test output through regular file fails before backend init."""
         # M1: --output beneath a regular file is a pre-detectable error.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
@@ -990,6 +1107,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertIn("Operation failed", err.getvalue())
 
     def test_fingerprint_normalizes_null_bos_repeat(self):
+        """Test fingerprint normalizes null bos repeat."""
         # L2: behaviorally identical hypotheses share a fingerprint, matching
         # local_repairs' dedup key.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -1003,6 +1121,7 @@ class RenderRobustnessTests(unittest.TestCase):
         self.assertEqual(candidate_fingerprint(base), candidate_fingerprint(variant))
 
     def test_report_intermediate_dirs_are_owner_only(self):
+        """Test report intermediate dirs are owner only."""
         # L3: every created path component is 0o700, not just the leaf.
         import os
         import stat as _stat
@@ -1019,6 +1138,7 @@ class RenderRobustnessTests(unittest.TestCase):
                 self.assertEqual(mode, 0o700, f"{component} has mode {oct(mode)}")
 
     def test_doctor_tokenizer_deep_failure_is_sanitized(self):
+        """Test doctor tokenizer deep failure is sanitized."""
         # L4: a corrupt tokenizer.json yields a fixed code, not raw exception text.
         # Requires the hf stack: without transformers the deep check is skipped.
         if not HAS_HF:
@@ -1043,6 +1163,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertEqual(detail, "tokenizer_deep_check_failed")
 
     def test_inspect_warns_on_empty_expected(self):
+        """Test inspect warns on empty expected."""
         # L1: empty expected answers are flagged as vacuously passing.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
@@ -1084,6 +1205,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertIn("s1", err.getvalue())
 
     def test_no_network_access_during_doctor_and_backend_init(self):
+        """Test no network access during doctor and backend init."""
         # The HF adapter must never download: block all socket connections and
         # verify doctor + backend init + generation complete without any.
         # Requires the hf stack (builds a tiny local checkpoint).
@@ -1094,6 +1216,8 @@ class RenderRobustnessTests(unittest.TestCase):
         real_socket = socket.socket
 
         class BlockedSocket:
+            """Blocked socket."""
+
             def __init__(self, *args, **kwargs):
                 raise AssertionError("network access attempted")
 
@@ -1121,6 +1245,7 @@ class RenderRobustnessTests(unittest.TestCase):
         self.assertIs(socket.socket, real_socket)
 
     def test_run_warns_on_empty_expected_before_backend_init(self):
+        """Test run warns on empty expected before backend init."""
         # The run-path empty-expected warning fires even when backend init
         # later fails (warning precedes expensive work).
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -1177,6 +1302,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertIn("se1", err.getvalue())
 
     def test_run_value_error_shows_sanitized_code(self):
+        """Test run value error shows sanitized code."""
         # A fixture ValueError in run surfaces the fixed vocabulary (line 191).
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
@@ -1210,6 +1336,7 @@ class RenderRobustnessTests(unittest.TestCase):
             self.assertIn("Operation failed [", err.getvalue())
 
     def test_deep_nested_output_chain_released_on_failure(self):
+        """Test deep nested output chain released on failure."""
         # QA round 2, issue 1: a failed run with --output a/b/c removes the
         # whole created chain, not just the leaf.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -1248,6 +1375,7 @@ class RoundTwoFixTests(unittest.TestCase):
     """Regression tests for the second hardening round (audit + red-team 2)."""
 
     def test_candidate_fingerprint_includes_name(self):
+        """Test candidate fingerprint includes name."""
         # The docstring was corrected: the name IS part of the payload, so
         # identically-rendering formats with different names differ.
         from model_protocol_lab.experiments import candidate_fingerprint
@@ -1258,6 +1386,7 @@ class RoundTwoFixTests(unittest.TestCase):
         self.assertEqual(candidate_fingerprint(base), candidate_fingerprint(base))
 
     def test_run_experiment_rejects_bad_boundary(self):
+        """Test run experiment rejects bad boundary."""
         backend = FakeBackend()
         with self.assertRaisesRegex(ValueError, "Boundary must be a nonempty tuple"):
             run_experiment(backend, (BASE,), split(), boundary=999)
@@ -1265,6 +1394,7 @@ class RoundTwoFixTests(unittest.TestCase):
             run_experiment(backend, (BASE,), split(), boundary=())
 
     def test_evaluate_and_run_experiment_reject_non_event_cancel(self):
+        """Test evaluate and run experiment reject non event cancel."""
         backend = FakeBackend()
         with self.assertRaisesRegex(ValueError, "threading.Event"):
             evaluate(backend, BASE, (case("x"),), boundary=ids("|"), cancel="x")
@@ -1272,15 +1402,20 @@ class RoundTwoFixTests(unittest.TestCase):
             run_experiment(backend, (BASE,), split(), boundary=ids("|"), cancel=123)
 
     def test_run_experiment_rejects_non_string_fingerprint(self):
+        """Test run experiment rejects non string fingerprint."""
+
         # A protocol-violating backend must fail fast, before any compute,
         # instead of exploding in json.dumps inside save_report.
         class BadFingerprintBackend(FakeBackend):
+            """Bad fingerprint backend."""
+
             fingerprint = 123
 
         with self.assertRaisesRegex(ValueError, "fingerprint must be a string"):
             run_experiment(BadFingerprintBackend(), (BASE,), split(), boundary=ids("|"))
 
     def test_doctor_failure_reports_have_stable_shape(self):
+        """Test doctor failure reports have stable shape."""
         from model_protocol_lab.doctor import examine_model
 
         report = examine_model("/nonexistent/path/xyz")
@@ -1291,6 +1426,7 @@ class RoundTwoFixTests(unittest.TestCase):
         self.assertEqual(model["added_tokens"], {})
 
     def test_doctor_rejects_mistyped_boundary_ids(self):
+        """Test doctor rejects mistyped boundary ids."""
         # Needs the hf stack: without transformers the boundary check is
         # skipped (vocab size unknown) rather than evaluated.
         if not HAS_HF:
@@ -1309,16 +1445,19 @@ class RoundTwoFixTests(unittest.TestCase):
             self.assertEqual(report["model"]["checks"]["boundary_ids"]["status"], "ok")
 
     def test_split_rejects_nfc_nfd_duplicate_ids(self):
+        """Test split rejects nfc nfd duplicate ids."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
         def fx(fid, content):
+            """Fx."""
             return Fixture(fid, (Message("user", content),), "a", "g1")
 
         with self.assertRaisesRegex(ValueError, "globally unique"):
             Split((fx("caf\u00e9", "q1"),), (fx("cafe\u0301", "q2"),))
 
     def test_split_rejects_nfc_nfd_cross_split_message_leak(self):
+        """Test split rejects nfc nfd cross split message leak."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
@@ -1328,6 +1467,7 @@ class RoundTwoFixTests(unittest.TestCase):
             Split((search,), (held,))
 
     def test_split_rejects_nfc_nfd_group_overlap(self):
+        """Test split rejects nfc nfd group overlap."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
@@ -1337,6 +1477,7 @@ class RoundTwoFixTests(unittest.TestCase):
             Split((search,), (held,))
 
     def test_inspect_warning_strips_terminal_escapes(self):
+        """Test inspect warning strips terminal escapes."""
         # A hostile fixture ID must not inject terminal escape sequences
         # into the empty-expected stderr warning.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -1374,6 +1515,7 @@ class RoundTwoFixTests(unittest.TestCase):
             self.assertIn("vacuously", err.getvalue())
 
     def test_load_dataset_rejects_non_path_input(self):
+        """Test load dataset rejects non path input."""
         with self.assertRaisesRegex(ValueError, "Invalid fixture path"):
             load_dataset(123)
         with self.assertRaisesRegex(ValueError, "Invalid fixture path"):
@@ -1384,6 +1526,7 @@ class RoundThreeFixTests(unittest.TestCase):
     """Regression tests for the third hardening round (fresh hostile audit)."""
 
     def test_doctor_config_failure_keeps_uniform_shape(self):
+        """Test doctor config failure keeps uniform shape."""
         # The config-read failure path returned {"verdict", "model": {"checks"}}
         # without the assets/special_tokens/added_tokens keys that
         # _model_result guarantees on every other path.
@@ -1409,6 +1552,7 @@ class RoundThreeFixTests(unittest.TestCase):
             self.assertTrue(all("sha256" in asset for asset in model["assets"]))
 
     def test_doctor_config_detail_uses_fixed_vocabulary(self):
+        """Test doctor config detail uses fixed vocabulary."""
         # Raw codec/parser text (UnicodeDecodeError, JSONDecodeError,
         # RecursionError) from the inspected config.json must not reach the
         # check detail; it collapses to the fixed "invalid_asset_json" code.
@@ -1416,6 +1560,7 @@ class RoundThreeFixTests(unittest.TestCase):
         from tests.test_doctor import write_model_dir
 
         def detail_for(payload: bytes) -> str:
+            """Detail for."""
             with TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 write_model_dir(root)
@@ -1430,6 +1575,7 @@ class RoundThreeFixTests(unittest.TestCase):
         self.assertEqual(detail_for(nested), "invalid_asset_json")
 
     def test_read_json_rejects_raw_codec_and_parser_failures(self):
+        """Test read json rejects raw codec and parser failures."""
         # Direct unit coverage for the _read_json vocabulary normalization.
         from model_protocol_lab.backends import _read_json
 
@@ -1452,15 +1598,20 @@ class RoundThreeFixTests(unittest.TestCase):
             self.assertEqual(_read_json(good), {"a": 1})
 
     def test_run_experiment_rejects_backend_missing_fingerprint(self):
+        """Test run experiment rejects backend missing fingerprint."""
+
         # A backend with no fingerprint attribute at all raised a raw
         # AttributeError; it must fail fast with the documented ValueError.
         class NoFingerprint:
+            """No fingerprint."""
+
             pass
 
         with self.assertRaisesRegex(ValueError, "fingerprint must be a string"):
             run_experiment(NoFingerprint(), (BASE,), split(), boundary=ids("|"))
 
     def test_evaluate_rejects_nfc_nfd_duplicate_ids(self):
+        """Test evaluate rejects nfc nfd duplicate ids."""
         # evaluate's uniqueness check used raw string equality while Split
         # compares NFC-normalized keys (red-team round 2): canonically
         # equivalent IDs evaded evaluate's check.
@@ -1479,6 +1630,7 @@ class RoundThreeFixTests(unittest.TestCase):
         self.assertEqual(report.status, "completed")
 
     def test_prepare_report_dir_never_chmods_through_symlink(self):
+        """Test prepare report dir never chmods through symlink."""
         # os.chmod follows symlinks: claiming a report dir through a symlinked
         # leaf used to tighten permissions on the link target, a directory
         # outside the requested tree. A symlinked leaf is now rejected
@@ -1508,6 +1660,7 @@ class RoundThreeFixTests(unittest.TestCase):
             self.assertEqual(list(real.iterdir()), [])
 
     def test_prepare_report_dir_still_secures_real_components(self):
+        """Test prepare report dir still secures real components."""
         # The symlink guard must not weaken the normal guarantee: created
         # components are still owner-only.
         import os

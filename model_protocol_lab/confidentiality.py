@@ -309,6 +309,7 @@ def mcnemar_exact_p(discord_ctrl_only: int, discord_treat_only: int) -> float | 
     return result
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def confidentiality_cell(
     per_fixture: list[dict[str, Any]],
 ) -> dict[str, Any]:

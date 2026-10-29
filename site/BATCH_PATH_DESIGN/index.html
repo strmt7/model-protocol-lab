@@ -1,0 +1,2641 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/BATCH_PATH_DESIGN/">
+      
+      
+        <link rel="prev" href="../ANSWERSYNTAX_DESIGN/">
+      
+      
+        <link rel="next" href="../BUNDLE_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Batch path - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#real-batch-path-for-the-local-backend-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Batch path
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ANSWERSYNTAX_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Answer syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-supersedes-what-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What supersedes what, exactly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-implementation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The implementation contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-vocabulary-and-precedence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Failure vocabulary and precedence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Failure vocabulary and precedence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-size-bound-byte-derived-refusal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The size bound (byte-derived refusal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-amendments-experimentsbatch_stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage amendments (experiments.batch_stage)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edges-pinned-by-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edges pinned by tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monday-morning-utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bundle (multi-question)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DIRECTIVE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directive ladder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONLANGUAGE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTIQUESTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-question (restated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-supersedes-what-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What supersedes what, exactly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-implementation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The implementation contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-vocabulary-and-precedence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Failure vocabulary and precedence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Failure vocabulary and precedence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-size-bound-byte-derived-refusal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The size bound (byte-derived refusal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-amendments-experimentsbatch_stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage amendments (experiments.batch_stage)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edges-pinned-by-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edges pinned by tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monday-morning-utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="real-batch-path-for-the-local-backend-design">Real batch path for the local backend — design<a class="headerlink" href="#real-batch-path-for-the-local-backend-design" title="Permanent link">&para;</a></h1>
+<p>Cycle 192 (wave-8 rank 4). An operator who will serve the
+checkpoint batched learns whether the lab's solo greedy
+verdicts survive the lab's own batched execution
+token-for-token — the audit that since cycle 153 could only
+answer <code>batch_unsupported</code> on the real backend — before
+trusting a winner measured one request at a time.</p>
+<p>This is a capability cycle, not a new probe. Cycle 153 built
+the audit (<code>model_protocol_lab/batchinv.py</code>,
+<code>experiments.batch_stage</code>, <code>run --batch-invariance</code>) around
+an optional backend contract and pre-registered as its
+claim 1 that no backend in the tree exposes a batch path.
+This cycle builds the path — <code>LocalHFBackend.generate_batch</code>
+— and supersedes claim 1 by construction. The audit, its
+verdict vocabulary (<code>batch_invariant</code> / <code>batch_variant</code> /
+<code>unavailable</code>), and its diff section do not change; the
+stage changes in exactly the ways §"Stage amendments"
+lists, each forced by a red-team finding.</p>
+<p>Design history: v1 froze two premises the red teams
+disproved. Red-team A returned DO NOT BUILD AS SPECIFIED
+(nine amendments); red-team B tried to disprove A and
+confirmed every finding (two were understated), rejected
+the coordinator's chunking adjudication as specified
+(unrecorded chunk composition would manufacture invariance
+for the longest prompts), and corrected the coordinator's
+validation-precedence candidate in one place. This v2 is
+the adjudicated contract: A's amendments 1–9 with
+amendment 1 implemented as B's C1-with-changes, amendment 8
+as B's C3-with-changes, and amendment 2 (the bound)
+resolved as an honest byte-derived refusal with a distinct
+stage detail — the resolution B's closing asymmetry argues
+for and this repo's <code>batch_unsupported</code> precedent embodies:
+a silent weaker measurement is worse than an honest
+refusal. Briefs: <code>~/workspace/agents_out/wave8/</code>
+(<code>cycle192_redteam_a.md</code>, <code>cycle192_redteam_b.md</code>).</p>
+<h2 id="what-supersedes-what-exactly">What supersedes what, exactly<a class="headerlink" href="#what-supersedes-what-exactly" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>batchinv.py</code>'s pre-registered claim 1 ("No backend in the
+  current tree exposes a batch path, so on the real local
+  backend the stage records <code>batch_unsupported</code>") becomes
+  false the moment <code>generate_batch</code> lands. The claim text is
+  rewritten in the same change to record the history: true
+  through cycle 191, superseded at cycle 192 by the real
+  path on <code>LocalHFBackend</code>. Claims 2 and 3 stand unchanged.</li>
+<li>Backends without the method — including the tree's own
+  wrapper backends (<code>TruncatedPromptBackend</code>,
+  <code>TokenHealingBackend</code>), which transform the token stream
+  in their solo <code>generate</code> — still record
+  <code>batch_unsupported</code>. The wrappers deliberately do not
+  forward the inner backend's batch path: their solo
+  contract rewrites inputs the batch path would bypass, so
+  inheriting it would compare two different streams and
+  call the difference "batch variance". (Verified at source:
+  no <code>__getattr__</code> exists anywhere in the package, so the
+  stage's <code>getattr</code> probe on a wrapper finds nothing.)</li>
+<li>The backend <code>fingerprint</code> does NOT gain a batch-capability
+  field. The fingerprint already binds code and policy
+  (library versions, adapter and generation-policy strings)
+  — deliberately: it binds everything that can change the
+  <strong>solo recorded observations</strong>, and batch capability
+  cannot change a single solo token. Changing it would make
+  every pre-192 artifact unreplayable under
+  <code>verify --determinism</code> (fingerprint-gated, solo-only,
+  search-observations-only) for zero measurement gain. The
+  <code>batch_invariance</code> payload itself records availability.</li>
+</ul>
+<h2 id="the-implementation-contract">The implementation contract<a class="headerlink" href="#the-implementation-contract" title="Permanent link">&para;</a></h2>
+<p><code>LocalHFBackend.generate_batch(prompts, *, max_new_tokens,
+seed, cancel)</code> implements the signature <code>batchinv.py</code>
+already documents:</p>
+<ul>
+<li>Input: a tuple of prompt id-tuples. Returns a tuple of
+  continuation-only id-tuples, one per prompt, in input
+  order, each of length exactly <code>max_new_tokens</code>.</li>
+<li>Decoding mirrors the solo <code>generate</code> exactly in every
+  respect that is not batching itself: fp32 full-prefix
+  recompute (<code>use_cache=False</code>), greedy argmax of the
+  last-position logits, no EOS or boundary stopping, the
+  same model call kwargs <strong>plus</strong> <code>attention_mask</code> (the real
+  mask, where solo passes all-ones) and <code>position_ids</code>
+  (below — solo passes none because an unpadded row's
+  implicit positions are already correct), under the backend
+  lock, in inference mode. The seed is validated and, as in
+  solo greedy, does not influence selection. All tensors —
+  input, mask, position ids, appended columns — are built
+  with <code>device=self._device</code> and long dtype, matching solo.
+  The method uses <code>self._torch</code> exactly like <code>generate</code> /
+  <code>forward_logits</code> and adds <strong>no imports</strong>: <code>backends.py</code>
+  imports torch only under <code>TYPE_CHECKING</code> and in <code>__init__</code>,
+  which is what keeps the package importable without the hf
+  extra (the cycle-105 audit guards that regime), and the
+  stage's <code>getattr</code> probe must find the attribute without
+  importing anything.</li>
+<li>Batching mechanics: prompts are left-padded to the batch's
+  longest prompt with pad id 0. The attention mask is 0 on
+  pads and 1 on real and generated positions. Position ids
+  are <strong>recomputed from the current mask at every step</strong>
+  (<code>mask.cumsum(-1) - 1</code>, clamped at 0), including steps
+  after generated columns are appended, so every row's real
+  tokens sit at the same positions they occupy solo. The
+  rationale is architecture-scoped: for learned-absolute-
+  position models (GPT-2) omitting position ids demonstrably
+  diverges on padded rows; for RoPE models (Llama) a uniform
+  pad shift preserves relative positions and the omission
+  happened to be harmless in testing — the ids are passed
+  uniformly for both, which was exact on both. Each
+  generation step runs ONE forward over the whole padded
+  batch and takes the per-row argmax at the last column
+  (left padding puts every row's frontier there). The chosen
+  token column and a 1-column of mask are appended; repeat
+  for exactly <code>max_new_tokens</code> steps.</li>
+<li>Unpadding is by recorded lengths only: a row's returned
+  ids are exactly the <code>max_new_tokens</code> tokens its own argmax
+  produced, collected per row during the loop. Nothing is
+  sliced out of the padded tensor and nothing is scanned for
+  a pad id — a pad id is a legitimate token id (the pad
+  value used is 0, which real prompts may contain), so any
+  scan-based unpadding would be a bug by construction.
+  Per-step bookkeeping extracts plain Python ints per row
+  and drops the step's result/logits references before the
+  next step (solo's <code>result = logits = None</code> pattern): a
+  retained <code>logits[:, -1, :]</code> view would keep every step's
+  full <code>(rows, L, vocab)</code> tensor alive for the whole call.</li>
+<li>Finite check: each step's last-position logits block must
+  have shape <code>[rows, vocab]</code> and be all-finite, mirroring
+  the solo per-step check; any violation fails the whole
+  batch (below), never a per-row salvage — a partial batch
+  result would be unattributable in the audit.</li>
+<li>Lock and cancel mirror solo <code>generate</code>'s discipline: the
+  lock is acquired by polling (<code>acquire(timeout=0.05)</code>) in a
+  loop that re-checks cancel; cancel is checked before
+  acquisition, after acquisition, before each forward, and
+  after each forward before committing the step's tokens.
+  The batch holds the lock for its whole run, as a solo
+  generation holds it for its own; concurrent callers wait
+  with their own polling-cancel, and the CLI run path is
+  sequential anyway. Deliberate raises never sit inside the
+  inference try: cancel and failure detected mid-inference
+  are carried out as flags and raised after it, because the
+  tree's <code>heal_input_ids</code> re-raise guard cannot distinguish
+  the method's own codes from torch <code>RuntimeError</code>s raised
+  by tensor ops in the same try — inside the try, every
+  exception converts to the failure flag, so nothing raw
+  can leak and the cancelled code is never eaten by the
+  conversion to <code>local_batch_failed</code>.</li>
+</ul>
+<h2 id="invariants">Invariants<a class="headerlink" href="#invariants" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>I1 (shape, falsifiable).</strong> For valid inputs the result
+  is a tuple of <code>len(prompts)</code> tuples, each exactly
+  <code>max_new_tokens</code> long, each id an <code>int</code> (not bool) with
+  <code>0 &lt;= id &lt; vocab_size</code>.</li>
+<li><strong>I2 (no pad leakage — construction invariant).</strong> Returned
+  ids come only from per-row argmax bookkeeping; the pad
+  value never enters a returned tuple <em>as padding</em>. This is
+  not output-falsifiable (a genuinely generated pad id is
+  indistinguishable), so it is verified by construction and
+  review; its observable consequence — prompts containing
+  id 0 behave exactly as solo — is pinned by I4's cases.</li>
+<li><strong>I3 (real batching, anti-theater, falsifiable).</strong> Every
+  generation step issues exactly one model forward whose
+  batch dimension equals the number of prompts. The pin is
+  the tree's white-box mechanism (cycle-81 precedent):
+  <code>patch.object(backend._model, "forward", wrapper)</code>
+  records the full shape sequence — <code>max_new_tokens</code>
+  forwards, every call's <code>input_ids.shape == (rows,
+  longest + step)</code>. A backend-level wrapper cannot observe
+  forwards and proves nothing. Secretly looping solo calls
+  is the one forbidden implementation.</li>
+<li><strong>I4 (equivalence is measured, not assumed).</strong> Property
+  tests pin, on the tree's tiny GPT-2 checkpoint: batched ==
+  solo token-exactly at batch sizes {1, 2, 3, 5} over
+  seeded prompt sets of mixed lengths (including prompts
+  containing token id 0), one 32-row case (the real caller
+  batches up to 100 rows; the pin's composition should not
+  stop at toy sizes), and permutation invariance (the same
+  prompt with different companions and at different
+  positions returns identical ids). Pre-build prototypes by
+  the coordinator and both red teams confirmed these
+  properties on tiny GPT-2 and tiny Llama (0 divergences
+  across randomized, near-tie, near-context, and 100-row
+  sets). On any real checkpoint where they fail, the audit
+  reports <code>batch_variant</code> with first-divergence positions:
+  divergence is a finding, not a defect to tune away.
+  Nothing in this cycle adds batch-invariant kernels or any
+  numeric correction.</li>
+<li><strong>I5 (fixed vocabulary, falsifiable).</strong> Every failure is
+  a <code>ValueError</code> or <code>RuntimeError</code> carrying one fixed code
+  from the sets below. New <code>RuntimeError("local_*")</code> codes
+  are added to <code>cli.py</code>'s <code>_KNOWN_LOCAL_FAILURE_CODES</code> in
+  the same change and raised in the literal
+  <code>raise RuntimeError("local_batch_…")</code> form the cycle-132
+  AST pin scans for (a test pins the sets equal).</li>
+<li><strong>I6 (cancel means no result, falsifiable).</strong> If the
+  cancel event is set before or during the batch, the
+  method raises <code>RuntimeError("local_batch_cancelled")</code>. It
+  never returns partial rows: the audit compares against
+  complete solo runs, so partial rows would manufacture
+  phantom divergences — the exact failure the stage's
+  contract forbids. (The stage passes a fresh event, so this
+  is unreachable inside the audit; it binds direct callers.)</li>
+</ul>
+<h2 id="failure-vocabulary-and-precedence">Failure vocabulary and precedence<a class="headerlink" href="#failure-vocabulary-and-precedence" title="Permanent link">&para;</a></h2>
+<p>Validation is <code>type()</code>-strict throughout, mirroring solo
+(<code>type(x) is int</code> for scalars — <code>True</code> is not a valid seed
+or cap; <code>type(prompts) is tuple</code>, per-prompt tuples checked
+by the same <code>_ids_valid</code> solo uses; <code>isinstance(cancel,
+Event)</code>). The precedence order is pinned (B's C3-with-
+changes — solo's order, with the batch-specific slots
+named):</p>
+<ol>
+<li>prompts container type, then per-prompt ids →
+   <code>ValueError("invalid_input_ids")</code>. Deliberate precedent
+   choice: <code>generate_batch</code> is a <em>raising</em> method, so it
+   uses the raising methods' code (<code>forward_logits</code>,
+   <code>heal_input_ids</code>), not solo <code>generate</code>'s returned
+   <code>invalid_or_empty_input</code>.</li>
+<li><code>max_new_tokens</code> not an int or outside 1..4096 →
+   <code>ValueError("invalid_output_cap")</code>.</li>
+<li><code>seed</code> not an int or outside <code>[0, 2**64)</code> →
+   <code>ValueError("invalid_seed")</code>.</li>
+<li><code>cancel</code> not a <code>threading.Event</code> →
+   <code>ValueError("invalid_cancellation_event")</code>.</li>
+<li><code>cancel</code> already set → <code>RuntimeError(
+   "local_batch_cancelled")</code> (mirrors solo, which reports
+   cancellation before the context check).</li>
+<li>Any prompt with <code>len(prompt) + max_new_tokens</code> over the
+   backend's context limit →
+   <code>ValueError("context_limit_exceeded")</code>.</li>
+<li><code>_ready()</code> — an uninitialized backend raises
+   <code>RuntimeError("local_backend_not_initialized")</code>, as in
+   every sibling method.</li>
+<li>Empty prompt tuple → return <code>()</code>. The shortcut sits
+   here, after all validation: an empty call returns <code>()</code>
+   exactly when a valid one-prompt call would have
+   proceeded, and scalar/cancel violations are never masked
+   by emptiness. (<code>batch_stage</code> never calls it empty.)</li>
+<li>Size bound (below) → <code>ValueError("batch_size_exceeded")</code>.</li>
+<li>Lock polling, then the step loop. Runtime failures —
+    the model forward raising, non-finite or mis-shaped
+    logits, any other inference error — raise
+    <code>RuntimeError("local_batch_failed") from None</code>; cancel
+    observed at any check point raises
+    <code>local_batch_cancelled</code> instead.</li>
+</ol>
+<h3 id="the-size-bound-byte-derived-refusal">The size bound (byte-derived refusal)<a class="headerlink" href="#the-size-bound-byte-derived-refusal" title="Permanent link">&para;</a></h3>
+<p>The v1 position-count bound is deleted. It refused
+ordinary legal runs (a 100-fixture split with
+paragraph-length prompts at default settings) while
+permitting multi-GB single tensors, because positions do
+not proxy bytes — the dominant transient, HF's
+full-sequence logits, scales with the vocabulary. v2
+refuses on an estimated peak, computed from the backend's
+own quantities:</p>
+<div class="highlight"><pre><span></span><code>L       = longest_prompt + max_new_tokens   (final padded length)
+peak    = 4 * rows * L * vocab_size          (full-sequence fp32 logits)
+        + 2 * (4 * rows * heads * L^2)       (eager attention scores:
+                                              matmul output and softmax
+                                              output co-live, one layer)
+        + 4 * rows * L^2                     (the (rows,1,L,L) fp32
+                                              additive mask, held for
+                                              the whole forward)
+</code></pre></div>
+<p>with <code>vocab_size</code> the backend's <code>_vocab_size</code> (the bound
+<code>generate</code> validates against, not raw <code>config.vocab_size</code>)
+and <code>heads</code> the loaded config's query-head count
+(<code>num_attention_heads</code>; <code>n_head</code> on GPT-2 configs). If
+<code>peak &gt; _BATCH_FORWARD_BYTE_BUDGET</code> (2^33 bytes, 8 GiB),
+the call raises <code>ValueError("batch_size_exceeded")</code>
+before any forward runs.</p>
+<p>The budget's role is stated plainly: it is a conservative
+ceiling on one forward's <em>estimated</em> transient peak, set
+just above the default caller scale (a 100-fixture split
+of paragraph-length prompts on a GPT-2-vocabulary model
+estimates ≈ 7.8 GB by this formula), so that an audit call
+degrades to a labelled refusal instead of an OOM kill —
+which, being a process kill rather than a Python
+exception, would defeat the probe's never-fail-the-run
+contract. It is not a memory guarantee: weights are already
+resident, allocator behaviour varies, and no byte budget
+consulted from Python can promise a machine will hold a
+tensor. The recorded limitation, not hidden: at
+large-vocab × long-context × full-split scale the audit
+records <code>batch_size_exceeded</code> (surfaced distinctly — see
+the stage amendments) and the operator's levers are
+<code>--max-new-tokens</code> and the fixture count. Chunked execution
+with recorded composition is the known future remedy if
+that limitation bites in practice; it is explicitly
+deferred, not silently absorbed — unrecorded chunking was
+rejected in this cycle's red-team round because singleton
+chunks manufacture invariance for exactly the longest
+prompts while diluting the divergence rate.</p>
+<h2 id="stage-amendments-experimentsbatch_stage">Stage amendments (<code>experiments.batch_stage</code>)<a class="headerlink" href="#stage-amendments-experimentsbatch_stage" title="Permanent link">&para;</a></h2>
+<p>Forced by F1 (the stage fed the batch path every prompt,
+including solo-ineligible ones, so one long fixture
+collapsed the whole audit to <code>batch_failed</code> — the exact
+per-prompt degradation the stage exists to avoid):</p>
+<ol>
+<li><code>generate_batch</code> is called with only the solo-evaluable
+   prompts, in the stage's sorted order; the arity/contract
+   check and the <code>zip</code> use the evaluable id list in the
+   same edit. (Strengthening fact: the evaluable subset
+   provably cannot trip the backend's caller-contract
+   <code>ValueError</code>s — solo success implies the context and
+   vocab checks passed, and the stage pre-validates seed
+   and cap — so residual batch failure from the stage path
+   is runtime failure or the size refusal, each with its
+   own honest detail.)</li>
+<li>When no prompt is evaluable the call is skipped: the
+   stage returns an available payload with
+   <code>n_evaluable == 0</code> and verdict <code>"unavailable"</code>, every
+   prompt carrying its <code>solo_failed</code> entry. (Today that
+   case surfaces as <code>batch_failed</code>; the change is owned
+   here and pinned by a test.)</li>
+<li>A <code>ValueError("batch_size_exceeded")</code> from the batch
+   path maps to <code>{"available": False, "detail":
+   "batch_size_exceeded"}</code> (new <code>batchinv</code> constant
+   <code>BATCH_SIZE_EXCEEDED</code>), never plain <code>batch_failed</code>. The
+   diff validator does not validate unavailable payloads'
+   detail strings and tolerates this addition; no other
+   detail vocabulary changes.</li>
+<li>The stage docstring's "runs all prompts together" is
+   amended: the batch path runs the solo-evaluable prompts
+   together.</li>
+</ol>
+<h2 id="edges-pinned-by-tests">Edges pinned by tests<a class="headerlink" href="#edges-pinned-by-tests" title="Permanent link">&para;</a></h2>
+<ul>
+<li>batch sizes {1, 2, 3, 5} vs solo, mixed prompt lengths,
+  prompts containing id 0 and the pad value as real content;
+  one 32-row case; permutation invariance</li>
+<li>forward counting/shapes (I3) via the model-forward patch,
+  full <code>(rows, longest + step)</code> sequence</li>
+<li>cancel set before the call; cancel set mid-batch (a
+  forward wrapper sets it during the first forward) — both
+  raise <code>local_batch_cancelled</code>, no partial result; cancel
+  set while waiting on a held lock (polling acquire)</li>
+<li>every <code>ValueError</code> code in the precedence list, including
+  multi-violation cases that pin the order (bool seed/cap;
+  bad ids + bad cap → ids win; pre-set cancel + over-context
+  prompt → cancelled wins, mirroring solo)</li>
+<li>empty batch returns <code>()</code> on a ready backend; empty batch
+  with a bad cap raises <code>invalid_output_cap</code>; empty batch
+  on an unready backend raises
+  <code>local_backend_not_initialized</code></li>
+<li>the size bound just under and just over the line (small
+  config: scaled-down budget via the module constant's
+  seam — the test computes a prompt set whose estimate
+  crosses 2^33 only if the formula is honest; a cheaper
+  equivalent pins the estimate arithmetic against the
+  formula on the tiny config and the raise at a patched
+  budget)</li>
+<li>non-finite logits (hostile forward wrapper) →
+  <code>local_batch_failed</code>; a raising forward →
+  <code>local_batch_failed</code>; the flag-carrying conversion
+  (§"Lock and cancel": cancellation detected inside the
+  inference try surfaces as <code>local_batch_cancelled</code>, never
+  eaten by the conversion to <code>local_batch_failed</code>)</li>
+<li><code>batch_stage</code> end-to-end on the real backend: available
+  payload, verdict <code>batch_invariant</code>; the CLI probe
+  (<code>_run_batch_probe</code>) recording the available payload
+  instead of <code>batch_unsupported</code>; a mixed stage case (one
+  over-context prompt among good ones) degrading per-prompt
+  with the audit still available (the F1 regression test);
+  the all-solo-fail case returning the pinned
+  available/<code>unavailable</code> payload; a size-refusing stub
+  backend mapping to the <code>batch_size_exceeded</code> detail</li>
+<li>a deliberately batch-variant stub through the real stage
+  wiring (already pinned at cycle 153; re-verified, not
+  re-built)</li>
+</ul>
+<h2 id="non-goals">Non-goals<a class="headerlink" href="#non-goals" title="Permanent link">&para;</a></h2>
+<ul>
+<li>No KV cache, no continuous batching, no padding-free
+  packing, no batch-invariant kernels, no chunking in this
+  cycle, no new dependency (stdlib + the existing
+  torch/transformers only).</li>
+<li>No new module, CLI flag, diff section, or report section:
+  the mypy source-file pin (55) and both diff oracles are
+  untouched. The stage payload gains no fields. README/
+  VALIDATION counts move only by the new test count,
+  measured.</li>
+<li>No change to solo <code>generate</code>, <code>forward_logits</code>, or the
+  diff code, except: the <code>batchinv.py</code> claim-1 text, the
+  stage amendments above, and the doc/help wording that
+  asserts the local backend is batch-less — <code>batchinv.py</code>
+  claim 1, <code>docs/USAGE.md</code> §8.21's honesty note, and
+  <code>README.md</code>'s Capabilities bullet ("the local backend
+  exposes no batch path…"). The CLI flag help and probe
+  docstrings are conditional ("when one exists") and stay
+  true unchanged — checked, not assumed.</li>
+<li>Determinism scope, stated to prevent a wrong assumption:
+  <code>verify --determinism</code> replays solo search observations
+  only; the batch payload is covered by no determinism
+  certificate, before or after this cycle.</li>
+</ul>
+<h2 id="monday-morning-utility">Monday-morning utility<a class="headerlink" href="#monday-morning-utility" title="Permanent link">&para;</a></h2>
+<p>An operator about to serve a checkpoint batched runs
+<code>model-protocol-lab run --batch-invariance</code> and learns —
+from the lab's own real batched execution, not a stub —
+whether the winner it measured solo survives batching
+token-for-token, before trusting that winner in production.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

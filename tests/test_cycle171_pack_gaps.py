@@ -24,6 +24,7 @@ SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "sample-report" / "r
 
 
 def _sample_report_dir(base: Path) -> Path:
+    """Sample report dir."""
     report = base / "run"
     report.mkdir()
     (report / "results.json").write_bytes(SAMPLE.read_bytes())
@@ -32,11 +33,13 @@ def _sample_report_dir(base: Path) -> Path:
 
 
 def _sealed_bundle(report: Path) -> bytes:
+    """Sealed bundle."""
     bundle, _, _ = pk.pack_bundle(report, [])
     return bundle
 
 
 def _manifest_for(entries):
+    """Manifest for."""
     manifest = {
         "context": {
             "backend_fingerprint": "x",
@@ -58,6 +61,7 @@ def _manifest_for(entries):
 
 
 def _zip(entries, comment=b""):
+    """Zip."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in entries:
@@ -79,6 +83,7 @@ def _sealed_shape(entries):
 
 
 def _status(report, check_id):
+    """Status."""
     for check in report["checks"]:
         if check["id"] == check_id:
             return check["status"], check["detail"]
@@ -86,7 +91,10 @@ def _status(report, check_id):
 
 
 class PackReadGuardTests(unittest.TestCase):
+    """Pack read guard tests."""
+
     def test_fifo_is_not_regular(self):
+        """Test fifo is not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_fifo_") as tmpdir:
             fifo = Path(tmpdir) / "pipe"
             os.mkfifo(fifo)
@@ -95,6 +103,7 @@ class PackReadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_entry_not_regular")
 
     def test_over_cap(self):
+        """Test over cap."""
         with tempfile.TemporaryDirectory(prefix="c171g_cap_") as tmpdir:
             target = Path(tmpdir) / "f.bin"
             target.write_bytes(b"12345")
@@ -103,17 +112,20 @@ class PackReadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "too_big_code")
 
     def test_missing_file_is_unreadable_not_oserror(self):
+        """Test missing file is unreadable not oserror."""
         with tempfile.TemporaryDirectory(prefix="c171g_miss_") as tmpdir:
             with self.assertRaises(ValueError) as ctx:
                 pk._read_regular_file(Path(tmpdir) / "nope", too_large_code="unused", cap=10)
             self.assertEqual(str(ctx.exception), "pack_entry_unreadable")
 
     def test_collect_missing_dir(self):
+        """Test collect missing dir."""
         with self.assertRaises(ValueError) as ctx:
             pk.collect_pack_files(Path("/nonexistent-dir-xyz"), [])
         self.assertEqual(str(ctx.exception), "pack_report_dir_missing")
 
     def test_collect_backslash_name_invalid(self):
+        """Test collect backslash name invalid."""
         with tempfile.TemporaryDirectory(prefix="c171g_bs_") as tmpdir:
             report = Path(tmpdir) / "run"
             report.mkdir()
@@ -124,6 +136,7 @@ class PackReadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_entry_name_invalid")
 
     def test_collect_include_duplicate(self):
+        """Test collect include duplicate."""
         with tempfile.TemporaryDirectory(prefix="c171g_dup_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             extra = Path(tmpdir) / "notes.md"
@@ -133,6 +146,7 @@ class PackReadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_include_duplicate")
 
     def test_collect_include_missing(self):
+        """Test collect include missing."""
         with tempfile.TemporaryDirectory(prefix="c171g_inc_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             with self.assertRaises(ValueError) as ctx:
@@ -141,18 +155,23 @@ class PackReadGuardTests(unittest.TestCase):
 
 
 class LoadGuardTests(unittest.TestCase):
+    """Load guard tests."""
+
     def test_missing(self):
+        """Test missing."""
         with self.assertRaises(ValueError) as ctx:
             pk.load_bundle_bytes(Path("/nonexistent-bundle-xyz"))
         self.assertEqual(str(ctx.exception), "bundle_path_missing")
 
     def test_directory_not_regular(self):
+        """Test directory not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_dir_") as tmpdir:
             with self.assertRaises(ValueError) as ctx:
                 pk.load_bundle_bytes(Path(tmpdir))
             self.assertEqual(str(ctx.exception), "bundle_not_regular_file")
 
     def test_fifo_not_regular(self):
+        """Test fifo not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_lfifo_") as tmpdir:
             fifo = Path(tmpdir) / "pipe"
             os.mkfifo(fifo)
@@ -161,6 +180,7 @@ class LoadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_not_regular_file")
 
     def test_oversize_sparse(self):
+        """Test oversize sparse."""
         with tempfile.TemporaryDirectory(prefix="c171g_big_") as tmpdir:
             target = Path(tmpdir) / "big.zip"
             with open(target, "wb") as handle:
@@ -170,6 +190,7 @@ class LoadGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_too_large")
 
     def test_growth_between_stat_and_read(self):
+        """Test growth between stat and read."""
         # The post-read length guard is a race defence: simulate the file
         # growing after fstat by lying about st_size and shrinking the cap.
         with tempfile.TemporaryDirectory(prefix="c171g_race_") as tmpdir:
@@ -178,6 +199,7 @@ class LoadGuardTests(unittest.TestCase):
             real_fstat = os.fstat
 
             def lying_fstat(fd, *args, **kwargs):
+                """Lying fstat."""
                 result = real_fstat(fd, *args, **kwargs)
                 return os.stat_result(
                     (
@@ -204,8 +226,11 @@ class LoadGuardTests(unittest.TestCase):
 
 
 class PreparseGuardTests(unittest.TestCase):
+    """Preparse guard tests."""
+
     @staticmethod
     def _patch_eocd(bundle: bytes, **fields) -> bytes:
+        """Patch eocd."""
         raw = bytearray(bundle)
         eocd = raw.rfind(b"PK\x05\x06")
         offsets = {
@@ -224,6 +249,7 @@ class PreparseGuardTests(unittest.TestCase):
         return bytes(raw)
 
     def test_multidisk_rejected(self):
+        """Test multidisk rejected."""
         with tempfile.TemporaryDirectory(prefix="c171g_md_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             with self.assertRaises(ValueError) as ctx:
@@ -231,6 +257,7 @@ class PreparseGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_zip64_sentinel_rejected(self):
+        """Test zip64 sentinel rejected."""
         with tempfile.TemporaryDirectory(prefix="c171g_z64_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             with self.assertRaises(ValueError) as ctx:
@@ -238,6 +265,7 @@ class PreparseGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_too_many_entries(self):
+        """Test too many entries."""
         with tempfile.TemporaryDirectory(prefix="c171g_many_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             patched = self._patch_eocd(bundle, entries=2000, entries_disk=2000)
@@ -246,6 +274,7 @@ class PreparseGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_too_many_entries")
 
     def test_zero_entries(self):
+        """Test zero entries."""
         with tempfile.TemporaryDirectory(prefix="c171g_zero_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             patched = self._patch_eocd(bundle, entries=0, entries_disk=0)
@@ -254,6 +283,7 @@ class PreparseGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_bad_magic_start(self):
+        """Test bad magic start."""
         with tempfile.TemporaryDirectory(prefix="c171g_magic_") as tmpdir:
             bundle = bytearray(_sealed_bundle(_sample_report_dir(Path(tmpdir))))
             bundle[0:4] = b"JUNK"
@@ -262,6 +292,7 @@ class PreparseGuardTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_corrupt_central_directory(self):
+        """Test corrupt central directory."""
         with tempfile.TemporaryDirectory(prefix="c171g_cd_") as tmpdir:
             bundle = bytearray(_sealed_bundle(_sample_report_dir(Path(tmpdir))))
             eocd = bytes(bundle).rfind(b"PK\x05\x06")
@@ -273,7 +304,10 @@ class PreparseGuardTests(unittest.TestCase):
 
 
 class ContainerAndCapsGapTests(unittest.TestCase):
+    """Container and caps gap tests."""
+
     def test_entry_count_mismatch(self):
+        """Test entry count mismatch."""
         with tempfile.TemporaryDirectory(prefix="c171g_cnt_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             raw = bytearray(bundle)
@@ -284,6 +318,7 @@ class ContainerAndCapsGapTests(unittest.TestCase):
             self.assertEqual(_status(report, "seal_container"), ("failed", "entry_count_mismatch"))
 
     def test_directory_entry(self):
+        """Test directory entry."""
         entries = [("results.json", SAMPLE.read_bytes())]
         bundle = _zip(
             [
@@ -298,6 +333,7 @@ class ContainerAndCapsGapTests(unittest.TestCase):
         self.assertEqual(_status(report, "seal_container"), ("failed", "directory_entry_present"))
 
     def test_entry_path_invalid(self):
+        """Test entry path invalid."""
         entries = [("results.json", SAMPLE.read_bytes())]
         raw_manifest = pk.manifest_bytes(_manifest_for(entries))
         bundle = _zip(
@@ -308,6 +344,7 @@ class ContainerAndCapsGapTests(unittest.TestCase):
         self.assertEqual(_status(report, "seal_container"), ("failed", "entry_path_invalid"))
 
     def test_total_too_large(self):
+        """Test total too large."""
         filler = b"\x00" * (60 * 1024 * 1024)
         entries = [(f"f{i}.bin", filler) for i in range(5)]
         entries.append(("results.json", SAMPLE.read_bytes()))
@@ -317,8 +354,11 @@ class ContainerAndCapsGapTests(unittest.TestCase):
 
 
 class ManifestSchemaGapTests(unittest.TestCase):
+    """Manifest schema gap tests."""
+
     @staticmethod
     def _report_for_manifest(manifest_obj=None, raw_manifest=None):
+        """Report for manifest."""
         entries = [("results.json", SAMPLE.read_bytes())]
         raw = raw_manifest if raw_manifest is not None else pk.manifest_bytes(manifest_obj)
         comment = b"mpl-bundle-sha256:" + pk.bundle_digest(raw).encode()
@@ -326,6 +366,7 @@ class ManifestSchemaGapTests(unittest.TestCase):
         return pk.verify_bundle_bytes(bundle)
 
     def test_file_entry_not_dict(self):
+        """Test file entry not dict."""
         manifest = _manifest_for([("results.json", SAMPLE.read_bytes())])
         manifest["files"] = [1]
         report = self._report_for_manifest(manifest)
@@ -335,6 +376,7 @@ class ManifestSchemaGapTests(unittest.TestCase):
         )
 
     def test_context_version_missing(self):
+        """Test context version missing."""
         manifest = _manifest_for([("results.json", SAMPLE.read_bytes())])
         del manifest["context"]["package_version"]
         report = self._report_for_manifest(manifest)
@@ -344,6 +386,7 @@ class ManifestSchemaGapTests(unittest.TestCase):
         )
 
     def test_context_catalog_bad(self):
+        """Test context catalog bad."""
         manifest = _manifest_for([("results.json", SAMPLE.read_bytes())])
         manifest["context"]["catalog_sha256"] = "zz"
         report = self._report_for_manifest(manifest)
@@ -353,6 +396,7 @@ class ManifestSchemaGapTests(unittest.TestCase):
         )
 
     def test_context_fingerprint_bad(self):
+        """Test context fingerprint bad."""
         manifest = _manifest_for([("results.json", SAMPLE.read_bytes())])
         manifest["context"]["backend_fingerprint"] = ""
         report = self._report_for_manifest(manifest)
@@ -362,18 +406,21 @@ class ManifestSchemaGapTests(unittest.TestCase):
         )
 
     def test_manifest_not_object(self):
+        """Test manifest not object."""
         report = self._report_for_manifest(raw_manifest=b"[1,2]")
         self.assertEqual(
             _status(report, "seal_manifest_schema"), ("failed", "manifest_not_an_object")
         )
 
     def test_manifest_unparseable(self):
+        """Test manifest unparseable."""
         report = self._report_for_manifest(raw_manifest=b"\xff\xfe{")
         self.assertEqual(
             _status(report, "seal_manifest_schema"), ("failed", "manifest_unparseable")
         )
 
     def test_expected_digest_unavailable_when_manifest_broken(self):
+        """Test expected digest unavailable when manifest broken."""
         report = self._report_for_manifest(raw_manifest=b"\xff\xfe{")
         # expect_digest path is exercised through verify_bundle_bytes below
         entries = [("results.json", SAMPLE.read_bytes())]
@@ -391,7 +438,10 @@ class ManifestSchemaGapTests(unittest.TestCase):
 
 
 class ReadErrorGapTests(unittest.TestCase):
+    """Read error gap tests."""
+
     def test_corrupt_results_crc_surfaces_read_error(self):
+        """Test corrupt results crc surfaces read error."""
         with tempfile.TemporaryDirectory(prefix="c171g_crc2_") as tmpdir:
             bundle = bytearray(_sealed_bundle(_sample_report_dir(Path(tmpdir))))
             eocd = bytes(bundle).rfind(b"PK\x05\x06")
@@ -411,6 +461,7 @@ class ReadErrorGapTests(unittest.TestCase):
             )
 
     def test_hash_entry_missing(self):
+        """Test hash entry missing."""
         entries = [("results.json", SAMPLE.read_bytes())]
         manifest = _manifest_for(entries)
         manifest["files"].append(
@@ -431,8 +482,11 @@ class ReadErrorGapTests(unittest.TestCase):
 
 
 class CliGapTests(unittest.TestCase):
+    """Cli gap tests."""
+
     @staticmethod
     def _run_main(argv):
+        """Run main."""
         import contextlib as _ctx
 
         out, err = io.StringIO(), io.StringIO()
@@ -441,11 +495,13 @@ class CliGapTests(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_pack_missing_dir_exit_1(self):
+        """Test pack missing dir exit 1."""
         code, _, err = self._run_main(["pack", "/nonexistent-dir-xyz"])
         self.assertEqual(code, 1)
         self.assertIn("pack_report_dir_missing", err)
 
     def test_pack_default_output(self):
+        """Test pack default output."""
         with tempfile.TemporaryDirectory(prefix="c171g_def_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             code, _, _err = self._run_main(["pack", str(report)])
@@ -456,6 +512,7 @@ class CliGapTests(unittest.TestCase):
             self.assertEqual(code, 0)
 
     def test_pack_output_unwritable(self):
+        """Test pack output unwritable."""
         with tempfile.TemporaryDirectory(prefix="c171g_unw_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             target = Path(tmpdir) / "no-such-dir" / "out.zip"
@@ -464,6 +521,7 @@ class CliGapTests(unittest.TestCase):
             self.assertIn("output_unwritable_or_exists", err)
 
     def test_pack_include_is_output(self):
+        """Test pack include is output."""
         with tempfile.TemporaryDirectory(prefix="c171g_iio_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             target = Path(tmpdir) / "out.zip"
@@ -474,11 +532,13 @@ class CliGapTests(unittest.TestCase):
             self.assertIn("include_is_output", err)
 
     def test_verify_bundle_missing_file(self):
+        """Test verify bundle missing file."""
         code, _, err = self._run_main(["verify", "--bundle", "/nonexistent-bundle-xyz"])
         self.assertEqual(code, 1)
         self.assertIn("bundle_path_missing", err)
 
     def test_replay_failure_with_intact_seal(self):
+        """Test replay failure with intact seal."""
         # Edit the decision BEFORE packing: the seal is honest, the
         # replay must fail, and the exit code must be 2 (not 1).
         with tempfile.TemporaryDirectory(prefix="c171g_replay_") as tmpdir:
@@ -499,8 +559,11 @@ class CliGapTests(unittest.TestCase):
 
 
 class SecondGapTests(unittest.TestCase):
+    """Second gap tests."""
+
     @staticmethod
     def _run_main(argv):
+        """Run main."""
         import contextlib as _ctx
 
         out, err = io.StringIO(), io.StringIO()
@@ -510,6 +573,7 @@ class SecondGapTests(unittest.TestCase):
 
     @staticmethod
     def _patch_local_and_cd_size(bundle: bytes, target: str, delta: int) -> bytes:
+        """Patch local and cd size."""
         raw = bytearray(bundle)
         # local header
         pos = 0
@@ -540,6 +604,7 @@ class SecondGapTests(unittest.TestCase):
         return bytes(raw)
 
     def test_context_not_dict(self):
+        """Test context not dict."""
         manifest = _manifest_for([("results.json", SAMPLE.read_bytes())])
         manifest["context"] = "nope"
         report = ManifestSchemaGapTests()._report_for_manifest(manifest)
@@ -549,6 +614,7 @@ class SecondGapTests(unittest.TestCase):
         )
 
     def test_manifest_missing_entry(self):
+        """Test manifest missing entry."""
         bundle = _zip([("results.json", SAMPLE.read_bytes())])
         report = pk.verify_bundle_bytes(bundle)
         self.assertEqual(_status(report, "seal_manifest_schema"), ("failed", "manifest_missing"))
@@ -558,6 +624,7 @@ class SecondGapTests(unittest.TestCase):
         )
 
     def test_oversize_entry_fails_at_caps_layer(self):
+        """Test oversize entry fails at caps layer."""
         # Layering is deliberate: a cap failure means the manifest is
         # never trusted, so downstream checks report unavailable rather
         # than re-deriving their own verdict on an unvalidated manifest.
@@ -574,6 +641,7 @@ class SecondGapTests(unittest.TestCase):
         self.assertEqual(_status(report, "seal_file_hashes"), ("unavailable", "manifest_unusable"))
 
     def test_hash_read_error_nonstored_entry(self):
+        """Test hash read error nonstored entry."""
         with tempfile.TemporaryDirectory(prefix="c171g_hre_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle = bytearray(_sealed_bundle(report))
@@ -595,6 +663,7 @@ class SecondGapTests(unittest.TestCase):
             )
 
     def test_declared_size_lie(self):
+        """Test declared size lie."""
         with tempfile.TemporaryDirectory(prefix="c171g_lie_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle = self._patch_local_and_cd_size(_sealed_bundle(report), "report.html", 5)
@@ -605,6 +674,7 @@ class SecondGapTests(unittest.TestCase):
             )
 
     def test_declared_size_smaller_aborts_stream(self):
+        """Test declared size smaller aborts stream."""
         # Declared size BELOW the real payload: the reader must abort
         # mid-stream (bounded memory), not buffer the whole lie first.
         with tempfile.TemporaryDirectory(prefix="c171g_lie2_") as tmpdir:
@@ -617,6 +687,7 @@ class SecondGapTests(unittest.TestCase):
             )
 
     def test_load_unreadable_via_mocked_open(self):
+        """Test load unreadable via mocked open."""
         with tempfile.TemporaryDirectory(prefix="c171g_unr_") as tmpdir:
             target = Path(tmpdir) / "b.zip"
             target.write_bytes(b"PK")
@@ -628,6 +699,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_unreadable")
 
     def test_preparse_entries_disk_mismatch(self):
+        """Test preparse entries disk mismatch."""
         with tempfile.TemporaryDirectory(prefix="c171g_edm_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             raw = bytearray(bundle)
@@ -638,6 +710,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_preparse_cd_disk_nonzero(self):
+        """Test preparse cd disk nonzero."""
         with tempfile.TemporaryDirectory(prefix="c171g_cdd_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             raw = bytearray(bundle)
@@ -648,6 +721,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_run_pack_resolve_oserror(self):
+        """Test run pack resolve oserror."""
         with tempfile.TemporaryDirectory(prefix="c171g_res_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             with mock.patch.object(Path, "resolve", side_effect=OSError("nope")):
@@ -656,6 +730,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertIn("path_unresolvable", err)
 
     def test_run_pack_include_resolve_oserror(self):
+        """Test run pack include resolve oserror."""
         with tempfile.TemporaryDirectory(prefix="c171g_ires_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             include = Path(tmpdir) / "inc.md"
@@ -663,6 +738,7 @@ class SecondGapTests(unittest.TestCase):
             real_resolve = Path.resolve
 
             def picky(self, *args, **kwargs):
+                """Picky."""
                 if self.name == "inc.md":
                     raise OSError("nope")
                 return real_resolve(self, *args, **kwargs)
@@ -673,6 +749,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertIn("path_unresolvable", err)
 
     def test_run_pack_include_cli_success(self):
+        """Test run pack include cli success."""
         with tempfile.TemporaryDirectory(prefix="c171g_ics_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             include = Path(tmpdir) / "notes.md"
@@ -685,7 +762,11 @@ class SecondGapTests(unittest.TestCase):
             self.assertIn("sealed 3 files", err)
 
     def test_run_pack_write_failure_removes_partial(self):
+        """Test run pack write failure removes partial."""
+
         class _BadHandle:
+            """Bad handle."""
+
             def __enter__(self):
                 return self
 
@@ -694,6 +775,7 @@ class SecondGapTests(unittest.TestCase):
 
             @staticmethod
             def write(data):
+                """Write."""
                 raise OSError("disk full")
 
         with tempfile.TemporaryDirectory(prefix="c171g_wf_") as tmpdir:
@@ -702,6 +784,7 @@ class SecondGapTests(unittest.TestCase):
             real_fdopen = os.fdopen
 
             def fake_fdopen(fd, mode, *args, **kwargs):
+                """Fake fdopen."""
                 if mode == "wb":
                     return _BadHandle()
                 return real_fdopen(fd, mode, *args, **kwargs)
@@ -713,6 +796,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertFalse(bundle.exists())
 
     def test_verify_bundle_not_zip(self):
+        """Test verify bundle not zip."""
         with tempfile.TemporaryDirectory(prefix="c171g_nz_") as tmpdir:
             target = Path(tmpdir) / "b.zip"
             target.write_bytes(b"this is not a zip at all")
@@ -721,6 +805,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertIn("bundle_container_invalid", err)
 
     def test_include_name_invalid_via_cli(self):
+        """Test include name invalid via cli."""
         with tempfile.TemporaryDirectory(prefix="c171g_ini_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bad = Path(tmpdir) / "a\\b"
@@ -733,6 +818,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertIn("pack_include_name_invalid", err)
 
     def test_preparse_entries_sentinel(self):
+        """Test preparse entries sentinel."""
         with tempfile.TemporaryDirectory(prefix="c171g_es_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             raw = bytearray(bundle)
@@ -743,6 +829,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_preparse_decoy_eocd_signature_fails_closed(self):
+        """Test preparse decoy eocd signature fails closed."""
         # The comment contains a fake EOCD signature near its end. Our
         # preparse skips it (length mismatch) and finds the real EOCD --
         # but zipfile's own scan is fooled into an empty infolist, and
@@ -761,6 +848,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(report["verdict"], "failed")
 
     def test_preparse_cd_offset_sentinel(self):
+        """Test preparse cd offset sentinel."""
         with tempfile.TemporaryDirectory(prefix="c171g_cos_") as tmpdir:
             bundle = _sealed_bundle(_sample_report_dir(Path(tmpdir)))
             raw = bytearray(bundle)
@@ -771,6 +859,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_preparse_truncated_trailing_signature(self):
+        """Test preparse truncated trailing signature."""
         # A stray signature too close to EOF to hold a record must be
         # skipped, not crash the scan; the archive then fails strict
         # parsing (trailing bytes) as designed.
@@ -781,6 +870,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_read_entry_aborts_on_lying_stream(self):
+        """Test read entry aborts on lying stream."""
         # The in-memory lie: the declared size is smaller than the
         # stream, so the reader must abort instead of buffering it.
         # Deterministic at the unit level: zipfile's own CRC check can
@@ -789,6 +879,8 @@ class SecondGapTests(unittest.TestCase):
         from types import SimpleNamespace
 
         class _Handle:
+            """Handle."""
+
             def __init__(self):
                 self.n = 0
 
@@ -799,12 +891,16 @@ class SecondGapTests(unittest.TestCase):
                 return False
 
             def read(self, size):
+                """Read."""
                 self.n += 1
                 return b"x" * 10 if self.n <= 2 else b""
 
         class _Archive:
+            """Archive."""
+
             @staticmethod
             def open(info, mode):
+                """Open."""
                 return _Handle()
 
         info = SimpleNamespace(file_size=5)
@@ -813,12 +909,14 @@ class SecondGapTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "bundle_entry_read_failed")
 
     def test_run_pack_fdopen_failure_closes_fd(self):
+        """Test run pack fdopen failure closes fd."""
         with tempfile.TemporaryDirectory(prefix="c171g_fo_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle = Path(tmpdir) / "out.zip"
             real_fdopen = os.fdopen
 
             def fake_fdopen(fd, mode, *args, **kwargs):
+                """Fake fdopen."""
                 if mode == "wb":
                     raise OSError("no handle")
                 return real_fdopen(fd, mode, *args, **kwargs)

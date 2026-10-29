@@ -46,6 +46,7 @@ CANDIDATES = ("alpha", "beta")
 
 
 def _fixture(fid, content, expected="BLUE"):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=content),),
@@ -55,6 +56,7 @@ def _fixture(fid, content, expected="BLUE"):
 
 
 def _format(name):
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -81,13 +83,16 @@ class ScriptedHealBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def heal_input_ids(self, input_ids):
+        """Heal input ids."""
         if self._heal_mode == "raise":
             raise RuntimeError("heal boom")
         if self._heal_mode == "rewrite":
@@ -95,6 +100,7 @@ class ScriptedHealBackend:
         return input_ids
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         if candidate is None:
@@ -108,6 +114,7 @@ class ScriptedHealBackend:
 
 
 def _stage(behavior, heal_mode="ok"):
+    """Stage."""
     cases = (_fixture("S1", "Say BLUE please"), _fixture("S2", "Say BLUE now"))
     formats = tuple(_format(n) for n in CANDIDATES)
     return experiments.healing_stage(
@@ -121,6 +128,7 @@ def _stage(behavior, heal_mode="ok"):
 
 
 def _native(behavior):
+    """Native."""
     # Build native outcomes by hand (mirrors native_search_outcomes).
     return {
         name: {
@@ -132,11 +140,13 @@ def _native(behavior):
 
 
 def _healed_payload(behavior):
+    """Healed payload."""
     stage = _stage(behavior)
     return stage
 
 
 def _audit(fragile=()):
+    """Audit."""
     return {
         "available": True,
         "per_candidate": {
@@ -150,6 +160,7 @@ def _audit(fragile=()):
 
 
 def _delta(behavior_native, behavior_healed, fragile=(), primary=("selected", "alpha")):
+    """Delta."""
     decision, winner = primary
     return healing_delta(
         winner,
@@ -162,11 +173,15 @@ def _delta(behavior_native, behavior_healed, fragile=(), primary=("selected", "a
 
 
 class HealingPureTests(unittest.TestCase):
+    """Healing pure tests."""
+
     def test_constants_match_hf(self):
+        """Test constants match hf."""
         self.assertEqual(HEAL_EXTENSION_BIAS, 10.0)
         self.assertEqual(HEAL_ORIGINAL_BIAS, 1.0)
 
     def test_normalize_tail_text(self):
+        """Test normalize tail text."""
         self.assertEqual(normalize_tail_text(" hello", "Ġ"), "Ġhello")
         self.assertEqual(normalize_tail_text("hello", "Ġ"), "hello")
         self.assertEqual(normalize_tail_text(" hello", None), " hello")
@@ -174,6 +189,7 @@ class HealingPureTests(unittest.TestCase):
             normalize_tail_text(7, "Ġ")
 
     def test_tail_extensions_sorted_and_includes_tail(self):
+        """Test tail extensions sorted and includes tail."""
         vocab = {"Par": 10, "Paris": 11, "Park": 12, "spar": 13}
         self.assertEqual(tail_extensions(vocab, "Par"), (10, 11, 12))
         self.assertEqual(tail_extensions(vocab, "zzz"), ())
@@ -184,6 +200,7 @@ class HealingPureTests(unittest.TestCase):
             tail_extensions(vocab, 7)
 
     def test_healing_biases(self):
+        """Test healing biases."""
         biases = healing_biases((10, 11), 10)
         self.assertEqual(biases, {10: 11.0, 11: 10.0})
         # Tail id outside the extension set still gets its original bias.
@@ -193,10 +210,12 @@ class HealingPureTests(unittest.TestCase):
             healing_biases((), 10)
 
     def test_heal_prompt_ids_happy_path(self):
+        """Test heal prompt ids happy path."""
         vocab = {"Par": 10, "Paris": 11, "Park": 12}
         seen = {}
 
         def argmax(trimmed, biases):
+            """Argmax."""
             seen["trimmed"] = trimmed
             seen["biases"] = biases
             return 11
@@ -216,6 +235,7 @@ class HealingPureTests(unittest.TestCase):
         self.assertEqual(seen["biases"][10], 11.0)
 
     def test_heal_prompt_ids_no_extensions_returns_canonical(self):
+        """Test heal prompt ids no extensions returns canonical."""
         # Only the tail token itself extends the tail text: HF skips the
         # biased step but still returns the re-canonicalized prompt.
         out = heal_prompt_ids(
@@ -230,6 +250,7 @@ class HealingPureTests(unittest.TestCase):
         self.assertEqual(out, (5, 6, 7))
 
     def test_heal_prompt_ids_single_token_is_failure(self):
+        """Test heal prompt ids single token is failure."""
         with self.assertRaisesRegex(ValueError, "heal_empty_trimmed_prompt"):
             heal_prompt_ids(
                 (10,),
@@ -242,6 +263,7 @@ class HealingPureTests(unittest.TestCase):
             )
 
     def test_heal_prompt_ids_invalid_input(self):
+        """Test heal prompt ids invalid input."""
         kw = {
             "decode_prompt": lambda ids: "x",
             "decode_token": lambda t: "x",
@@ -255,6 +277,7 @@ class HealingPureTests(unittest.TestCase):
                 heal_prompt_ids(bad, **kw)
 
     def test_heal_prompt_ids_injected_failures_fail_closed(self):
+        """Test heal prompt ids injected failures fail closed."""
         base = {
             "decode_token": lambda t: "Par",
             "vocab": {"Par": 10, "Paris": 11},
@@ -263,6 +286,7 @@ class HealingPureTests(unittest.TestCase):
         }
 
         def boom(ids):
+            """Boom."""
             raise RuntimeError("decode exploded")
 
         with self.assertRaisesRegex(ValueError, "heal_decode_failed"):
@@ -298,6 +322,7 @@ class HealingPureTests(unittest.TestCase):
             )
 
     def test_heal_prompt_ids_deterministic(self):
+        """Test heal prompt ids deterministic."""
         kw = {
             "decode_prompt": lambda ids: "Say Par",
             "decode_token": lambda t: "Par",
@@ -310,20 +335,28 @@ class HealingPureTests(unittest.TestCase):
 
 
 class TokenHealingBackendTests(unittest.TestCase):
+    """Token healing backend tests."""
+
     def test_rejects_backend_without_heal(self):
+        """Test rejects backend without heal."""
+
         class Plain:
+            """Plain."""
+
             fingerprint = "plain"
 
         with self.assertRaisesRegex(ValueError, "does not support token healing"):
             backends.TokenHealingBackend(Plain())
 
     def test_rejects_non_string_fingerprint(self):
+        """Test rejects non string fingerprint."""
         inner = ScriptedHealBackend({"alpha": "pass"})
         inner.fingerprint = 42
         with self.assertRaisesRegex(ValueError, "fingerprint must be a string"):
             backends.TokenHealingBackend(inner)
 
     def test_fingerprint_suffix_and_forwarding(self):
+        """Test fingerprint suffix and forwarding."""
         inner = ScriptedHealBackend({"alpha": "pass"})
         inner.hf_stop_token_bytes = "sentinel"
         wrapper = backends.TokenHealingBackend(inner)
@@ -332,6 +365,7 @@ class TokenHealingBackendTests(unittest.TestCase):
         self.assertEqual(wrapper.encode("ab"), inner.encode("ab"))
 
     def test_generate_heals_and_counts(self):
+        """Test generate heals and counts."""
         inner = ScriptedHealBackend({"alpha": "pass"}, heal_mode="ok")
         wrapper = backends.TokenHealingBackend(inner)
         gen = wrapper.generate(
@@ -342,15 +376,18 @@ class TokenHealingBackendTests(unittest.TestCase):
         self.assertEqual(wrapper.n_fallback, 0)
 
     def test_generate_falls_back_on_contract_violation(self):
+        """Test generate falls back on contract violation."""
         # A healer returning a non-tuple degrades to native ids instead
         # of feeding malformed ids into generation.
         inner = ScriptedHealBackend({"alpha": "pass"}, heal_mode="ok")
         seen = {}
 
         def bad_heal(input_ids):
+            """Bad heal."""
             return [1, 2, 3]
 
         def spy_generate(input_ids, *, max_new_tokens, seed, cancel):
+            """Spy generate."""
             seen["input_ids"] = input_ids
             return core.Generation((1,), "limit")
 
@@ -364,11 +401,13 @@ class TokenHealingBackendTests(unittest.TestCase):
         self.assertEqual(wrapper.n_healed, 0)
 
     def test_generate_falls_back_on_heal_failure(self):
+        """Test generate falls back on heal failure."""
         inner = ScriptedHealBackend({"alpha": "pass"}, heal_mode="raise")
         wrapper = backends.TokenHealingBackend(inner)
         seen = {}
 
         def spy_generate(input_ids, *, max_new_tokens, seed, cancel):
+            """Spy generate."""
             seen["input_ids"] = input_ids
             return core.Generation((1, 2), "limit")
 
@@ -390,38 +429,48 @@ class HealInputIdsAdapterTests(unittest.TestCase):
     """
 
     def _backend(self, logits):
+        """Backend."""
         import contextlib
         from threading import RLock
 
         vocab = {"a": 0, "ab": 1, "abc": 2}
 
         class FakeTokenizer:
+            """Fake tokenizer."""
+
             @staticmethod
             def get_vocab():
+                """Get vocab."""
                 return dict(vocab)
 
             @staticmethod
             def convert_tokens_to_ids(text):
+                """Convert tokens to ids."""
                 return vocab.get(text)
 
             @staticmethod
             def convert_ids_to_tokens(ids):
+                """Convert ids to tokens."""
                 inv = {v: k for k, v in vocab.items()}
                 return [inv[i] for i in ids]
 
             @staticmethod
             def decode(ids, **kwargs):
+                """Decode."""
                 inv = {v: k for k, v in vocab.items()}
                 return "".join(inv[i] for i in ids)
 
             @staticmethod
             def encode(text, **kwargs):
+                """Encode."""
                 table = {"aab": (0, 1), "a": (0,)}
                 if text not in table:
                     raise ValueError("unknown text")
                 return table[text]
 
         class FakeLogits:
+            """Fake logits."""
+
             def __init__(self, values):
                 self._v = list(values)
 
@@ -430,6 +479,7 @@ class HealInputIdsAdapterTests(unittest.TestCase):
                 return 1
 
             def numel(self):
+                """Numel."""
                 return len(self._v)
 
             def __setitem__(self, i, v):
@@ -439,6 +489,8 @@ class HealInputIdsAdapterTests(unittest.TestCase):
                 return self._v[i]
 
         class FakeLogits3D:
+            """Fake logits3 d."""
+
             def __init__(self, values):
                 self._values = values
 
@@ -447,49 +499,67 @@ class HealInputIdsAdapterTests(unittest.TestCase):
                 return FakeLogits(self._values)
 
         class FakeResult:
+            """Fake result."""
+
             def __init__(self, values):
                 self.logits = FakeLogits3D(values)
 
         class FakeModel:
+            """Fake model."""
+
             def __call__(self, **kwargs):
                 return FakeResult(list(logits))
 
         class FakeAll:
+            """Fake all."""
+
             def all(self):
+                """All."""
                 return self
 
             @staticmethod
             def item():
+                """Item."""
                 return True
 
         class FakeScalar:
+            """Fake scalar."""
+
             def __init__(self, value):
                 self._value = value
 
             def item(self):
+                """Item."""
                 return self._value
 
         class FakeTorch:
+            """Fake torch."""
+
             long = "long"
 
             @staticmethod
             def inference_mode():
+                """Inference mode."""
                 return contextlib.nullcontext()
 
             @staticmethod
             def tensor(data, dtype=None, device=None):
+                """Tensor."""
                 return data
 
             @staticmethod
             def ones_like(seq):
+                """Ones like."""
                 return seq
 
             @staticmethod
             def isfinite(logits):
+                """Isfinite."""
                 return FakeAll()
 
             @staticmethod
             def argmax(logits):
+                """Argmax."""
                 best = max(range(logits.numel()), key=lambda i: logits[i])
                 return FakeScalar(best)
 
@@ -504,6 +574,7 @@ class HealInputIdsAdapterTests(unittest.TestCase):
         return backend
 
     def test_heal_input_ids_rewires_tail(self):
+        """Test heal input ids rewires tail."""
         # Prompt (0, 1) decodes to "aab"; tail "ab" has extensions
         # {ab, abc}; logits [0, 1, 5] + biases {1: 11, 2: 10} ->
         # argmax 2 ("abc"). Healed prompt: (0, 2).
@@ -511,12 +582,14 @@ class HealInputIdsAdapterTests(unittest.TestCase):
         self.assertEqual(backend.heal_input_ids((0, 1)), (0, 2))
 
     def test_heal_input_ids_prefers_original_on_tie(self):
+        """Test heal input ids prefers original on tie."""
         # Logits tie between "ab" and "abc": the +1.0 original-token
         # bias breaks the tie toward the original tail.
         backend = self._backend([0.0, 5.0, 5.0])
         self.assertEqual(backend.heal_input_ids((0, 1)), (0, 1))
 
     def test_heal_input_ids_rejects_bad_input(self):
+        """Test heal input ids rejects bad input."""
         backend = self._backend([0.0, 1.0, 5.0])
         with self.assertRaises(ValueError):
             backend.heal_input_ids(())
@@ -525,7 +598,10 @@ class HealInputIdsAdapterTests(unittest.TestCase):
 
 
 class HealingStageTests(unittest.TestCase):
+    """Healing stage tests."""
+
     def test_outcomes_and_shape(self):
+        """Test outcomes and shape."""
         out = _stage({"alpha": "pass", "beta": "fail"})
         self.assertEqual(out["n_fixtures"], 2)
         self.assertEqual(sorted(out["outcomes"]), ["alpha", "beta"])
@@ -541,23 +617,27 @@ class HealingStageTests(unittest.TestCase):
         self.assertEqual(out["fixture_ids"], ["S1", "S2"])
 
     def test_heal_failure_falls_back_and_still_evaluates(self):
+        """Test heal failure falls back and still evaluates."""
         out = _stage({"alpha": "pass", "beta": "pass"}, heal_mode="raise")
         self.assertTrue(out["outcomes"]["alpha"]["passed"])
         self.assertEqual(out["n_healed"], 0)
         self.assertEqual(out["n_fallback"], 4)
 
     def test_backend_error_records_none(self):
+        """Test backend error records none."""
         out = _stage({"alpha": "error", "beta": "pass"})
         self.assertIsNone(out["outcomes"]["alpha"]["passed"])
         self.assertTrue(out["outcomes"]["beta"]["passed"])
 
     def test_deterministic(self):
+        """Test deterministic."""
         self.assertEqual(
             _stage({"alpha": "pass", "beta": "fail"}),
             _stage({"alpha": "pass", "beta": "fail"}),
         )
 
     def test_validation(self):
+        """Test validation."""
         cases = (_fixture("S1", "Say BLUE please"),)
         formats = (_format("alpha"),)
         with self.assertRaises(ValueError):
@@ -575,6 +655,8 @@ class HealingStageTests(unittest.TestCase):
         # A backend that cannot heal fails the stage loudly (the CLI
         # converts this into the unavailable marker, never a crash).
         class Plain:
+            """Plain."""
+
             fingerprint = "plain"
 
         with self.assertRaises(ValueError):
@@ -582,9 +664,14 @@ class HealingStageTests(unittest.TestCase):
 
 
 class NativeSearchOutcomesTests(unittest.TestCase):
+    """Native search outcomes tests."""
+
     @staticmethod
     def _entries():
+        """Entries."""
+
         def obs(passed):
+            """Obs."""
             return {
                 "fixture": "S1",
                 "exact_match": passed,
@@ -605,17 +692,20 @@ class NativeSearchOutcomesTests(unittest.TestCase):
         ]
 
     def test_extracts_pass_fail(self):
+        """Test extracts pass fail."""
         out = native_search_outcomes(self._entries(), CANDIDATES)
         self.assertTrue(out["alpha"]["passed"])
         self.assertEqual(out["alpha"]["per_fixture"], {"S1": True})
         self.assertFalse(out["beta"]["passed"])
 
     def test_missing_candidate_is_none(self):
+        """Test missing candidate is none."""
         out = native_search_outcomes(self._entries(), ("alpha", "gamma"))
         self.assertIsNone(out["gamma"]["passed"])
         self.assertEqual(out["gamma"]["per_fixture"], {})
 
     def test_ineligible_and_malformed_degrade(self):
+        """Test ineligible and malformed degrade."""
         entries = self._entries()
         entries[0]["summary"]["aggregate_eligible"] = False
         entries[1]["observations"] = [{"fixture": "S1"}]  # missing verdict fields
@@ -628,7 +718,10 @@ class NativeSearchOutcomesTests(unittest.TestCase):
 
 
 class HealingDeltaTests(unittest.TestCase):
+    """Healing delta tests."""
+
     def test_stable_winner(self):
+        """Test stable winner."""
         d = _delta({"alpha": "pass", "beta": "fail"}, {"alpha": "pass", "beta": "fail"})
         self.assertTrue(d["available"])
         self.assertEqual(d["healed_decision"], "selected")
@@ -637,12 +730,14 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertEqual(d["per_candidate"]["alpha"]["verdict_changed"], False)
 
     def test_flipped_winner(self):
+        """Test flipped winner."""
         d = _delta({"alpha": "pass", "beta": "fail"}, {"alpha": "fail", "beta": "pass"})
         self.assertTrue(d["flipped"])
         self.assertEqual(d["healed_winner"], "beta")
         self.assertEqual(len(d["fixture_flips"]), 4)
 
     def test_healed_tie_is_ambiguous(self):
+        """Test healed tie is ambiguous."""
         d = _delta(
             {"alpha": "pass", "beta": "fail"},
             {"alpha": "pass", "beta": "pass"},
@@ -652,6 +747,7 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertTrue(d["flipped"])
 
     def test_all_unevaluable_is_unavailable(self):
+        """Test all unevaluable is unavailable."""
         d = _delta(
             {"alpha": "pass", "beta": "fail"},
             {"alpha": "error", "beta": "error"},
@@ -660,6 +756,7 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertIsNone(d["healed_winner"])
 
     def test_falsification_table(self):
+        """Test falsification table."""
         # beta is seam-fragile and flips; alpha is canonical and stable:
         # the prediction holds for both.
         d = _delta(
@@ -680,6 +777,7 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertTrue(fals["prediction_holds"])
 
     def test_falsification_violation(self):
+        """Test falsification violation."""
         # alpha is canonical but flips anyway: a genuine violation of the
         # prediction (the interesting, publishable outcome).
         d = _delta(
@@ -693,6 +791,7 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertFalse(fals["prediction_holds"])
 
     def test_falsification_without_audit(self):
+        """Test falsification without audit."""
         d = healing_delta(
             "alpha",
             "selected",
@@ -708,6 +807,7 @@ class HealingDeltaTests(unittest.TestCase):
         self.assertIsNone(fals["prediction_holds"])
 
     def test_malformed_input_never_raises(self):
+        """Test malformed input never raises."""
         good_native = _native({"alpha": "pass", "beta": "fail"})
         good_healed = _healed_payload({"alpha": "pass", "beta": "fail"})
         bads = [
@@ -817,6 +917,7 @@ class HealingDeltaTests(unittest.TestCase):
                 self.assertEqual(got, want)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_healing_delta(primary_winner, primary_decision, candidates, native, healed, audit):
     """Independent reimplementation of healing_delta (different structure)."""
     if not (
@@ -927,8 +1028,11 @@ def _oracle_healing_delta(primary_winner, primary_decision, candidates, native, 
 
 
 class DiffTokenHealingTests(unittest.TestCase):
+    """Diff token healing tests."""
+
     @staticmethod
     def _payload(flipped=False, winner="alpha", extra=None):
+        """Payload."""
         payload = {
             "available": True,
             "primary_winner": "alpha",
@@ -956,12 +1060,14 @@ class DiffTokenHealingTests(unittest.TestCase):
         return payload
 
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         p = self._payload()
         diff = diff_token_healing(p, copy.deepcopy(p))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_flip_only_change_pins_disjunct(self):
+        """Test flip only change pins disjunct."""
         old = self._payload(flipped=False)
         new = self._payload(flipped=True, winner="beta")
         diff = diff_token_healing(old, new)
@@ -969,6 +1075,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertTrue(diff["flip"]["changed"])
 
     def test_candidate_drift_only_change_pins_disjunct(self):
+        """Test candidate drift only change pins disjunct."""
         old = self._payload()
         new = self._payload()
         new["per_candidate"]["beta"]["healed"] = True
@@ -978,6 +1085,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertEqual(diff["candidate_drift"][0]["candidate"], "beta")
 
     def test_falsification_only_change_pins_disjunct(self):
+        """Test falsification only change pins disjunct."""
         old = self._payload()
         new = self._payload()
         new["falsification"]["n_holds"] = 1
@@ -986,6 +1094,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertTrue(diff["falsification"]["changed"])
 
     def test_added_removed_candidates_pin_disjunct(self):
+        """Test added removed candidates pin disjunct."""
         old = self._payload()
         new = self._payload()
         new["per_candidate"]["gamma"] = {
@@ -1004,6 +1113,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertEqual(diff2["candidates_removed"], ["beta"])
 
     def test_availability_contract(self):
+        """Test availability contract."""
         p = self._payload()
         self.assertEqual(diff_token_healing(p, None)["available"], "old")
         self.assertEqual(diff_token_healing(None, p)["available"], "new")
@@ -1012,6 +1122,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertFalse(d["changed"])
 
     def test_hostile_values_degrade_not_crash(self):
+        """Test hostile values degrade not crash."""
         # Non-bool flipped / non-bool verdict values fail validation on
         # that side instead of crashing the comparison (wave-2 C3).
         p = self._payload()
@@ -1036,6 +1147,7 @@ class DiffTokenHealingTests(unittest.TestCase):
         self.assertFalse(any("\x1b" in line for line in rendered))
 
     def test_render_summary_lines(self):
+        """Test render summary lines."""
         old = self._payload(flipped=False)
         new = self._payload(flipped=True, winner="beta")
         new["per_candidate"]["beta"]["healed"] = True
@@ -1054,8 +1166,11 @@ class DiffTokenHealingTests(unittest.TestCase):
 
 
 class TokenHealingSectionTests(unittest.TestCase):
+    """Token healing section tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         d = _delta(
             {"alpha": "pass", "beta": "fail"},
             {"alpha": "fail", "beta": "pass"},
@@ -1064,11 +1179,13 @@ class TokenHealingSectionTests(unittest.TestCase):
         return {"token_healing": d}
 
     def test_renders_nothing_when_unavailable(self):
+        """Test renders nothing when unavailable."""
         self.assertEqual(_token_healing_section({}), "")
         self.assertEqual(_token_healing_section({"token_healing": {"available": False}}), "")
         self.assertEqual(_token_healing_section({"token_healing": {"available": True}}), "")
 
     def test_renders_verdict_and_tables(self):
+        """Test renders verdict and tables."""
         section_html = _token_healing_section(self._result())
         self.assertIn("Token-healing selection sensitivity", section_html)
         self.assertIn("flipped", section_html)
@@ -1076,6 +1193,7 @@ class TokenHealingSectionTests(unittest.TestCase):
         self.assertIn("Boundary-audit prediction holds for", section_html)
 
     def test_escapes_hostile_candidate_names(self):
+        """Test escapes hostile candidate names."""
         import html as html_module
 
         result = self._result()
@@ -1091,6 +1209,7 @@ class HealingMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -1109,7 +1228,10 @@ class HealingMutationGateTests(unittest.TestCase):
                 scenario(mutant)
 
     def test_mutant_dropped_original_bias_caught(self):
+        """Test mutant dropped original bias caught."""
+
         def scenario(mod):
+            """Scenario."""
             # Without the +1.0 original-token bias, the tail token loses
             # its slight healing advantage: the bias map is wrong.
             self.assertEqual(mod.healing_biases((10, 11), 10)[10], 11.0)
@@ -1123,7 +1245,10 @@ class HealingMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_endswith_prefix_search_caught(self):
+        """Test mutant endswith prefix search caught."""
+
         def scenario(mod):
+            """Scenario."""
             # A suffix search instead of a prefix search finds the wrong
             # extension set: "sPar" does not extend "Par".
             self.assertEqual(
@@ -1140,7 +1265,10 @@ class HealingMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_inverted_falsification_caught(self):
+        """Test mutant inverted falsification caught."""
+
         def scenario(mod):
+            """Scenario."""
             # Weakening the prediction to require a flip for every fragile
             # candidate misclassifies the uninformative case (fragile but
             # stable): the scenario holds on the real module and must fail
@@ -1177,7 +1305,10 @@ class HealingMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_dropped_flip_disjunct_caught(self):
+        """Test mutant dropped flip disjunct caught."""
+
         def scenario(mod):
+            """Scenario."""
             old = {
                 "available": True,
                 "flipped": False,

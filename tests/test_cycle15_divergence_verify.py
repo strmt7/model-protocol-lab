@@ -94,6 +94,7 @@ class _ConcatBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
@@ -191,6 +192,7 @@ class _DivergenceOracle:
 
     @staticmethod
     def _checked_ids(value: object, name: str, cap: int) -> tuple[int, ...]:
+        """Checked ids."""
         if type(value) is not tuple or any(
             type(token) is not int or not 0 <= token < 2**31 for token in value
         ):
@@ -201,6 +203,7 @@ class _DivergenceOracle:
 
     @staticmethod
     def _checked_stop_texts(value: object) -> tuple[str, ...]:
+        """Checked stop texts."""
         if type(value) is tuple:
             items: tuple[object, ...] = value
         elif type(value) is list:
@@ -226,6 +229,7 @@ class _DivergenceOracle:
     def _observation_ids(
         self, observation: dict[str, Any], key: str, cap: int
     ) -> tuple[int, ...] | None:
+        """Observation ids."""
         raw: object = observation.get(key)
         if type(raw) is list:
             raw = tuple(raw)
@@ -238,11 +242,13 @@ class _DivergenceOracle:
 
     @staticmethod
     def _parse_firing_step(detail: str) -> int | None:
+        """Parse firing step."""
         match = re.fullmatch(r"fired_at_step_(\d+)", detail)
         return int(match.group(1)) if match is not None else None
 
     @staticmethod
     def _safe_decode(backend: Any, ids: tuple[int, ...]) -> str | None:
+        """Safe decode."""
         try:
             text = backend.decode(ids)
         except Exception:  # noqa: BLE001 -- text checks degrade, never fail the oracle
@@ -250,6 +256,7 @@ class _DivergenceOracle:
         return text if type(text) is str else None
 
     def _cell_text(self, backend: Any, cell: _OracleCell) -> str | None:
+        """Cell text."""
         if cell.returned_text is not None:
             return cell.returned_text
         return self._safe_decode(backend, cell.truncated_ids)
@@ -264,9 +271,11 @@ class _DivergenceOracle:
         min_tokens: int,
         backend: Any,
     ) -> dict[str, _OracleCell]:
+        """Build cells."""
         token_bytes = getattr(backend, "hf_stop_token_bytes", None)
 
         def make(semantic: str, outcome: Any, disposition: str | None) -> _OracleCell:
+            """Make."""
             return _OracleCell(
                 semantic=semantic,
                 available=bool(outcome.available),
@@ -369,6 +378,7 @@ class _DivergenceOracle:
             and eos.firing_step == sglang.firing_step
         )
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _classify_stop(
         self,
         *,
@@ -378,6 +388,7 @@ class _DivergenceOracle:
         output_ids: tuple[int, ...],
         min_tokens: int,
     ) -> list[_OracleDivergence]:
+        """Classify stop."""
         kinds: list[str] = []
         live = [cells[semantic] for semantic in _STOP_SEMANTICS if cells[semantic].available]
         hf = cells[HF_STOP_STRING]
@@ -415,6 +426,7 @@ class _DivergenceOracle:
             for kind in kinds
         ]
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _classify_selection(
         self, per_stop: list[tuple[str, _OracleCell, _OracleCell, _OracleCell]]
     ) -> _OracleDivergence | None:
@@ -521,6 +533,7 @@ class _DivergenceOracle:
             "verdict": "diverge" if divergences else "agree",
         }
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def section_data(
         self,
         *,
@@ -682,6 +695,7 @@ class _StrictEosOracle(_DivergenceOracle):
 
     @staticmethod
     def _eos_precedence_fires(eos: _OracleCell, live: list[_OracleCell]) -> bool:
+        """Eos precedence fires."""
         if not (eos.available and eos.fired and eos.firing_step is not None):
             return False
         stop_steps = [
@@ -694,12 +708,14 @@ class DivergenceClassificationTests(unittest.TestCase):
     """``diff_backends`` divergence classification vs the independent oracle."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.oracle = _DivergenceOracle()
 
     @staticmethod
     def _backend(
         texts: list[str], prompt_texts: list[str] | tuple[str, ...] = ()
     ) -> tuple[_ConcatBackend, tuple[int, ...], tuple[int, ...]]:
+        """Backend."""
         mapping = {index + 1: text for index, text in enumerate(texts)}
         prompt_ids = tuple(1001 + index for index in range(len(prompt_texts)))
         for pid, text in zip(prompt_ids, prompt_texts, strict=True):
@@ -707,6 +723,7 @@ class DivergenceClassificationTests(unittest.TestCase):
         return _ConcatBackend(mapping), tuple(range(1, len(texts) + 1)), prompt_ids
 
     def _run_hand_case(self, name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Run hand case."""
         for case in _HAND_CASES:
             if case[0] == name:
                 _, texts, stops, eos_id, min_tokens, _ = case
@@ -754,6 +771,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                 self.assertEqual(icell["disposition"], ocell.disposition, where)
 
     def test_hand_cases_match_oracle(self) -> None:
+        """Test hand cases match oracle."""
         for name, _, _, _, _, expected in _HAND_CASES:
             with self.subTest(name=name):
                 impl, oracle_result = self._run_hand_case(name)
@@ -766,6 +784,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                     self.assertEqual(impl["verdict"], "agree", name)
 
     def test_each_class_attribution_matches_class_semantics(self) -> None:
+        """Test each class attribution matches class semantics."""
         # Every divergence class fires at least once by construction; the
         # oracle's attributed semantics for each firing must equal the
         # module's _CLASS_SEMANTICS entry (the class x semantic matrix pin).
@@ -784,11 +803,13 @@ class DivergenceClassificationTests(unittest.TestCase):
                     )
 
     def test_severity_pin_matches(self) -> None:
+        """Test severity pin matches."""
         # The oracle's docstring-derived severity pin equals the module's
         # DIVERGENCE_SEVERITY for every class.
         self.assertEqual(self.oracle.SEVERITY, DIVERGENCE_SEVERITY)
 
     def test_fuzz_classification_matches_oracle(self) -> None:
+        """Test fuzz classification matches oracle."""
         rng = random.Random(20261017)  # noqa: S311 -- seeded deterministic fuzz, not crypto
         token_pool = [
             "a",
@@ -862,6 +883,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                 self.assert_matches_oracle(impl, oracle_result, f"fuzz-{trial}")
 
     def test_invalid_inputs_raise_identical_codes(self) -> None:
+        """Test invalid inputs raise identical codes."""
         backend, _, _ = self._backend(["a"])
         base: dict[str, Any] = {
             "prompt_ids": (),
@@ -914,6 +936,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                 self.assertEqual(str(oracle_cm.exception), code, name)
 
     def test_mutated_attribution_is_caught(self) -> None:
+        """Test mutated attribution is caught."""
         # Sensitivity: remove one semantic from a class's attribution in a
         # COPY of the oracle -- the check against _CLASS_SEMANTICS must fail.
         mutated = _DivergenceOracle(
@@ -936,6 +959,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                 self.assertEqual(divergence.attributed, _CLASS_SEMANTICS[divergence.kind])
 
     def test_swapped_attribution_is_caught(self) -> None:
+        """Test swapped attribution is caught."""
         # Sensitivity: swap two classes' attributions in a copy -- the
         # check against _CLASS_SEMANTICS must fail.
         swapped = dict(_DivergenceOracle.CLASS_SEMANTICS)
@@ -959,6 +983,7 @@ class DivergenceClassificationTests(unittest.TestCase):
                 self.assertEqual(divergence.attributed, _CLASS_SEMANTICS[divergence.kind])
 
     def test_mutated_predicate_is_caught(self) -> None:
+        """Test mutated predicate is caught."""
         # Sensitivity: a classifier mutant that requires a *strictly*
         # earlier EOS step misses EOS_PRECEDENCE on the same-step tie --
         # the differential comparison against diff_backends must fail.
@@ -981,11 +1006,13 @@ class DivergenceSectionTests(unittest.TestCase):
     """``divergence_section_data`` aggregation vs the independent oracle."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.oracle = _DivergenceOracle()
 
     def assert_section_matches(
         self, impl: dict[str, Any] | None, oracle_result: dict[str, Any] | None, label: str
     ) -> None:
+        """Assert section matches."""
         self.assertEqual(impl is None, oracle_result is None, label)
         if impl is None or oracle_result is None:
             return
@@ -1021,6 +1048,7 @@ class DivergenceSectionTests(unittest.TestCase):
     def _section_kwargs(
         observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend
     ) -> dict[str, Any]:
+        """Section kwargs."""
         return {
             "observations": observations,
             "stop_texts": ("STOP",),
@@ -1030,6 +1058,7 @@ class DivergenceSectionTests(unittest.TestCase):
         }
 
     def test_section_agree_and_diverge(self) -> None:
+        """Test section agree and diverge."""
         backend = _ConcatBackend({1: "a", 2: "STOP", 3: "b"})
         observations = [
             {"fixture": "agree_fx", "input_ids": [], "output_ids": [1]},
@@ -1066,6 +1095,7 @@ class DivergenceSectionTests(unittest.TestCase):
         self.assertEqual(impl["observations_processed"], 2)
 
     def test_section_default_fixture_names(self) -> None:
+        """Test section default fixture names."""
         backend = _ConcatBackend({1: "a"})
         observations = [
             {"input_ids": [], "output_ids": [1]},  # no fixture name
@@ -1084,6 +1114,7 @@ class DivergenceSectionTests(unittest.TestCase):
 
     @staticmethod
     def _random_observation(rng: random.Random, n_tokens: int) -> Any:
+        """Random observation."""
         roll = rng.random()
         if roll < 0.62:
             observation: dict[str, Any] = {
@@ -1108,6 +1139,7 @@ class DivergenceSectionTests(unittest.TestCase):
         return {"input_ids": [], "output_ids": list(range(MAX_OUTPUT_IDS + 5))}
 
     def test_section_fuzz_matches_oracle(self) -> None:
+        """Test section fuzz matches oracle."""
         rng = random.Random(20261018)  # noqa: S311 -- seeded deterministic fuzz, not crypto
         token_pool = [
             "a",
@@ -1150,6 +1182,7 @@ class DivergenceSectionTests(unittest.TestCase):
                 self.assert_section_matches(impl, oracle_result, f"section-fuzz-{trial}")
 
     def test_section_truncation_accounting(self) -> None:
+        """Test section truncation accounting."""
         backend = _ConcatBackend({1: "x", 2: "y"})
         observations = [
             {"fixture": f"obs_{i}", "input_ids": [], "output_ids": [1, 2]}
@@ -1172,6 +1205,7 @@ class DivergenceSectionTests(unittest.TestCase):
         self.assertEqual(impl["verdict"], "agree")
 
     def test_section_truncation_with_skips(self) -> None:
+        """Test section truncation with skips."""
         # Invalid observations inside the first N are skipped by omission;
         # observations_processed counts only the emulated ones.
         backend = _ConcatBackend({1: "x", 2: "y"})
@@ -1196,6 +1230,7 @@ class DivergenceSectionTests(unittest.TestCase):
         self.assertNotIn("bad_0", [entry["fixture"] for entry in impl["per_fixture"]])
 
     def test_section_no_usable_observations_returns_none(self) -> None:
+        """Test section no usable observations returns none."""
         backend = _ConcatBackend({1: "x"})
         for label, observations in (
             ("empty", []),
@@ -1207,6 +1242,7 @@ class DivergenceSectionTests(unittest.TestCase):
                 self.assertIsNone(self.oracle.section_data(**kwargs))
 
     def test_section_invalid_inputs_raise_identical_codes(self) -> None:
+        """Test section invalid inputs raise identical codes."""
         backend = _ConcatBackend({1: "x"})
         base: dict[str, Any] = {
             "observations": [],

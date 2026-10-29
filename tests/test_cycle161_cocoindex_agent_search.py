@@ -25,6 +25,8 @@ from tools.cocoindex_agent_search import (
 
 
 class CocoIndexAgentSearchTests(unittest.TestCase):
+    """Coco index agent search tests."""
+
     def test_successful_search_records_real_use_without_query_text(self):
         """Purpose: Prove routing receipt semantics.
         Inputs: fresh source/real wrapper/mock package.
@@ -123,6 +125,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             self.assertFalse(marker.with_name(mirror.name + ".usage.json").exists())
 
     def test_home_requires_absolute_override(self):
+        """Test home requires absolute override."""
         with (
             patch.dict("os.environ", {"AGENT_CODE_HOME": "relative"}),
             self.assertRaisesRegex(ValueError, "absolute"),
@@ -130,6 +133,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             home()
 
     def test_home_rejects_checkout_state(self):
+        """Test home rejects checkout state."""
         with (
             patch.dict("os.environ", {"AGENT_CODE_HOME": str(ROOT / "index-state")}),
             self.assertRaisesRegex(ValueError, "outside the checkout"),
@@ -137,6 +141,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             home()
 
     def test_mirror_copies_exact_bytes_and_prunes_stale_generated_file(self):
+        """Test mirror copies exact bytes and prunes stale generated file."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source.py"
@@ -156,6 +161,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             self.assertEqual((mirror / "nested/source.py").read_bytes(), source.read_bytes())
 
     def test_search_rejects_missing_index_without_starting_package(self):
+        """Test search rejects missing index without starting package."""
         with (
             tempfile.TemporaryDirectory() as temp,
             self.assertRaisesRegex(RuntimeError, "no active index"),
@@ -163,6 +169,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             search(Path(temp), "training labels", 5, repo=Path(temp))
 
     def test_search_rejects_unreliable_wildcard_filter(self):
+        """Test search rejects unreliable wildcard filter."""
         with (
             tempfile.TemporaryDirectory() as temp,
             self.assertRaisesRegex(ValueError, "wildcard path filters"),
@@ -170,6 +177,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             search(Path(temp), "training labels", 5, repo=Path(temp), path="model_protocol_lab/*")
 
     def test_search_rejects_stale_source_before_package_call(self):
+        """Test search rejects stale source before package call."""
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             source = base / "source.py"
@@ -191,11 +199,13 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
                 search(base, "training labels", 5, repo=base)
 
     def test_mirror_paths_are_per_repository(self):
+        """Test mirror paths are per repository."""
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             self.assertNotEqual(paths(base, base / "a")[1], paths(base, base / "b")[1])
 
     def test_tracked_files_rejects_escape_and_real_env(self):
+        """Test tracked files rejects escape and real env."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for unsafe in (b"../outside\0", b".env\0", b"secrets/key.txt\0", b"tls/private.pem\0"):

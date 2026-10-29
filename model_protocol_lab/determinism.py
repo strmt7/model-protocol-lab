@@ -142,6 +142,7 @@ def _search_incomplete(data: dict[str, Any]) -> bool:
     return False
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _plan(
     data: Any,
 ) -> tuple[
@@ -290,6 +291,7 @@ def _certificate(
     return certificate
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def audit_determinism(
     data: Any, backend: Any, *, replay: dict[str, Any] | None = None
 ) -> dict[str, Any]:

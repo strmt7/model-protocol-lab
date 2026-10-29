@@ -446,33 +446,45 @@ stated against the final head's complete capture on the same terms.
 
 Every occurrence was adjudicated into exactly one class:
 
-- **Fixed in code.** The bulk: missing docstrings inserted,
-  docstring formatting normalized, methods that never use their
-  instance converted to static methods file by file, explicit
-  `check=False` on subprocess calls whose sites inspect the return
-  code themselves, unused names renamed to discards after per-site
-  verification, overlapping except-tuple entries removed, type
-  annotations completed in `tools/` and `examples/`, and two
-  security items hardened (the findings guard now asserts its API
-  URL stays on the fixed `https://api.github.com/` host before
-  opening it; the CocoIndex tool resolves `git` to an absolute path
-  once instead of starting it from a partial path).
-- **Configured, with the justification in the repo.** Used only
-  where a rule's premise does not apply to a deliberate pattern of
-  this codebase. The `.deepsource.toml` excludes the two prose
-  files named there (the secrets analyzer's only hits were prose
-  fragments, not credentials), pins the repo's own 100-character
-  line-length standard, and sets the complexity threshold to the
-  provider's `critical` band — in this codebase branch count is
-  specification count, and the remaining above-band functions carry
-  per-site comments. Per-site `# skipcq` comments with reasons cover
-  the rest: function-local imports that keep validator mirrors
-  self-contained and the import graph acyclic, single-element tuple
-  unpacks that are the assertion being tested, `next()` calls in
-  tests whose `StopIteration` is the intended failure, the
-  mutation-gate `exec` sites (the gates execute this repo's own
-  module source, mutated in memory, never external input), and
-  deliberate test-fixture patterns.
+- **Fixed in code.** The bulk: missing docstrings inserted
+  (including, after the provider's full-strength runs reported them,
+  the test suite's methods and classes), docstring formatting
+  normalized, methods that never use their instance converted to
+  static methods file by file, explicit `check=False` on subprocess
+  calls whose sites inspect the return code themselves, unused
+  names renamed to discards after per-site verification,
+  overlapping except-tuple entries removed, type annotations
+  completed in `tools/` and `examples/`, a launcher import deferred
+  into its entry function, and two security items hardened (the
+  findings guard now asserts its API URL stays on the fixed
+  `https://api.github.com/` host before opening it; the CocoIndex
+  tool resolves `git` to an absolute path once instead of starting
+  it from a partial path). One report was a genuine defect: a test
+  method nested inside another method, collected by no runner, was
+  dedented to class level and now executes.
+- **Suppressed per site, with the justification in the repo.** Used
+  only where a rule's premise does not apply to a deliberate pattern
+  of this codebase. A `.deepsource.toml` was landed early in the
+  cycle and then withdrawn: controlled captures proved the provider
+  does not apply repo-file configuration for this repository's
+  connection (the reported configuration was byte-identical across
+  commits with and without the file, and neither its path excludes
+  nor its complexity threshold changed any outcome), and the
+  connection is documented in `AGENTS.md` as needing no repo config
+  file. Every occurrence is therefore dispositioned in code or by a
+  per-site `# skipcq` comment with its reason: function-local
+  imports that keep validator mirrors self-contained and the import
+  graph acyclic, single-element tuple unpacks that are the
+  assertion being tested, `next()` calls in tests whose
+  `StopIteration` is the intended failure, the mutation-gate `exec`
+  sites (the gates execute this repo's own module source, mutated
+  in memory, never external input), above-band complexity in
+  gate-pinned oracle and stage functions whose branch count is
+  specification count, and deliberate test-fixture patterns. The
+  secrets analyzer's two hits are prose fragments in this file and
+  the changelog (a negated example flag and a permission word in a
+  quoted scope string), adjudicated false positives in place; the
+  prose was not edited to dodge the pattern.
 - **Proven false positives.** A small set of analyzer claims the
   source refutes — imports reported unused that are used on the
   following lines, a dict reported as a list append, keyword

@@ -135,6 +135,7 @@ _DIVERGENCE = {"abs": 0.0, "rel": 0.0, "cases": 0}
 
 
 def _record(expected: float, got: float) -> None:
+    """Record."""
     diff = abs(got - expected)
     denom = abs(expected)
     rel = diff / denom if denom >= _REL_FLOOR else diff / _REL_FLOOR
@@ -162,6 +163,7 @@ def _assert_score_tuple(
     *,
     label: str,
 ) -> None:
+    """Assert score tuple."""
     exp_per, exp_total, exp_mean = expected
     got_per, got_total, got_mean = got
     assert len(got_per) == len(exp_per), f"{label}: per-token length mismatch"
@@ -196,6 +198,7 @@ _TARGET_LENS = (0, 1, 2, 3, 5, 8, 13, 16, 32, 48, 64)
 
 
 def _fuzz_case(rng: random.Random, *, spiky: bool) -> tuple[torch.Tensor, int, tuple[int, ...]]:
+    """Fuzz case."""
     vocab = rng.choice(_VOCABS)
     prompt_len = rng.randint(1, 8)
     target_len = rng.choice(_TARGET_LENS)
@@ -213,6 +216,7 @@ def _fuzz_case(rng: random.Random, *, spiky: bool) -> tuple[torch.Tensor, int, t
 
 
 def _spike_rows(vocab: int, spikes: dict[int, int], scale: float = 30.0) -> torch.Tensor:
+    """Spike rows."""
     rows = []
     n = max(spikes) + 1
     for r in range(n):
@@ -230,13 +234,16 @@ class _FakeBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(c) for c in text)
 
     @staticmethod
     def decode(ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(i) for i in ids)
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Forward logits."""
         assert len(input_ids) == self._logits.shape[0]
         return self._logits
 
@@ -359,6 +366,7 @@ class LogprobNumericsAuditTests(unittest.TestCase):
                 _assert_score_tuple(expected, got, label=f"batch[{b}]")
 
     def test_documented_rejections(self) -> None:
+        """Test documented rejections."""
         good = torch.zeros(4, 8, dtype=torch.float32)
         with self.assertRaisesRegex(TypeError, "logits_must_be_tensor"):
             score_span_from_logits([[0.0] * 8] * 4, prompt_len=2, target_ids=(1, 2))
@@ -425,6 +433,7 @@ class LogprobNumericsAuditTests(unittest.TestCase):
                     )
 
     def test_score_target_logprobs_empty_prompt_refused(self) -> None:
+        """Test score target logprobs empty prompt refused."""
         backend = _FakeBackend(8, torch.zeros(2, 8))
         score = score_target_logprobs(backend, (), (1, 2))
         self.assertEqual(score.status, "unavailable")

@@ -88,6 +88,7 @@ def _oracle_logprobs(
 
 
 def _rand_logits(prompt_len: int, n_targets: int, vocab: int, seed: str) -> torch.Tensor:
+    """Rand logits."""
     rng = random.Random(seed)  # noqa: S311 -- deterministic string seed
     rows = [[rng.uniform(-8.0, 8.0) for _ in range(vocab)] for _ in range(prompt_len + n_targets)]
     return torch.tensor(rows, dtype=torch.float32)
@@ -104,10 +105,12 @@ class CharBackend:
 
     @staticmethod
     def decode(ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(65 + i) for i in ids)
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(c) - 65 for c in text)
 
     @staticmethod
@@ -118,9 +121,11 @@ class CharBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         raise NotImplementedError("scoring audit never generates")
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Forward logits."""
         return self._logits
 
 
@@ -128,36 +133,44 @@ class TestF32Saturation(unittest.TestCase):
     """Regression tests for the cycle-76 _f32 overflow bug."""
 
     def test_negative_overflow_saturates_to_neg_inf(self) -> None:
+        """Test negative overflow saturates to neg inf."""
         # The exact reported case: finite float64 from fp32-range logits.
         result = _f32(-6.8e38)
         self.assertTrue(math.isinf(result) and result < 0)
 
     def test_positive_overflow_saturates_to_pos_inf(self) -> None:
+        """Test positive overflow saturates to pos inf."""
         result = _f32(6.8e38)
         self.assertTrue(math.isinf(result) and result > 0)
 
     def test_just_above_flt_max_saturates(self) -> None:
+        """Test just above flt max saturates."""
         above = math.nextafter(_FLT_MAX, math.inf)
         self.assertEqual(_f32(above), math.inf)
         self.assertEqual(_f32(-above), -math.inf)
 
     def test_flt_max_itself_stays_finite(self) -> None:
+        """Test flt max itself stays finite."""
         self.assertEqual(_f32(_FLT_MAX), _FLT_MAX)
         self.assertEqual(_f32(-_FLT_MAX), -_FLT_MAX)
 
     def test_infinities_pass_through(self) -> None:
+        """Test infinities pass through."""
         self.assertEqual(_f32(math.inf), math.inf)
         self.assertEqual(_f32(-math.inf), -math.inf)
 
     def test_nan_preserved(self) -> None:
+        """Test nan preserved."""
         self.assertTrue(math.isnan(_f32(math.nan)))
 
     def test_ordinary_values_unchanged(self) -> None:
+        """Test ordinary values unchanged."""
         for v in (0.0, 0.1, -2.5, 1e30, -1e-30, 3.14159):
             with self.subTest(value=v):
                 self.assertEqual(_f32(v), struct.unpack("<f", struct.pack("<f", v))[0])
 
     def test_idempotent(self) -> None:
+        """Test idempotent."""
         for v in (-6.8e38, 6.8e38, _FLT_MAX, 0.1, float("nan")):
             with self.subTest(value=v):
                 once = _f32(v)
@@ -172,6 +185,7 @@ class TestF32MatchesTorch(unittest.TestCase):
     """Differential: _f32 agrees with torch float32 conversion."""
 
     def test_agreement_across_magnitudes(self) -> None:
+        """Test agreement across magnitudes."""
         rng = random.Random("cycle76-f32-torch")  # noqa: S311 -- deterministic
         values = [rng.uniform(-1e3, 1e3) for _ in range(50)]
         values += [
@@ -204,6 +218,7 @@ class TestEndToEndOverflowScoring(unittest.TestCase):
 
     @staticmethod
     def _extreme_backend() -> CharBackend:
+        """Extreme backend."""
         # Row 1 (the single target row) has fp32-range logits whose true
         # logprob for token 1 is ~-6.8e38: finite float64, out of f32 range.
         logits = torch.tensor(
@@ -218,6 +233,7 @@ class TestEndToEndOverflowScoring(unittest.TestCase):
         return CharBackend(logits)
 
     def test_extreme_logits_score_ok_with_neg_inf(self) -> None:
+        """Test extreme logits score ok with neg inf."""
         # Target id 1 selects the -3.4e38 logit: true logprob ~ -6.8e38.
         score = score_target_logprobs(self._extreme_backend(), (0, 1), (1,))
         self.assertEqual(score.status, STATUS_OK)
@@ -228,6 +244,7 @@ class TestEndToEndOverflowScoring(unittest.TestCase):
         self.assertEqual(score.scored_token_count, 1)
 
     def test_moderate_logits_unaffected(self) -> None:
+        """Test moderate logits unaffected."""
         backend = CharBackend(torch.zeros(3, 4, dtype=torch.float32))
         score = score_target_logprobs(backend, (0, 1), (1,))
         self.assertEqual(score.status, STATUS_OK)
@@ -241,6 +258,7 @@ class TestScoringOracle(unittest.TestCase):
     """Independent plain-Python oracle vs score_span_from_logits."""
 
     def test_oracle_agreement_seeded(self) -> None:
+        """Test oracle agreement seeded."""
         for seed, prompt_len, n_targets, vocab in (
             ("cycle76-a", 1, 1, 4),
             ("cycle76-b", 2, 3, 6),
@@ -257,6 +275,7 @@ class TestScoringOracle(unittest.TestCase):
                 self.assertEqual(got[2], want[2])
 
     def test_single_token_target(self) -> None:
+        """Test single token target."""
         logits = _rand_logits(1, 1, 4, "cycle76-single")
         got = score_span_from_logits(logits, prompt_len=1, target_ids=(2,))
         rows = logits.to(torch.float64).tolist()
@@ -264,6 +283,7 @@ class TestScoringOracle(unittest.TestCase):
         self.assertEqual(got, want)
 
     def test_one_logit_flip_moves_score(self) -> None:
+        """Test one logit flip moves score."""
         logits = _rand_logits(2, 2, 4, "cycle76-flip")
         base = score_span_from_logits(logits, prompt_len=2, target_ids=(0, 1))
         flipped = logits.clone()
@@ -277,6 +297,7 @@ class TestScoringOracle(unittest.TestCase):
         self.assertEqual(base[0], same[0])
 
     def test_target_id_selects_gathered_token(self) -> None:
+        """Test target id selects gathered token."""
         logits = _rand_logits(1, 2, 4, "cycle76-gather")
         a = score_span_from_logits(logits, prompt_len=1, target_ids=(0, 0))
         b = score_span_from_logits(logits, prompt_len=1, target_ids=(3, 3))
@@ -287,6 +308,7 @@ class TestScoringRejections(unittest.TestCase):
     """Fixed rejection codes for malformed math inputs."""
 
     def test_non_finite_logits_rejected(self) -> None:
+        """Test non finite logits rejected."""
         logits = torch.zeros(2, 4, dtype=torch.float32)
         logits[0, 0] = float("inf")
         with self.assertRaises(ValueError) as ctx:
@@ -294,6 +316,7 @@ class TestScoringRejections(unittest.TestCase):
         self.assertEqual(ctx.exception.args[0], "non_finite_logits")
 
     def test_nan_logits_rejected(self) -> None:
+        """Test nan logits rejected."""
         logits = torch.zeros(2, 4, dtype=torch.float32)
         logits[1, 2] = float("nan")
         with self.assertRaises(ValueError) as ctx:
@@ -301,12 +324,14 @@ class TestScoringRejections(unittest.TestCase):
         self.assertEqual(ctx.exception.args[0], "non_finite_logits")
 
     def test_length_mismatch_rejected(self) -> None:
+        """Test length mismatch rejected."""
         logits = torch.zeros(5, 4, dtype=torch.float32)
         with self.assertRaises(ValueError) as ctx:
             score_span_from_logits(logits, prompt_len=1, target_ids=(0,))
         self.assertEqual(ctx.exception.args[0], "logits_length_mismatch")
 
     def test_non_2d_rejected(self) -> None:
+        """Test non 2d rejected."""
         with self.assertRaises(ValueError) as ctx:
             score_span_from_logits(
                 torch.zeros(4, dtype=torch.float32), prompt_len=1, target_ids=(0,)
@@ -314,11 +339,13 @@ class TestScoringRejections(unittest.TestCase):
         self.assertEqual(ctx.exception.args[0], "logits_must_be_2d")
 
     def test_non_tensor_rejected(self) -> None:
+        """Test non tensor rejected."""
         with self.assertRaises(TypeError) as ctx:
             score_span_from_logits([[0.0]], prompt_len=1, target_ids=(0,))  # type: ignore[arg-type]
         self.assertEqual(ctx.exception.args[0], "logits_must_be_tensor")
 
     def test_torch_absent_raises_fixed_code(self) -> None:
+        """Test torch absent raises fixed code."""
         logits = torch.zeros(2, 4, dtype=torch.float32)
         saved = sys.modules.get("torch")
         sys.modules["torch"] = None  # type: ignore[assignment]
@@ -334,12 +361,17 @@ class TestScoringRejections(unittest.TestCase):
 
 
 class ExplodingBackend(CharBackend):
+    """Exploding backend."""
+
     @staticmethod
     def decode(ids: tuple[int, ...]) -> str:
+        """Decode."""
         raise RuntimeError("decode exploded")
 
 
 class NoLogitsBackend(CharBackend):
+    """No logits backend."""
+
     forward_logits = None  # type: ignore[assignment]
 
 
@@ -347,19 +379,26 @@ class TestFailClosedPipeline(unittest.TestCase):
     """score_target_logprobs never raises and never guesses."""
 
     def test_backend_without_forward_logits(self) -> None:
+        """Test backend without forward logits."""
         score = score_target_logprobs(NoLogitsBackend(torch.zeros(3, 4)), (0, 1), (1,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
         self.assertEqual(score.reason, "logits_not_supported")
 
     def test_decode_failure_maps_to_fixed_code(self) -> None:
+        """Test decode failure maps to fixed code."""
         score = score_target_logprobs(ExplodingBackend(torch.zeros(3, 4)), (0, 1), (1,))
         self.assertEqual(score.status, STATUS_UNAVAILABLE)
         self.assertEqual(score.reason, "decode_failed")
 
     def test_provider_exception_maps_to_fixed_code(self) -> None:
+        """Test provider exception maps to fixed code."""
+
         class BadForward(CharBackend):
+            """Bad forward."""
+
             @staticmethod
             def forward_logits(input_ids: tuple[int, ...]) -> torch.Tensor:
+                """Forward logits."""
                 # Whitelisted provider-vocabulary codes pass through;
                 # anything else collapses (see next test).
                 raise ValueError("non_finite_logits")
@@ -369,9 +408,14 @@ class TestFailClosedPipeline(unittest.TestCase):
         self.assertEqual(score.reason, "non_finite_logits")
 
     def test_provider_arbitrary_exception_collapses(self) -> None:
+        """Test provider arbitrary exception collapses."""
+
         class BadForward(CharBackend):
+            """Bad forward."""
+
             @staticmethod
             def forward_logits(input_ids: tuple[int, ...]) -> torch.Tensor:
+                """Forward logits."""
                 raise RuntimeError("something unprintable \x00")
 
         score = score_target_logprobs(BadForward(torch.zeros(3, 4)), (0, 1), (1,))
@@ -379,6 +423,7 @@ class TestFailClosedPipeline(unittest.TestCase):
         self.assertEqual(score.reason, "forward_failed")
 
     def test_empty_target_scores_ok_empty(self) -> None:
+        """Test empty target scores ok empty."""
         backend = CharBackend(torch.zeros(2, 4))
         score = score_target_logprobs(backend, (0, 1), ())
         self.assertEqual(score.status, "ok_empty")
@@ -386,6 +431,7 @@ class TestFailClosedPipeline(unittest.TestCase):
         self.assertIsNone(score.mean_logprob)
 
     def test_alignment_ok_for_conforming_backend(self) -> None:
+        """Test alignment ok for conforming backend."""
         backend = CharBackend(torch.zeros(3, 4))
         check = check_alignment(backend, (0, 1), (2,))
         self.assertTrue(check.ok)

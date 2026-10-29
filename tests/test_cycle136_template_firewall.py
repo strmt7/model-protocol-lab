@@ -46,64 +46,85 @@ LLAMA3_JINJA = (
 
 
 class BenignTemplatesAllowedTests(unittest.TestCase):
+    """Benign templates allowed tests."""
+
     def test_chatml_style(self):
+        """Test chatml style."""
         self.assertEqual(scan_template_ast(CHATML_JINJA), ())
 
     def test_llama3_style(self):
+        """Test llama3 style."""
         self.assertEqual(scan_template_ast(LLAMA3_JINJA), ())
 
     def test_plain_getattr_allowed(self):
+        """Test plain getattr allowed."""
         # message.role / message.content are the bread and butter of chat
         # templates; only dunder attribute access is denied.
         self.assertEqual(scan_template_ast("{{ message.role }}:{{ message.content }}"), ())
 
     def test_literal_range_allowed(self):
+        """Test literal range allowed."""
         self.assertEqual(scan_template_ast("{% for i in range(3) %}{{ i }}{% endfor %}"), ())
 
     def test_namespace_allowed(self):
+        """Test namespace allowed."""
         self.assertEqual(scan_template_ast("{% set ns = namespace(x=0) %}{{ ns.x }}"), ())
 
     def test_plain_text_allowed(self):
+        """Test plain text allowed."""
         self.assertEqual(scan_template_ast("Hello, world!"), ())
 
 
 class SstiCorpusDeniedTests(unittest.TestCase):
+    """Ssti corpus denied tests."""
+
     @staticmethod
     def _rules(source):
+        """Rules."""
         return [f.rule for f in scan_template_ast(source)]
 
     def test_lipsum_globals(self):
+        """Test lipsum globals."""
         rules = self._rules("{{ lipsum.__globals__.os.popen('id').read() }}")
         self.assertIn("dangerous_global", rules)
         self.assertIn("dunder_getattr", rules)
 
     def test_dunder_class_chain(self):
+        """Test dunder class chain."""
         self.assertIn("dunder_getattr", self._rules("{{ ''.__class__.__mro__ }}"))
 
     def test_attr_filter(self):
+        """Test attr filter."""
         self.assertIn("attr_filter", self._rules("{{ x|attr('__class__') }}"))
 
     def test_dunder_getitem(self):
+        """Test dunder getitem."""
         self.assertIn("dunder_getitem", self._rules("{{ x['__globals__'] }}"))
 
     def test_self_reference(self):
+        """Test self reference."""
         rules = self._rules("{{ self._TemplateReference__context }}")
         self.assertIn("dangerous_global", rules)
 
     def test_cycler_joiner(self):
+        """Test cycler joiner."""
         self.assertIn("dangerous_global", self._rules("{{ cycler('a', 'b') }}"))
         self.assertIn("dangerous_global", self._rules("{{ joiner(',') }}"))
 
     def test_unbounded_range_literal(self):
+        """Test unbounded range literal."""
         self.assertIn("unbounded_range", self._rules("{% for i in range(10**12) %}x{% endfor %}"))
 
     def test_unbounded_range_variable(self):
+        """Test unbounded range variable."""
         self.assertIn("unbounded_range", self._rules("{% for i in range(n) %}x{% endfor %}"))
 
     def test_super_call(self):
+        """Test super call."""
         self.assertIn("super_call", self._rules("{{ super() }}"))
 
     def test_findings_are_fixed_vocabulary(self):
+        """Test findings are fixed vocabulary."""
         for finding in scan_template_ast("{{ lipsum.__globals__ }}{{ x|attr('y') }}"):
             self.assertIsInstance(finding, TemplateFinding)
             self.assertIsInstance(finding.rule, str)
@@ -111,20 +132,26 @@ class SstiCorpusDeniedTests(unittest.TestCase):
 
 
 class FailClosedTests(unittest.TestCase):
+    """Fail closed tests."""
+
     def test_non_str_source(self):
+        """Test non str source."""
         findings = scan_template_ast(None)  # type: ignore[arg-type]
         self.assertEqual([f.rule for f in findings], ["parse_error"])
 
     def test_empty_source(self):
+        """Test empty source."""
         findings = scan_template_ast("   ")
         self.assertEqual([f.rule for f in findings], ["parse_error"])
 
     def test_unparseable_source(self):
+        """Test unparseable source."""
         findings = scan_template_ast("{% if %}")
         self.assertEqual([f.rule for f in findings], ["parse_error"])
 
 
 def _write_config(root: Path, chat_template) -> Path:
+    """Write config."""
     root.mkdir(parents=True, exist_ok=True)
     (root / "tokenizer_config.json").write_text(
         json.dumps({"chat_template": chat_template}), encoding="utf-8"
@@ -133,13 +160,17 @@ def _write_config(root: Path, chat_template) -> Path:
 
 
 class DoctorFirewallTests(unittest.TestCase):
+    """Doctor firewall tests."""
+
     def test_allowed(self):
+        """Test allowed."""
         root = _write_config(Path(tempfile.mkdtemp(prefix="mpl_fw_")), CHATML_JINJA)
         out = DOCTOR.template_firewall(root)
         self.assertEqual(out["status"], "allowed")
         self.assertEqual(out["findings"], [])
 
     def test_denied(self):
+        """Test denied."""
         root = _write_config(
             Path(tempfile.mkdtemp(prefix="mpl_fw_")),
             "{{ lipsum.__globals__.os.popen('id').read() }}",
@@ -150,16 +181,19 @@ class DoctorFirewallTests(unittest.TestCase):
         self.assertIn("dangerous_global", rules)
 
     def test_no_template(self):
+        """Test no template."""
         root = _write_config(Path(tempfile.mkdtemp(prefix="mpl_fw_")), None)
         out = DOCTOR.template_firewall(root)
         self.assertEqual(out["status"], "no_template")
 
     def test_missing_dir_unavailable(self):
+        """Test missing dir unavailable."""
         missing = Path(tempfile.mkdtemp(prefix="mpl_fw_")) / "no_such_dir"
         out = DOCTOR.template_firewall(missing)
         self.assertEqual(out["status"], "unavailable")
 
     def test_never_renders_denied_template(self):
+        """Test never renders denied template."""
         # template_conformance must fail closed: a denied template yields
         # status "denied" without reaching the Jinja compiler. A template
         # that would also explode at render time proves no render happened
@@ -194,8 +228,11 @@ class DoctorFirewallTests(unittest.TestCase):
 
 
 class FirewallHtmlTests(unittest.TestCase):
+    """Firewall html tests."""
+
     @staticmethod
     def _result(firewall):
+        """Result."""
         return {
             "decision": "compatible_on_fixture_set",
             "selected_candidate": "chatml",
@@ -209,11 +246,13 @@ class FirewallHtmlTests(unittest.TestCase):
         }
 
     def test_allowed_renders(self):
+        """Test allowed renders."""
         rendered = reporting.render_html(self._result({"status": "allowed", "findings": []}))
         self.assertIn('id="template-firewall"', rendered)
         self.assertIn("allowed", rendered)
 
     def test_denied_lists_findings(self):
+        """Test denied lists findings."""
         rendered = reporting.render_html(
             self._result(
                 {
@@ -226,11 +265,13 @@ class FirewallHtmlTests(unittest.TestCase):
         self.assertIn("dunder_getattr", rendered)
 
     def test_absent_when_not_run(self):
+        """Test absent when not run."""
         result = self._result({"status": "unavailable"})
         rendered = reporting.render_html(result)
         self.assertNotIn('id="template-firewall"', rendered)
 
     def test_hostile_findings_escaped(self):
+        """Test hostile findings escaped."""
         hostile = '"><img src=x onerror=alert(1)>'
         rendered = reporting.render_html(
             self._result(
@@ -271,6 +312,7 @@ class FirewallMutationGateTests(unittest.TestCase):
     }
 
     def test_mutants_killed(self):
+        """Test mutants killed."""
         import subprocess
         import sys
 

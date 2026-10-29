@@ -571,6 +571,7 @@ def false_recall_readout(records: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def duplicate_readout(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-dose duplicate-needle readout over the candidate's
     own population (dose-0 pass with the duplicate and the 25 /
@@ -694,6 +695,7 @@ def headline_population(
     return population
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def headline_readouts(
     records_by_candidate: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:

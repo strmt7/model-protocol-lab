@@ -118,6 +118,7 @@ class _WordBackend:
         self.prompts: list[str] = []
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         ids = []
         for word in text.split(" "):
             if word not in self._vocab:
@@ -126,12 +127,15 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids: Any) -> str:
+        """Decode."""
         inv = {v: k for k, v in self._vocab.items()}
         return " ".join(inv.get(i, "?") for i in ids)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(
         self, input_ids: Any, *, max_new_tokens: int, seed: int, cancel: Any = None
     ) -> Generation:
+        """Generate."""
         self.generate_calls += 1
         prompt = self.decode(input_ids)
         self.prompts.append(prompt)
@@ -182,16 +186,19 @@ class _SeamBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         merged = text.replace("d\n", "\x01")
         return tuple(ord(ch) for ch in merged)
 
     @staticmethod
     def decode(ids: Any) -> str:
+        """Decode."""
         return "".join(chr(i) for i in ids)
 
     def generate(
         self, input_ids: Any, *, max_new_tokens: int, seed: int, cancel: Any = None
     ) -> Generation:
+        """Generate."""
         self.generate_calls += 1
         prompt = self.decode(input_ids)
         # The one seam scenario sizes its pad with a 16-char filler
@@ -240,12 +247,14 @@ def _entry(
 
 
 def _run_stage(backend: Any, formats: tuple, cases: tuple, search: list, **kwargs: Any) -> dict:
+    """Run stage."""
     kwargs.setdefault("boundary", (999,))
     kwargs.setdefault("max_context", 100_000)
     return experiments.repetition_stage(backend, formats, cases, search, **kwargs)
 
 
 def _payload(backend: Any, formats: tuple, cases: tuple, search: list, **kwargs: Any) -> dict:
+    """Payload."""
     stage = _run_stage(backend, formats, cases, search, **kwargs)
     return experiments.repetition_analysis(
         stage, "no_candidate", None, tuple(fmt.name for fmt in formats)
@@ -253,7 +262,10 @@ def _payload(backend: Any, formats: tuple, cases: tuple, search: list, **kwargs:
 
 
 class TestProtocolPins(unittest.TestCase):
+    """Test protocol pins."""
+
     def test_protocol_constants_frozen(self):
+        """Test protocol constants frozen."""
         self.assertEqual(repetition.PROTOCOL_VERSION, 1)
         self.assertEqual(repetition.JOINER, "\n")
         self.assertEqual(repetition.DETECTOR_VERSION, 1)
@@ -266,6 +278,7 @@ class TestProtocolPins(unittest.TestCase):
         )
 
     def test_fingerprint_pinned_and_id_order_free(self):
+        """Test fingerprint pinned and id order free."""
         self.assertEqual(
             repetition.protocol_fingerprint(["fx-a", "fx-b"], "sha256:scripted"),
             repetition.protocol_fingerprint(["fx-b", "fx-a"], "sha256:scripted"),
@@ -281,6 +294,7 @@ class TestProtocolPins(unittest.TestCase):
         self.assertEqual(block["fixture_set_sha256"], repetition.fixture_set_sha256(["f1"]))
 
     def test_filler_unit_shape(self):
+        """Test filler unit shape."""
         # Trailing space is deliberate (the truncated-suffix sizing
         # starts mid-flow, never at a hard stop).
         self.assertTrue(repetition.FILLER_UNIT.endswith(" "))
@@ -288,15 +302,20 @@ class TestProtocolPins(unittest.TestCase):
 
 
 class TestDetector(unittest.TestCase):
+    """Test detector."""
+
     def test_exact_halves_flagged(self):
+        """Test exact halves flagged."""
         self.assertTrue(repetition.detect_pre_repeated("the cat sat the cat sat"))
         self.assertTrue(repetition.detect_pre_repeated("the cat satthe cat sat"))
 
     def test_ha_ha_ha_ha_flagged_by_clause_i(self):
+        """Test ha ha ha ha flagged by clause i."""
         # B's pinned example: t = "ha ha", sep = " ".
         self.assertTrue(repetition.detect_pre_repeated("ha ha ha ha"))
 
     def test_sentence_repeat_flagged_via_period_inclusive_half(self):
+        """Test sentence repeat flagged via period inclusive half."""
         # Red-team B's brief called this a non-example ("separator
         # is '. '"), but execution disproved the annotation: the
         # string decomposes as t + " " + t with t = "the cat sat."
@@ -308,29 +327,37 @@ class TestDetector(unittest.TestCase):
         self.assertFalse(repetition.detect_pre_repeated("the cat sat. the dog sat."))
 
     def test_one_word_changed_not_flagged(self):
+        """Test one word changed not flagged."""
         self.assertFalse(repetition.detect_pre_repeated("the cat sat the dog sat"))
 
     def test_adjacent_long_substring_flagged_by_clause_ii(self):
+        """Test adjacent long substring flagged by clause ii."""
         # Clause (i) cannot fire (the halves differ); two adjacent
         # copies of a 10-char substring can.
         self.assertTrue(repetition.detect_pre_repeated("xxabcdefghijabcdefghijyy"))
 
     def test_short_repeats_not_flagged(self):
+        """Test short repeats not flagged."""
         self.assertFalse(repetition.detect_pre_repeated("abcabcab"))
         self.assertFalse(repetition.detect_pre_repeated("short"))
         self.assertFalse(repetition.detect_pre_repeated(""))
 
     def test_whitespace_collapsed_before_detection(self):
+        """Test whitespace collapsed before detection."""
         self.assertTrue(repetition.detect_pre_repeated("the  cat\nsat the cat sat"))
 
 
 class TestPureHelpers(unittest.TestCase):
+    """Test pure helpers."""
+
     def test_is_vacuous(self):
+        """Test is vacuous."""
         self.assertTrue(repetition.is_vacuous(""))
         self.assertTrue(repetition.is_vacuous("  \n "))
         self.assertFalse(repetition.is_vacuous(" x "))
 
     def test_target_index_is_last_user(self):
+        """Test target index is last user."""
         fixture = Fixture(
             id="m",
             group="g",
@@ -345,6 +372,7 @@ class TestPureHelpers(unittest.TestCase):
         self.assertEqual(repetition.target_content(fixture), "second")
 
     def test_target_index_requires_a_user_message(self):
+        """Test target index requires a user message."""
         fixture = Fixture(
             id="m",
             group="g",
@@ -355,6 +383,7 @@ class TestPureHelpers(unittest.TestCase):
             repetition.target_index(fixture)
 
     def test_build_arm_fixture_x2_doubles_last_user_only(self):
+        """Test build arm fixture x2 doubles last user only."""
         fixture = Fixture(
             id="m",
             group="g",
@@ -374,6 +403,7 @@ class TestPureHelpers(unittest.TestCase):
         self.assertEqual(fixture.messages[2].content, "same")
 
     def test_build_arm_fixture_pad_and_x1(self):
+        """Test build arm fixture pad and x1."""
         pad = repetition.build_arm_fixture(CASE_A, "pad", "FILL")
         self.assertTrue(pad.messages[-1].content.endswith("\nFILL"))
         x1 = repetition.build_arm_fixture(CASE_A, "x1")
@@ -382,6 +412,7 @@ class TestPureHelpers(unittest.TestCase):
             repetition.build_arm_fixture(CASE_A, "x3")
 
     def test_is_echo_fixture(self):
+        """Test is echo fixture."""
         echo = Fixture(
             id="e",
             group="g",
@@ -399,12 +430,14 @@ class TestPureHelpers(unittest.TestCase):
         self.assertFalse(repetition.is_echo_fixture(blank))
 
     def test_filler_text_shape(self):
+        """Test filler text shape."""
         unit = repetition.FILLER_UNIT
         self.assertEqual(repetition.filler_text(0, 0), "")
         self.assertEqual(repetition.filler_text(2, 3), unit * 2 + unit[:3])
         self.assertEqual(repetition.filler_text(0, 5), unit[:5])
 
     def test_filler_search_order_deterministic_capped(self):
+        """Test filler search order deterministic capped."""
         first = repetition.filler_search_order(16, 40)
         self.assertEqual(first, repetition.filler_search_order(16, 40))
         self.assertEqual(len(first), len(set(first)))
@@ -412,6 +445,7 @@ class TestPureHelpers(unittest.TestCase):
         self.assertLessEqual(len(repetition.filler_search_order(1, 100_000)), 512)
 
     def test_screen_filler_both_directions(self):
+        """Test screen filler both directions."""
         screened, candidates = repetition.screen_filler(
             {"fx-a": "rain", "fx-b": "blue"}, {"cand-a": "STOP"}
         )
@@ -424,11 +458,13 @@ class TestPureHelpers(unittest.TestCase):
         self.assertEqual(candidates2, frozenset({"cand-a"}))
 
     def test_content_region(self):
+        """Test content region."""
         self.assertEqual(repetition.content_region((1, 2, 3, 4, 5), (1, 2), (5,)), (3, 4))
         self.assertIsNone(repetition.content_region((1, 2, 3), (1, 9), (3,)))
         self.assertIsNone(repetition.content_region((1,), (1, 2), (3,)))
 
     def test_classify_construction(self):
+        """Test classify construction."""
         self.assertEqual(
             repetition.classify_construction((1, 2), (1, 2, 9, 1, 2), (9,)),
             ("id_exact", ()),
@@ -450,7 +486,10 @@ def _record(
     pad_evaluable: bool = True,
     delta: int | None = 5,
 ) -> dict[str, Any]:
+    """Record."""
+
     def cell(v: bool | None) -> dict[str, Any] | None:
+        """Cell."""
         if v is None:
             return None
         return {
@@ -476,7 +515,10 @@ def _record(
 
 
 class TestAggregate(unittest.TestCase):
+    """Test aggregate."""
+
     def test_paired_denominators_per_contrast(self):
+        """Test paired denominators per contrast."""
         records = [
             _record("f1", x1=True, x2=True, pad=False),
             _record("f2", x1=False, x2=True, pad=None, pad_evaluable=False),
@@ -495,11 +537,13 @@ class TestAggregate(unittest.TestCase):
         self.assertAlmostEqual(agg["pad_evaluable_share"], 2 / 3)
 
     def test_rates_none_when_nothing_paired(self):
+        """Test rates none when nothing paired."""
         agg = repetition.aggregate_candidate([_record("f1", x2=None, pad=None)])
         self.assertIsNone(agg["contrasts"]["x2_vs_x1"]["raw_gain"])
         self.assertEqual(agg["contrasts"]["x2_vs_x1"]["n_paired"], 0)
 
     def test_vacuous_excluded_from_contrasts_but_counted(self):
+        """Test vacuous excluded from contrasts but counted."""
         records = [
             _record("f1", x1=True, x2=True, pad=True),
             _record("f2", vacuous=True, x2=None, pad=None, pad_evaluable=False),
@@ -509,6 +553,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(agg["contrasts"]["x2_vs_x1"]["n_paired"], 1)
 
     def test_excluding_pre_repeated_is_a_subpopulation(self):
+        """Test excluding pre repeated is a subpopulation."""
         records = [
             _record("f1", x1=False, x2=True, pad=True),
             _record("f2", pre=True, x1=True, x2=False, pad=False),
@@ -521,6 +566,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(agg["contrasts"]["x2_vs_x1"]["raw_gain"], 0.0)
 
     def test_delta_signs_and_boundary_rates(self):
+        """Test delta signs and boundary rates."""
         records = [
             _record("f1", delta=-2),
             _record("f2", delta=0),
@@ -532,6 +578,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(agg["boundary_found_rates"]["x1"], 1.0)
 
     def test_arm_all_pass(self):
+        """Test arm all pass."""
         self.assertTrue(repetition.arm_all_pass([_record("f1"), _record("f2")], "x2"))
         self.assertFalse(repetition.arm_all_pass([_record("f1"), _record("f2", x2=False)], "x2"))
         self.assertIsNone(repetition.arm_all_pass([_record("f1", x2=None)], "x2"))
@@ -539,7 +586,10 @@ class TestAggregate(unittest.TestCase):
 
 
 class TestConstructionOracle(unittest.TestCase):
+    """Test construction oracle."""
+
     def test_x2_prompt_rebuilt_from_arm_fixture_not_replace(self):
+        """Test x2 prompt rebuilt from arm fixture not replace."""
         # G1: identical first/last user contents. A replace-based
         # construction would double the FIRST turn; the stage's x2
         # prompt must equal the render of the fixture whose LAST
@@ -575,6 +625,7 @@ class TestConstructionOracle(unittest.TestCase):
         self.assertNotIn(wrongly_doubled_first, backend.prompts)
 
     def test_catalog_wide_construction_measured(self):
+        """Test catalog wide construction measured."""
         # Every catalog family's base format runs the stage without
         # error; the construction class is measured per candidate,
         # and the resulting payload passes the diff validator.
@@ -594,7 +645,10 @@ class TestConstructionOracle(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_x1_reused_never_regenerated(self):
+        """Test x1 reused never regenerated."""
         # G5: exactly the treated arms generate (2 arms x 3
         # fixtures); the x1 ground records are the recorded native
         # observations verbatim, including a None boundary_text_match.
@@ -610,6 +664,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_headline_contrast_length_held_constant(self):
+        """Test headline contrast length held constant."""
         backend = _WordBackend(
             {
                 ("markone", "x2"): True,
@@ -626,6 +681,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(agg["pad_evaluable_share"], 1.0)
 
     def test_per_candidate_boundary_map(self):
+        """Test per candidate boundary map."""
         # G10: each candidate is judged under its own boundary; the
         # backend emits only id 998, so cand-b (mapped to 999) finds
         # no boundary in its treated arms.
@@ -651,6 +707,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(rec_b["arms"]["x2"]["verdict"])
 
     def test_vacuous_fixture_excluded_and_never_generated(self):
+        """Test vacuous fixture excluded and never generated."""
         # G14: whitespace-only content is vacuous by predicate, not
         # by render comparison; it generates nothing and pairs with
         # nothing, but it is counted.
@@ -674,6 +731,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_screened_fixture_pad_skips_but_x2_runs(self):
+        """Test screened fixture pad skips but x2 runs."""
         # G7: the expected answer "rain" occurs inside the filler
         # unit, so the pad arm would hand the model its answer; the
         # fixture is pad-screened (visible denominator shrink) while
@@ -701,6 +759,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_context_equality_measured_one_over_degrades_per_fixture(self):
+        """Test context equality measured one over degrades per fixture."""
         # G15: the budget is the stage's max_context parameter (the
         # fake backend has no context limit of its own). Equality
         # with len(ids) + max_new_tokens is measured; the longer
@@ -742,6 +801,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_delta_zero_without_positive_filler_match_is_unmatchable(self):
+        """Test delta zero without positive filler match is unmatchable."""
         # A one-word content doubles without growing the word count
         # (delta 0); every exact-length pad is a zero-filler
         # degenerate, so the pair is pad-unmatchable, never shipped
@@ -762,11 +822,16 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_negative_delta_overshoot_is_unmatchable(self):
+        """Test negative delta overshoot is unmatchable."""
+
         # The recorded x1 is longer than the fresh x2 render (a
         # squash tokenizer): the empty pad already overshoots the
         # x2 length, so no filler search can match.
         class _SquashBackend(_WordBackend):
+            """Squash backend."""
+
             def encode(self, text: str) -> tuple[int, ...]:
+                """Encode."""
                 if text.count("markone") >= 2:
                     return (42,)
                 return super().encode(text)
@@ -782,6 +847,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_candidate_unavailable_withholds_all_arms(self):
+        """Test candidate unavailable withholds all arms."""
         backend = _WordBackend({(m, "x2"): True for m in EXPECTED_BY_MARKER})
         entries = [
             _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True}),
@@ -797,6 +863,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_arm_failure_withholds_the_flip(self):
+        """Test arm failure withholds the flip."""
         # G19's worked example: cand-b's x2 generation fails on one
         # fixture, so the completed sets differ across candidates.
         # A flip computed anyway would compare different populations;
@@ -818,6 +885,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_cancel_returns_no_partial_aggregates(self):
+        """Test cancel returns no partial aggregates."""
         # G18: cancellation mid-stage returns the cancelled payload
         # with empty candidates -- no half-built aggregates.
         backend = _WordBackend(
@@ -835,6 +903,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_cell_budget_fires_before_any_generation(self):
+        """Test cell budget fires before any generation."""
         backend = _WordBackend()
         formats = tuple(
             Format(name=f"f{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
@@ -855,6 +924,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_filler_screen_failure_fails_closed(self):
+        """Test filler screen failure fails closed."""
         # The shipped filler is clean against the shipped catalog,
         # so this guard is proven with a stubbed hostile unit (the
         # cycle-171 rule: a guard is proven with a stub or removed).
@@ -870,6 +940,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_seam_backend_records_text_level_with_seam_ids(self):
+        """Test seam backend records text level with seam ids."""
         # G3: a merge-y tokenizer does not block measurement; the
         # construction is recorded text_level with the seam ids.
         case = Fixture(
@@ -892,6 +963,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_think_groups_and_render_aliasing_disclosed(self):
+        """Test think groups and render aliasing disclosed."""
         # G16: one contribution per candidate to its think group;
         # two candidates with identical framing share a render
         # signature and the payload says so.
@@ -925,6 +997,7 @@ class TestStage(unittest.TestCase):
 
 
 def _stage_dict(candidates: dict[str, Any]) -> dict[str, Any]:
+    """Stage dict."""
     ids = sorted({r["fixture"] for e in candidates.values() for r in e.get("records", [])})
     return {
         "available": True,
@@ -935,6 +1008,7 @@ def _stage_dict(candidates: dict[str, Any]) -> dict[str, Any]:
 
 
 def _cand(records: list, *, think: bool = False, signature: str | None = "sig") -> dict[str, Any]:
+    """Cand."""
     return {
         "status": "available",
         "detail": "",
@@ -945,14 +1019,18 @@ def _cand(records: list, *, think: bool = False, signature: str | None = "sig") 
 
 
 class TestAnalysis(unittest.TestCase):
+    """Test analysis."""
+
     @staticmethod
     def _two_candidate_stage() -> dict[str, Any]:
+        """Two candidate stage."""
         # Both pass x1 everywhere; under x2 only cand-a passes all.
         a_records = [_record("f1"), _record("f2")]
         b_records = [_record("f1"), _record("f2", x2=False)]
         return _stage_dict({"cand-a": _cand(a_records), "cand-b": _cand(b_records)})
 
     def test_mapped_decisions_do_not_flip(self):
+        """Test mapped decisions do not flip."""
         # G6: the run vocabulary is mapped before comparison --
         # compatible_on_fixture_set and held_out_failed both mean
         # ("selected", winner); an arm re-selecting the same winner
@@ -966,6 +1044,7 @@ class TestAnalysis(unittest.TestCase):
             self.assertFalse(payload["arms"]["x2"]["flip"], decision)
 
     def test_verbatim_decision_can_flip(self):
+        """Test verbatim decision can flip."""
         stage = self._two_candidate_stage()
         payload = experiments.repetition_analysis(stage, "no_candidate", None, ("cand-a", "cand-b"))
         self.assertTrue(payload["arms"]["x2"]["flip"])
@@ -975,12 +1054,14 @@ class TestAnalysis(unittest.TestCase):
         self.assertTrue(payload["arms"]["x2"]["flip"])
 
     def test_x1_arm_never_reports_a_flip(self):
+        """Test x1 arm never reports a flip."""
         stage = self._two_candidate_stage()
         payload = experiments.repetition_analysis(stage, "no_candidate", None, ("cand-a", "cand-b"))
         self.assertIsNone(payload["arms"]["x1"]["flip"])
         self.assertEqual(payload["arms"]["x1"]["decision"], "ambiguous")
 
     def test_unavailable_stage_passes_through(self):
+        """Test unavailable stage passes through."""
         payload = experiments.repetition_analysis(
             {"available": False, "detail": "cancelled", "protocol": None},
             "no_candidate",
@@ -990,6 +1071,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(payload, {"available": False, "detail": "cancelled", "protocol": None})
 
     def test_think_group_dedup_counts_aliased_renders_once(self):
+        """Test think group dedup counts aliased renders once."""
         # G16: two think candidates share one render signature;
         # the group reports both the per-candidate mean and the
         # deduplicated mean (first candidate by name wins the key).
@@ -1011,8 +1093,11 @@ class TestAnalysis(unittest.TestCase):
 
 
 class TestValidatorAndDiff(unittest.TestCase):
+    """Test validator and diff."""
+
     @staticmethod
     def _valid_payload() -> dict[str, Any]:
+        """Valid payload."""
         backend = _WordBackend(
             {
                 ("markone", "x2"): True,
@@ -1030,15 +1115,18 @@ class TestValidatorAndDiff(unittest.TestCase):
         return _payload(backend, (FMT_A, FMT_B), CASES, entries)
 
     def test_real_payload_validates(self):
+        """Test real payload validates."""
         self.assertTrue(diffreports._valid_repetition(self._valid_payload()))
 
     def test_tamper_battery_rejected(self):
+        """Test tamper battery rejected."""
         import copy as _copy
 
         base = self._valid_payload()
         tampers = []
 
         def tamper(name, fn):
+            """Tamper."""
             payload = _copy.deepcopy(base)
             fn(payload)
             tampers.append((name, payload))
@@ -1090,6 +1178,7 @@ class TestValidatorAndDiff(unittest.TestCase):
                 self.assertFalse(diffreports._valid_repetition(payload), name)
 
     def test_coherent_foreign_protocol_version_validates_and_drifts(self):
+        """Test coherent foreign protocol version validates and drifts."""
         payload = self._valid_payload()
         table = {
             "version": 99,
@@ -1110,6 +1199,7 @@ class TestValidatorAndDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_identical_payloads_unchanged(self):
+        """Test diff identical payloads unchanged."""
         payload = self._valid_payload()
         diff = diffreports.diff_repetition(payload, payload)
         self.assertEqual(diff["available"], "both")
@@ -1118,6 +1208,7 @@ class TestValidatorAndDiff(unittest.TestCase):
         self.assertEqual(diff["effect_drift"], [])
 
     def test_diff_availability_shapes(self):
+        """Test diff availability shapes."""
         payload = self._valid_payload()
         self.assertEqual(diffreports.diff_repetition(payload, None)["available"], "old")
         self.assertEqual(diffreports.diff_repetition(None, payload)["available"], "new")
@@ -1127,6 +1218,7 @@ class TestValidatorAndDiff(unittest.TestCase):
         )
 
     def test_diff_effect_and_backend_drift(self):
+        """Test diff effect and backend drift."""
         backend = _WordBackend({("markone", "x2"): True})
         backend.fingerprint = "sha256:other"
         entries = [_entry(backend, FMT_A, {"fx-a": False, "fx-b": True, "fx-c": False})]
@@ -1143,8 +1235,11 @@ class TestValidatorAndDiff(unittest.TestCase):
 
 
 class TestReporting(unittest.TestCase):
+    """Test reporting."""
+
     @staticmethod
     def _payload() -> dict[str, Any]:
+        """Payload."""
         backend = _WordBackend(
             {("markone", "x2"): True, ("marktwo", "x2"): True, ("markthree", "x2"): True}
         )
@@ -1152,6 +1247,7 @@ class TestReporting(unittest.TestCase):
         return _payload(backend, (FMT_A,), CASES, [entry])
 
     def test_section_renders_with_headline_effect(self):
+        """Test section renders with headline effect."""
         from model_protocol_lab import reporting
 
         result = {"decision": "no_candidate", "search": [], "repetition": self._payload()}
@@ -1160,6 +1256,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("Prompt repetition", html)
 
     def test_section_absent_without_available_payload(self):
+        """Test section absent without available payload."""
         from model_protocol_lab import reporting
 
         html = reporting.render_html({"decision": "failed", "search": []})
@@ -1174,6 +1271,7 @@ class TestReporting(unittest.TestCase):
         self.assertNotIn('id="repetition"', html)
 
     def test_section_escapes_hostile_candidate_names(self):
+        """Test section escapes hostile candidate names."""
         from model_protocol_lab import reporting
 
         payload = self._payload()
@@ -1186,6 +1284,7 @@ class TestReporting(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", html)
 
     def test_section_survives_malformed_payload(self):
+        """Test section survives malformed payload."""
         from model_protocol_lab import reporting
 
         for bad in (
@@ -1201,8 +1300,11 @@ class TestReporting(unittest.TestCase):
 
 
 class TestCliDispatch(unittest.TestCase):
+    """Test cli dispatch."""
+
     @staticmethod
     def _write_fixtures(directory: str) -> Path:
+        """Write fixtures."""
         path = Path(directory) / "fixture.json"
         path.write_text(
             json.dumps(
@@ -1230,22 +1332,27 @@ class TestCliDispatch(unittest.TestCase):
         return path
 
     def _run_with_stage_recorder(self, result_doc: dict, stage_recorder: Any) -> tuple[Any, dict]:
+        """Run with stage recorder."""
         from model_protocol_lab import backends
         from model_protocol_lab import doctor as doctor_mod
 
         captured: dict[str, Any] = {}
 
         class _FakeHFBackend:
+            """Fake hf backend."""
+
             def __init__(self, model: Any, device: Any = None, max_context: Any = None) -> None:
                 self.model = model
 
             eos_token_id = None
 
         def fake_experiment(backend: Any, formats: Any, split: Any, **kwargs: Any) -> dict:
+            """Fake experiment."""
             captured["experiment_cancel"] = kwargs.get("cancel")
             return result_doc
 
         def fake_save(result: Any, outdir: Any, **kwargs: Any) -> tuple[str, str]:
+            """Fake save."""
             captured["result"] = result
             return (str(Path(outdir) / "results.json"), str(Path(outdir) / "report.md"))
 
@@ -1276,11 +1383,13 @@ class TestCliDispatch(unittest.TestCase):
         return code, captured
 
     def test_cancel_event_identity_reaches_the_stage(self):
+        """Test cancel event identity reaches the stage."""
         # G18(a): the identical Event object the run created is
         # threaded dispatch -> wrapper -> stage.
         seen: dict[str, Any] = {}
 
         def recorder(backend: Any, formats: Any, cases: Any, search: Any, **kwargs: Any) -> dict:
+            """Recorder."""
             seen["stage_cancel"] = kwargs.get("cancel")
             return {"available": False, "detail": "cancelled", "protocol": None, "candidates": {}}
 
@@ -1300,11 +1409,13 @@ class TestCliDispatch(unittest.TestCase):
         )
 
     def test_failed_native_search_gates_to_zero_generations(self):
+        """Test failed native search gates to zero generations."""
         # G20: a failed run decision means the stage is never
         # invoked and the payload is the wrapper's gate detail.
         calls: list = []
 
         def recorder(*args: Any, **kwargs: Any) -> dict:
+            """Recorder."""
             calls.append((args, kwargs))
             return {}
 
@@ -1347,6 +1458,7 @@ class TestRepetitionMutationGates(unittest.TestCase):
     """
 
     def _run_gate(self, name: str, original: str, mutant: str, scenario: Any) -> None:
+        """Run gate."""
         source = Path(repetition.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(original), 1, f"gate {name}: anchor not unique")
         mutated = source.replace(original, mutant)
@@ -1357,7 +1469,10 @@ class TestRepetitionMutationGates(unittest.TestCase):
             scenario(variant)
 
     def test_gate_joiner_in_id_exact(self):
+        """Test gate joiner in id exact."""
+
         def scenario(mod: Any) -> None:
+            """Scenario."""
             self.assertEqual(
                 mod.classify_construction((1, 2), (1, 2, 9, 1, 2), (9,)),
                 ("id_exact", ()),
@@ -1373,7 +1488,10 @@ class TestRepetitionMutationGates(unittest.TestCase):
         )
 
     def test_gate_vacuous_excluded_from_pairing(self):
+        """Test gate vacuous excluded from pairing."""
+
         def scenario(mod: Any) -> None:
+            """Scenario."""
             records = [
                 _record("f1", x1=True, x2=True, pad=True),
                 _record("f2", vacuous=True, x1=True, x2=True, pad=True),
@@ -1389,7 +1507,10 @@ class TestRepetitionMutationGates(unittest.TestCase):
         )
 
     def test_gate_detector_space_separator(self):
+        """Test gate detector space separator."""
+
         def scenario(mod: Any) -> None:
+            """Scenario."""
             self.assertTrue(mod.detect_pre_repeated("ha ha ha ha"))
 
         self._run_gate(
@@ -1410,6 +1531,7 @@ class TestValidatorStructuralBattery(unittest.TestCase):
 
     @staticmethod
     def _base() -> dict[str, Any]:
+        """Base."""
         backend = _WordBackend(
             {("markone", "x2"): True, ("marktwo", "x2"): True, ("markthree", "x2"): True}
         )
@@ -1417,12 +1539,14 @@ class TestValidatorStructuralBattery(unittest.TestCase):
         return _payload(backend, (FMT_A,), CASES, [entry])
 
     def test_structural_rejects(self):
+        """Test structural rejects."""
         import copy as _copy
 
         base = self._base()
         self.assertTrue(diffreports._valid_repetition(base))
 
         def rec(payload: dict, index: int = 0) -> dict:
+            """Rec."""
             return payload["candidates"]["cand-a"]["records"][index]
 
         cases: list[tuple[str, Any]] = [
@@ -1531,6 +1655,7 @@ class TestValidatorStructuralBattery(unittest.TestCase):
                 self.assertFalse(diffreports._valid_repetition(payload), name)
 
     def test_fixture_set_mismatch_across_candidates_rejected(self):
+        """Test fixture set mismatch across candidates rejected."""
         backend = _WordBackend({("markone", "x2"): True})
         entries = [
             _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True}),
@@ -1541,6 +1666,7 @@ class TestValidatorStructuralBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_repetition(payload))
 
     def test_mapped_primary_payload_validates(self):
+        """Test mapped primary payload validates."""
         # The validator's mapped branch: a run-vocabulary primary
         # decision is compared as ("selected", winner).
         backend = _WordBackend(
@@ -1555,6 +1681,7 @@ class TestValidatorStructuralBattery(unittest.TestCase):
         self.assertFalse(payload["arms"]["x2"]["flip"])
 
     def test_diff_pad_share_drift_listed(self):
+        """Test diff pad share drift listed."""
         backend = _WordBackend({("markone", "x2"): True})
         entry = _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True})
         full = _payload(backend, (FMT_A,), CASES, [entry])
@@ -1577,7 +1704,10 @@ class TestValidatorStructuralBattery(unittest.TestCase):
 
 
 class TestStageGapCoverage(unittest.TestCase):
+    """Test stage gap coverage."""
+
     def test_stage_contract_value_errors(self):
+        """Test stage contract value errors."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.repetition_stage(
@@ -1589,6 +1719,7 @@ class TestStageGapCoverage(unittest.TestCase):
             )
 
     def test_search_entry_junk_and_missing_fixture(self):
+        """Test search entry junk and missing fixture."""
         backend = _WordBackend({("markone", "x2"): True})
         good = _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True})
         stage = _run_stage(backend, (FMT_A,), CASES, ["junk", good])
@@ -1603,8 +1734,13 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertEqual(stage["candidates"]["cand-a"]["detail"], "native_search_unavailable")
 
     def test_undecodable_boundary_screens_nothing(self):
+        """Test undecodable boundary screens nothing."""
+
         class _BoundaryDecodeBackend(_WordBackend):
+            """Boundary decode backend."""
+
             def decode(self, ids: Any) -> str:
+                """Decode."""
                 if tuple(ids) == (999,):
                     raise ValueError("undecodable")
                 return super().decode(ids)
@@ -1616,6 +1752,7 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertEqual(payload["candidates"]["cand-a"]["pad_evaluable_share"], 1.0)
 
     def test_cancel_already_set_at_stage_entry(self):
+        """Test cancel already set at stage entry."""
         backend = _WordBackend()
         entry = _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True})
         event = threading.Event()
@@ -1625,6 +1762,7 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_non_list_search_and_nameless_entries(self):
+        """Test non list search and nameless entries."""
         backend = _WordBackend({("markone", "x2"): True})
         entry = _entry(backend, FMT_A, {"fx-a": True, "fx-b": True, "fx-c": True})
         stage = _run_stage(backend, (FMT_A,), CASES, (entry,))
@@ -1633,6 +1771,7 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertEqual(stage["candidates"]["cand-a"]["detail"], "native_search_unavailable")
 
     def test_marker_ambiguous_render_skips_affixes(self):
+        """Test marker ambiguous render skips affixes."""
         # A format whose own framing contains the marker makes the
         # marker render ambiguous (count != 1): affixes are skipped
         # and the construction is measured text_level, not guessed.
@@ -1651,6 +1790,7 @@ class TestStageGapCoverage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_marker_in_content_skips_affixes(self):
+        """Test marker in content skips affixes."""
         case = Fixture(
             id="fx-marker",
             group="g",
@@ -1667,7 +1807,10 @@ class TestStageGapCoverage(unittest.TestCase):
 
 
 class TestReportingDefensivePaths(unittest.TestCase):
+    """Test reporting defensive paths."""
+
     def test_withheld_unavailable_and_junk_entries_render(self):
+        """Test withheld unavailable and junk entries render."""
         from model_protocol_lab import reporting
 
         payload = {
@@ -1687,6 +1830,7 @@ class TestReportingDefensivePaths(unittest.TestCase):
         self.assertIn("native search unavailable", html)
 
     def test_no_arms_payload_renders_without_arm_list(self):
+        """Test no arms payload renders without arm list."""
         from model_protocol_lab import reporting
 
         backend = _WordBackend({("markone", "x2"): True})

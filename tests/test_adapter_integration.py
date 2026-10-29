@@ -58,8 +58,11 @@ def build_tiny_gpt2(root: Path, vocab_size: int = 64) -> None:
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class TinyGPT2AdapterTests(unittest.TestCase):
+    """Tiny gpt2 adapter tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from model_protocol_lab.backends import LocalHFBackend
 
         cls._tmp = TemporaryDirectory()
@@ -69,6 +72,7 @@ class TinyGPT2AdapterTests(unittest.TestCase):
         cls.backend = LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def test_initialization_succeeds_with_stable_fingerprint(self):
+        """Test initialization succeeds with stable fingerprint."""
         from model_protocol_lab.backends import LocalHFBackend
 
         again = LocalHFBackend(self.root, device="cpu", max_context=64)
@@ -77,17 +81,20 @@ class TinyGPT2AdapterTests(unittest.TestCase):
         self.assertEqual(len(self.backend.fingerprint), len("sha256:") + 64)
 
     def test_encode_decode_roundtrip(self):
+        """Test encode decode roundtrip."""
         ids = self.backend.encode("w1 w2 w3")
         self.assertEqual(len(ids), 3)
         self.assertTrue(all(type(t) is int and 0 <= t < 64 for t in ids))
         self.assertEqual(self.backend.decode(ids), "w1 w2 w3")
 
     def test_encode_uses_no_implicit_special_tokens(self):
+        """Test encode uses no implicit special tokens."""
         # "<stop>" is a registered special token; encoding must not add it.
         ids = self.backend.encode("w1")
         self.assertNotIn(62, ids)
 
     def test_generate_returns_exactly_the_requested_cap(self):
+        """Test generate returns exactly the requested cap."""
         event = Event()
         result = self.backend.generate((1, 2, 3), max_new_tokens=8, seed=0, cancel=event)
         self.assertIs(type(result), Generation)
@@ -97,24 +104,28 @@ class TinyGPT2AdapterTests(unittest.TestCase):
         self.assertIsNone(result.error)
 
     def test_generate_is_deterministic_greedy(self):
+        """Test generate is deterministic greedy."""
         event = Event()
         first = self.backend.generate((1, 2, 3), max_new_tokens=8, seed=0, cancel=event)
         second = self.backend.generate((1, 2, 3), max_new_tokens=8, seed=999, cancel=event)
         self.assertEqual(first.token_ids, second.token_ids)
 
     def test_generate_continuation_excludes_prompt(self):
+        """Test generate continuation excludes prompt."""
         event = Event()
         result = self.backend.generate((1, 2), max_new_tokens=4, seed=0, cancel=event)
         decoded = self.backend.decode(result.token_ids)
         self.assertIs(type(decoded), str)
 
     def test_pre_cancelled_generate_returns_cancelled(self):
+        """Test pre cancelled generate returns cancelled."""
         event = Event()
         event.set()
         result = self.backend.generate((1, 2), max_new_tokens=4, seed=0, cancel=event)
         self.assertEqual((result.token_ids, result.reason), ((), "cancelled"))
 
     def test_invalid_inputs_become_error_generations_not_exceptions(self):
+        """Test invalid inputs become error generations not exceptions."""
         event = Event()
         cases = [
             ((), 4, 0),  # empty input
@@ -132,12 +143,14 @@ class TinyGPT2AdapterTests(unittest.TestCase):
                 self.assertIs(type(result.error), str)
 
     def test_context_limit_is_enforced(self):
+        """Test context limit is enforced."""
         event = Event()
         result = self.backend.generate(tuple([1] * 63), max_new_tokens=4, seed=0, cancel=event)
         self.assertEqual(result.reason, "error")
         self.assertEqual(result.error, "context_limit_exceeded")
 
     def test_full_evaluate_runs_against_the_real_backend(self):
+        """Test full evaluate runs against the real backend."""
         from model_protocol_lab.catalog import CATALOG
         from model_protocol_lab.core import Fixture, Message, evaluate
 
@@ -157,6 +170,7 @@ class TinyGPT2AdapterTests(unittest.TestCase):
         self.assertEqual(obs.raw_reason, "limit")
 
     def test_unsupported_model_type_fails_closed(self):
+        """Test unsupported model type fails closed."""
         from model_protocol_lab.backends import LocalHFBackend
 
         with TemporaryDirectory() as tmp:
@@ -169,6 +183,7 @@ class TinyGPT2AdapterTests(unittest.TestCase):
                 LocalHFBackend(root, device="cpu", max_context=64)
 
     def test_missing_tokenizer_fails_closed(self):
+        """Test missing tokenizer fails closed."""
         from model_protocol_lab.backends import LocalHFBackend
 
         with TemporaryDirectory() as tmp:
@@ -179,6 +194,7 @@ class TinyGPT2AdapterTests(unittest.TestCase):
                 LocalHFBackend(root, device="cpu", max_context=64)
 
     def test_pickle_weights_are_not_used(self):
+        """Test pickle weights are not used."""
         # The fixture dir must contain no pickle weight files by construction.
         names = [p.name for p in self.root.iterdir()]
         self.assertIn("model.safetensors", names)
@@ -194,6 +210,7 @@ class BackendInitFailureTests(unittest.TestCase):
     """Each unsupported configuration must fail closed at construction."""
 
     def _tiny(self):
+        """Tiny."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -202,11 +219,13 @@ class BackendInitFailureTests(unittest.TestCase):
 
     @staticmethod
     def _config(root):
+        """Config."""
         path = root / "config.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         return path, data
 
     def _assert_init_fails(self, root, **kwargs):
+        """Assert init fails."""
         from model_protocol_lab.backends import LocalHFBackend
 
         options = {"device": "cpu", "max_context": 64}
@@ -215,6 +234,7 @@ class BackendInitFailureTests(unittest.TestCase):
             LocalHFBackend(root, **options)
 
     def test_bad_context_limit_rejected(self):
+        """Test bad context limit rejected."""
         from model_protocol_lab.backends import LocalHFBackend
 
         root = self._tiny()
@@ -222,10 +242,12 @@ class BackendInitFailureTests(unittest.TestCase):
             LocalHFBackend(root, device="cpu", max_context=0)
 
     def test_bad_device_rejected(self):
+        """Test bad device rejected."""
         root = self._tiny()
         self._assert_init_fails(root, device="tpu")
 
     def test_context_beyond_declared_window_rejected(self):
+        """Test context beyond declared window rejected."""
         from model_protocol_lab.backends import LocalHFBackend
 
         root = self._tiny()
@@ -235,6 +257,7 @@ class BackendInitFailureTests(unittest.TestCase):
             LocalHFBackend(root, device="cpu", max_context=65)
 
     def test_quantization_config_rejected(self):
+        """Test quantization config rejected."""
         root = self._tiny()
         path, data = self._config(root)
         data["quantization_config"] = {"bits": 8}
@@ -242,11 +265,13 @@ class BackendInitFailureTests(unittest.TestCase):
         self._assert_init_fails(root)
 
     def test_missing_tokenizer_model_section_rejected(self):
+        """Test missing tokenizer model section rejected."""
         root = self._tiny()
         (root / "tokenizer.json").write_text('{"version": "1.0"}', encoding="utf-8")
         self._assert_init_fails(root)
 
     def test_stochastic_tokenizer_rejected(self):
+        """Test stochastic tokenizer rejected."""
         root = self._tiny()
         doc = json.loads((root / "tokenizer.json").read_text(encoding="utf-8"))
         doc["model"]["dropout"] = 0.1
@@ -254,6 +279,7 @@ class BackendInitFailureTests(unittest.TestCase):
         self._assert_init_fails(root)
 
     def test_checkpoint_loading_mismatch_rejected(self):
+        """Test checkpoint loading mismatch rejected."""
         from safetensors.torch import load_file, save_file
 
         root = self._tiny()
@@ -264,6 +290,7 @@ class BackendInitFailureTests(unittest.TestCase):
         self._assert_init_fails(root)
 
     def test_config_vocabulary_mismatch_rejected(self):
+        """Test config vocabulary mismatch rejected."""
         # Declared vocab_size disagrees with the stored weights: the strict
         # loading-info check must refuse the checkpoint.
         root = self._tiny()
@@ -273,6 +300,7 @@ class BackendInitFailureTests(unittest.TestCase):
         self._assert_init_fails(root)
 
     def test_tokenizer_vocabulary_mismatch_rejected(self):
+        """Test tokenizer vocabulary mismatch rejected."""
         # Model loads fine (64 embeddings), but the tokenizer ships ids the
         # model has no embeddings for.
         from tokenizers import Tokenizer
@@ -292,14 +320,18 @@ class BackendInitFailureTests(unittest.TestCase):
         "requires a machine without CUDA",
     )
     def test_unavailable_cuda_device_rejected(self):
+        """Test unavailable cuda device rejected."""
         root = self._tiny()
         self._assert_init_fails(root, device="cuda")
 
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class BackendGenerateEdgeTests(unittest.TestCase):
+    """Backend generate edge tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         cls.addClassCleanup(cls._tmp.cleanup)
         cls.root = Path(cls._tmp.name)
@@ -309,19 +341,23 @@ class BackendGenerateEdgeTests(unittest.TestCase):
         cls.backend = LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def test_generate_rejects_non_event_cancellation(self):
+        """Test generate rejects non event cancellation."""
         result = self.backend.generate((1, 2), max_new_tokens=4, seed=0, cancel="nope")
         self.assertEqual(result.reason, "error")
         self.assertEqual(result.error, "invalid_cancellation_event")
 
     def test_encode_rejects_non_string(self):
+        """Test encode rejects non string."""
         with self.assertRaises(ValueError):
             self.backend.encode(123)
 
     def test_decode_rejects_out_of_vocabulary_ids(self):
+        """Test decode rejects out of vocabulary ids."""
         with self.assertRaises(ValueError):
             self.backend.decode((10_000,))
 
     def test_mid_generation_cancellation_is_cooperative(self):
+        """Test mid generation cancellation is cooperative."""
         from unittest.mock import patch
 
         event = Event()
@@ -329,6 +365,7 @@ class BackendGenerateEdgeTests(unittest.TestCase):
         original = model.forward
 
         def cancelling_forward(*args, **kwargs):
+            """Cancelling forward."""
             event.set()
             return original(*args, **kwargs)
 
@@ -338,6 +375,7 @@ class BackendGenerateEdgeTests(unittest.TestCase):
         self.assertLess(len(result.token_ids), 8)
 
     def test_inference_exception_becomes_error_generation(self):
+        """Test inference exception becomes error generation."""
         from unittest.mock import patch
 
         event = Event()
@@ -349,7 +387,10 @@ class BackendGenerateEdgeTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class OversizedTokenizerTests(unittest.TestCase):
+    """Oversized tokenizer tests."""
+
     def _tiny(self):
+        """Tiny."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -357,6 +398,7 @@ class OversizedTokenizerTests(unittest.TestCase):
         return root
 
     def test_oversized_tokenizer_rejected_before_hf_load(self):
+        """Test oversized tokenizer rejected before hf load."""
         import os
 
         from model_protocol_lab.backends import LocalHFBackend

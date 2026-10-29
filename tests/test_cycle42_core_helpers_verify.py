@@ -135,6 +135,7 @@ def _ids_ok(value: object, *, require_nonempty: bool = False) -> bool:
 
 
 def _oracle_truncate_text_tail(text: object, drop_bytes: object) -> str | None:
+    """Oracle truncate text tail."""
     # Exact-type discipline is code-pinned (D2): bool/str-subclass rejected.
     if type(text) is not str or type(drop_bytes) is not int:
         raise ValueError("oracle: needs an exact str and an exact int")
@@ -150,6 +151,7 @@ def _oracle_truncate_text_tail(text: object, drop_bytes: object) -> str | None:
 
 
 def _oracle_first_boundary(tokens: object, stop: object) -> int | None:
+    """Oracle first boundary."""
     # No docstring exists (D1); oracle mirrors the code's permissive contract:
     # no type checks, `not stop` guard, slice == stop comparison. Written as a
     # nested element loop instead of slice comparison, and only exercised on
@@ -171,6 +173,7 @@ def _oracle_first_boundary(tokens: object, stop: object) -> int | None:
 
 
 def _oracle_local_repairs(base: Format) -> tuple[Format, ...]:
+    """Oracle local repairs."""
     from dataclasses import replace as _replace
 
     proposals = [
@@ -190,6 +193,7 @@ def _oracle_local_repairs(base: Format) -> tuple[Format, ...]:
     ]
 
     def _signature(fmt: Format) -> tuple[object, ...]:
+        """Signature."""
         # D3: name is ignored; repeat_bos collapses when bos is empty.
         return (
             fmt.bos,
@@ -213,6 +217,7 @@ def _oracle_local_repairs(base: Format) -> tuple[Format, ...]:
 
 
 def _oracle_template_diff(hand_ids: object, template_ids: object) -> tuple[dict[str, object], ...]:
+    """Oracle template diff."""
     # Drives difflib's own get_opcodes (autojunk=False) instead of the
     # hand-rolled deadline queue loop; verifies the "byte-identical to
     # unbounded difflib" docstring claim (D4).
@@ -240,6 +245,7 @@ def _oracle_template_diff(hand_ids: object, template_ids: object) -> tuple[dict[
 def _oracle_check_boundary_portability(
     boundary_text: object, primary_ids: object, secondary_encode: object
 ) -> dict[str, object]:
+    """Oracle check boundary portability."""
     if type(boundary_text) is not str or not boundary_text:
         raise ValueError("oracle: boundary_text must be a nonempty str")
     if not _ids_ok(primary_ids, require_nonempty=True):
@@ -273,9 +279,11 @@ def _oracle_check_boundary_portability(
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_template_tokenizer_compatibility(
     name: object, inventory: object, registered_tokens: object, secondary_encode: object
 ) -> dict[str, object]:
+    """Oracle template tokenizer compatibility."""
     if type(name) is not str or not name:
         raise ValueError("oracle: name must be a nonempty str")
     if type(inventory) is not tuple or any(
@@ -389,14 +397,17 @@ _TRUNCATE_ALPHABET = ["a", "b", " ", "\n", "\t", "é", "ü", "中", "文", "\U00
 
 
 def _rng(tag: str) -> random.Random:
+    """Rng."""
     return random.Random(f"cycle42-{tag}")  # noqa: S311 -- deterministic test fuzz, not crypto
 
 
 def _rand_text(rng: random.Random, max_len: int = 12) -> str:
+    """Rand text."""
     return "".join(rng.choice(_TRUNCATE_ALPHABET) for _ in range(rng.randint(0, max_len)))
 
 
 def _rand_format(rng: random.Random) -> Format:
+    """Rand format."""
     bos = rng.choice(["", "<s>", "BOS>", "\n", " ", "<|begin|>"])
     prefix = lambda: rng.choice(  # noqa: E731 -- local test generator
         ["<|user|>\n", "USER: ", "", "  ", "[INST] ", "<|a|>", "<|a|> ", "<|a|>\n", "A:\t "]
@@ -424,7 +435,10 @@ def _outcome_of(func, *args, **kwargs):
 
 
 class TestTruncateTextTailDifferential(unittest.TestCase):
+    """Test truncate text tail differential."""
+
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("truncate")
         divergences = 0
         cases = 0
@@ -453,6 +467,7 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
         self.assertEqual(divergences, 0)
 
     def test_codepoint_split_returns_none(self):
+        """Test codepoint split returns none."""
         # "中" is 3 bytes: dropping 1 or 2 bytes splits the codepoint.
         self.assertIsNone(real_core.truncate_text_tail("a中", 1))
         self.assertIsNone(real_core.truncate_text_tail("a中", 2))
@@ -464,6 +479,7 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
         self.assertEqual(real_core.truncate_text_tail("hello", 2), "hel")
 
     def test_bounds_are_exclusive(self):
+        """Test bounds are exclusive."""
         # D2: 1 <= drop_bytes < len(raw); empty text rejects everything.
         with self.assertRaises(ValueError):
             real_core.truncate_text_tail("abc", 0)
@@ -478,6 +494,7 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
             real_core.truncate_text_tail("", 1)
 
     def test_exact_type_discipline(self):
+        """Test exact type discipline."""
         # D2: docstring says "a string and an integer"; code wants exact types.
         with self.assertRaises(ValueError):
             real_core.truncate_text_tail("abc", True)
@@ -493,12 +510,15 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
             real_core.truncate_text_tail(None, 1)
 
         class _StrSub(str):
+            """Str sub."""
+
             pass
 
         with self.assertRaises(ValueError):
             real_core.truncate_text_tail(_StrSub("abc"), 1)
 
     def test_lone_surrogate_propagates_encode_error(self):
+        """Test lone surrogate propagates encode error."""
         # D2: only the decode side maps to None; a lone surrogate fails at
         # .encode("utf-8") with UnicodeEncodeError, which is NOT converted.
         with self.assertRaises(UnicodeEncodeError):
@@ -509,7 +529,10 @@ class TestTruncateTextTailDifferential(unittest.TestCase):
 
 
 class TestFirstBoundaryDifferential(unittest.TestCase):
+    """Test first boundary differential."""
+
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("first-boundary")
         for iteration in range(500):
             tokens = tuple(rng.randint(0, 5) for _ in range(rng.randint(0, 12)))
@@ -529,6 +552,7 @@ class TestFirstBoundaryDifferential(unittest.TestCase):
                 )
 
     def test_pinned_semantics(self):
+        """Test pinned semantics."""
         self.assertEqual(real_core.first_boundary((1, 2, 3, 2, 1), (2,)), 1)
         self.assertEqual(real_core.first_boundary((1, 2, 3), (1, 2, 3)), 0)
         self.assertEqual(real_core.first_boundary((1, 2, 3), (3,)), 2)
@@ -541,11 +565,13 @@ class TestFirstBoundaryDifferential(unittest.TestCase):
         self.assertEqual(real_core.first_boundary((1, 2, 3), (2, 3)), 1)
 
     def test_empty_stop_rejected(self):
+        """Test empty stop rejected."""
         for bad in ((), [], "", 0, None, False):
             with self.subTest(stop=bad), self.assertRaises(ValueError):
                 real_core.first_boundary((1, 2, 3), bad)
 
     def test_no_type_validation(self):
+        """Test no type validation."""
         # D1: lists and strs are accepted (no docstring governs this).
         self.assertEqual(real_core.first_boundary([1, 2, 3], [2]), 1)
         self.assertEqual(real_core.first_boundary("hello", "ell"), 1)
@@ -559,7 +585,10 @@ class TestFirstBoundaryDifferential(unittest.TestCase):
 
 
 class TestLocalRepairsDifferential(unittest.TestCase):
+    """Test local repairs differential."""
+
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("local-repairs")
         for iteration in range(250):
             base = _rand_format(rng)
@@ -570,6 +599,7 @@ class TestLocalRepairsDifferential(unittest.TestCase):
                 )
 
     def test_result_starts_with_base(self):
+        """Test result starts with base."""
         rng = _rng("local-repairs-base")
         for _ in range(50):
             base = _rand_format(rng)
@@ -578,6 +608,7 @@ class TestLocalRepairsDifferential(unittest.TestCase):
             self.assertTrue(1 <= len(result) <= 5)
 
     def test_all_five_variants_survive_when_distinct(self):
+        """Test all five variants survive when distinct."""
         base = Format(
             name="x",
             bos="<s>",
@@ -598,6 +629,7 @@ class TestLocalRepairsDifferential(unittest.TestCase):
         self.assertEqual(result[4].assistant_prefix, "A:")
 
     def test_empty_bos_collapses_toggle_and_no_bos(self):
+        """Test empty bos collapses toggle and no bos."""
         # D3: with bos == "", repeat_bos collapses to False in the dedup key,
         # so /toggle-bos and /no-bos dedup away against base. (assistant_prefix
         # keeps a trailing space so /prefix-trim stays distinct.)
@@ -613,6 +645,7 @@ class TestLocalRepairsDifferential(unittest.TestCase):
         self.assertEqual([v.name for v in result], ["x", "x/prefix-newline", "x/prefix-trim"])
 
     def test_prefix_trim_noop_dedups(self):
+        """Test prefix trim noop dedups."""
         # assistant_prefix with no trailing whitespace: trim == base.
         base = Format(
             name="x",
@@ -629,6 +662,7 @@ class TestLocalRepairsDifferential(unittest.TestCase):
         )
 
     def test_dedup_ignores_name(self):
+        """Test dedup ignores name."""
         # D3: only the key matters; craft base where toggle-bos differs from
         # base ONLY by repeat_bos, then confirm dedup keeps the FIRST (base).
         base = Format(
@@ -659,8 +693,11 @@ def _reconstruct_template(hand_ids: tuple[int, ...], segments) -> tuple[int, ...
 
 
 class TestTemplateDiffDifferential(unittest.TestCase):
+    """Test template diff differential."""
+
     @staticmethod
     def _rand_pair(rng: random.Random) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Rand pair."""
         base = [rng.randint(0, 6) for _ in range(rng.randint(0, 40))]
         mutated = list(base)
         for _ in range(rng.randint(0, 3)):
@@ -680,6 +717,7 @@ class TestTemplateDiffDifferential(unittest.TestCase):
         return tuple(base), tuple(mutated)
 
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("template-diff")
         for iteration in range(300):
             hand, template = self._rand_pair(rng)
@@ -691,6 +729,7 @@ class TestTemplateDiffDifferential(unittest.TestCase):
                 self.assertEqual(_reconstruct_template(hand, impl), template)
 
     def test_identical_inputs_yield_empty_tuple(self):
+        """Test identical inputs yield empty tuple."""
         rng = _rng("template-diff-identical")
         for iteration in range(50):
             ids = tuple(rng.randint(0, 9) for _ in range(rng.randint(0, 20)))
@@ -701,6 +740,7 @@ class TestTemplateDiffDifferential(unittest.TestCase):
                 self.assertEqual(real_core.template_diff(ids, ids, _deadline_s=-1.0), ())
 
     def test_pinned_segment_shapes(self):
+        """Test pinned segment shapes."""
         segments = real_core.template_diff((1, 2, 3, 4), (1, 9, 3, 4))
         self.assertEqual(len(segments), 1)
         seg = segments[0]
@@ -727,6 +767,7 @@ class TestTemplateDiffDifferential(unittest.TestCase):
         self.assertEqual(ins["template_span"], [0, 2])
 
     def test_input_validation(self):
+        """Test input validation."""
         good = (1, 2, 3)
         for bad in ([1, 2], (1, -2), (1, True), (1, 2.0), None, "12", (1, "2")):
             with self.subTest(bad=bad):
@@ -736,12 +777,15 @@ class TestTemplateDiffDifferential(unittest.TestCase):
                     real_core.template_diff(good, bad)  # type: ignore[arg-type]
 
         class _TupleSub(tuple):
+            """Tuple sub."""
+
             pass
 
         with self.assertRaises(ValueError):
             real_core.template_diff(_TupleSub((1, 2)), good)
 
     def test_deadline_degradation(self):
+        """Test deadline degradation."""
         # D4: an expired budget raises ValueError("template_diff_too_fragmented").
         hand = tuple(range(50))
         template = tuple(range(50, 100))
@@ -753,6 +797,7 @@ class TestTemplateDiffDifferential(unittest.TestCase):
         self.assertEqual(_reconstruct_template(hand, segments), template)
 
     def test_byte_identical_to_unbounded_difflib(self):
+        """Test byte identical to unbounded difflib."""
         # The docstring's core claim, on localized diffs inside long inputs.
         rng = _rng("template-diff-long")
         base = tuple(rng.randint(0, 255) for _ in range(5000))
@@ -767,26 +812,35 @@ class TestTemplateDiffDifferential(unittest.TestCase):
 
 
 class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
+    """Test check boundary portability differential."""
+
     @staticmethod
     def _encoders():
+        """Encoders."""
         mapping = {"<stop>": (99,), "end": (7, 8), "x": (1,)}
 
         def enc_exact(text):
+            """Enc exact."""
             return mapping[text]  # KeyError -> encode_failed
 
         def enc_shift(text):
+            """Enc shift."""
             return tuple(t + 1000 for t in mapping[text])
 
         def enc_boom(text):
+            """Enc boom."""
             raise RuntimeError("tokenizer exploded")
 
         def enc_list(text):
+            """Enc list."""
             return [99]  # list, not tuple -> encode_invalid
 
         def enc_empty(text):
+            """Enc empty."""
             return ()
 
         def enc_negative(text):
+            """Enc negative."""
             return (99, -1)
 
         return {
@@ -799,6 +853,7 @@ class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
         }
 
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("portability")
         encoders = self._encoders()
         texts = ["<stop>", "end", "x", "missing", "", "é", "<stop> "]
@@ -815,6 +870,7 @@ class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
                 )
 
     def test_pinned_reports(self):
+        """Test pinned reports."""
         encoders = self._encoders()
         ok = real_core.check_boundary_portability("<stop>", (99,), encoders["exact"])
         self.assertEqual(
@@ -849,6 +905,7 @@ class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
         self.assertEqual(empty["secondary_ids"], [])
 
     def test_validation(self):
+        """Test validation."""
         enc = self._encoders()["exact"]
         with self.assertRaises(ValueError):
             real_core.check_boundary_portability("", (99,), enc)
@@ -864,6 +921,8 @@ class TestCheckBoundaryPortabilityDifferential(unittest.TestCase):
             real_core.check_boundary_portability("<stop>", (99,), "not-callable")  # type: ignore[arg-type]
 
         class _StrSub(str):
+            """Str sub."""
+
             pass
 
         with self.assertRaises(ValueError):
@@ -887,9 +946,12 @@ class _MappingEncoder:
 
 
 class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
+    """Test template tokenizer compatibility differential."""
+
     _LITERALS = ["<s>", "</s>", "[INST]", "[/INST]", "<|user|>", "<|end|>", "Ġhello"]
 
     def _rand_case(self, rng: random.Random):
+        """Rand case."""
         inventory = tuple(rng.choice(self._LITERALS) for _ in range(rng.randint(0, 4)))
         registered = {}
         mapping = {}
@@ -915,6 +977,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
         return ("fmt", inventory, registered, encoder)
 
     def test_fuzz_matches_oracle(self):
+        """Test fuzz matches oracle."""
         rng = _rng("ttc")
         for iteration in range(300):
             name, inventory, registered, encoder = self._rand_case(rng)
@@ -937,6 +1000,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
                 )
 
     def test_status_vocabulary(self):
+        """Test status vocabulary."""
         # One token per status: ok / unregistered / fragments / id_mismatch /
         # encode_failed / encode_invalid.
         encoder = _MappingEncoder(
@@ -975,6 +1039,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
         self.assertIn("'<|end|>'", report["detail"])
 
     def test_compatible_report(self):
+        """Test compatible report."""
         encoder = _MappingEncoder({"<s>": (10,), "</s>": (11,)})
         report = real_core.template_tokenizer_compatibility(
             "fmt", ("<s>", "</s>"), {"<s>": 10, "</s>": 11}, encoder
@@ -989,6 +1054,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
         self.assertTrue(all(row["status"] == "ok" for row in report["tokens"]))
 
     def test_empty_inventory_is_unknown(self):
+        """Test empty inventory is unknown."""
         report = real_core.template_tokenizer_compatibility("fmt", (), {}, _MappingEncoder({}))
         self.assertEqual(report["verdict"], "unknown")
         self.assertEqual(report["reason"], "empty_inventory")
@@ -996,6 +1062,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
         self.assertIn("never 'compatible'", report["detail"])
 
     def test_incompatible_names_first_failure_in_order(self):
+        """Test incompatible names first failure in order."""
         encoder = _MappingEncoder({"a": (1, 2), "b": (3,)})
         report = real_core.template_tokenizer_compatibility("fmt", ("a", "b"), {}, encoder)
         self.assertEqual(report["verdict"], "incompatible")
@@ -1007,6 +1074,7 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
         self.assertEqual(report2["detail"], "unregistered on 'b'")
 
     def test_validation(self):
+        """Test validation."""
         enc = _MappingEncoder({})
         with self.assertRaises(ValueError):
             real_core.template_tokenizer_compatibility("", (), {}, enc)
@@ -1031,7 +1099,10 @@ class TestTemplateTokenizerCompatibilityDifferential(unittest.TestCase):
 
 
 class TestRedTeam(unittest.TestCase):
+    """Test red team."""
+
     def test_truncate_all_split_positions_of_multibyte_char(self):
+        """Test truncate all split positions of multibyte char."""
         # Every interior cut of a 3-byte char -> None; the aligned cut -> text.
         text = "x中y"
         raw = text.encode("utf-8")
@@ -1045,38 +1116,47 @@ class TestRedTeam(unittest.TestCase):
             self.assertEqual(result, expected, f"drop={drop}")
 
     def test_first_boundary_unsized_tokens_raise_typeerror(self):
+        """Test first boundary unsized tokens raise typeerror."""
         with self.assertRaises(TypeError):
             real_core.first_boundary((t for t in (1, 2)), (1,))
 
     def test_portability_baseexception_propagates(self):
+        """Test portability baseexception propagates."""
         # D5: the never-raise guarantee covers Exception, not BaseException.
 
         def enc_interrupt(text):
+            """Enc interrupt."""
             raise KeyboardInterrupt("simulated")
 
         with self.assertRaises(KeyboardInterrupt):
             real_core.check_boundary_portability("<stop>", (99,), enc_interrupt)
 
         def enc_system_exit(text):
+            """Enc system exit."""
             raise SystemExit(3)
 
         with self.assertRaises(SystemExit):
             real_core.check_boundary_portability("<stop>", (99,), enc_system_exit)
 
     def test_ttc_baseexception_propagates(self):
+        """Test ttc baseexception propagates."""
+
         def enc_interrupt(text):
+            """Enc interrupt."""
             raise KeyboardInterrupt("simulated")
 
         with self.assertRaises(KeyboardInterrupt):
             real_core.template_tokenizer_compatibility("f", ("<s>",), {}, enc_interrupt)
 
     def test_local_repairs_assumes_format(self):
+        """Test local repairs assumes format."""
         # No docstring states the argument contract; a non-Format fails with
         # AttributeError (code-pinned, not a bug: garbage in).
         with self.assertRaises(AttributeError):
             real_core.local_repairs("not-a-format")  # type: ignore[arg-type]
 
     def test_ttc_duplicate_inventory_tokens(self):
+        """Test ttc duplicate inventory tokens."""
         # Duplicates are accepted: one row per inventory entry, in order.
         encoder = _MappingEncoder({"<s>": (10,)})
         report = real_core.template_tokenizer_compatibility(
@@ -1087,6 +1167,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertTrue(all(row["status"] == "ok" for row in report["tokens"]))
 
     def test_template_diff_long_equal_prefix_stays_fast(self):
+        """Test template diff long equal prefix stays fast."""
         # difflib is linear-ish here; guard against pathological slowdown.
         # The CI gate runs under `coverage run` (3-4x instrumentation
         # overhead: ~1.5s uninstrumented vs ~5.1s covered for this input),
@@ -1104,10 +1185,12 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(len(segments), 1)
 
     def test_truncate_nul_and_control_bytes(self):
+        """Test truncate nul and control bytes."""
         self.assertEqual(real_core.truncate_text_tail("a\x00b", 1), "a\x00")
         self.assertEqual(real_core.truncate_text_tail("a\r\nb", 2), "a\r")
 
     def test_first_boundary_bool_tokens_never_equal_int_stop(self):
+        """Test first boundary bool tokens never equal int stop."""
         # Exact-type discipline is NOT applied here (D1): True == 1 in
         # Python, so bools match ints under ==.
         self.assertEqual(real_core.first_boundary((True, False), (1,)), 0)
@@ -1237,6 +1320,7 @@ MUTANTS = [
 
 
 def _load_mutant(name: str, old: str, new: str, count: int):
+    """Load mutant."""
     src = CORE_SRC.read_text(encoding="utf-8")
     found = src.count(old)
     if found != count:
@@ -1281,12 +1365,15 @@ def _battery_cases():
     port_map = {"<stop>": (99,), "end": (7, 8)}
 
     def enc_exact(t):
+        """Enc exact."""
         return port_map[t]
 
     def enc_shift(t):
+        """Enc shift."""
         return tuple(v + 1000 for v in port_map[t])
 
     def enc_boom(t):
+        """Enc boom."""
         raise RuntimeError("boom")
 
     ttc_enc = _MappingEncoder(
@@ -1350,6 +1437,7 @@ def _battery_cases():
 
 
 def _battery_divergences(mutant_module) -> list[str]:
+    """Battery divergences."""
     divergences = []
     for func_name, args, kwargs in _battery_cases():
         real = _outcome_of(getattr(real_core, func_name), *args, **kwargs)
@@ -1360,7 +1448,10 @@ def _battery_divergences(mutant_module) -> list[str]:
 
 
 class TestMutantSensitivity(unittest.TestCase):
+    """Test mutant sensitivity."""
+
     def test_all_mutants_caught(self):
+        """Test all mutants caught."""
         self.addCleanup(shutil.rmtree, MUTANT_DIR, True)
         caught: list[str] = []
         for name, old, new, count in MUTANTS:

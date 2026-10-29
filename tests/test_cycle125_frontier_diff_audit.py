@@ -32,6 +32,7 @@ def _frontier(
     max_tokens: int = 10,
     robust: bool = False,
 ) -> dict:
+    """Frontier."""
     candidates = {}
     for name, pts in steps.items():
         candidates[name] = {
@@ -48,6 +49,7 @@ def _frontier(
 
 
 def _base(frontier: dict) -> dict:
+    """Base."""
     return {
         "decision": "compatible_on_fixture_set",
         "selected_candidate": "alpha",
@@ -57,7 +59,10 @@ def _base(frontier: dict) -> dict:
 
 
 class TestDiffFrontiers(unittest.TestCase):
+    """Test diff frontiers."""
+
     def test_identical_frontiers_no_changes(self) -> None:
+        """Test identical frontiers no changes."""
         frontier = _frontier(
             {"alpha": [(1, 2)], "beta": [(1, 0), (5, 2)]},
             [[1, "selected", "alpha"]],
@@ -73,6 +78,7 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertFalse(diff["budget_robust"]["changed"])
 
     def test_leader_flip_span_hand_derived(self) -> None:
+        """Test leader flip span hand derived."""
         # old: alpha leads 2-0 until beta ties 2-2 at budget 5.
         # new: beta takes the lead 2-1 at budget 3, tie at 5.
         old = _frontier(
@@ -90,6 +96,7 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertEqual(diff["winner_flips"], [])
 
     def test_decision_and_winner_flip_spans(self) -> None:
+        """Test decision and winner flip spans."""
         old = _frontier(
             {"alpha": [(1, 2)]},
             [[1, "selected", "alpha"], [6, "ambiguous", None]],
@@ -111,14 +118,18 @@ class TestDiffFrontiers(unittest.TestCase):
         )
 
     def test_adjacent_spans_merge(self) -> None:
+        """Test adjacent spans merge."""
+
         # Mutation-gate pin: _diff_spans must merge adjacent differing
         # spans whose (old, new) values agree. The `budget - 2` mutant
         # breaks the adjacency check, leaving two spans [2, 2] and
         # [3, 3] instead of the merged [2, 3].
         def old_at(budget: int) -> str:
+            """Old at."""
             return "a"
 
         def new_at(budget: int) -> str:
+            """New at."""
             return "b" if budget in (2, 3) else "a"
 
         self.assertEqual(
@@ -127,6 +138,7 @@ class TestDiffFrontiers(unittest.TestCase):
         )
 
     def test_sweep_range_drift_and_common_prefix(self) -> None:
+        """Test sweep range drift and common prefix."""
         old = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]], max_tokens=10)
         new = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]], max_tokens=16)
         diff = diff_frontiers(old, new)
@@ -136,6 +148,7 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_robustness_flip(self) -> None:
+        """Test robustness flip."""
         old = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]], robust=True)
         new = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]], robust=False)
         diff = diff_frontiers(old, new)
@@ -143,6 +156,7 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_availability_variants(self) -> None:
+        """Test availability variants."""
         good = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]])
         for old, new, expected in [
             (good, good, "both"),
@@ -157,6 +171,7 @@ class TestDiffFrontiers(unittest.TestCase):
             self.assertFalse(diff["changed"])
 
     def test_malformed_decision_steps_skip_axis(self) -> None:
+        """Test malformed decision steps skip axis."""
         old = _frontier({"alpha": [(1, 2)], "beta": [(1, 0)]}, "not-a-list")
         new = _frontier({"alpha": [(1, 2)], "beta": [(1, 0)]}, [[1, "selected", "alpha"]])
         diff = diff_frontiers(old, new)
@@ -166,6 +181,7 @@ class TestDiffFrontiers(unittest.TestCase):
         self.assertEqual(diff["winner_flips"], [])
 
     def test_deterministic_json(self) -> None:
+        """Test deterministic json."""
         old = _frontier(
             {"alpha": [(1, 2)], "beta": [(1, 0), (5, 2)]},
             [[1, "selected", "alpha"]],
@@ -182,7 +198,10 @@ class TestDiffFrontiers(unittest.TestCase):
 
 
 class TestDiffReportsIntegration(unittest.TestCase):
+    """Test diff reports integration."""
+
     def test_frontier_change_breaks_identical(self) -> None:
+        """Test frontier change breaks identical."""
         old = _frontier(
             {"alpha": [(1, 2)], "beta": [(1, 0), (5, 2)]},
             [[1, "selected", "alpha"]],
@@ -198,18 +217,21 @@ class TestDiffReportsIntegration(unittest.TestCase):
         self.assertEqual(diff["frontier"]["leader_flips"], [[3, 4, "alpha", "beta"]])
 
     def test_frontier_asymmetry_breaks_identical(self) -> None:
+        """Test frontier asymmetry breaks identical."""
         old = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]])
         diff = diff_reports(_base(old), _base(None), old_label="a", new_label="b")
         self.assertTrue(diff["summary"]["frontier_asymmetric"])
         self.assertFalse(diff["summary"]["identical"])
 
     def test_neither_frontier_stays_identical(self) -> None:
+        """Test neither frontier stays identical."""
         diff = diff_reports(_base(None), _base(None), old_label="a", new_label="b")
         self.assertFalse(diff["summary"]["frontier_changed"])
         self.assertFalse(diff["summary"]["frontier_asymmetric"])
         self.assertTrue(diff["summary"]["identical"])
 
     def test_identical_frontiers_keep_identical(self) -> None:
+        """Test identical frontiers keep identical."""
         frontier = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]], robust=True)
         diff = diff_reports(_base(frontier), _base(frontier), old_label="a", new_label="b")
         self.assertTrue(diff["summary"]["identical"])
@@ -217,7 +239,10 @@ class TestDiffReportsIntegration(unittest.TestCase):
 
 
 class TestRenderSummary(unittest.TestCase):
+    """Test render summary."""
+
     def test_flip_spans_rendered(self) -> None:
+        """Test flip spans rendered."""
         old = _frontier(
             {"alpha": [(1, 2)], "beta": [(1, 0), (5, 2)]},
             [[1, "selected", "alpha"]],
@@ -233,6 +258,7 @@ class TestRenderSummary(unittest.TestCase):
         self.assertIn("frontier CHANGED", text)
 
     def test_unavailable_variants_rendered(self) -> None:
+        """Test unavailable variants rendered."""
         good = _frontier({"alpha": [(1, 2)]}, [[1, "selected", "alpha"]])
         text = render_summary(diff_reports(_base(good), _base(None), old_label="a", new_label="b"))
         self.assertIn("did not record one", text)
@@ -240,6 +266,7 @@ class TestRenderSummary(unittest.TestCase):
         self.assertIn("not recorded by either run", text)
 
     def test_hostile_names_sanitized(self) -> None:
+        """Test hostile names sanitized."""
         # render_summary writes to stderr (a terminal): the invariant is
         # that control characters and bidi spoofing are stripped, matching
         # _display_id's contract for every other operator-visible name.
@@ -261,6 +288,8 @@ class TestRenderSummary(unittest.TestCase):
 
 
 class TestMutationGate(unittest.TestCase):
+    """Test mutation gate."""
+
     SOURCE = _REPO_ROOT / "model_protocol_lab" / "diffreports.py"
 
     MUTANTS = [
@@ -287,6 +316,7 @@ class TestMutationGate(unittest.TestCase):
     ]
 
     def test_mutants_are_killed(self) -> None:
+        """Test mutants are killed."""
         source = self.SOURCE.read_text()
         killed = []
         survived = []

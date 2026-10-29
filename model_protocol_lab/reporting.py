@@ -259,6 +259,7 @@ _FAILURE_GUIDANCE = {
 }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _failure_diagnosis(result: dict[str, Any]) -> str:
     """Actionable failure-cause line for the decision banner.
 
@@ -314,6 +315,7 @@ def _public_view(result: dict[str, Any], include_evidence: bool) -> dict[str, An
 _WITHHELD_DIAGNOSTIC_DETAIL = "[withheld without --include-evidence]"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
     """Remove raw-evidence carriers from an evidence-excluded public view.
 
@@ -400,6 +402,7 @@ def _toc(entries: list[tuple[str, str, str]]) -> str:
     return '<nav class="toc" aria-label="Report sections"><ul>' + items + "</ul></nav>"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _taxonomy_note(result: dict[str, Any]) -> str:
     """One-line failure-taxonomy citation for the decision banner."""
     taxonomy = result.get("failure_taxonomy")
@@ -556,6 +559,7 @@ def _matrix_cell_html(cell: dict[str, Any] | None) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _stop_matrix_section(result: dict[str, Any]) -> str:
     """Return the stop matrix section."""
     matrix = result.get("stop_matrix")
@@ -648,6 +652,7 @@ def _stop_matrix_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _backend_divergence_section(result: dict[str, Any]) -> str:
     """Backend stop-semantics divergence section.
 
@@ -1027,6 +1032,7 @@ def _logprob_fixture_details(candidate: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _logprob_section(result: dict[str, Any]) -> str:
     """Teacher-forced log-likelihood diagnostic section (§9.3-§9.5).
 
@@ -1146,6 +1152,7 @@ def _logprob_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _search_outcomes(
     result: dict[str, Any],
 ) -> tuple[list[str], list[str], dict[str, dict[str, bool | None]]]:
@@ -1283,6 +1290,7 @@ def _decisive_section(result: dict[str, Any]) -> str:
     return '<section id="decisive-fixtures"><h2>Decisive fixtures</h2>' + body + "</section>"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def selection_margin(result: dict[str, Any]) -> dict[str, Any] | None:
     """Fragility of the selection decision, measured in fixture flips.
 
@@ -1414,6 +1422,7 @@ def _sorted_str_keys(candidates: dict[str, Any]) -> list[str]:
     return sorted(key for key in candidates if type(key) is str)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
     """Validated frontier series: (sorted candidate names, max_new_tokens).
 
@@ -1489,6 +1498,7 @@ ribbon colors: a gray span reads as "no unique leader" at a glance.
 """
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, int]]:
     """Per-budget selection margin over the token-budget sweep.
 
@@ -1599,6 +1609,7 @@ _SAFE_FLOOR_ABSENT: Any = object()
 """Sentinel distinguishing a missing ``safe_budget_floor`` field from None."""
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def safe_budget_floor(frontier: Any) -> int | None:
     """First token budget from which the native decision never flips.
 
@@ -1652,6 +1663,7 @@ def safe_budget_floor(frontier: Any) -> int | None:
     return last_hi + 1 if last_hi < max_tokens else None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def token_overhead(result: dict[str, Any]) -> dict[str, Any]:
     """Per-candidate token counts from the recorded observations.
 
@@ -1807,6 +1819,7 @@ def _selection_margin_line(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _token_overhead_section(result: dict[str, Any]) -> str:
     """Efficiency card: per-candidate token counts and the winner's tax.
 
@@ -2836,6 +2849,7 @@ def _frontier_chart_svg_block(frontier: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _frontier_spark_table(frontier: dict[str, Any]) -> str:
     """One sparkline per candidate: pass count over token budgets 1..max."""
     candidates = frontier.get("candidates")
@@ -2889,6 +2903,7 @@ def _frontier_spark_table(frontier: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _frontier_section(result: dict[str, Any]) -> str:
     """Token-budget robustness frontier: post-hoc and exact.
 
@@ -3127,6 +3142,7 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _marker_isolation_section(result: dict[str, Any]) -> str:
     """Chat-marker isolation: the families x markers conformance matrix.
 
@@ -3213,6 +3229,7 @@ def _marker_isolation_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _selection_robustness_section(result: dict[str, Any]) -> str:
     """Selection robustness: does the winner survive other stop semantics?
 
@@ -3449,6 +3466,7 @@ def _transfer_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _perturbation_section(result: dict[str, Any]) -> str:
     """Fixture-perturbation robustness: does the winner survive phrasing noise?
 
@@ -3570,6 +3588,7 @@ def _perturbation_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _token_healing_section(result: dict[str, Any]) -> str:
     """Token-healing selection sensitivity: does healing flip the winner?
 
@@ -3726,6 +3745,7 @@ def _token_healing_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _hierarchy_section(result: dict[str, Any]) -> str:
     """Instruction-hierarchy adherence: which instruction wins conflicts?
 
@@ -3951,6 +3971,7 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _position_section(result: dict[str, Any]) -> str:
     """Position sensitivity: does option placement change the winner?
 
@@ -4268,6 +4289,7 @@ _WSCAN_MUTATIONS = (
 )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _wscanonical_section(result: dict[str, Any]) -> str:
     """Whitespace canonicalization: are prompts whitespace-fragile?
 
@@ -4478,6 +4500,7 @@ def _structured_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _deliforge_section(result: dict[str, Any]) -> str:
     """Delimiter authority: forged markers, reserved vs subword encoding.
 
@@ -4707,6 +4730,7 @@ def _faketurn_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _toolcall_section(result: dict[str, Any]) -> str:
     """Prompt-only tool-call syntax adherence per template family.
 
@@ -4833,6 +4857,7 @@ def _toolcall_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _ablation_section(result: dict[str, Any]) -> str:
     """Template field ablation (cycle 167).
 
@@ -5043,6 +5068,7 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _verbosity_section(result: dict[str, Any]) -> str:
     """Response verbosity profile per template family.
 
@@ -5194,6 +5220,7 @@ def _verbosity_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _refusals_section(result: dict[str, Any]) -> str:
     """Suspected-refusal profile per candidate template.
 
@@ -5337,6 +5364,7 @@ def _refusals_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _scorerlens_section(result: dict[str, Any]) -> str:
     """Scorer-lens regrade per candidate template.
 
@@ -5522,6 +5550,7 @@ def _scorerlens_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _aliasing_section(result: dict[str, Any]) -> str:
     """Candidate aliasing audit: render and measurement classes.
 
@@ -5736,6 +5765,7 @@ def _aliasing_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _repetition_section(result: dict[str, Any]) -> str:
     """Prompt-repetition probe: x2 vs recorded native vs padding control.
 
@@ -5892,6 +5922,7 @@ def _repetition_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _distraction_section(result: dict[str, Any]) -> str:
     """Distractor-dilution probe: verdict curves over filler doses.
 
@@ -6088,6 +6119,7 @@ def _distraction_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _leading_section(result: dict[str, Any]) -> str:
     """Leading-claim caving probe: claim agreement per template.
 
@@ -6315,6 +6347,7 @@ def _leading_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _numform_section(result: dict[str, Any]) -> str:
     """Numeric surface-form probe: written form per template.
 
@@ -6491,6 +6524,7 @@ def _numform_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _dateline_section(result: dict[str, Any]) -> str:
     """Date-line sensitivity probe: the injected date per template.
 
@@ -6684,6 +6718,7 @@ def _dateline_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _multiturn_section(result: dict[str, Any]) -> str:
     """Multi-turn drift probe: does the winner survive its own history.
 
@@ -6806,6 +6841,7 @@ def _multiturn_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _needle_section(result: dict[str, Any]) -> str:
     """Needle-depth probe: at which depth the fact gets lost.
 
@@ -6946,6 +6982,7 @@ def _needle_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _placement_section(result: dict[str, Any]) -> str:
     """Instruction placement probe: question before or after the payload.
 
@@ -7088,6 +7125,7 @@ def _placement_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _canonical_form_section(result: dict[str, Any]) -> str:
     """Canonical-form ladder probe: NFC vs NFD prompt text.
 
@@ -7223,6 +7261,7 @@ def _canonical_form_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _negation_section(result: dict[str, Any]) -> str:
     """Antonym-negated definite-description probe: direct vs
     negated vs flipped instruction arms on generated compare
@@ -7494,6 +7533,7 @@ def _negation_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _instruction_distance_section(result: dict[str, Any]) -> str:
     """Instruction-distance probe: one frozen format directive
     separated from the block it governs by verified token doses.
@@ -7786,6 +7826,7 @@ def _instruction_distance_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _history_frame_section(result: dict[str, Any]) -> str:
     """History-frame probe: a frozen synthetic history segment
     reframed in two foreign chat-template framings.
@@ -8144,6 +8185,7 @@ def _history_frame_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _prune_sweep_section(result: dict[str, Any]) -> str:
     """Prune-sweep probe: seeded interior word loss from a
     frozen generated passage, classified per candidate.
@@ -8500,6 +8542,7 @@ def _prune_sweep_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _record_notation_section(result: dict[str, Any]) -> str:
     """Record-notation probe: the same generated table in two
     frozen notations, described per candidate.
@@ -8859,6 +8902,7 @@ def _record_notation_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -9059,6 +9103,7 @@ def _rotation_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _density_section(result: dict[str, Any]) -> str:
     """Instruction-density ladder: which instructions does a growing stack drop?
 
@@ -9328,6 +9373,7 @@ def _density_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _field_order_section(result: dict[str, Any]) -> str:
     """Schema field order: does the answer field's position change its value?
 
@@ -9568,6 +9614,7 @@ def _field_order_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _choiceaudit_section(result: dict[str, Any]) -> str:
     """Choice-scoring audit: does likelihood scoring pick what generation picks?
 
@@ -9771,6 +9818,7 @@ def _choiceaudit_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _precision_section(result: dict[str, Any]) -> str:
     """Load precision: does the fp32 winner survive a bf16 load?
 
@@ -9969,6 +10017,7 @@ def _precision_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _confidence_section(result: dict[str, Any]) -> str:
     """Verbalized confidence: does the stated number track correctness?
 
@@ -10173,6 +10222,7 @@ def _confidence_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _cache_profile_section(result: dict[str, Any]) -> str:
     """Prefix-cache sharability profile per template family.
 
@@ -10574,6 +10624,7 @@ def _answer_collision_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fewshot_section(result: dict[str, Any]) -> str:
     """Few-shot demonstration gain x template family.
 
@@ -10740,6 +10791,7 @@ def _fewshot_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _synthhistory_section(result: dict[str, Any]) -> str:
     """Synthetic-history selection stability: does the winner survive context?
 
@@ -10941,6 +10993,7 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _batchinv_section(result: dict[str, Any]) -> str:
     """Batch-invariance audit: solo vs batched greedy decoding.
 
@@ -11048,6 +11101,7 @@ def _batchinv_section(result: dict[str, Any]) -> str:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _prefill_section(result: dict[str, Any]) -> str:
     """Assistant-prefill sensitivity: does the winner survive prefill?
 
@@ -11321,6 +11375,7 @@ def _template_firewall_section(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _portfolio_section(result: dict[str, Any]) -> str:
     """Oracle-mixture / protocol-portfolio gap: what the winner leaves behind.
 

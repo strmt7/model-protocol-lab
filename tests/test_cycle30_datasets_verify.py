@@ -102,10 +102,12 @@ _REF_TEXT_CAP = 16_384  # documented bound on any single text field
 
 
 def _ref_reject_nonfinite(value):
+    """Ref reject nonfinite."""
     raise ValueError("reference oracle: non-finite JSON constant")
 
 
 def _ref_object_hook(pairs):
+    """Ref object hook."""
     observed = set()
     for key, _ignored in pairs:
         if key in observed:
@@ -115,6 +117,7 @@ def _ref_object_hook(pairs):
 
 
 def _ref_checked_text(value, *, allow_blank, where):
+    """Ref checked text."""
     if type(value) is not str or len(value) > _REF_TEXT_CAP:
         raise ValueError(f"reference oracle: invalid text at {where}")
     if not allow_blank and not value.strip():
@@ -123,6 +126,7 @@ def _ref_checked_text(value, *, allow_blank, where):
 
 
 def _ref_fixture_from_mapping(mapping, label):
+    """Ref fixture from mapping."""
     if type(mapping) is not dict or set(mapping) != {"id", "group", "messages", "expected"}:
         raise ValueError(f"reference oracle: bad fixture fields at {label}")
     ident = _ref_checked_text(mapping["id"], allow_blank=False, where=f"{label}.id")
@@ -147,6 +151,7 @@ def _ref_fixture_from_mapping(mapping, label):
 
 
 def _ref_message_key(case):
+    """Ref message key."""
     return tuple(
         (unicodedata.normalize("NFC", message.role), unicodedata.normalize("NFC", message.content))
         for message in case.messages
@@ -154,6 +159,7 @@ def _ref_message_key(case):
 
 
 def _ref_split_discipline(search_cases, held_cases):
+    """Ref split discipline."""
     # Mirrors the documented core.Split contract (NFC-canonical uniqueness of
     # ids across the whole dataset; no group shared across the split; no
     # identical message inputs shared across the split), checked here
@@ -245,6 +251,7 @@ def _capture(call):
 
 
 def _assert_agree(label, argument, *, expect_valid):
+    """Assert agree."""
     kind_impl, value_impl = _capture(lambda: datasets_mod.parse_dataset(argument))
     kind_ref, value_ref = _capture(lambda: reference_parse_dataset(argument))
     if expect_valid:
@@ -279,6 +286,7 @@ _TEXT_POOL = [
 
 
 def _fresh_id(rng, seen_nfc, prefix):
+    """Fresh id."""
     while True:
         base = f"{prefix}-{rng.randrange(1_000_000)}"
         roll = rng.random()
@@ -293,6 +301,7 @@ def _fresh_id(rng, seen_nfc, prefix):
 
 
 def _random_messages(rng):
+    """Random messages."""
     count = rng.choice([1, 1, 3, 3, 5, 7])
     messages = []
     for index in range(count):
@@ -304,6 +313,7 @@ def _random_messages(rng):
 
 
 def _message_key(mapping_messages):
+    """Message key."""
     return tuple(
         (unicodedata.normalize("NFC", m["role"]), unicodedata.normalize("NFC", m["content"]))
         for m in mapping_messages
@@ -311,11 +321,13 @@ def _message_key(mapping_messages):
 
 
 def _gen_valid_doc(rng, seq):
+    """Gen valid doc."""
     seen_nfc = set()
     seen_keys = set()  # message-input keys must not repeat across the split
     search, held = [], []
 
     def make_fixture(prefix):
+        """Make fixture."""
         for _attempt in range(60):
             messages = _random_messages(rng)
             key = _message_key(messages)
@@ -343,9 +355,12 @@ def _gen_valid_doc(rng, seq):
 
 
 def _base_doc():
+    """Base doc."""
+
     # Note: the two fixtures differ in every discipline dimension (id, group
     # AND message inputs) so the base document is valid.
     def fixture(ident, group, content):
+        """Fixture."""
         return {
             "id": ident,
             "group": group,
@@ -357,12 +372,14 @@ def _base_doc():
 
 
 def _dump(doc):
+    """Dump."""
     return json.dumps(doc, ensure_ascii=False)
 
 
 # Each corruption takes (rng, doc-dict) and returns the fuzz input (usually a
 # str; sometimes a non-str object for the type gate).
 def _c_dup_key_fixture(rng, doc):
+    """C dup key fixture."""
     return (
         '{"search": [{"id": "x", "id": "y", "group": "g", "messages": '
         '[{"role": "user", "content": "cs"}], "expected": "e"}], '
@@ -372,11 +389,13 @@ def _c_dup_key_fixture(rng, doc):
 
 
 def _c_dup_key_top(rng, doc):
+    """C dup key top."""
     inner = _dump(doc["search"])
     return f'{{"search": {inner}, "search": {inner}, "held_out": {_dump(doc["held_out"])}}}'
 
 
 def _c_dup_key_message(rng, doc):
+    """C dup key message."""
     return (
         '{"search": [{"id": "x", "group": "g", "messages": '
         '[{"role": "user", "role": "assistant", "content": "cs"}], "expected": "e"}], '
@@ -386,113 +405,137 @@ def _c_dup_key_message(rng, doc):
 
 
 def _c_nan(rng, doc):
+    """C nan."""
     return _dump(doc).replace('"expected": "e"', '"expected": NaN', 1)
 
 
 def _c_infinity(rng, doc):
+    """C infinity."""
     return _dump(doc).replace('"id": "fs1"', '"id": Infinity', 1)
 
 
 def _c_neg_infinity(rng, doc):
+    """C neg infinity."""
     return _dump(doc).replace('"expected": "e"', '"expected": -Infinity', 1)
 
 
 def _c_missing_heldout(rng, doc):
+    """C missing heldout."""
     return _dump({"search": doc["search"]})
 
 
 def _c_missing_search(rng, doc):
+    """C missing search."""
     return _dump({"held_out": doc["held_out"]})
 
 
 def _c_extra_top(rng, doc):
+    """C extra top."""
     doc["zzz"] = 1
     return _dump(doc)
 
 
 def _c_fixture_missing_group(rng, doc):
+    """C fixture missing group."""
     del doc["search"][0]["group"]
     return _dump(doc)
 
 
 def _c_fixture_extra_key(rng, doc):
+    """C fixture extra key."""
     doc["search"][0]["note"] = "extra"
     return _dump(doc)
 
 
 def _c_message_missing_role(rng, doc):
+    """C message missing role."""
     del doc["search"][0]["messages"][0]["role"]
     return _dump(doc)
 
 
 def _c_message_extra_key(rng, doc):
+    """C message extra key."""
     doc["search"][0]["messages"][0]["lang"] = "en"
     return _dump(doc)
 
 
 def _c_id_number(rng, doc):
+    """C id number."""
     doc["search"][0]["id"] = 7
     return _dump(doc)
 
 
 def _c_id_null(rng, doc):
+    """C id null."""
     doc["search"][0]["id"] = None
     return _dump(doc)
 
 
 def _c_content_null(rng, doc):
+    """C content null."""
     doc["search"][0]["messages"][0]["content"] = None
     return _dump(doc)
 
 
 def _c_content_number(rng, doc):
+    """C content number."""
     doc["search"][0]["messages"][0]["content"] = 3.5
     return _dump(doc)
 
 
 def _c_expected_list(rng, doc):
+    """C expected list."""
     doc["search"][0]["expected"] = ["e"]
     return _dump(doc)
 
 
 def _c_group_bool(rng, doc):
+    """C group bool."""
     doc["search"][0]["group"] = True
     return _dump(doc)
 
 
 def _c_search_dict(rng, doc):
+    """C search dict."""
     doc["search"] = {"oops": 1}
     return _dump(doc)
 
 
 def _c_heldout_str(rng, doc):
+    """C heldout str."""
     doc["held_out"] = "nope"
     return _dump(doc)
 
 
 def _c_top_list(rng, doc):
+    """C top list."""
     return _dump([doc])
 
 
 def _c_top_str(rng, doc):
+    """C top str."""
     return _dump("nope")
 
 
 def _c_top_null(rng, doc):
+    """C top null."""
     return _dump(None)
 
 
 def _c_empty_search(rng, doc):
+    """C empty search."""
     doc["search"] = []
     return _dump(doc)
 
 
 def _c_empty_heldout(rng, doc):
+    """C empty heldout."""
     doc["held_out"] = []
     return _dump(doc)
 
 
 def _c_too_many_cases(rng, doc):
+    """C too many cases."""
     doc["search"] = [
         {
             "id": f"bulk-{i}",
@@ -506,11 +549,13 @@ def _c_too_many_cases(rng, doc):
 
 
 def _c_zero_messages(rng, doc):
+    """C zero messages."""
     doc["search"][0]["messages"] = []
     return _dump(doc)
 
 
 def _c_many_messages(rng, doc):
+    """C many messages."""
     doc["search"][0]["messages"] = [
         {"role": "user" if i % 2 == 0 else "assistant", "content": "c"} for i in range(22)
     ]
@@ -518,6 +563,7 @@ def _c_many_messages(rng, doc):
 
 
 def _c_even_messages(rng, doc):
+    """C even messages."""
     doc["search"][0]["messages"] = [
         {"role": "user" if i % 2 == 0 else "assistant", "content": "c"}
         for i in range(rng.choice([2, 4, 6]))
@@ -526,6 +572,7 @@ def _c_even_messages(rng, doc):
 
 
 def _c_bad_alternation(rng, doc):
+    """C bad alternation."""
     doc["search"][0]["messages"] = [
         {"role": "user", "content": "a"},
         {"role": "user", "content": "b"},
@@ -535,69 +582,82 @@ def _c_bad_alternation(rng, doc):
 
 
 def _c_bad_role(rng, doc):
+    """C bad role."""
     doc["search"][0]["messages"][0]["role"] = "system"
     return _dump(doc)
 
 
 def _c_oversize_id(rng, doc):
+    """C oversize id."""
     doc["search"][0]["id"] = "x" * 16_385
     return _dump(doc)
 
 
 def _c_oversize_content(rng, doc):
+    """C oversize content."""
     doc["search"][0]["messages"][0]["content"] = "y" * 16_385
     return _dump(doc)
 
 
 def _c_blank_id(rng, doc):
+    """C blank id."""
     doc["search"][0]["id"] = "   "
     return _dump(doc)
 
 
 def _c_blank_group(rng, doc):
+    """C blank group."""
     doc["search"][0]["group"] = ""
     return _dump(doc)
 
 
 def _c_blank_group_ws(rng, doc):
+    """C blank group ws."""
     doc["search"][0]["group"] = "\t \n"
     return _dump(doc)
 
 
 def _c_dup_id_across(rng, doc):
+    """C dup id across."""
     doc["held_out"][0]["id"] = "fs1"
     return _dump(doc)
 
 
 def _c_dup_id_within(rng, doc):
+    """C dup id within."""
     doc["search"].append(dict(doc["search"][0], group="other"))
     return _dump(doc)
 
 
 def _c_group_crosses(rng, doc):
+    """C group crosses."""
     doc["held_out"][0]["group"] = "gs"
     return _dump(doc)
 
 
 def _c_nfc_id_collision(rng, doc):
+    """C nfc id collision."""
     doc["search"][0]["id"] = "caf\u00e9"
     doc["held_out"][0]["id"] = "cafe\u0301"
     return _dump(doc)
 
 
 def _c_nfc_group_collision(rng, doc):
+    """C nfc group collision."""
     doc["search"][0]["group"] = "gr\u00e9"
     doc["held_out"][0]["group"] = "gre\u0301"
     return _dump(doc)
 
 
 def _c_identical_messages_across(rng, doc):
+    """C identical messages across."""
     # Same message inputs in both splits (ids and groups differ) -> rejected.
     doc["held_out"][0]["messages"] = [dict(m) for m in doc["search"][0]["messages"]]
     return _dump(doc)
 
 
 def _c_nfc_message_collision(rng, doc):
+    """C nfc message collision."""
     # NFC-equal message contents across the split -> rejected even though the
     # stored bytes differ.
     doc["search"][0]["messages"] = [{"role": "user", "content": "caf\u00e9"}]
@@ -606,52 +666,64 @@ def _c_nfc_message_collision(rng, doc):
 
 
 def _c_truncated(rng, doc):
+    """C truncated."""
     return _dump(doc)[: len(_dump(doc)) // 2]
 
 
 def _c_trailing_garbage(rng, doc):
+    """C trailing garbage."""
     return _dump(doc) + " garbage"
 
 
 def _c_trailing_comma(rng, doc):
+    """C trailing comma."""
     return _dump(doc).replace('{"search":', '{"search":,', 1)
 
 
 def _c_empty_text(rng, doc):
+    """C empty text."""
     return ""
 
 
 def _c_whitespace_text(rng, doc):
+    """C whitespace text."""
     return "   \n\t  "
 
 
 def _c_none_input(rng, doc):
+    """C none input."""
     return None
 
 
 def _c_int_input(rng, doc):
+    """C int input."""
     return 123
 
 
 def _c_bytes_input(rng, doc):
+    """C bytes input."""
     return b"{}"
 
 
 def _c_list_input(rng, doc):
+    """C list input."""
     return ["x"]
 
 
 def _c_message_not_dict(rng, doc):
+    """C message not dict."""
     doc["search"][0]["messages"][0] = "oops"
     return _dump(doc)
 
 
 def _c_messages_not_list(rng, doc):
+    """C messages not list."""
     doc["search"][0]["messages"] = {"role": "user", "content": "c"}
     return _dump(doc)
 
 
 def _c_deep_nesting(rng, doc):
+    """C deep nesting."""
     return '{"search": ' + "[" * 20_000 + "]" * 20_000 + ', "held_out": []}'
 
 
@@ -716,6 +788,7 @@ CORRUPTIONS = [
 
 
 def _build_valid_cases():
+    """Build valid cases."""
     out = []
     for seq in range(300):
         rng = random.Random(f"cycle30-valid-{seq}")  # noqa: S311 -- deterministic test seed
@@ -724,6 +797,7 @@ def _build_valid_cases():
 
 
 def _build_invalid_cases():
+    """Build invalid cases."""
     out = []
     for seq in range(400):
         rng = random.Random(f"cycle30-invalid-{seq}")  # noqa: S311 -- deterministic test seed
@@ -741,30 +815,40 @@ INVALID_CASES = _build_invalid_cases()
 
 
 class TestOracleDifferentialValid(unittest.TestCase):
+    """Test oracle differential valid."""
+
     def test_valid_documents_agree(self):
+        """Test valid documents agree."""
         for doc in VALID_CASES:
             with self.subTest(doc=doc):
                 _assert_agree("valid", doc, expect_valid=True)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestOracleDifferentialInvalid(unittest.TestCase):
+    """Test oracle differential invalid."""
+
     def test_invalid_documents_agree(self):
+        """Test invalid documents agree."""
         for payload in [payload for _name, payload in INVALID_CASES]:
             with self.subTest(payload=payload):
                 _assert_agree("invalid", payload, expect_valid=False)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -774,12 +858,14 @@ class TestOracleDifferentialInvalid(unittest.TestCase):
 
 
 def _doc_with_byte_length(nbytes):
+    """Doc with byte length."""
     # Distribute padding across many fixtures so every text field stays
     # within MAX_TEXT while the total UTF-8 byte length is exact.
     per_split = 64
     base_len = 1000
 
     def fixture(tag, i):
+        """Fixture."""
         suffix = f"-{tag}-{i:05d}"
         return {
             "id": f"pad-{tag}-{i:05d}",
@@ -811,9 +897,11 @@ def _doc_with_byte_length(nbytes):
 
 
 def _doc_with_case_count(count):
+    """Doc with case count."""
     doc = _base_doc()
 
     def fixture(tag, i):
+        """Fixture."""
         # Content is unique per fixture so no message-input key repeats
         # across the split (the discipline under test here is the count).
         return {
@@ -829,6 +917,7 @@ def _doc_with_case_count(count):
 
 
 def _doc_with_message_count(count):
+    """Doc with message count."""
     doc = _base_doc()
     doc["search"][0]["messages"] = [
         # Search content "m" keeps the message-input key distinct from the
@@ -840,6 +929,7 @@ def _doc_with_message_count(count):
 
 
 def _set_field(doc, field, value):
+    """Set field."""
     if field == "id":
         doc["search"][0]["id"] = value
     elif field == "group":
@@ -854,45 +944,56 @@ def _set_field(doc, field, value):
 
 
 class TestBoundaries(unittest.TestCase):
+    """Test boundaries."""
+
     @staticmethod
     def test_byte_limit_exact():
+        """Test byte limit exact."""
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES)
         _assert_agree("bytes-exact", doc, expect_valid=True)
 
     @staticmethod
     def test_byte_limit_plus_one():
+        """Test byte limit plus one."""
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES + 1)
         _assert_agree("bytes-plus-one", doc, expect_valid=False)
 
     def test_case_count_ok(self):
+        """Test case count ok."""
         for count in [1, 2, 99, 100]:
             with self.subTest(count=count):
                 _assert_agree(f"cases-{count}", _doc_with_case_count(count), expect_valid=True)
 
     @staticmethod
     def test_case_count_101_rejected():
+        """Test case count 101 rejected."""
         _assert_agree("cases-101", _doc_with_case_count(101), expect_valid=False)
 
     def test_message_count_ok(self):
+        """Test message count ok."""
         for count in [1, 3, 19, 21]:
             with self.subTest(count=count):
                 _assert_agree(f"msgs-{count}", _doc_with_message_count(count), expect_valid=True)
 
     @staticmethod
     def test_message_count_22_rejected():
+        """Test message count 22 rejected."""
         _assert_agree("msgs-22", _doc_with_message_count(22), expect_valid=False)
 
     @staticmethod
     def test_message_count_20_rejected_ends_with_assistant():
+        """Test message count 20 rejected ends with assistant."""
         _assert_agree("msgs-20", _doc_with_message_count(20), expect_valid=False)
 
     def test_text_limit_exact_ok(self):
+        """Test text limit exact ok."""
         for field in ["id", "group", "content", "expected"]:
             with self.subTest(field=field):
                 doc = _set_field(_base_doc(), field, "x" * datasets_mod.MAX_TEXT)
                 _assert_agree(f"text-exact-{field}", doc, expect_valid=True)
 
     def test_text_limit_plus_one_rejected(self):
+        """Test text limit plus one rejected."""
         for field in ["id", "group", "content", "expected"]:
             with self.subTest(field=field):
                 doc = _set_field(_base_doc(), field, "x" * (datasets_mod.MAX_TEXT + 1))
@@ -900,15 +1001,18 @@ class TestBoundaries(unittest.TestCase):
 
     @staticmethod
     def test_text_limit_counts_characters_not_bytes():
+        """Test text limit counts characters not bytes."""
         doc = _set_field(_base_doc(), "content", "\u00e9" * datasets_mod.MAX_TEXT)
         assert len(doc.encode("utf-8")) > datasets_mod.MAX_TEXT
         _assert_agree("text-multibyte", doc, expect_valid=True)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -918,8 +1022,14 @@ class TestBoundaries(unittest.TestCase):
 
 
 class TestPinnedBehavior(unittest.TestCase):
+    """Test pinned behavior."""
+
     def test_non_str_input_rejected(self):
+        """Test non str input rejected."""
+
         class Sub(str):
+            """Sub."""
+
             pass
 
         payload = Sub(_dump(_base_doc()))
@@ -929,6 +1039,7 @@ class TestPinnedBehavior(unittest.TestCase):
             reference_parse_dataset(payload)
 
     def test_lone_surrogate_raises_valueerror(self):
+        """Test lone surrogate raises valueerror."""
         doc = _dump(_base_doc()).replace("fs1", "a\ud800", 1)
         with self.assertRaises(ValueError) as info:
             datasets_mod.parse_dataset(doc)
@@ -939,18 +1050,21 @@ class TestPinnedBehavior(unittest.TestCase):
         assert "lone surrogate" in str(info.exception)
 
     def test_duplicate_id_across_splits_rejected(self):
+        """Test duplicate id across splits rejected."""
         doc = _base_doc()
         doc["held_out"][0]["id"] = "fs1"
         with self.assertRaisesRegex(ValueError, "globally unique"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_group_cannot_cross_split(self):
+        """Test group cannot cross split."""
         doc = _base_doc()
         doc["held_out"][0]["group"] = "gs"
         with self.assertRaisesRegex(ValueError, "Related fixtures cannot cross the split"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_conversation_must_end_with_user(self):
+        """Test conversation must end with user."""
         doc = _base_doc()
         doc["search"][0]["messages"] = [
             {"role": "user", "content": "a"},
@@ -960,18 +1074,21 @@ class TestPinnedBehavior(unittest.TestCase):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_alternation_must_start_with_user(self):
+        """Test alternation must start with user."""
         doc = _base_doc()
         doc["search"][0]["messages"][0]["role"] = "assistant"
         with self.assertRaisesRegex(ValueError, "must alternate"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_blank_id_rejected(self):
+        """Test blank id rejected."""
         doc = _base_doc()
         doc["search"][0]["id"] = "  \t "
         with self.assertRaisesRegex(ValueError, "Blank identifier"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_blank_group_rejected(self):
+        """Test blank group rejected."""
         doc = _base_doc()
         doc["search"][0]["group"] = ""
         with self.assertRaisesRegex(ValueError, "Blank identifier"):
@@ -979,6 +1096,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_whitespace_padded_id_accepted():
+        """Test whitespace padded id accepted."""
         doc = _base_doc()
         doc["search"][0]["id"] = "  padded-id  "
         split = datasets_mod.parse_dataset(_dump(doc))
@@ -986,6 +1104,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_empty_expected_accepted():
+        """Test empty expected accepted."""
         doc = _base_doc()
         doc["search"][0]["expected"] = ""
         split = datasets_mod.parse_dataset(_dump(doc))
@@ -993,6 +1112,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_top_level_key_order_irrelevant():
+        """Test top level key order irrelevant."""
         doc = _base_doc()
         text = _dump({"held_out": doc["held_out"], "search": doc["search"]})
         split = datasets_mod.parse_dataset(text)
@@ -1000,6 +1120,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_nfd_data_preserved_byte_exact():
+        """Test nfd data preserved byte exact."""
         doc = _base_doc()
         doc["search"][0]["id"] = "cafe\u0301"
         doc["search"][0]["messages"][0]["content"] = "nai\u0308ve"
@@ -1009,6 +1130,7 @@ class TestPinnedBehavior(unittest.TestCase):
         assert unicodedata.normalize("NFC", split.search[0].id) == "caf\u00e9"
 
     def test_nfc_id_collision_rejected(self):
+        """Test nfc id collision rejected."""
         doc = _base_doc()
         doc["search"][0]["id"] = "caf\u00e9"  # NFC
         doc["held_out"][0]["id"] = "cafe\u0301"  # NFD, NFC-equal
@@ -1016,6 +1138,7 @@ class TestPinnedBehavior(unittest.TestCase):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_nan_and_infinity_rejected(self):
+        """Test nan and infinity rejected."""
         base = _dump(_base_doc())
         for token in ("NaN", "Infinity", "-Infinity"):
             text = base.replace('"expected": "e"', f'"expected": {token}', 1)
@@ -1023,33 +1146,39 @@ class TestPinnedBehavior(unittest.TestCase):
                 datasets_mod.parse_dataset(text)
 
     def test_deep_nesting_converted_to_valueerror(self):
+        """Test deep nesting converted to valueerror."""
         text = '{"search": ' + "[" * 20_000 + "]" * 20_000 + ', "held_out": []}'
         with self.assertRaisesRegex(ValueError, "nesting too deep"):
             datasets_mod.parse_dataset(text)
 
     def test_overflow_float_rejected(self):
+        """Test overflow float rejected."""
         text = _dump(_base_doc()).replace('"id": "fs1"', '"id": 1e400', 1)
         with self.assertRaisesRegex(ValueError, "Invalid or oversized text field"):
             datasets_mod.parse_dataset(text)
 
     def test_empty_splits_rejected(self):
+        """Test empty splits rejected."""
         doc = _base_doc()
         doc["search"] = []
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_zero_messages_rejected(self):
+        """Test zero messages rejected."""
         doc = _base_doc()
         doc["search"][0]["messages"] = []
         with self.assertRaisesRegex(ValueError, "conversation must have 1-21 messages"):
             datasets_mod.parse_dataset(_dump(doc))
 
     def test_bom_rejected(self):
+        """Test bom rejected."""
         with self.assertRaises(ValueError):
             datasets_mod.parse_dataset("\ufeff" + _dump(_base_doc()))
 
     @staticmethod
     def test_dunder_keys_are_inert_data():
+        """Test dunder keys are inert data."""
         doc = _base_doc()
         doc["search"][0]["id"] = "__proto__"
         doc["search"][0]["messages"][0]["content"] = "${jndi:ldap://x}"
@@ -1058,14 +1187,17 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_parse_is_deterministic():
+        """Test parse is deterministic."""
         text = VALID_CASES[7]
         assert datasets_mod.parse_dataset(text) == datasets_mod.parse_dataset(text)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1075,7 +1207,10 @@ class TestPinnedBehavior(unittest.TestCase):
 
 
 class TestLoadDataset(unittest.TestCase):
+    """Test load dataset."""
+
     def test_roundtrip_file(self):
+        """Test roundtrip file."""
         tmp_path = self.tmp_path
         text = VALID_CASES[3]
         target = tmp_path / "ds.json"
@@ -1085,6 +1220,7 @@ class TestLoadDataset(unittest.TestCase):
         assert loaded == reference_load_dataset(target)
 
     def test_fuzz_files_agree(self):
+        """Test fuzz files agree."""
         tmp_path = self.tmp_path
         for index in [0, 11, 42, 101, 250]:
             with self.subTest(index=index):
@@ -1094,20 +1230,24 @@ class TestLoadDataset(unittest.TestCase):
                 assert datasets_mod.load_dataset(target) == reference_load_dataset(target)
 
     def test_missing_file(self):
+        """Test missing file."""
         tmp_path = self.tmp_path
         with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset(tmp_path / "nope.json")
 
     def test_directory_refused(self):
+        """Test directory refused."""
         tmp_path = self.tmp_path
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(tmp_path)
 
     def test_dev_null_refused(self):
+        """Test dev null refused."""
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset("/dev/null")
 
     def test_fifo_without_writer_refused(self):
+        """Test fifo without writer refused."""
         tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
@@ -1115,6 +1255,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(fifo)
 
     def test_symlink_to_fifo_refused(self):
+        """Test symlink to fifo refused."""
         tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
@@ -1124,6 +1265,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(link)
 
     def test_invalid_utf8(self):
+        """Test invalid utf8."""
         tmp_path = self.tmp_path
         target = tmp_path / "bad.json"
         target.write_bytes(b'{"search": "\xed\xa0\x80"}')
@@ -1131,6 +1273,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(target)
 
     def test_bytes_path_rejected(self):
+        """Test bytes path rejected."""
         tmp_path = self.tmp_path
         target = tmp_path / "ds.json"
         target.write_text(_dump(_base_doc()), encoding="utf-8")
@@ -1138,11 +1281,13 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(os.fsencode(target))
 
     def test_non_path_types_rejected(self):
+        """Test non path types rejected."""
         for bad in [None, 123, 4.5, ["x"], b"x"]:
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "Invalid fixture path"):
                 datasets_mod.load_dataset(bad)
 
     def test_symlink_to_regular_file_accepted(self):
+        """Test symlink to regular file accepted."""
         tmp_path = self.tmp_path
         text = _dump(_base_doc())
         target = tmp_path / "ds.json"
@@ -1152,6 +1297,7 @@ class TestLoadDataset(unittest.TestCase):
         assert datasets_mod.load_dataset(link) == datasets_mod.parse_dataset(text)
 
     def test_dangling_symlink(self):
+        """Test dangling symlink."""
         tmp_path = self.tmp_path
         link = tmp_path / "dangling"
         os.symlink(tmp_path / "missing", link)
@@ -1159,6 +1305,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(link)
 
     def test_symlink_loop(self):
+        """Test symlink loop."""
         tmp_path = self.tmp_path
         link = tmp_path / "loop"
         os.symlink(link, link)
@@ -1166,6 +1313,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(link)
 
     def test_trailing_slash_normalized_by_pathlib(self):
+        """Test trailing slash normalized by pathlib."""
         tmp_path = self.tmp_path
         text = _dump(_base_doc())
         target = tmp_path / "ds.json"
@@ -1175,6 +1323,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(str(tmp_path / "missing.json") + "/")
 
     def test_exact_max_bytes_file_accepted(self):
+        """Test exact max bytes file accepted."""
         tmp_path = self.tmp_path
         text = _doc_with_byte_length(datasets_mod.MAX_BYTES)
         target = tmp_path / "ds.json"
@@ -1183,6 +1332,7 @@ class TestLoadDataset(unittest.TestCase):
         assert datasets_mod.load_dataset(target) == reference_load_dataset(target)
 
     def test_max_bytes_plus_one_file_rejected(self):
+        """Test max bytes plus one file rejected."""
         tmp_path = self.tmp_path
         text = _doc_with_byte_length(datasets_mod.MAX_BYTES + 1)
         target = tmp_path / "ds.json"
@@ -1191,6 +1341,7 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(target)
 
     def test_unreadable_file(self):
+        """Test unreadable file."""
         tmp_path = self.tmp_path
         target = tmp_path / "noperm.json"
         target.write_text(_dump(_base_doc()), encoding="utf-8")
@@ -1204,6 +1355,7 @@ class TestLoadDataset(unittest.TestCase):
             target.chmod(0o600)
 
     def test_empty_file(self):
+        """Test empty file."""
         tmp_path = self.tmp_path
         target = tmp_path / "empty.json"
         target.write_bytes(b"")
@@ -1211,18 +1363,22 @@ class TestLoadDataset(unittest.TestCase):
             datasets_mod.load_dataset(target)
 
     def test_path_with_null_byte(self):
+        """Test path with null byte."""
         with self.assertRaises(ValueError):
             datasets_mod.load_dataset("a\0b")
 
     def test_absurdly_long_path(self):
+        """Test absurdly long path."""
         with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             datasets_mod.load_dataset("/" + "x" * 6000)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1232,13 +1388,17 @@ class TestLoadDataset(unittest.TestCase):
 
 
 class TestRedTeam(unittest.TestCase):
+    """Test red team."""
+
     def test_fifo_with_writer_still_refused(self):
+        """Test fifo with writer still refused."""
         tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
         stop = threading.Event()
 
         def writer():
+            """Writer."""
             fd = os.open(fifo, os.O_RDWR)  # O_RDWR on a fifo never blocks
             try:
                 os.write(fd, _dump(_base_doc()).encode("utf-8"))
@@ -1257,6 +1417,7 @@ class TestRedTeam(unittest.TestCase):
         assert not thread.is_alive()
 
     def test_oversize_file_never_fully_read(self):
+        """Test oversize file never fully read."""
         tmp_path = self.tmp_path
         target = tmp_path / "big.json"
         with open(target, "wb") as handle:
@@ -1267,11 +1428,13 @@ class TestRedTeam(unittest.TestCase):
             datasets_mod.load_dataset(target)
 
     def test_deeply_nested_object_converted(self):
+        """Test deeply nested object converted."""
         text = '{"a":' * 30_000 + "null" + "}" * 30_000
         with self.assertRaisesRegex(ValueError, "nesting too deep"):
             datasets_mod.parse_dataset(text)
 
     def test_many_extra_keys_rejected(self):
+        """Test many extra keys rejected."""
         search_fixture = (
             '{"id": "x", "group": "g", '
             '"messages": [{"role": "user", "content": "c"}], "expected": "e"'
@@ -1294,11 +1457,13 @@ class TestRedTeam(unittest.TestCase):
             datasets_mod.parse_dataset(text)
 
     def test_whitespace_only_splits_rejected(self):
+        """Test whitespace only splits rejected."""
         with self.assertRaises(ValueError):
             datasets_mod.parse_dataset('{"search": [], "held_out": []}')
 
     @staticmethod
     def test_groups_may_repeat_within_one_split():
+        """Test groups may repeat within one split."""
         doc = _base_doc()
         doc["search"].append(
             {
@@ -1312,6 +1477,7 @@ class TestRedTeam(unittest.TestCase):
         assert len(split.search) == 2
 
     def test_ids_unique_within_split_enforced(self):
+        """Test ids unique within split enforced."""
         doc = _base_doc()
         doc["search"].append(dict(doc["search"][0]))
         with self.assertRaisesRegex(ValueError, "globally unique"):
@@ -1319,6 +1485,7 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_single_message_conversation_valid():
+        """Test single message conversation valid."""
         doc = _base_doc()  # one user message, no assistant turn yet
         split = datasets_mod.parse_dataset(_dump(doc))
         assert len(split.search[0].messages) == 1
@@ -1326,15 +1493,18 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_maximal_conversation_shape():
+        """Test maximal conversation shape."""
         text = _doc_with_message_count(21)
         split = datasets_mod.parse_dataset(text)
         assert [m.role for m in split.search[0].messages] == ["user", "assistant"] * 10 + ["user"]
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 

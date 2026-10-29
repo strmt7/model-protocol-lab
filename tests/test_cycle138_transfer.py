@@ -18,11 +18,15 @@ CANDIDATES = ("alpha", "beta")
 
 
 def _portability(transfer, winner="alpha", decision="selected"):
+    """Portability."""
     return experiments.transfer_portability(winner, decision, CANDIDATES, transfer)
 
 
 class TransferPortabilityTest(unittest.TestCase):
+    """Transfer portability test."""
+
     def test_full_transfer(self):
+        """Test full transfer."""
         out = _portability(
             {
                 "ckptA": {"alpha": True, "beta": False},
@@ -39,6 +43,7 @@ class TransferPortabilityTest(unittest.TestCase):
         self.assertEqual(out["matrix"]["beta"]["ckptA"], "fails_there")
 
     def test_partial_transfer(self):
+        """Test partial transfer."""
         out = _portability(
             {
                 "ckptA": {"alpha": True, "beta": False},
@@ -50,6 +55,7 @@ class TransferPortabilityTest(unittest.TestCase):
         self.assertEqual(out["matrix"]["beta"]["ckptB"], "wins_there")
 
     def test_no_transfer(self):
+        """Test no transfer."""
         out = _portability(
             {
                 "ckptA": {"alpha": False, "beta": False},
@@ -63,6 +69,7 @@ class TransferPortabilityTest(unittest.TestCase):
         )
 
     def test_ties_there(self):
+        """Test ties there."""
         out = _portability({"ckptA": {"alpha": True, "beta": True}})
         self.assertEqual(out["matrix"]["alpha"]["ckptA"], "ties_there")
         self.assertEqual(
@@ -73,6 +80,7 @@ class TransferPortabilityTest(unittest.TestCase):
         self.assertEqual(out["transfer_verdict"], "none")
 
     def test_incompatible_checkpoint(self):
+        """Test incompatible checkpoint."""
         out = _portability(
             {
                 "ckptA": {"alpha": True, "beta": False},
@@ -88,14 +96,17 @@ class TransferPortabilityTest(unittest.TestCase):
         self.assertEqual(out["transfer_verdict"], "full")
 
     def test_no_primary_winner_unavailable(self):
+        """Test no primary winner unavailable."""
         out = _portability({"ckptA": {"alpha": True, "beta": False}}, winner=None)
         self.assertEqual(out["transfer_verdict"], "unavailable")
 
     def test_all_incompatible_unavailable(self):
+        """Test all incompatible unavailable."""
         out = _portability({"ckptA": {"alpha": None, "beta": None}})
         self.assertEqual(out["transfer_verdict"], "unavailable")
 
     def test_checkpoint_order_invariant(self):
+        """Test checkpoint order invariant."""
         t1 = {
             "ckptA": {"alpha": True, "beta": False},
             "ckptB": {"alpha": False, "beta": True},
@@ -107,6 +118,7 @@ class TransferPortabilityTest(unittest.TestCase):
         self.assertEqual(_portability(t1), _portability(t2))
 
     def test_malformed_input_unavailable(self):
+        """Test malformed input unavailable."""
         for bad in (
             ("alpha", "", ("alpha", "beta"), {"c": {"alpha": True}}),
             ("gamma", "selected", CANDIDATES, {"c": {"alpha": True}}),
@@ -120,6 +132,7 @@ class TransferPortabilityTest(unittest.TestCase):
 
 
 def _fixture(fid, expected):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=f"q-{fid}"),),
@@ -129,6 +142,7 @@ def _fixture(fid, expected):
 
 
 def _format(name):
+    """Format."""
     return Format(name=name, bos="", user_prefix=f"[{name}]", assistant_prefix="A:", turn_end="\n")
 
 
@@ -143,13 +157,16 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         fixture = next((fid for fid in self._expected if f"q-{fid}" in prompt), None)
@@ -166,13 +183,17 @@ class ScriptedBackend:
 
 
 class TransferStageTest(unittest.TestCase):
+    """Transfer stage test."""
+
     @staticmethod
     def _stage(behavior):
+        """Stage."""
         expected = {"S1": "GREEN", "S2": "BLUE"}
         cases = tuple(_fixture(fid, ans) for fid, ans in expected.items())
         formats = tuple(_format(n) for n in CANDIDATES)
 
         def factory(cid: str) -> ScriptedBackend:
+            """Factory."""
             return ScriptedBackend(expected, behavior.get(cid, {}))
 
         return experiments.transfer_stage(
@@ -186,11 +207,15 @@ class TransferStageTest(unittest.TestCase):
         )
 
     def test_all_pass(self):
+        """Test all pass."""
         out = self._stage({"ckptA": {"alpha": "pass", "beta": "fail"}})
         self.assertEqual(out, {"ckptA": {"alpha": True, "beta": False}})
 
     def test_backend_construction_failure_records_none(self):
+        """Test backend construction failure records none."""
+
         def factory(cid):
+            """Factory."""
             raise RuntimeError("no such checkpoint")
 
         cases = (_fixture("S1", "GREEN"),)
@@ -199,11 +224,13 @@ class TransferStageTest(unittest.TestCase):
         self.assertEqual(out, {"ckptX": {"alpha": None}})
 
     def test_evaluation_error_records_none(self):
+        """Test evaluation error records none."""
         out = self._stage({"ckptA": {"alpha": "error", "beta": "pass"}})
         self.assertIsNone(out["ckptA"]["alpha"])
         self.assertTrue(out["ckptA"]["beta"])
 
     def test_end_to_end_portability(self):
+        """Test end to end portability."""
         outcomes = self._stage(
             {
                 "ckptA": {"alpha": "pass", "beta": "fail"},
@@ -218,10 +245,12 @@ class TransferStageTest(unittest.TestCase):
         self.assertEqual(port["transfer_verdict"], "partial")
 
     def test_validation(self):
+        """Test validation."""
         cases = (_fixture("S1", "GREEN"),)
         formats = (_format("alpha"),)
 
         def factory(cid: str) -> ScriptedBackend:
+            """Factory."""
             return ScriptedBackend({"S1": "GREEN"}, {})
 
         for kwargs in (
@@ -245,8 +274,11 @@ class TransferStageTest(unittest.TestCase):
 
 
 class TransferHtmlTest(unittest.TestCase):
+    """Transfer html test."""
+
     @staticmethod
     def _transfer():
+        """Transfer."""
         return {
             "available": True,
             "primary_winner": "alpha",
@@ -266,6 +298,7 @@ class TransferHtmlTest(unittest.TestCase):
         }
 
     def test_section_renders(self):
+        """Test section renders."""
         html = _transfer_section({"transfer": self._transfer()})
         self.assertIn("Cross-checkpoint transfer", html)
         self.assertIn("ckptA", html)
@@ -273,12 +306,14 @@ class TransferHtmlTest(unittest.TestCase):
         self.assertIn("transfers to some checkpoints", html)
 
     def test_section_absent_when_missing(self):
+        """Test section absent when missing."""
         self.assertEqual(_transfer_section({}), "")
         self.assertEqual(_transfer_section({"transfer": {"available": False}}), "")
         self.assertEqual(_transfer_section({"transfer": {"available": True}}), "")
 
 
 def _transfer_payload(verdict="full", winner="alpha"):
+    """Transfer payload."""
     return {
         "available": True,
         "primary_winner": "alpha",
@@ -294,12 +329,16 @@ def _transfer_payload(verdict="full", winner="alpha"):
 
 
 class DiffTransferTest(unittest.TestCase):
+    """Diff transfer test."""
+
     def test_identical_unchanged(self):
+        """Test identical unchanged."""
         diff = diffreports.diff_transfer(_transfer_payload(), _transfer_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_verdict_change_detected(self):
+        """Test verdict change detected."""
         old = _transfer_payload(verdict="full")
         new = _transfer_payload(verdict="partial")
         diff = diffreports.diff_transfer(old, new)
@@ -307,6 +346,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertTrue(diff["transfer_verdict"]["changed"])
 
     def test_checkpoint_drift_detected(self):
+        """Test checkpoint drift detected."""
         old = _transfer_payload()
         new = _transfer_payload(winner="beta")
         new["matrix"]["alpha"]["ckptA"] = "fails_there"
@@ -318,6 +358,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertEqual(len(diff["cell_drift"]), 2)
 
     def test_checkpoint_added_removed(self):
+        """Test checkpoint added removed."""
         old = _transfer_payload()
         new = _transfer_payload()
         new["per_checkpoint"]["ckptB"] = {"decision": "selected", "winner": "alpha"}
@@ -329,6 +370,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertEqual(diff["checkpoints_removed"], [])
 
     def test_asymmetric(self):
+        """Test asymmetric."""
         diff = diffreports.diff_transfer(_transfer_payload(), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -336,6 +378,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_feeds_identical(self):
+        """Test feeds identical."""
         old = {"decision": "selected", "transfer": _transfer_payload()}
         new = {"decision": "selected", "transfer": _transfer_payload()}
         diff = diffreports.diff_reports(old, new)
@@ -348,6 +391,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertFalse(diff2["summary"]["identical"])
 
     def test_mixed_key_types_fail_closed(self):
+        """Test mixed key types fail closed."""
         # Hostile results.json with non-string checkpoint keys must not
         # crash the comparator; the malformed side degrades to asymmetric.
         good = _transfer_payload()
@@ -362,6 +406,7 @@ class DiffTransferTest(unittest.TestCase):
         self.assertEqual(diff2["available"], "old")
 
     def test_transfer_portability_mixed_keys_fail_closed(self):
+        """Test transfer portability mixed keys fail closed."""
         # Never raises on malformed input, per the docstring contract.
         result = experiments.transfer_portability(
             "alpha",

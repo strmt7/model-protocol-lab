@@ -695,6 +695,7 @@ def dropped_set_shares(case: dict[str, Any], seed: int) -> dict[str, Any]:
     return shares
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_case(case: dict[str, Any], seed: int) -> bool:
     """The pre-generation invariant battery over one case
     (design section 3.4 + amendments C and D), executed by

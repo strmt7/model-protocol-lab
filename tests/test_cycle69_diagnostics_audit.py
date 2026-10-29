@@ -130,6 +130,7 @@ def _request_seed(exp_seed: int, fixture_id: str) -> int:
 
 
 def _boundary_ids() -> tuple[int, ...]:
+    """Boundary ids."""
     return tuple(ord(c) for c in BOUNDARY_TEXT)
 
 
@@ -169,10 +170,12 @@ class SeedSpyBackend:
     # -- Backend protocol -------------------------------------------------
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(c) for c in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(i) for i in token_ids)
 
     def generate(
@@ -183,6 +186,7 @@ class SeedSpyBackend:
         seed: int,
         cancel: Any,
     ) -> Any:
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in self._candidates if f"[{n}]" in prompt), None)
         fixture_id = self.seed_to_fid.get(seed)
@@ -236,6 +240,7 @@ class PromptTailBackend(SeedSpyBackend):
         seed: int,
         cancel: Any,
     ) -> Any:
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in self._candidates if f"[{n}]" in prompt), None)
         fixture_id = self.seed_to_fid.get(seed)
@@ -268,6 +273,7 @@ class LogitBackend(SeedSpyBackend):
         self._means = dict(means)
 
     def _mean_for(self, input_ids: tuple[int, ...]) -> float:
+        """Mean for."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in self._candidates if f"[{n}]" in prompt), None)
         for (cand, fid), mean in self._means.items():
@@ -279,6 +285,7 @@ class LogitBackend(SeedSpyBackend):
         raise AssertionError("forward_logits called on an unrecognized prompt/target")
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Forward logits."""
         seq = tuple(input_ids)
         if not seq or any(type(t) is not int or t < 0 or t >= VOCAB for t in seq):
             raise ValueError("invalid_token_ids")
@@ -312,6 +319,7 @@ def make_scenario(
     fixtures: dict[str, Any] = {}
 
     def _fixture(fid: str, text: str, expected: str) -> Any:
+        """Fixture."""
         fx = real_core.Fixture(
             id=fid,
             messages=(real_core.Message(role="user", content=text),),
@@ -346,6 +354,7 @@ def make_scenario(
 
 
 def run_search_experiment(sc: Any) -> dict[str, Any]:
+    """Run search experiment."""
     return run_experiment(
         sc.backend,
         sc.formats,
@@ -370,6 +379,7 @@ def _oracle_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> in
     return None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_budget_frontier(
     search: list[dict[str, Any]],
     *,
@@ -419,6 +429,7 @@ def oracle_budget_frontier(
     }
 
     def pass_count(name: str, budget: int) -> int:
+        """Pass count."""
         return sum(1 for mb in sorted_mins[name] if mb <= budget)
 
     candidates: dict[str, dict[str, Any]] = {}
@@ -446,6 +457,7 @@ def oracle_budget_frontier(
         }
 
     def decision_at(budget: int) -> tuple[str, str | None]:
+        """Decision at."""
         winners = [n for n in names if pass_count(n, budget) == n_fixtures]
         if len(winners) == 1:
             return ("selected", winners[0])
@@ -514,6 +526,7 @@ def _synth_obs(
     bfound: bool,
     status: str = "completed",
 ) -> dict[str, Any]:
+    """Synth obs."""
     return {
         "fixture": fixture,
         "status": status,
@@ -527,6 +540,7 @@ def _synth_obs(
 def _synth_entry(
     name: str, obs: list[dict[str, Any]], boundary_ids: tuple[int, ...] | None = None
 ) -> dict[str, Any]:
+    """Synth entry."""
     entry: dict[str, Any] = {"format": {"name": name}, "observations": obs}
     if boundary_ids is not None:
         entry["boundary_token_ids"] = list(boundary_ids)
@@ -552,6 +566,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_mixed_scenario_matches_oracle_exactly():
+        """Test mixed scenario matches oracle exactly."""
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -576,6 +591,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_per_candidate_boundary_token_ids_honored():
+        """Test per candidate boundary token ids honored."""
         bnd = _boundary_ids()
         text = "alpha" + BOUNDARY_TEXT
         search = [
@@ -604,6 +620,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_minimal_pair_boundary_shift_deltas():
+        """Test minimal pair boundary shift deltas."""
         search = _mixed_frontier_search()
         before = budget_frontier(
             search,
@@ -654,6 +671,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_ambiguous_native_decision():
+        """Test ambiguous native decision."""
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -680,6 +698,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_no_candidate_native_decision_is_robust():
+        """Test no candidate native decision is robust."""
         search = [
             _synth_entry(
                 "c1",
@@ -709,6 +728,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_held_out_failed_native_decision():
+        """Test held out failed native decision."""
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -729,6 +749,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_budget_zero_and_one():
+        """Test budget zero and one."""
         search = [
             _synth_entry(
                 "c1",
@@ -761,6 +782,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 
     @staticmethod
     def test_failed_and_incomplete_observations_contribute_nothing():
+        """Test failed and incomplete observations contribute nothing."""
         search = [
             _synth_entry(
                 "c1",
@@ -781,6 +803,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["candidates"]["c1"]["pass_steps"] == [[1, 0]]
 
     def test_rejects_empty_inputs(self):
+        """Test rejects empty inputs."""
         for kwargs in [
             {"search": [], "why": "empty search"},
             {"search": [_synth_entry("c1", [])], "why": "empty observations"},
@@ -798,6 +821,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
                 assert why  # documents which case ran
 
     def test_rejects_duplicate_candidate_names(self):
+        """Test rejects duplicate candidate names."""
         search = [
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
@@ -812,6 +836,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
             )
 
     def test_rejects_fixture_mismatch_across_entries(self):
+        """Test rejects fixture mismatch across entries."""
         search = [
             _synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)]),
             _synth_entry("c2", [_synth_obs("S2", "a", exact=True, bfound=True)]),
@@ -826,6 +851,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
             )
 
     def test_rejects_bad_boundary(self):
+        """Test rejects bad boundary."""
         for bad_boundary in [(), (1, -2), ("x",)]:
             with self.subTest(bad_boundary=bad_boundary):
                 search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
@@ -839,6 +865,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
                     )
 
     def test_rejects_bad_max_new_tokens(self):
+        """Test rejects bad max new tokens."""
         for bad_cap in [0, 4097, "64"]:
             with self.subTest(bad_cap=bad_cap):
                 search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
@@ -852,6 +879,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
                     )
 
     def test_rejects_incomplete_native_decision(self):
+        """Test rejects incomplete native decision."""
         search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
         with self.assertRaises(ValueError):
             budget_frontier(
@@ -863,6 +891,7 @@ class TestBudgetFrontierOracle(unittest.TestCase):
             )
 
     def test_rejects_winner_decision_mismatch(self):
+        """Test rejects winner decision mismatch."""
         search = [_synth_entry("c1", [_synth_obs("S1", "a", exact=True, bfound=True)])]
         with self.assertRaises(ValueError):  # winner must be None for ambiguous
             budget_frontier(
@@ -890,10 +919,12 @@ class TestBudgetFrontierOracle(unittest.TestCase):
             )
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -902,6 +933,7 @@ class TestBudgetFrontierFromRealRun(unittest.TestCase):
 
     @staticmethod
     def test_real_search_result_matches_oracle():
+        """Test real search result matches oracle."""
         sc = make_scenario(
             exp_seed=11,
             behavior={("cand-A", "S2"): "fail_answer", ("cand-B", "S1"): "fail_answer"},
@@ -928,10 +960,12 @@ class TestBudgetFrontierFromRealRun(unittest.TestCase):
         assert frontier["budget_robust"] is True  # no_candidate at every budget
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -954,6 +988,7 @@ def _oracle_lp64(mean: float) -> float:
 
 
 def _oracle_target_score(mean: float, target_ids: tuple[int, ...], target_text: str) -> dict:
+    """Oracle target score."""
     n = len(target_ids)
     total64 = _oracle_lp64(mean) * n
     return {
@@ -967,6 +1002,7 @@ def _oracle_target_score(mean: float, target_ids: tuple[int, ...], target_text: 
 
 
 def _oracle_aggregate(per_fixture: list[dict]) -> dict:
+    """Oracle aggregate."""
     ok = [s for s in per_fixture if s["status"] == "ok"]
     total = sum(s["total_logprob"] for s in ok)
     tokens = sum(s["scored_token_count"] for s in ok)
@@ -979,6 +1015,7 @@ def _oracle_aggregate(per_fixture: list[dict]) -> dict:
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_interpretation(fixture_scores: list[dict]) -> dict:
     """Band interpretation re-derived from the documented thresholds."""
     failures = [s for s in fixture_scores if not s["native_pass"]]
@@ -1001,6 +1038,7 @@ def _oracle_interpretation(fixture_scores: list[dict]) -> dict:
 def _oracle_diagnostic_candidates(
     result: dict[str, Any], fixtures: tuple, means: dict[tuple[str, str], float]
 ) -> list[dict[str, Any]]:
+    """Oracle diagnostic candidates."""
     expected_by_id = {fx.id: fx.expected for fx in fixtures}
     out = []
     for entry in result["search"]:
@@ -1041,6 +1079,7 @@ def _logprob_scenario(
     behavior: dict[tuple[str, str], str],
     exp_seed: int = 21,
 ) -> Any:
+    """Logprob scenario."""
     return make_scenario(
         exp_seed=exp_seed,
         behavior=behavior,
@@ -1050,6 +1089,8 @@ def _logprob_scenario(
 
 
 class TestLogprobDiagnosticOracle(unittest.TestCase):
+    """Test logprob diagnostic oracle."""
+
     MEANS = {
         ("cand-A", "S1"): -1.0,
         ("cand-A", "S2"): -1.0,
@@ -1059,6 +1100,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
     BEHAVIOR = {("cand-A", "S2"): "fail_answer", ("cand-B", "S1"): "fail_answer"}
 
     def _run(self, means=None, behavior=None):
+        """Run."""
         means = self.MEANS if means is None else means
         behavior = self.BEHAVIOR if behavior is None else behavior
         sc = _logprob_scenario(means, behavior)
@@ -1067,6 +1109,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         return sc, result, diag
 
     def test_full_payload_matches_independent_oracle(self):
+        """Test full payload matches independent oracle."""
         sc, result, diag = self._run()
         assert diag["available"] is True
         assert diag["detail"] is None
@@ -1088,6 +1131,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert kinds == {"cand-A": "greedy_derailed", "cand-B": "weights_dont_know"}
 
     def test_identical_logprobs_across_candidates(self):
+        """Test identical logprobs across candidates."""
         means = {(c, f): -3.0 for c in ("cand-A", "cand-B") for f in ("S1", "S2")}
         behavior = {("cand-A", "S1"): "fail_answer", ("cand-B", "S1"): "fail_answer"}
         _sc, _result, diag = self._run(means=means, behavior=behavior)
@@ -1100,6 +1144,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert kinds == {"cand-A": "indeterminate", "cand-B": "indeterminate"}
 
     def test_exact_band_edges(self):
+        """Test exact band edges."""
         means = {
             ("cand-A", "S1"): -2.0,
             ("cand-A", "S2"): -1.0,
@@ -1112,6 +1157,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert kinds == {"cand-A": "greedy_derailed", "cand-B": "indeterminate"}
 
     def test_mixed_bands(self):
+        """Test mixed bands."""
         means = {
             ("cand-A", "S1"): -1.0,
             ("cand-A", "S2"): -6.0,
@@ -1129,6 +1175,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert kinds["cand-B"] == "weights_dont_know"
 
     def test_minimal_pair_mean_shift_exact_delta(self):
+        """Test minimal pair mean shift exact delta."""
         _sc1, _result1, diag1 = self._run()
         means2 = dict(self.MEANS)
         means2[("cand-A", "S2")] = -6.0
@@ -1157,6 +1204,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert b1 == b2
 
     def test_diagnostic_runs_on_ambiguous_decision(self):
+        """Test diagnostic runs on ambiguous decision."""
         sc = _logprob_scenario(self.MEANS, behavior={})
         result = run_search_experiment(sc)
         assert result["decision"] == "ambiguous"
@@ -1168,6 +1216,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert kinds == {"cand-A": "no_failures", "cand-B": "no_failures"}
 
     def test_diagnostic_runs_on_no_candidate_decision(self):
+        """Test diagnostic runs on no candidate decision."""
         behavior = {
             ("cand-A", "S1"): "fail_answer",
             ("cand-A", "S2"): "fail_answer",
@@ -1182,6 +1231,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert len(diag["candidates"]) == 2
 
     def test_empty_fixtures_never_crash(self):
+        """Test empty fixtures never crash."""
         sc, result, _ = self._run()
         diag = logprob_diagnostic(sc.backend, result, ())
         assert diag["available"] is True
@@ -1192,6 +1242,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
 
     @staticmethod
     def test_backend_without_forward_logits_degrades():
+        """Test backend without forward logits degrades."""
         sc = make_scenario(exp_seed=21, behavior={("cand-A", "S2"): "fail_answer"})
         result = run_search_experiment(sc)
         assert not callable(getattr(sc.backend, "forward_logits", None))
@@ -1201,6 +1252,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert diag["candidates"] == []
 
     def test_rejects_malformed_inputs(self):
+        """Test rejects malformed inputs."""
         sc = make_scenario(exp_seed=21)
         result = run_search_experiment(sc)
         with self.assertRaises(ValueError):
@@ -1210,6 +1262,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
 
     @staticmethod
     def test_aggregate_nan_defense():
+        """Test aggregate nan defense."""
         from model_protocol_lab.scoring import TargetScore
 
         bad = TargetScore(
@@ -1228,6 +1281,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
 
     @staticmethod
     def test_interpretation_ignores_passing_fixtures():
+        """Test interpretation ignores passing fixtures."""
         scores = [
             {
                 "native_pass": True,
@@ -1247,10 +1301,12 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert _interpret_logprob_candidate(scores)["kind"] == "weights_dont_know"
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1260,8 +1316,11 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
 
 
 class TestSensitivitySweep(unittest.TestCase):
+    """Test sensitivity sweep."""
+
     @staticmethod
     def test_noop_perturbation_flags_nothing():
+        """Test noop perturbation flags nothing."""
         sc = make_scenario(exp_seed=31, candidates=("cand-A",))
         result = run_search_experiment(sc)
         assert result["decision"] == "compatible_on_fixture_set"
@@ -1285,6 +1344,7 @@ class TestSensitivitySweep(unittest.TestCase):
 
     @staticmethod
     def test_real_prompt_tail_change_is_detected():
+        """Test real prompt tail change is detected."""
         sc = make_scenario(
             exp_seed=32,
             candidates=("cand-A",),
@@ -1309,6 +1369,7 @@ class TestSensitivitySweep(unittest.TestCase):
 
     @staticmethod
     def test_winner_swap_with_same_decision_still_flagged():
+        """Test winner swap with same decision still flagged."""
         sc = make_scenario(
             exp_seed=33,
             candidates=("cand-A", "cand-B"),
@@ -1334,6 +1395,7 @@ class TestSensitivitySweep(unittest.TestCase):
 
     @staticmethod
     def test_codepoint_split_depth_records_failed_decision():
+        """Test codepoint split depth records failed decision."""
         sc = make_scenario(
             exp_seed=34,
             candidates=("cand-A",),
@@ -1361,6 +1423,7 @@ class TestSensitivitySweep(unittest.TestCase):
         assert sweep["flips_at"] == [1]
 
     def test_rejects_bad_max_drop_bytes(self):
+        """Test rejects bad max drop bytes."""
         sc = make_scenario(exp_seed=35, candidates=("cand-A",))
         for bad in (0, 9, -1, "3"):
             with self.assertRaises(ValueError):
@@ -1376,6 +1439,7 @@ class TestSensitivitySweep(unittest.TestCase):
 
     @staticmethod
     def test_sweep_result_is_json_serializable():
+        """Test sweep result is json serializable."""
         import json
 
         sc = make_scenario(exp_seed=36, candidates=("cand-A",))
@@ -1391,10 +1455,12 @@ class TestSensitivitySweep(unittest.TestCase):
         json.dumps(sweep, allow_nan=False)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1408,6 +1474,7 @@ class TestCliWiring(unittest.TestCase):
 
     @staticmethod
     def _run_options() -> dict[str, argparse.Action]:
+        """Run options."""
         parser = build_parser()
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
@@ -1415,6 +1482,7 @@ class TestCliWiring(unittest.TestCase):
         return {name: action for action in run_parser._actions for name in action.option_strings}
 
     def test_sensitivity_sweep_flag(self):
+        """Test sensitivity sweep flag."""
         opts = self._run_options()
         assert "--sensitivity-sweep" in opts
         assert isinstance(opts["--sensitivity-sweep"], argparse._StoreTrueAction)
@@ -1423,21 +1491,25 @@ class TestCliWiring(unittest.TestCase):
         assert opts["--max-drop-bytes"].default == 3
 
     def test_logprob_diagnostic_flag(self):
+        """Test logprob diagnostic flag."""
         opts = self._run_options()
         assert "--logprob-diagnostic" in opts
         assert isinstance(opts["--logprob-diagnostic"], argparse._StoreTrueAction)
         assert opts["--logprob-diagnostic"].default is False
 
     def test_budget_frontier_has_no_flag_it_is_always_on(self):
+        """Test budget frontier has no flag it is always on."""
         opts = self._run_options()
         assert "--budget-frontier" not in opts
         assert "--budget_frontier" not in opts
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1450,6 +1522,7 @@ PKG_DIR = REPO_ROOT / "model_protocol_lab"
 
 
 def _read_experiments_source() -> str:
+    """Read experiments source."""
     return (PKG_DIR / "experiments.py").read_text(encoding="utf-8")
 
 
@@ -1627,6 +1700,7 @@ def _write_package_copy(dest: Path, mutate: tuple[str, str] | None) -> Path:
 
 
 def _run_check(pkgdir: Path, check: str) -> subprocess.CompletedProcess[str]:
+    """Run check."""
     script = _MUTANT_PREAMBLE.replace("__PKGDIR__", str(pkgdir)).replace("__CHECK__", check)
     script_path = pkgdir.parent / "check.py"
     script_path.write_text(script, encoding="utf-8")
@@ -1641,7 +1715,10 @@ def _run_check(pkgdir: Path, check: str) -> subprocess.CompletedProcess[str]:
 
 
 class TestMutationGate(unittest.TestCase):
+    """Test mutation gate."""
+
     def test_mutant_is_caught(self):
+        """Test mutant is caught."""
         tmp_path = self.tmp_path
         for spec in _MUTANTS:
             with self.subTest(spec=spec):
@@ -1667,10 +1744,12 @@ class TestMutationGate(unittest.TestCase):
                 )
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 

@@ -36,6 +36,7 @@ SPACE = "\u202f"
 
 
 def _digits_of(value: int) -> str:
+    """Digits of."""
     return str(value)
 
 
@@ -87,7 +88,10 @@ def _margin_oracle(a: int, b: int) -> str:
 
 
 class TestRenderers(unittest.TestCase):
+    """Test renderers."""
+
     def test_battery(self):
+        """Test battery."""
         cases = {
             0: ("0", "0", "0", "0e0"),
             7: ("7", "7", "7", "7e0"),
@@ -119,6 +123,7 @@ class TestRenderers(unittest.TestCase):
                 self.assertEqual(tuple(nf.render_form(value, f) for f in nf.FORMS), expected)
 
     def test_sweep_round_trip_and_injectivity(self):
+        """Test sweep round trip and injectivity."""
         # Injectivity is per form: below 1000 the grouped forms
         # coincide with plain by design (that is what the
         # form_identical flag records), so cross-form string
@@ -141,6 +146,7 @@ class TestRenderers(unittest.TestCase):
                 seen[form][text] = value
 
     def test_sweep_matches_redteam_battery(self):
+        """Test sweep matches redteam battery."""
         # Red-team A's own examples land on B's expected strings.
         self.assertEqual(nf.render_form(9_990_000, "scientific"), "9.99e6")
         total = 9_990_000 + 9_990_000
@@ -148,6 +154,7 @@ class TestRenderers(unittest.TestCase):
         self.assertEqual(nf.parse_value("2.500000e6"), 2_500_000)
 
     def test_render_rejects(self):
+        """Test render rejects."""
         with self.assertRaises(ValueError):
             nf.render_form(-1, "plain")
         with self.assertRaises(ValueError):
@@ -157,7 +164,10 @@ class TestRenderers(unittest.TestCase):
 
 
 class TestParser(unittest.TestCase):
+    """Test parser."""
+
     def test_acceptances(self):
+        """Test acceptances."""
         self.assertEqual(nf.parse_value("0"), 0)
         self.assertEqual(nf.parse_value("0123"), 123)
         self.assertEqual(nf.parse_value("1,234,567"), 1234567)
@@ -169,6 +179,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(nf.parse_value("0.0e5"), 0)
 
     def test_rejections(self):
+        """Test rejections."""
         for text in (
             "",
             " ",
@@ -200,6 +211,7 @@ class TestParser(unittest.TestCase):
                 self.assertIsNone(nf.parse_value(text))
 
     def test_caps_fire_before_conversion(self):
+        """Test caps fire before conversion."""
         # The exponent cap is the DoS guard: these must classify,
         # never allocate a giant integer.
         self.assertIsNone(nf.parse_value("1e1000"))
@@ -211,7 +223,10 @@ class TestParser(unittest.TestCase):
 
 
 class TestClassifiers(unittest.TestCase):
+    """Test classifiers."""
+
     def test_carry_truth_table(self):
+        """Test carry truth table."""
         self.assertEqual(nf.carry_class(100, 200), "none")
         self.assertEqual(nf.carry_class(104, 202), "none")
         self.assertEqual(nf.carry_class(105, 206), "some")
@@ -223,6 +238,7 @@ class TestClassifiers(unittest.TestCase):
         self.assertEqual(nf.carry_class(1299, 1), "some")
 
     def test_carry_matches_oracle_on_sweep(self):
+        """Test carry matches oracle on sweep."""
         import itertools
 
         values = [0, 1, 5, 9, 10, 55, 99, 100, 500, 999, 1000, 5999, 9999, 123456]
@@ -230,6 +246,7 @@ class TestClassifiers(unittest.TestCase):
             self.assertEqual(nf.carry_class(a, b), _carry_oracle(a, b), (a, b))
 
     def test_margin_truth_table(self):
+        """Test margin truth table."""
         self.assertEqual(nf.margin_class(5, 5), "equal")
         self.assertEqual(nf.margin_class(99, 100), "different_length")
         self.assertEqual(nf.margin_class(200, 100), "same_length_early")
@@ -238,6 +255,7 @@ class TestClassifiers(unittest.TestCase):
         self.assertEqual(nf.margin_class(1211, 1291), "same_length_middle")
 
     def test_margin_matches_oracle_on_sweep(self):
+        """Test margin matches oracle on sweep."""
         import itertools
 
         values = [1, 9, 10, 99, 100, 121, 129, 191, 999, 1000, 123456]
@@ -246,7 +264,10 @@ class TestClassifiers(unittest.TestCase):
 
 
 class TestGeneration(unittest.TestCase):
+    """Test generation."""
+
     def test_shape_and_ids(self):
+        """Test shape and ids."""
         value_set = nf.generate_value_set(0)
         self.assertEqual(sorted(value_set), sorted(nf.TASKS))
         for task in nf.TASKS:
@@ -264,6 +285,7 @@ class TestGeneration(unittest.TestCase):
                 # larger side).
                 magnitude = max(record["operands"])
                 digits = len(str(magnitude))
+                # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                 expected_band = next(i for i, (lo, hi) in enumerate(nf.BANDS) if lo <= digits <= hi)
                 self.assertEqual(record["band"], expected_band, record["value_id"])
             if task == "copy":
@@ -271,6 +293,7 @@ class TestGeneration(unittest.TestCase):
                     self.assertEqual(sum(1 for r in records if r["band"] == band), 4, (task, band))
 
     def test_strata_verified_by_oracles(self):
+        """Test strata verified by oracles."""
         for seed in range(8):
             value_set = nf.generate_value_set(seed)
             for record in value_set["copy"]:
@@ -302,6 +325,7 @@ class TestGeneration(unittest.TestCase):
             self.assertEqual(carries, {"none", "some", "full_chain"})
 
     def test_determinism(self):
+        """Test determinism."""
         self.assertEqual(nf.generate_value_set(7), nf.generate_value_set(7))
         self.assertNotEqual(nf.generate_value_set(7), nf.generate_value_set(8))
         rows_a = nf.canonical_generated_rows(3)
@@ -314,6 +338,7 @@ class TestGeneration(unittest.TestCase):
         self.assertNotEqual(nf.generator_sha256(3), nf.generator_sha256(4))
 
     def test_fixture_id_pairing_across_forms(self):
+        """Test fixture id pairing across forms."""
         for seed in (0, 5):
             fixtures = nf.build_fixtures(seed)
             value_set = nf.generate_value_set(seed)
@@ -331,6 +356,7 @@ class TestGeneration(unittest.TestCase):
                         self.assertEqual(case.messages[-1].content, nf.prompt_text(entry, form))
 
     def test_expected_answers(self):
+        """Test expected answers."""
         value_set = nf.generate_value_set(0)
         for record in value_set["copy"]:
             self.assertEqual(
@@ -350,6 +376,7 @@ class TestGeneration(unittest.TestCase):
             )
 
     def test_prompts_carry_no_digit(self):
+        """Test prompts carry no digit."""
         for task in nf.TASKS:
             text = nf.PROMPT_TEMPLATES[task]
             self.assertFalse(any(ch.isdigit() for ch in text), task)
@@ -362,6 +389,7 @@ class TestGeneration(unittest.TestCase):
         )
 
     def test_hash_seed_independence(self):
+        """Test hash seed independence."""
         script = (
             "import json,sys;"
             "sys.path.insert(0, '.');"
@@ -383,6 +411,7 @@ class TestGeneration(unittest.TestCase):
         self.assertEqual(len(outputs), 1)
 
     def test_previously_crashing_seeds_generate(self):
+        """Test previously crashing seeds generate."""
         # Cycle 187 (wave-8 F1): seeds whose band-0 "some" slot
         # redrew a = 0 raised ZeroDivisionError in _add_partner
         # (empty pivot set). The construction now proposes 0,
@@ -397,6 +426,7 @@ class TestGeneration(unittest.TestCase):
                 self.assertEqual(record["stratum"], _margin_oracle(a, b), (seed, record))
 
     def test_seed_sweep_generation_is_total(self):
+        """Test seed sweep generation is total."""
         # Generation must succeed for every seed, not just the
         # ones the stage tests happen to use: the CLI accepts
         # any int as --seed, including negatives.
@@ -411,6 +441,7 @@ class TestGeneration(unittest.TestCase):
                 self.assertEqual(record["expected_value"], a + b)
 
     def test_healthy_seed_hashes_pinned(self):
+        """Test healthy seed hashes pinned."""
         # The F1 fix must be set-preserving: seeds that already
         # generated valid sets keep byte-identical instruments,
         # or every existing report becomes incomparable for no
@@ -430,8 +461,11 @@ class TestGeneration(unittest.TestCase):
 
 
 class TestGroupingClassifier(unittest.TestCase):
+    """Test grouping classifier."""
+
     @staticmethod
     def _evidence(counts):
+        """Evidence."""
         probes = nf.probe_strings()
         evidence = {}
         for probe in probes:
@@ -442,14 +476,17 @@ class TestGroupingClassifier(unittest.TestCase):
         return evidence
 
     def test_single_digit(self):
+        """Test single digit."""
         evidence = self._evidence({n: n for n in range(1, 13)})
         self.assertEqual(nf.classify_grouping(evidence), "single_digit")
 
     def test_chunked(self):
+        """Test chunked."""
         evidence = self._evidence({n: -(-n // 3) for n in range(1, 13)})
         self.assertEqual(nf.classify_grouping(evidence), "chunked_up_to_3")
 
     def test_irregular(self):
+        """Test irregular."""
         counts = {n: -(-n // 3) for n in range(1, 13)}
         counts[12] = 11  # within the envelope, matching neither rule
         counts[2] = 2
@@ -457,6 +494,7 @@ class TestGroupingClassifier(unittest.TestCase):
         self.assertEqual(nf.classify_grouping(evidence), "irregular_or_mixed")
 
     def test_unknown_cases(self):
+        """Test unknown cases."""
         self.assertEqual(nf.classify_grouping({}), "unknown")
         evidence = self._evidence({n: n for n in range(1, 13)})
         del evidence["1234567"]
@@ -467,6 +505,7 @@ class TestGroupingClassifier(unittest.TestCase):
         self.assertEqual(nf.classify_grouping(below_floor), "unknown")
 
     def test_measure_with_stub_encoders(self):
+        """Test measure with stub encoders."""
         value_set = nf.generate_value_set(0)
         char = nf.measure_grouping(tuple, value_set)
         self.assertEqual(char["classification"], "single_digit")
@@ -474,12 +513,14 @@ class TestGroupingClassifier(unittest.TestCase):
         self.assertIsNotNone(char["form_token_means"]["comma"])
 
         def chunk_encode(text):
+            """Chunk encode."""
             return tuple(text[i : i + 3] for i in range(0, len(text), 3)) or (0,)
 
         chunked = nf.measure_grouping(chunk_encode, value_set)
         self.assertEqual(chunked["classification"], "chunked_up_to_3")
 
         def boom(text):
+            """Boom."""
             raise RuntimeError("no encoder")
 
         failed = nf.measure_grouping(boom, value_set)
@@ -489,7 +530,10 @@ class TestGroupingClassifier(unittest.TestCase):
 
 
 class TestContrastClassification(unittest.TestCase):
+    """Test contrast classification."""
+
     def test_truth_table(self):
+        """Test truth table."""
         cases = [
             ((3, 5, 0), "insufficient"),
             ((6, 0, 0), "no_difference_observed"),
@@ -505,6 +549,7 @@ class TestContrastClassification(unittest.TestCase):
 
     @staticmethod
     def _contrast_records(verdicts_a, verdicts_b):
+        """Contrast records."""
         records = []
         for form, verdicts in (("plain", verdicts_a), ("comma", verdicts_b)):
             for index, verdict in enumerate(verdicts):
@@ -519,6 +564,7 @@ class TestContrastClassification(unittest.TestCase):
         return records
 
     def test_paired_contrast_counts(self):
+        """Test paired contrast counts."""
         verdicts_a = [i < 10 for i in range(16)]
         verdicts_b = [i < 6 or i >= 12 for i in range(16)]
         contrast = nf.paired_contrast(
@@ -541,6 +587,7 @@ class TestContrastClassification(unittest.TestCase):
         self.assertEqual(partial["classification"], "insufficient")
 
     def test_mcnemar_none_without_discordance(self):
+        """Test mcnemar none without discordance."""
         contrast = nf.paired_contrast(
             self._contrast_records([True] * 16, [True] * 16), "copy", "plain", "comma"
         )
@@ -549,8 +596,11 @@ class TestContrastClassification(unittest.TestCase):
 
 
 class TestDecomposition(unittest.TestCase):
+    """Test decomposition."""
+
     @staticmethod
     def _record(task, verdict, answer, expected, boundary=True, value=None, expected_value=None):
+        """Record."""
         return {
             "task": task,
             "expected_answer": expected,
@@ -566,6 +616,7 @@ class TestDecomposition(unittest.TestCase):
         }
 
     def test_classes(self):
+        """Test classes."""
         self.assertEqual(
             nf.cell_decomposition(self._record("copy", True, "1,000", "1,000", value=1000)),
             "exact_pass",
@@ -613,6 +664,7 @@ FORMATS = (FMT_A, FMT_B)
 
 
 def _form_of_token(token: str) -> str:
+    """Form of token."""
     if "," in token:
         return "comma"
     if SPACE in token:
@@ -646,6 +698,7 @@ class _NumformBackend:
         self.cancel_event: Event | None = None
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -657,9 +710,12 @@ class _NumformBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         text = self.decode(list(input_ids))
         if "Copy this number" in text:
@@ -677,6 +733,7 @@ class _NumformBackend:
         # glued to it ("100<|im_end|>", "100~"); strip the glue
         # before parsing.
         def clean(token: str) -> str:
+            """Clean."""
             for sep in ("<|", "~"):
                 token = token.split(sep)[0]
             return token
@@ -724,6 +781,7 @@ class _NumformBackend:
 
 
 def _run_stage(backend, formats=FORMATS, **kwargs):
+    """Run stage."""
     kwargs.setdefault("boundary", tuple(backend.encode(BOUNDARY_WORD)))
     kwargs.setdefault("max_new_tokens", 64)
     kwargs.setdefault("max_context", 8192)
@@ -732,11 +790,15 @@ def _run_stage(backend, formats=FORMATS, **kwargs):
 
 
 def _payload(backend, stage):
+    """Payload."""
     return numform_analysis(stage, tuple(fmt.name for fmt in FORMATS))
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_happy_path_faithful(self):
+        """Test happy path faithful."""
         backend = _NumformBackend()
         stage = _run_stage(backend)
         self.assertTrue(stage["available"], stage["detail"])
@@ -776,6 +838,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(contrast["classification"], "no_difference_observed")
 
     def test_add_grouping_can_be_invisible_in_the_prompt(self):
+        """Test add grouping can be invisible in the prompt."""
         # Design property, pinned: an add pair whose operands
         # are both sub-1000 renders byte-identically in the
         # plain, comma and space arms, yet the expected answers
@@ -800,6 +863,7 @@ class TestStage(unittest.TestCase):
             self.assertGreater(len(expecteds), 1)
 
     def test_plain_model_decomposition(self):
+        """Test plain model decomposition."""
         backend = _NumformBackend(mode="plain")
         payload = _payload(backend, _run_stage(backend))
         self.assertTrue(_valid_numform(payload))
@@ -822,6 +886,7 @@ class TestStage(unittest.TestCase):
         self.assertGreaterEqual(contrast["n_pass_a_only"], 2)
 
     def test_wrong_value_model(self):
+        """Test wrong value model."""
         backend = _NumformBackend(mode="wrong_value")
         payload = _payload(backend, _run_stage(backend))
         candidate = payload["candidates"]["nf-b"]
@@ -833,6 +898,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(compare["n_exact"], 16)  # labels unaffected
 
     def test_flip_label_model(self):
+        """Test flip label model."""
         backend = _NumformBackend(mode="flip_label")
         payload = _payload(backend, _run_stage(backend))
         candidate = payload["candidates"]["nf-a"]
@@ -842,6 +908,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(compare["decomposition"].get("non_label", 0), 0)
 
     def test_context_exceeded(self):
+        """Test context exceeded."""
         backend = _NumformBackend()
         stage = _run_stage(backend, max_context=8)
         self.assertTrue(stage["available"])
@@ -855,6 +922,7 @@ class TestStage(unittest.TestCase):
         self.assertIsNone(aggregate["exact_rate"])
 
     def test_answer_budget_exceeded(self):
+        """Test answer budget exceeded."""
         backend = _NumformBackend()
         stage = _run_stage(backend, max_new_tokens=1)
         records = stage["candidates"]["nf-a"]["records"]
@@ -862,6 +930,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(all(r["cell"] is None for r in records))
 
     def test_form_not_in_render(self):
+        """Test form not in render."""
         # A template that normalises its input (strips grouping
         # separators, upper-cases the scientific exponent) makes
         # the grouped operand strings vanish from the render;
@@ -872,6 +941,7 @@ class TestStage(unittest.TestCase):
         original_render = Format.render
 
         def normalising_render(self, messages):
+            """Normalising render."""
             text = original_render(self, messages)
             text = text.replace(",", "").replace(SPACE, "")
             return re.sub(r"e(?=[0-9])", "E", text)
@@ -899,6 +969,7 @@ class TestStage(unittest.TestCase):
                     self.assertIsNotNone(record["cell"])
 
     def test_evaluation_failed(self):
+        """Test evaluation failed."""
         backend = _NumformBackend(fail_tasks={"add"})
         stage = _run_stage(backend)
         self.assertTrue(stage["available"])
@@ -909,6 +980,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(all(r["cell"] is not None for r in records if r["task"] != "add"))
 
     def test_template_screen(self):
+        """Test template screen."""
         backend = _NumformBackend()
         with mock.patch.dict(
             nf.PROMPT_TEMPLATES,
@@ -920,6 +992,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_cancelled_before_start(self):
+        """Test cancelled before start."""
         backend = _NumformBackend()
         event = Event()
         event.set()
@@ -929,6 +1002,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_cancelled_mid_run(self):
+        """Test cancelled mid run."""
         backend = _NumformBackend()
         event = Event()
         backend.cancel_on_task = "add"
@@ -939,6 +1013,7 @@ class TestStage(unittest.TestCase):
         self.assertGreater(backend.generate_calls, 0)
 
     def test_record_budget(self):
+        """Test record budget."""
         backend = _NumformBackend()
         with mock.patch.object(nf, "MAX_GROUND_RECORDS", 100):
             stage = _run_stage(backend)
@@ -946,13 +1021,17 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "numform_record_budget_exceeded")
 
     def test_empty_formats_raise(self):
+        """Test empty formats raise."""
         backend = _NumformBackend()
         with self.assertRaises(ValueError):
             numform_stage(backend, (), boundary=(1,), max_context=100)
 
 
 class TestAnalysis(unittest.TestCase):
+    """Test analysis."""
+
     def test_unavailable_stage_passthrough(self):
+        """Test unavailable stage passthrough."""
         stage = {
             "available": False,
             "detail": "cancelled",
@@ -965,6 +1044,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(payload["protocol"], {"version": 1})
 
     def test_unavailable_candidate_entry(self):
+        """Test unavailable candidate entry."""
         backend = _NumformBackend()
         stage = _run_stage(backend)
         stage["candidates"]["nf-b"] = {
@@ -979,6 +1059,7 @@ class TestAnalysis(unittest.TestCase):
         self.assertTrue(_valid_numform(payload))
 
     def test_aggregates_recomputed_independently(self):
+        """Test aggregates recomputed independently."""
         backend = _NumformBackend(mode="plain")
         payload = _payload(backend, _run_stage(backend))
         records = payload["candidates"]["nf-a"]["records"]
@@ -990,6 +1071,7 @@ class TestAnalysis(unittest.TestCase):
 
 
 def _base_payload(mode="faithful", seed=0, fingerprint=None):
+    """Base payload."""
     backend = _NumformBackend(mode=mode)
     if fingerprint is not None:
         backend.fingerprint = fingerprint
@@ -1006,29 +1088,37 @@ class _CharBackend(_NumformBackend):
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(ord(ch) for ch in text)
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(chr(int(i)) for i in ids)
 
 
 class TestValidatorBattery(unittest.TestCase):
+    """Test validator battery."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.base = _base_payload()
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.base)
         mutate(payload)
         return payload
 
     def test_base_validates(self):
+        """Test base validates."""
         self.assertTrue(_valid_numform(self.base))
         self.assertTrue(_valid_numform(_base_payload(mode="plain")))
         self.assertTrue(_valid_numform(_base_payload(seed=3)))
 
     def test_seed26_payload_validates(self):
+        """Test seed26 payload validates."""
         # Cycle 187 (wave-8 F1): seed 26 crashed the generator
         # before the fix, so no honest payload could exist for
         # it; now the full stage + validator path accepts it.
@@ -1073,6 +1163,7 @@ class TestValidatorBattery(unittest.TestCase):
 
     @staticmethod
     def _recompute_candidate(entry):
+        """Recompute candidate."""
         pairs = (
             ("plain", "comma"),
             ("plain", "space"),
@@ -1091,6 +1182,8 @@ class TestValidatorBattery(unittest.TestCase):
         }
 
     def test_fabricated_set_rejected(self):
+        """Test fabricated set rejected."""
+
         # Cycle 187 (wave-8 F2): the validator regenerates the
         # set from the seed. Swapping one value for a different
         # locally-valid one in every candidate -- with aggregates
@@ -1098,6 +1191,7 @@ class TestValidatorBattery(unittest.TestCase):
         # records-derived way -- validated before the fix and
         # must not validate now.
         def swap(payload):
+            """Swap."""
             for entry in payload["candidates"].values():
                 for record in entry["records"]:
                     if record["task"] == "copy" and record["value_id"] == "nf-copy-00":
@@ -1117,11 +1211,14 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(swap)))
 
     def test_seed_relabel_rejected(self):
+        """Test seed relabel rejected."""
+
         # The seed is part of the instrument binding: genuine
         # seed-0 records relabelled as seed 999 (with the
         # relabelled seed's true generator hash and a recomputed
         # fingerprint) are not seed 999's payload.
         def relabel(payload):
+            """Relabel."""
             payload["protocol"]["seed"] = 999
             payload["protocol"]["generator_sha256"] = nf.generator_sha256(999)
             core = {k: v for k, v in payload["protocol"].items() if k != "fingerprint"}
@@ -1134,11 +1231,14 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(relabel)))
 
     def test_grouping_delta_relation(self):
+        """Test grouping delta relation."""
+
         # Cycle 187 (wave-8 F4): each stored delta must equal
         # its form's mean minus the plain mean (the producer's
         # paired-difference mean over the same operand multiset),
         # not merely be a plausible number.
         def inconsistent(payload):
+            """Inconsistent."""
             payload["grouping"]["form_token_means"] = {
                 "plain": 10.0,
                 "comma": 20.0,
@@ -1155,6 +1255,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(inconsistent)))
 
         def consistent(payload):
+            """Consistent."""
             payload["grouping"]["form_token_means"] = {
                 "plain": 10.0,
                 "comma": 20.0,
@@ -1171,6 +1272,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(_valid_numform(self._tampered(consistent)))
 
     def test_mirror_matches_producer_sweep(self):
+        """Test mirror matches producer sweep."""
         # The validator's generator mirror must reproduce the
         # producer's set exactly, seed for seed -- including
         # seed 4, whose copy draw hits the round-redraw loop.
@@ -1182,6 +1284,7 @@ class TestValidatorBattery(unittest.TestCase):
             self.assertEqual(digest, nf.generator_sha256(seed), seed)
 
     def test_mirror_defensive_paths(self):
+        """Test mirror defensive paths."""
         # The mirror's fail-closed guards, proven directly the
         # way the producer's identical guards are proven above:
         # the out-of-band raise, the partner==0 nudge (both
@@ -1195,9 +1298,11 @@ class TestValidatorBattery(unittest.TestCase):
         # set differs from the unpatched one; the property is
         # that mirror and producer agree under the same patch.
         def make_flaky(original):
+            """Make flaky."""
             calls = {"n": 0}
 
             def flaky(a, target, derived):
+                """Flaky."""
                 calls["n"] += 1
                 if calls["n"] == 1:
                     return -1
@@ -1220,12 +1325,15 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertEqual(digest, produced_digest)
 
     def test_cross_candidate_answer_tokens(self):
+        """Test cross candidate answer tokens."""
+
         # Cycle 187 (wave-8 F4): expected_answer_tokens is
         # measured once per run, so candidates must agree on it
         # per record; a one-candidate edit (with that candidate's
         # aggregates honestly recomputed) is a construction
         # disagreement, not a per-candidate fact.
         def mismatch(payload):
+            """Mismatch."""
             names = sorted(payload["candidates"])
             entry = payload["candidates"][names[1]]
             entry["records"][0]["expected_answer_tokens"] += 5
@@ -1234,7 +1342,10 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(mismatch)))
 
     def test_aggregate_tampers(self):
+        """Test aggregate tampers."""
+
         def agg(payload):
+            """Agg."""
             return payload["candidates"]["nf-a"]["aggregates"]["copy"]["comma"]
 
         tampers = [
@@ -1252,7 +1363,10 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_contrast_tampers(self):
+        """Test contrast tampers."""
+
         def contrast(payload):
+            """Contrast."""
             return payload["candidates"]["nf-a"]["contrasts"]["add"]["plain__comma"]
 
         tampers = [
@@ -1266,7 +1380,10 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_record_tampers(self):
+        """Test record tampers."""
+
         def first(payload, task, form="plain"):
+            """First."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
@@ -1320,7 +1437,10 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_protocol_tampers(self):
+        """Test protocol tampers."""
+
         def proto(payload):
+            """Proto."""
             return payload["protocol"]
 
         tampers = [
@@ -1340,7 +1460,10 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_grouping_tampers(self):
+        """Test grouping tampers."""
+
         def grouping(payload):
+            """Grouping."""
             return payload["grouping"]
 
         tampers = [
@@ -1355,6 +1478,7 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_top_level_tampers(self):
+        """Test top level tampers."""
         tampers = [
             lambda p: p.__setitem__("n_candidates", 7),
             lambda p: p.__setitem__("pooled", {"exact_rate": 0.5}),
@@ -1367,6 +1491,7 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_records_bytes_cap(self):
+        """Test records bytes cap."""
         # 24 candidates at the record cap, each cell carrying a
         # 3000-digit input-token count (legal per-record: the
         # count is just an int >= 0), push the records' JSON
@@ -1385,12 +1510,14 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(payload))
 
     def test_record_count_cap(self):
+        """Test record count cap."""
         payload = copy.deepcopy(self.base)
         records = payload["candidates"]["nf-a"]["records"]
         records.extend(copy.deepcopy(records[:8]))
         self.assertFalse(_valid_numform(payload))
 
     def test_char_backend_payload_validates_with_grouping(self):
+        """Test char backend payload validates with grouping."""
         backend = _CharBackend()
         stage = _run_stage(backend)
         payload = _payload(backend, stage)
@@ -1399,12 +1526,16 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 class TestDiffNumform(unittest.TestCase):
+    """Test diff numform."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.faithful = _base_payload()
         cls.plain = _base_payload(mode="plain")
 
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diff_numform(self.faithful, copy.deepcopy(self.faithful))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
@@ -1413,6 +1544,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertEqual(diff["rate_drift"], [])
 
     def test_rate_and_contrast_drift(self):
+        """Test rate and contrast drift."""
         diff = diff_numform(self.faithful, self.plain)
         self.assertTrue(diff["changed"])
         self.assertTrue(diff["comparable"])
@@ -1422,6 +1554,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertTrue(any("classification" in metric for metric in contrast_metrics))
 
     def test_generator_drift_not_comparable(self):
+        """Test generator drift not comparable."""
         other = _base_payload(seed=1)
         diff = diff_numform(self.faithful, other)
         self.assertTrue(diff["generator_drift"])
@@ -1430,12 +1563,14 @@ class TestDiffNumform(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_backend_drift_not_comparable(self):
+        """Test backend drift not comparable."""
         other = _base_payload(fingerprint="sha256:someone-else")
         diff = diff_numform(self.faithful, other)
         self.assertTrue(diff["backend_drift"])
         self.assertFalse(diff["comparable"])
 
     def test_grouping_drift_flags_but_stays_comparable(self):
+        """Test grouping drift flags but stays comparable."""
         backend = _CharBackend()
         stage = _run_stage(backend)
         char_payload = _payload(backend, stage)
@@ -1453,6 +1588,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertFalse(diff_numform(word, copy.deepcopy(word))["grouping_changed"])
 
     def test_status_drift(self):
+        """Test status drift."""
         degraded = copy.deepcopy(self.plain)
         degraded["candidates"]["nf-b"] = {
             "status": "unavailable",
@@ -1466,6 +1602,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertEqual(status_entries[0]["candidate"], "nf-b")
 
     def test_candidates_added(self):
+        """Test candidates added."""
         backend = _NumformBackend()
         three = (
             FMT_A,
@@ -1489,6 +1626,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertEqual(reverse["candidates_removed"], ["nf-c"])
 
     def test_one_sided_availability(self):
+        """Test one sided availability."""
         diff = diff_numform(self.faithful, None)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -1498,6 +1636,7 @@ class TestDiffNumform(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_diff_reports_integration(self):
+        """Test diff reports integration."""
         old = {"numform": self.faithful, "decision": "x", "selected_candidate": None}
         new = {"numform": self.plain, "decision": "x", "selected_candidate": None}
         report = diff_reports(old, new)
@@ -1510,17 +1649,22 @@ class TestDiffNumform(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
+    """Test reporting section."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _base_payload(mode="plain")
 
     def test_section_renders(self):
+        """Test section renders."""
         html = render_html({"numform": self.payload})
         self.assertIn('id="numform"', html)
         self.assertIn("Numeric surface form", html)
         self.assertIn("plain_advantage", html)
 
     def test_unknown_grouping_line(self):
+        """Test unknown grouping line."""
         # The word-token backend's grouping classification is
         # unknown, so the section must say no grouping reading
         # is available rather than inventing one.
@@ -1528,6 +1672,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("unknown", html)
 
     def test_unavailable_candidate_row(self):
+        """Test unavailable candidate row."""
         payload = copy.deepcopy(self.payload)
         payload["candidates"]["nf-b"] = {
             "status": "unavailable",
@@ -1539,10 +1684,12 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("nf-b", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertNotIn('id="numform"', render_html({}))
         self.assertNotIn('id="numform"', render_html({"numform": None}))
 
     def test_malformed_shapes_do_not_raise(self):
+        """Test malformed shapes do not raise."""
         for bad in (
             {"available": True},
             {"available": True, "candidates": "junk"},
@@ -1559,7 +1706,10 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestCliWrapper(unittest.TestCase):
+    """Test cli wrapper."""
+
     def test_happy_path(self):
+        """Test happy path."""
         backend = _NumformBackend()
         result: dict = {}
         _run_numform_probe(
@@ -1577,6 +1727,7 @@ class TestCliWrapper(unittest.TestCase):
         self.assertTrue(_valid_numform(result["numform"]))
 
     def test_stage_failure_becomes_unavailable(self):
+        """Test stage failure becomes unavailable."""
         backend = _NumformBackend()
         result: dict = {}
         with mock.patch(
@@ -1608,6 +1759,7 @@ class TestGapCoverage(unittest.TestCase):
     # -- numform.py -------------------------------------------------
 
     def test_parse_digit_caps_per_grammar(self):
+        """Test parse digit caps per grammar."""
         grouped22 = "1,000,000,000,000,000,000,000"  # 22 digits
         self.assertIsNone(nf.parse_value(grouped22))
         self.assertIsNone(nf.parse_value(grouped22.replace(",", SPACE)))
@@ -1615,15 +1767,18 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(nf.parse_value("1e999"), 10**999)  # grammar cap boundary
 
     def test_parse_negative_shift_quotient(self):
+        """Test parse negative shift quotient."""
         self.assertEqual(nf.parse_value("1.250e2"), 125)
         self.assertEqual(nf.parse_value("12.50e1"), 125)
         self.assertIsNone(nf.parse_value("1.25e1"))  # 12.5 is not an integer
 
     def test_band_of_outside_bands(self):
+        """Test band of outside bands."""
         with self.assertRaises(ValueError):
             nf._band_of(10**12)
 
     def test_compare_partner_length_clamp(self):
+        """Test compare partner length clamp."""
         partner = nf._compare_partner(123456789012, "different_length", 2)
         self.assertEqual(len(str(partner)), 11)
         self.assertEqual(nf.margin_class(123456789012, partner), "different_length")
@@ -1632,10 +1787,12 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(nf.margin_class(7, partner), "different_length")
 
     def test_generation_retries_out_of_range_partner(self):
+        """Test generation retries out of range partner."""
         original = nf._compare_partner
         calls = {"n": 0}
 
         def flaky(a, target, derived):
+            """Flaky."""
             calls["n"] += 1
             if calls["n"] == 1:
                 return -1
@@ -1648,11 +1805,13 @@ class TestGapCoverage(unittest.TestCase):
             self.assertEqual(record["stratum"], _margin_oracle(*record["operands"]))
 
     def test_generation_seed_type(self):
+        """Test generation seed type."""
         for bad_seed in ("0", True, 0.5, None):
             with self.subTest(seed=bad_seed), self.assertRaises(ValueError):
                 nf.generate_value_set(bad_seed)
 
     def test_grouping_zero_count_is_unknown(self):
+        """Test grouping zero count is unknown."""
         evidence = {
             probe: (len(probe) if (probe.isascii() and probe.isdigit()) else 3)
             for probe in nf.probe_strings()
@@ -1661,6 +1820,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(nf.classify_grouping(evidence), "unknown")
 
     def test_paired_contrast_ignores_unpaired_values(self):
+        """Test paired contrast ignores unpaired values."""
         records = [
             {
                 "task": "copy",
@@ -1688,6 +1848,7 @@ class TestGapCoverage(unittest.TestCase):
     # -- diffreports mirror parity (direct calls) -------------------
 
     def test_validator_mirror_parity(self):
+        """Test validator mirror parity."""
         import itertools
 
         values = [0, 1, 7, 42, 999, 1000, 1234567, 10**12 - 1, 999000000000]
@@ -1702,7 +1863,10 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(dr._numform_margin(1211, 1291), "same_length_middle")
 
     def test_validator_grouping_mirror_parity(self):
+        """Test validator grouping mirror parity."""
+
         def evidence(counts):
+            """Evidence."""
             return {
                 probe: counts(len(probe)) if (probe.isascii() and probe.isdigit()) else 3
                 for probe in nf.probe_strings()
@@ -1729,6 +1893,7 @@ class TestGapCoverage(unittest.TestCase):
                 self.assertEqual(dr._numform_classify_grouping(item), nf.classify_grouping(item))
 
     def test_validator_contrast_mirror(self):
+        """Test validator contrast mirror."""
         for n_paired in (0, 3, 6, 16):
             for a_only in (0, 1, 2, 4):
                 for b_only in (0, 1, 2, 4):
@@ -1771,15 +1936,21 @@ class TestGapCoverage(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.base = _base_payload()
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.base)
         mutate(payload)
         return payload
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_record_guards_round_two(self):
+        """Test record guards round two."""
+
         def first(payload, task, form="plain"):
+            """First."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
@@ -1788,6 +1959,7 @@ class TestGapCoverage(unittest.TestCase):
             )
 
         def middle_compare(payload):
+            """Middle compare."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r
@@ -1801,6 +1973,7 @@ class TestGapCoverage(unittest.TestCase):
             record["form_identical"] = True
 
         def wrong_compare_stratum(payload):
+            """Wrong compare stratum."""
             record = first(payload, "compare")
             true_class = nf.margin_class(*record["operands"])
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
@@ -1815,6 +1988,7 @@ class TestGapCoverage(unittest.TestCase):
             )
 
         def wrong_add_stratum(payload):
+            """Wrong add stratum."""
             record = first(payload, "add")
             true_class = nf.carry_class(*record["operands"])
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
@@ -1854,6 +2028,7 @@ class TestGapCoverage(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_payload_guards_round_two(self):
+        """Test payload guards round two."""
         tampers = [
             lambda p: p.__setitem__("protocol", []),
             lambda p: p["protocol"].__setitem__("seed", "0"),
@@ -1878,8 +2053,13 @@ class TestGapCoverage(unittest.TestCase):
     # -- experiments stage paths ------------------------------------
 
     def test_boundary_decode_failure_screens_nothing(self):
+        """Test boundary decode failure screens nothing."""
+
         class DecodeRaisesBackend(_NumformBackend):
+            """Decode raises backend."""
+
             def decode(self, ids):
+                """Decode."""
                 if self.encode(BOUNDARY_WORD)[0] in ids:
                     raise RuntimeError("undecodable boundary")
                 return super().decode(ids)
@@ -1895,6 +2075,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertTrue(all(r["cell"] is not None for r in records))
 
     def test_boundary_text_in_template_screens(self):
+        """Test boundary text in template screens."""
         backend = _NumformBackend()
         stage = _run_stage(backend, boundary=tuple(backend.encode("number")))
         self.assertFalse(stage["available"])
@@ -1902,6 +2083,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 0)
 
     def test_stage_records_too_large(self):
+        """Test stage records too large."""
         backend = _NumformBackend()
         with mock.patch.object(nf, "MAX_RECORDS_BYTES", 10):
             stage = _run_stage(backend)
@@ -1911,6 +2093,7 @@ class TestGapCoverage(unittest.TestCase):
     # -- reporting paths ---------------------------------------------
 
     def test_section_known_grouping_and_formatted_rates(self):
+        """Test section known grouping and formatted rates."""
         backend = _CharBackend()
         payload = _payload(backend, _run_stage(backend))
         html = render_html({"numform": payload})
@@ -1918,6 +2101,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertIn("(1.000)", html)
 
     def test_section_rate_not_available(self):
+        """Test section rate not available."""
         backend = _NumformBackend()
         stage = _run_stage(backend, max_context=8)
         payload = _payload(backend, stage)
@@ -1925,6 +2109,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertIn("(n/a)", html)
 
     def test_section_defensive_continues(self):
+        """Test section defensive continues."""
         payload = {
             "available": True,
             "detail": "",
@@ -1954,15 +2139,20 @@ class TestGapCoverageRoundThree(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.base = _base_payload()
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.base)
         mutate(payload)
         return payload
 
     def test_construction_guards_round_three(self):
+        """Test construction guards round three."""
+
         def first(payload, task, form="plain", name="nf-a"):
+            """First."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
@@ -1971,11 +2161,13 @@ class TestGapCoverageRoundThree(unittest.TestCase):
             )
 
         def equal_compare(payload):
+            """Equal compare."""
             record = first(payload, "compare")
             record["operands"] = [500, 500]
             record["expected_value"] = 500
 
         def swapped_label(payload):
+            """Swapped label."""
             record = first(payload, "compare")
             record["expected_answer"] = (
                 "second" if record["expected_answer"] == "first" else "first"
@@ -1994,11 +2186,15 @@ class TestGapCoverageRoundThree(unittest.TestCase):
                 self.assertFalse(_valid_numform(self._tampered(mutate)))
 
     def test_recompute_guards_round_three(self):
+        """Test recompute guards round three."""
+
         def duplicate_within_candidate(payload):
+            """Duplicate within candidate."""
             records = payload["candidates"]["nf-a"]["records"]
             records[5] = copy.deepcopy(records[0])
 
         def cross_candidate_construction_drift(payload):
+            """Cross candidate construction drift."""
             # The same (task, value, form) key carrying a
             # different -- individually consistent -- value in
             # the second candidate: construction tuples differ.
@@ -2016,6 +2212,7 @@ class TestGapCoverageRoundThree(unittest.TestCase):
             record["cell"]["verdict"] = False
 
         def no_available_candidates(payload):
+            """No available candidates."""
             for name in ("nf-a", "nf-b"):
                 payload["candidates"][name] = {
                     "status": "unavailable",
@@ -2024,6 +2221,7 @@ class TestGapCoverageRoundThree(unittest.TestCase):
                 }
 
         def drop_one_form_of_one_value(payload):
+            """Drop one form of one value."""
             for name in ("nf-a", "nf-b"):
                 entry = payload["candidates"][name]
                 entry["records"] = [

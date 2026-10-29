@@ -95,6 +95,7 @@ HTML_WITHHELD = "[stop text and diagnostic detail withheld from this HTML view]"
 
 
 def _no_ws(text: str) -> str:
+    """No ws."""
     return "".join(text.split())
 
 
@@ -147,21 +148,25 @@ class _CanaryBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(
         input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
 
 def _canary_ids() -> list[int]:
+    """Canary ids."""
     return [ord(char) for char in CANARY]
 
 
@@ -194,6 +199,7 @@ def _hostile_document() -> dict:
 
 
 def _dataset_path(directory: Path, document: dict | None = None) -> Path:
+    """Dataset path."""
     path = directory / "dataset.json"
     path.write_text(json.dumps(document or _hostile_document()), encoding="utf-8")
     return path
@@ -273,6 +279,7 @@ def _hostile_result() -> dict:
 
 
 def _walk_keys(value: object, seen: set[str]) -> None:
+    """Walk keys."""
     if isinstance(value, dict):
         for key, item in value.items():
             seen.add(str(key))
@@ -301,6 +308,7 @@ class PublicViewBarrier48(LeakAsserts):
     """The _public_view / _strip_raw_diagnostics barrier over every carrier."""
 
     def test_public_view_strips_every_carrier(self) -> None:
+        """Test public view strips every carrier."""
         result = _hostile_result()
         public = _public_view(result, include_evidence=False)
         text = json.dumps(public, ensure_ascii=True)
@@ -349,6 +357,7 @@ class PublicViewBarrier48(LeakAsserts):
         self.assertEqual(segment["hand_ids"], _canary_ids())
 
     def test_save_report_json_and_html_false_path(self) -> None:
+        """Test save report json and html false path."""
         with tempfile.TemporaryDirectory() as tmp:
             json_path, html_path = save_report(
                 _hostile_result(), Path(tmp) / "report", include_evidence=False
@@ -429,6 +438,7 @@ class CliRunSweep48(LeakAsserts):
     """``mpl run --output``: the real CLI end to end with CLI defaults."""
 
     def _cli_run(self, tmp: Path, include_evidence: bool):
+        """Cli run."""
         ckpt, tok = _write_tiny_checkpoint(tmp / "ckpt")
         dataset = _dataset_path(tmp)
         out = tmp / ("out-true" if include_evidence else "out-false")
@@ -459,6 +469,7 @@ class CliRunSweep48(LeakAsserts):
         return proc, out, tok
 
     def test_cli_run_false_path_outputs_clean(self) -> None:
+        """Test cli run false path outputs clean."""
         with tempfile.TemporaryDirectory() as tmp:
             proc, out, tok = self._cli_run(Path(tmp), include_evidence=False)
             json_text = (out / "results.json").read_text(encoding="utf-8")
@@ -509,6 +520,7 @@ class DiffReportsSweep48(LeakAsserts):
 
     @staticmethod
     def _evidence_reports(tmp: Path) -> tuple[dict, dict, Path, Path]:
+        """Evidence reports."""
         reports = []
         dirs = []
         for name in ("old", "new"):
@@ -527,6 +539,7 @@ class DiffReportsSweep48(LeakAsserts):
         return reports[0], reports[1], dirs[0], dirs[1]
 
     def test_diff_reports_self_diff_clean(self) -> None:
+        """Test diff reports self diff clean."""
         with tempfile.TemporaryDirectory() as tmp:
             old, new, _, _ = self._evidence_reports(Path(tmp))
         # Vacuity: the compared reports really carry the canary -- the
@@ -558,10 +571,12 @@ class _OrdTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
 
@@ -577,6 +592,7 @@ class DebugTranscriptSweep48(LeakAsserts):
 
     @staticmethod
     def _session(commands: list[str]) -> str:
+        """Session."""
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(
@@ -587,6 +603,7 @@ class DebugTranscriptSweep48(LeakAsserts):
         return out.getvalue()
 
     def test_save_content_free_session_transcript_clean(self) -> None:
+        """Test save content free session transcript clean."""
         with tempfile.TemporaryDirectory() as tmp:
             target = str(Path(tmp) / "transcript.txt")
             self._session(
@@ -614,6 +631,7 @@ class DebugTranscriptSweep48(LeakAsserts):
         self.assertCanaryPresent(saved, "debug .save transcript after .render (by design)")
 
     def test_cli_debug_script_content_free_clean(self) -> None:
+        """Test cli debug script content free clean."""
         with tempfile.TemporaryDirectory() as tmp:
             dataset = _dataset_path(Path(tmp))
             script = Path(tmp) / "session.txt"
@@ -629,6 +647,7 @@ class DoctorSweep48(LeakAsserts):
     """``mpl doctor``: checks and counts only, never fixture content."""
 
     def test_doctor_report_clean(self) -> None:
+        """Test doctor report clean."""
         with tempfile.TemporaryDirectory() as tmp:
             ckpt, _ = _write_tiny_checkpoint(Path(tmp) / "ckpt")
             report = doctor(ckpt, _dataset_path(Path(tmp)), boundary_ids=(1, 2))
@@ -641,6 +660,7 @@ class DoctorSweep48(LeakAsserts):
         )
 
     def test_cli_doctor_clean(self) -> None:
+        """Test cli doctor clean."""
         with tempfile.TemporaryDirectory() as tmp:
             ckpt, _ = _write_tiny_checkpoint(Path(tmp) / "ckpt")
             dataset = _dataset_path(Path(tmp))
@@ -667,6 +687,7 @@ class SampleReportHygiene48(LeakAsserts):
     """The committed examples/sample-report/ stays synthetic and evidence-free."""
 
     def test_committed_sample_report_clean(self) -> None:
+        """Test committed sample report clean."""
         raw = (REPO_ROOT / "examples" / "sample-report" / "results.json").read_bytes()
         report = json.loads(raw)
         self.assertFalse(report["raw_evidence_included"])

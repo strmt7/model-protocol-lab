@@ -46,6 +46,7 @@ FIXTURES_JSON = Path(__file__).resolve().parent.parent / "examples" / "fixtures.
 
 
 def _fixture(fid):
+    """Fixture."""
     return Fixture(id=fid, messages=(Message("user", "q"),), expected="a", group="g")
 
 
@@ -54,7 +55,10 @@ def _fixture(fid):
 
 
 class OverhangBytesTests(unittest.TestCase):
+    """Overhang bytes tests."""
+
     def test_bytes_agree_with_str_on_ascii(self):
+        """Test bytes agree with str on ascii."""
         rng = random.Random(1234)  # noqa: S311 -- deterministic test seed
         alphabet = "abc "
         for _ in range(500):
@@ -70,12 +74,14 @@ class OverhangBytesTests(unittest.TestCase):
                 )
 
     def test_bytes_mid_token_occurrence(self):
+        """Test bytes mid token occurrence."""
         self.assertTrue(_hf_overhang_match([b" world"], b"or"))
         self.assertTrue(_hf_overhang_match([b"las", b"topper"], b"stop"))
         self.assertFalse(_hf_overhang_match([b" wold"], b"or"))
         self.assertFalse(_hf_overhang_match([b"hello ", b"xsto"], b"stop"))
 
     def test_mixed_types_rejected(self):
+        """Test mixed types rejected."""
         self.assertFalse(_hf_overhang_match([b"ab"], "ab"))
         self.assertFalse(_hf_overhang_match(["ab"], b"ab"))
 
@@ -96,6 +102,8 @@ def _stub_tokenizer(decoder_name, decoder_state, vocab):
     ids = {token: index for index, token in enumerate(vocab)}
 
     class StubDecoder(_NamedDecoder):
+        """Stub decoder."""
+
         pass
 
     StubDecoder.__name__ = decoder_name
@@ -108,7 +116,10 @@ def _stub_tokenizer(decoder_name, decoder_state, vocab):
 
 
 class ByteMapperModeTests(unittest.TestCase):
+    """Byte mapper mode tests."""
+
     def test_bytes_to_unicode_matches_spec(self):
+        """Test bytes to unicode matches spec."""
         table = _bytes_to_unicode()
         self.assertEqual(len(table), 256)
         # Printable ASCII maps to itself; byte 0x00 is U+0100; 0xE4 is "ä".
@@ -121,23 +132,28 @@ class ByteMapperModeTests(unittest.TestCase):
         importlib.util.find_spec("transformers") is not None, "transformers not installed"
     )
     def test_bytes_to_unicode_matches_transformers(self):
+        """Test bytes to unicode matches transformers."""
         from transformers.convert_slow_tokenizer import bytes_to_unicode
 
         self.assertEqual(_bytes_to_unicode(), bytes_to_unicode())
 
     def test_no_decoder_returns_none(self):
+        """Test no decoder returns none."""
         self.assertIsNone(_hf_byte_token_mapper(SimpleNamespace()))
         self.assertIsNone(_hf_byte_token_mapper(None))
 
     def test_non_byte_decoder_returns_none(self):
+        """Test non byte decoder returns none."""
         tokenizer = _stub_tokenizer("WordLevel", "", ["a", "b"])
         self.assertIsNone(_hf_byte_token_mapper(tokenizer))
 
     def test_unparseable_decoder_state_returns_none(self):
+        """Test unparseable decoder state returns none."""
         tokenizer = _stub_tokenizer("Sequence", "not-json{", ["a"])
         self.assertIsNone(_hf_byte_token_mapper(tokenizer))
 
     def test_byte_level_maps_raw_bytes(self):
+        """Test byte level maps raw bytes."""
         # "€" (U+20AC) is outside the byte-level alphabet; "Ā" (U+0100) is
         # byte 0x00 in it, so it must not be used as the unmappable case.
         tokenizer = _stub_tokenizer("ByteLevel", "", ["Ã", "¤", "ab", "€"])
@@ -150,6 +166,7 @@ class ByteMapperModeTests(unittest.TestCase):
         self.assertIsNone(mapper(3))
 
     def test_byte_fallback_maps_hex_tokens_only(self):
+        """Test byte fallback maps hex tokens only."""
         state = json.dumps({"type": "Sequence", "decoders": [{"type": "ByteFallback"}]})
         tokenizer = _stub_tokenizer("Sequence", state, ["<0x41>", "<0xZZ>", "hello"])
         mapper = _hf_byte_token_mapper(tokenizer)
@@ -160,6 +177,7 @@ class ByteMapperModeTests(unittest.TestCase):
         self.assertIsNone(mapper(2))
 
     def test_byte_level_preferred_detector_falls_back_to_config(self):
+        """Test byte level preferred detector falls back to config."""
         # A decoder that is not literally named ByteLevel but whose config
         # carries the marker still selects the byte path.
         state = json.dumps({"type": "ByteLevel"})
@@ -168,6 +186,7 @@ class ByteMapperModeTests(unittest.TestCase):
         self.assertIsNotNone(mapper)
 
     def test_str_decoder_state_is_parsed(self):
+        """Test str decoder state is parsed."""
         # __getstate__ may return str instead of bytes; both are accepted.
         state = json.dumps({"type": "Sequence", "decoders": [{"type": "ByteFallback"}]})
         tokenizer = _stub_tokenizer("Sequence", state, ["<0x41>"])
@@ -177,28 +196,37 @@ class ByteMapperModeTests(unittest.TestCase):
         self.assertEqual(mapper(0), b"A")
 
     def test_bytes_decoder_state_is_parsed(self):
+        """Test bytes decoder state is parsed."""
         state = json.dumps({"type": "ByteLevel"}).encode()
         tokenizer = _stub_tokenizer("Custom", state, ["a"])
         mapper = _hf_byte_token_mapper(tokenizer)
         self.assertIsNotNone(mapper)
 
     def test_mapper_construction_failure_degrades_to_none(self):
+        """Test mapper construction failure degrades to none."""
+
         class BoomTokenizer(SimpleNamespace):
+            """Boom tokenizer."""
+
             @property
             def backend_tokenizer(self):
                 raise RuntimeError("synthetic")
 
             @staticmethod
-            def get_vocab():  # pragma: no cover -- never reached
+            def get_vocab():
+                """Get vocab."""
+                # pragma: no cover -- never reached
                 return {}
 
         self.assertIsNone(_hf_byte_token_mapper(BoomTokenizer()))
 
     def test_empty_vocab_degrades_to_none(self):
+        """Test empty vocab degrades to none."""
         tokenizer = _stub_tokenizer("ByteLevel", "", [])
         self.assertIsNone(_hf_byte_token_mapper(tokenizer))
 
     def test_non_string_token_degrades_to_none(self):
+        """Test non string token degrades to none."""
         tokenizer = _stub_tokenizer("ByteLevel", "", ["a"])
         tokenizer.convert_ids_to_tokens = lambda i: None
         mapper = _hf_byte_token_mapper(tokenizer)
@@ -215,6 +243,7 @@ class ByteMapperModeTests(unittest.TestCase):
         self.assertEqual(mapper(999), b"")
 
     def test_decoder_config_has_type(self):
+        """Test decoder config has type."""
         self.assertTrue(_decoder_config_has_type({"type": "ByteFallback"}, "ByteFallback"))
         self.assertTrue(
             _decoder_config_has_type(
@@ -228,7 +257,10 @@ class ByteMapperModeTests(unittest.TestCase):
 
 
 class EmulationBytePathTests(unittest.TestCase):
+    """Emulation byte path tests."""
+
     def test_byte_path_fires_on_fragment_bytes(self):
+        """Test byte path fires on fragment bytes."""
         # "ä" as raw bytes b"\xc3\xa4" split across two tokens: the decode
         # strings are useless here, the bytes match.
         backend = FakeBackend(decode_script=["�", "�"])
@@ -240,18 +272,23 @@ class EmulationBytePathTests(unittest.TestCase):
         self.assertEqual(outcome.detail, "fired_at_step_2")
 
     def test_byte_path_falls_back_to_decode_for_unmapped_tokens(self):
+        """Test byte path falls back to decode for unmapped tokens."""
         backend = FakeBackend(decode_script=["a", "b"])
         outcome = emulate_hf_stop_string(backend, (), (1, 2), "ab", token_bytes=lambda i: None)
         self.assertTrue(outcome.available)
         self.assertTrue(outcome.fired)
 
     def test_byte_path_rejects_non_callable(self):
+        """Test byte path rejects non callable."""
         outcome = emulate_hf_stop_string(FakeBackend(), (1,), (2,), "x", token_bytes="nope")
         self.assertFalse(outcome.available)
         self.assertEqual(outcome.detail, "invalid_emulation_input")
 
     def test_byte_path_hook_failure_degrades(self):
+        """Test byte path hook failure degrades."""
+
         def bad(token_id):
+            """Bad."""
             raise RuntimeError("synthetic")
 
         outcome = emulate_hf_stop_string(FakeBackend(), (), (1,), "x", token_bytes=bad)
@@ -259,16 +296,22 @@ class EmulationBytePathTests(unittest.TestCase):
         self.assertEqual(outcome.detail, "token_text_unavailable")
 
     def test_byte_path_hook_returning_non_bytes_degrades(self):
+        """Test byte path hook returning non bytes degrades."""
         outcome = emulate_hf_stop_string(FakeBackend(), (), (1,), "x", token_bytes=lambda i: "s")
         self.assertFalse(outcome.available)
         self.assertEqual(outcome.detail, "token_text_unavailable")
 
     def test_byte_path_decode_non_string_degrades(self):
+        """Test byte path decode non string degrades."""
+
         class BadDecode:
+            """Bad decode."""
+
             fingerprint = "bad"
 
             @staticmethod
             def decode(token_ids):
+                """Decode."""
                 return 42
 
         outcome = emulate_hf_stop_string(BadDecode(), (), (1,), "x", token_bytes=lambda i: None)
@@ -276,6 +319,7 @@ class EmulationBytePathTests(unittest.TestCase):
         self.assertEqual(outcome.detail, "token_text_unavailable")
 
     def test_truncated_backend_forwards_byte_mapper(self):
+        """Test truncated backend forwards byte mapper."""
         inner = FakeBackend()
         inner.hf_stop_token_bytes = lambda i: b"q"  # type: ignore[attr-defined]
         wrapped = TruncatedPromptBackend(inner, 1)
@@ -284,6 +328,7 @@ class EmulationBytePathTests(unittest.TestCase):
         self.assertIsNone(plain.hf_stop_token_bytes)
 
     def test_stop_matrix_rejects_non_callable_token_bytes(self):
+        """Test stop matrix rejects non callable token bytes."""
         obs = {
             "fixture": "f1",
             "status": "completed",
@@ -298,6 +343,7 @@ class EmulationBytePathTests(unittest.TestCase):
             )
 
     def test_matrix_stage_rows_threads_token_bytes(self):
+        """Test matrix stage rows threads token bytes."""
         obs = {
             "fixture": "f1",
             "status": "completed",
@@ -352,6 +398,7 @@ class ByteSpaceOracleTests(unittest.TestCase):
     """The byte-space port agrees with the real StopStringCriteria."""
 
     def test_fragment_stop_matches_oracle(self):
+        """Test fragment stop matches oracle."""
         import torch
         from transformers import PreTrainedTokenizerFast
         from transformers.generation.stopping_criteria import StopStringCriteria
@@ -373,10 +420,13 @@ class ByteSpaceOracleTests(unittest.TestCase):
             self.assertEqual(mapper(vocab["¤"]), "ä".encode()[1:])
 
             class DecodeBackend:
+                """Decode backend."""
+
                 fingerprint = "fragment-oracle-not-a-model"
 
                 @staticmethod
                 def decode(token_ids):
+                    """Decode."""
                     return hf_tokenizer.decode(list(token_ids))
 
             backend = DecodeBackend()
@@ -392,6 +442,7 @@ class ByteSpaceOracleTests(unittest.TestCase):
             self.assertEqual(new.truncated_ids, tuple(ids))
 
     def test_byte_path_agrees_with_oracle_on_ascii(self):
+        """Test byte path agrees with oracle on ascii."""
         import torch
         from transformers import PreTrainedTokenizerFast
         from transformers.generation.stopping_criteria import StopStringCriteria
@@ -411,10 +462,13 @@ class ByteSpaceOracleTests(unittest.TestCase):
             self.assertIsNotNone(mapper)
 
             class DecodeBackend:
+                """Decode backend."""
+
                 fingerprint = "ascii-oracle-not-a-model"
 
                 @staticmethod
                 def decode(token_ids):
+                    """Decode."""
                     return hf_tokenizer.decode(list(token_ids))
 
             backend = DecodeBackend()
@@ -459,7 +513,10 @@ def _search_entry(name, specs):
 
 
 class BudgetFrontierTests(unittest.TestCase):
+    """Budget frontier tests."""
+
     def test_min_budgets_curve_and_flips(self):
+        """Test min budgets curve and flips."""
         boundary = (9,)
         search = [
             _search_entry("A", [([1, 2, 9], True), ([9], True)]),
@@ -488,6 +545,7 @@ class BudgetFrontierTests(unittest.TestCase):
         self.assertEqual(frontier["native_winner"], "A")
 
     def test_ambiguous_native_can_flip_to_unique_winner(self):
+        """Test ambiguous native can flip to unique winner."""
         boundary = (9,)
         search = [
             _search_entry("A", [([1, 2, 9], True), ([4, 5, 9], True)]),
@@ -512,6 +570,7 @@ class BudgetFrontierTests(unittest.TestCase):
         self.assertFalse(frontier["budget_robust"])
 
     def test_stable_frontier(self):
+        """Test stable frontier."""
         boundary = (9,)
         search = [
             _search_entry("A", [([9], True), ([9], True)]),
@@ -529,6 +588,7 @@ class BudgetFrontierTests(unittest.TestCase):
         self.assertEqual(frontier["decision_steps"], [[1, "selected", "A"]])
 
     def test_no_candidate_native(self):
+        """Test no candidate native."""
         boundary = (9,)
         search = [
             _search_entry("A", [([1, 2, 9], True), ([1], False)]),
@@ -562,6 +622,7 @@ class BudgetFrontierTests(unittest.TestCase):
                     self.assertEqual(found, expected)
 
     def test_incomplete_observations_never_pass(self):
+        """Test incomplete observations never pass."""
         boundary = (9,)
         search = [
             {
@@ -588,6 +649,7 @@ class BudgetFrontierTests(unittest.TestCase):
         self.assertEqual(frontier["candidates"]["A"]["pass_steps"], [[1, 0]])
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         good = [_search_entry("A", [([9], True)])]
         kwargs = {
             "boundary": (9,),
@@ -676,6 +738,7 @@ class BudgetFrontierTests(unittest.TestCase):
 
 
 def _write_model(tmp, **config_extra):
+    """Write model."""
     root = Path(tmp) / "model"
     root.mkdir()
     config = {"model_type": "gpt2", "n_positions": 1024}
@@ -684,7 +747,10 @@ def _write_model(tmp, **config_extra):
 
 
 class DoctorSuggestionTests(unittest.TestCase):
+    """Doctor suggestion tests."""
+
     def test_suggestion_on_clean_doctor(self):
+        """Test suggestion on clean doctor."""
         with TemporaryDirectory() as tmp:
             model = _write_model(tmp)
             report = doctor(model, FIXTURES_JSON, boundary_ids=(1, 2))
@@ -703,22 +769,26 @@ class DoctorSuggestionTests(unittest.TestCase):
                 self.assertIn(family, suggestion["note"])
 
     def test_no_suggestion_without_dataset(self):
+        """Test no suggestion without dataset."""
         with TemporaryDirectory() as tmp:
             report = doctor(_write_model(tmp), boundary_ids=(1, 2))
             self.assertIsNone(report["suggestion"])
 
     def test_no_suggestion_without_boundary_ids(self):
+        """Test no suggestion without boundary ids."""
         with TemporaryDirectory() as tmp:
             report = doctor(_write_model(tmp), FIXTURES_JSON)
             self.assertIsNone(report["suggestion"])
 
     def test_no_suggestion_on_failed_verdict(self):
+        """Test no suggestion on failed verdict."""
         with TemporaryDirectory() as tmp:
             report = doctor(Path(tmp) / "missing", FIXTURES_JSON, boundary_ids=(1, 2))
             self.assertEqual(report["verdict"], "failed")
             self.assertIsNone(report["suggestion"])
 
     def test_no_suggestion_without_declared_window(self):
+        """Test no suggestion without declared window."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "model"
             root.mkdir()
@@ -728,6 +798,7 @@ class DoctorSuggestionTests(unittest.TestCase):
             self.assertIsNone(report["suggestion"])
 
     def test_suggestion_quotes_paths_with_spaces(self):
+        """Test suggestion quotes paths with spaces."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "my model"
             root.mkdir()
@@ -739,6 +810,7 @@ class DoctorSuggestionTests(unittest.TestCase):
             self.assertNotIn(" --model my model ", suggestion["next_command"])
 
     def test_examine_model_reports_context_window(self):
+        """Test examine model reports context window."""
         with TemporaryDirectory() as tmp:
             gpt2 = _write_model(tmp)
             self.assertEqual(examine_model(gpt2)["model"]["context_window"], 1024)
@@ -755,6 +827,7 @@ class DoctorSuggestionTests(unittest.TestCase):
             self.assertIsNone(examine_model(plain)["model"]["context_window"])
 
     def test_next_command_unit_validation(self):
+        """Test next command unit validation."""
         base = {"verdict": "ok", "model": {"context_window": 8}}
         self.assertIsNone(_next_command("m", "d", None, base))
         self.assertIsNone(_next_command("m", "d", (), base))
@@ -772,6 +845,7 @@ class DoctorSuggestionTests(unittest.TestCase):
         self.assertIn("--boundary-ids 1,2", good["next_command"])
 
     def test_doctor_cli_includes_suggestion(self):
+        """Test doctor cli includes suggestion."""
         with TemporaryDirectory() as tmp:
             model = _write_model(tmp)
             buffer = io.StringIO()
@@ -797,6 +871,7 @@ class DoctorSuggestionTests(unittest.TestCase):
 
 
 def _frontier_result(**overrides):
+    """Frontier result."""
     boundary = (9,)
     search = [
         _search_entry("A", [([1, 2, 9], True), ([9], True)]),
@@ -820,7 +895,10 @@ def _frontier_result(**overrides):
 
 
 class FrontierReportTests(unittest.TestCase):
+    """Frontier report tests."""
+
     def test_stable_section(self):
+        """Test stable section."""
         boundary = (9,)
         search = [
             _search_entry("A", [([9], True), ([9], True)]),
@@ -846,6 +924,7 @@ class FrontierReportTests(unittest.TestCase):
         self.assertIn("Winner pass curve: A", html)
 
     def test_flips_section(self):
+        """Test flips section."""
         html = render_html(_frontier_result())
         self.assertIn("Token-budget frontier", html)
         self.assertIn("budget-sensitive", html)
@@ -854,6 +933,7 @@ class FrontierReportTests(unittest.TestCase):
         self.assertIn("no_candidate", html)
 
     def test_section_tolerates_malformed_points(self):
+        """Test section tolerates malformed points."""
         boundary = (9,)
         search = [
             _search_entry("A", [([9], True)]),
@@ -882,6 +962,7 @@ class FrontierReportTests(unittest.TestCase):
         self.assertIn("Token-budget frontier", html)
 
     def test_flip_label_names_winner(self):
+        """Test flip label names winner."""
         # Ambiguous native where A alone passes early: the flip range names A.
         boundary = (9,)
         search = [
@@ -933,6 +1014,7 @@ class FrontierReportTests(unittest.TestCase):
         self.assertNotIn("<script>", scrubbed)
 
     def test_section_absent_when_unavailable(self):
+        """Test section absent when unavailable."""
         html = render_html({"decision": "failed", "search": []})
         self.assertNotIn("Token-budget frontier", html)
         html = render_html(

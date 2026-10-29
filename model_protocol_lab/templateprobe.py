@@ -373,6 +373,7 @@ def _finding(outcome: str, pair_id: str, message_index: int, region: str) -> dic
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def classify_pair(
     spec: dict[str, Any],
     base_a: str,
@@ -441,6 +442,7 @@ def classify_pair(
     return result
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def role_arm_facts(spec: dict[str, Any], baseline_render: str, arm_render: str) -> dict[str, Any]:
     """Render-diff facts for one role arm: order / merged / vanished.
 

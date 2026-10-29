@@ -10,13 +10,17 @@ import unittest
 
 
 def _valid_cell():
+    """Valid cell."""
     from model_protocol_lab.cacheprofile import candidate_cache_profile
 
     return candidate_cache_profile([[1, 2, 3], [1, 2, 4]])
 
 
 class CellValidatorCoverageTests(unittest.TestCase):
+    """Cell validator coverage tests."""
+
     def test_fail_closed_rejections(self):
+        """Test fail closed rejections."""
         from model_protocol_lab import experiments
 
         valid = experiments._cache_profile_cell_valid
@@ -45,6 +49,7 @@ class CellValidatorCoverageTests(unittest.TestCase):
         self.assertFalse(valid(broken))
 
     def test_zero_cell_mean_branches(self):
+        """Test zero cell mean branches."""
         from model_protocol_lab import experiments
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
@@ -57,8 +62,11 @@ class CellValidatorCoverageTests(unittest.TestCase):
 
 
 class DiffValidatorCoverageTests(unittest.TestCase):
+    """Diff validator coverage tests."""
+
     @staticmethod
     def _payload():
+        """Payload."""
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
         return {
@@ -77,6 +85,7 @@ class DiffValidatorCoverageTests(unittest.TestCase):
         }
 
     def test_rejection_branches(self):
+        """Test rejection branches."""
         from model_protocol_lab import diffreports
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
@@ -123,14 +132,18 @@ class DiffValidatorCoverageTests(unittest.TestCase):
 
 
 class ReportingDegradedPathsTests(unittest.TestCase):
+    """Reporting degraded paths tests."""
+
     @staticmethod
     def _section(payload):
+        """Section."""
         from model_protocol_lab import reporting
 
         return reporting._cache_profile_section({"cache_profile": payload})
 
     @staticmethod
     def _base_payload(per_candidate):
+        """Base payload."""
         return {
             "available": True,
             "block_size": 16,
@@ -145,9 +158,11 @@ class ReportingDegradedPathsTests(unittest.TestCase):
         }
 
     def test_non_dict_per_candidate(self):
+        """Test non dict per candidate."""
         self.assertEqual(self._section(self._base_payload([1, 2])), "")
 
     def test_non_dict_entry_skipped(self):
+        """Test non dict entry skipped."""
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
         cell = candidate_cache_profile([[1, 2], [1, 3]])
@@ -156,12 +171,14 @@ class ReportingDegradedPathsTests(unittest.TestCase):
         self.assertNotIn("bad", html)
 
     def test_zero_evaluable_renders_na(self):
+        """Test zero evaluable renders na."""
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
         html = self._section(self._base_payload({"c": candidate_cache_profile([])}))
         self.assertIn("n/a", html)
 
     def test_excluded_candidates_rendered(self):
+        """Test excluded candidates rendered."""
         from model_protocol_lab.cacheprofile import candidate_cache_profile
 
         payload = self._base_payload({"c": candidate_cache_profile([])})

@@ -1876,6 +1876,7 @@ def oracle_diff_reports(
                 m_tuples: set[tuple[Any, ...]] = set()
                 r_tuples: set[Any] = set()
                 for entry in primary:
+                    # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                     cell = next(
                         r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture
                     )
@@ -1892,6 +1893,7 @@ def oracle_diff_reports(
                     outputs: set[Any] = set()
                     outcomes: set[tuple[Any, ...]] = set()
                     for name in names:
+                        # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                         cell = next(
                             r
                             for r in by_name[name]["records"]
@@ -8563,6 +8565,7 @@ def _rand_entry(rng: random.Random, name: str, n_fixtures: int) -> dict[str, Any
     return entry
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def make_report(
     rng: random.Random,
     *,

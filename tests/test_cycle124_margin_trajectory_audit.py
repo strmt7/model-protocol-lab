@@ -21,6 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _frontier() -> dict:
+    """Frontier."""
     return {
         "max_new_tokens": 10,
         "candidates": {
@@ -40,11 +41,15 @@ def _frontier() -> dict:
 
 
 def _seg_paths(svg: str) -> list[tuple[str, str]]:
+    """Seg paths."""
     return re.findall(r'<path d="([^"]+)" fill="none" stroke="([^"]+)"', svg)
 
 
 class TestMarginTrajectorySemantics(unittest.TestCase):
+    """Test margin trajectory semantics."""
+
     def test_hand_derived_trajectory(self) -> None:
+        """Test hand derived trajectory."""
         # b=1: 0-0 tie; b=4: alpha 1-0; b=6: beta 2-1; b=8: 2-2 tie.
         self.assertEqual(
             margin_trajectory(_frontier()),
@@ -52,6 +57,7 @@ class TestMarginTrajectorySemantics(unittest.TestCase):
         )
 
     def test_single_candidate_has_zero_margin(self) -> None:
+        """Test single candidate has zero margin."""
         frontier = {
             "max_new_tokens": 5,
             "candidates": {
@@ -65,6 +71,7 @@ class TestMarginTrajectorySemantics(unittest.TestCase):
         self.assertEqual(margin_trajectory(frontier), [(1, "solo", 0)])
 
     def test_three_way_tie_collapses_to_single_point(self) -> None:
+        """Test three way tie collapses to single point."""
         frontier = {
             "max_new_tokens": 4,
             "candidates": {
@@ -79,6 +86,7 @@ class TestMarginTrajectorySemantics(unittest.TestCase):
         self.assertEqual(margin_trajectory(frontier), [(1, None, 0)])
 
     def test_constant_margin_collapses_change_points(self) -> None:
+        """Test constant margin collapses change points."""
         # alpha leads beta by exactly 1 at every change budget: one point.
         frontier = {
             "max_new_tokens": 8,
@@ -98,6 +106,7 @@ class TestMarginTrajectorySemantics(unittest.TestCase):
         self.assertEqual(margin_trajectory(frontier), [(1, "alpha", 1)])
 
     def test_malformed_input_yields_empty(self) -> None:
+        """Test malformed input yields empty."""
         self.assertEqual(margin_trajectory({}), [])
         self.assertEqual(margin_trajectory({"candidates": {}}), [])
         self.assertEqual(margin_trajectory({"candidates": {"a": {}}}), [])
@@ -108,12 +117,16 @@ class TestMarginTrajectorySemantics(unittest.TestCase):
         self.assertEqual(margin_trajectory("not-a-dict"), [])  # type: ignore[arg-type]
 
     def test_deterministic_across_calls(self) -> None:
+        """Test deterministic across calls."""
         frontier = _frontier()
         self.assertEqual(margin_trajectory(frontier), margin_trajectory(frontier))
 
 
 class TestMarginChartGeometry(unittest.TestCase):
+    """Test margin chart geometry."""
+
     def test_segment_paths_hand_derived(self) -> None:
+        """Test segment paths hand derived."""
         # W=560 over budgets 1..10: x(b) = (b-1)*560//9.
         # y_max=1, H=240: y(0)=240, y(1)=0.
         svg = reporting._margin_chart_svg(_frontier())
@@ -126,6 +139,7 @@ class TestMarginChartGeometry(unittest.TestCase):
         self.assertEqual(paths[3], ("M 435 240 H 560 V 240", "#94a3b8"))
 
     def test_leader_colors_match_frontier_palette_order(self) -> None:
+        """Test leader colors match frontier palette order."""
         # Reversed dict insertion order must not change the assignment:
         # sorted-name order rules, shared with the frontier chart.
         frontier = _frontier()
@@ -137,26 +151,31 @@ class TestMarginChartGeometry(unittest.TestCase):
         self.assertEqual(paths[1][1], "#38bdf8")
 
     def test_area_fill_present_but_not_url_based(self) -> None:
+        """Test area fill present but not url based."""
         svg = reporting._margin_chart_svg(_frontier())
         self.assertIn('fill-opacity="0.10"', svg)
         self.assertNotIn("url(", svg)
 
     def test_zero_baseline_emphasized(self) -> None:
+        """Test zero baseline emphasized."""
         svg = reporting._margin_chart_svg(_frontier())
         # y(0)=240 is the bottom gridline; the zero tick uses the axis color.
         self.assertIn('y1="240" x2="560" y2="240" stroke="#475569"', svg)
 
     def test_malformed_returns_empty(self) -> None:
+        """Test malformed returns empty."""
         self.assertEqual(reporting._margin_chart_svg({}), "")
         self.assertEqual(reporting._margin_chart_svg({"candidates": {}}), "")
 
     def test_byte_deterministic(self) -> None:
+        """Test byte deterministic."""
         frontier = _frontier()
         self.assertEqual(
             reporting._margin_chart_svg(frontier), reporting._margin_chart_svg(frontier)
         )
 
     def test_aria_covers_every_span(self) -> None:
+        """Test aria covers every span."""
         svg = reporting._margin_chart_svg(_frontier())
         match = re.search(r'aria-label="([^"]+)"', svg)
         self.assertIsNotNone(match)
@@ -166,6 +185,7 @@ class TestMarginChartGeometry(unittest.TestCase):
         self.assertIn("margin 1", aria)
 
     def test_hostile_candidate_name_escaped(self) -> None:
+        """Test hostile candidate name escaped."""
         frontier = {
             "max_new_tokens": 4,
             "candidates": {
@@ -187,7 +207,10 @@ class TestMarginChartGeometry(unittest.TestCase):
 
 
 class TestSectionWiring(unittest.TestCase):
+    """Test section wiring."""
+
     def test_margin_block_follows_frontier_chart(self) -> None:
+        """Test margin block follows frontier chart."""
         html = reporting._frontier_section({"budget_frontier": _frontier()})
         self.assertIn("<h3>Margin trajectory: how decisive was the lead</h3>", html)
         self.assertIn('class="margin-svg"', html)
@@ -201,11 +224,14 @@ class TestSectionWiring(unittest.TestCase):
         )
 
     def test_section_without_frontier_has_no_margin_block(self) -> None:
+        """Test section without frontier has no margin block."""
         self.assertNotIn("margin-svg", reporting._frontier_section({}))
         self.assertNotIn("margin-svg", reporting._frontier_section({"budget_frontier": None}))
 
 
 class TestMutationGate(unittest.TestCase):
+    """Test mutation gate."""
+
     SOURCE = _REPO_ROOT / "model_protocol_lab" / "reporting.py"
 
     MUTANTS = [
@@ -223,6 +249,7 @@ class TestMutationGate(unittest.TestCase):
     ]
 
     def test_mutants_are_killed(self) -> None:
+        """Test mutants are killed."""
         import subprocess
         import sys
 

@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–221 (executed 2026-10-14 → 2026-10-29, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–222 (executed 2026-10-14 → 2026-10-29, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8845 tests collected**
-  (cycle 220, 2026-10-29). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8846 tests collected**
+  (cycle 222, 2026-10-29). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -56,11 +56,17 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.1348% (cycle 221, 2026-10-29)**. The gate compares the
+  95.1389% (cycle 222, 2026-10-29)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.635) is auditable rather than inferred from the display.
-  Cycle 221 moves both figures: the record-notation feature
+  (+0.639) is auditable rather than inferred from the display.
+  Cycle 222 moves both figures slightly: the DeepSource
+  remediation added no feature surface; it changed 5 statements
+  net (36,943 → 36,948) and 7 covered statements
+  (35,551 → 35,558), and its suite grew by one test when a
+  previously uncollected nested test method was dedented to
+  class level and began executing. Cycle 221 moves both
+  figures: the record-notation feature
   added 939 statements (36,004 → 36,943) and 898 covered
   statements (34,653 → 35,551); its first full run measured
   94.8876% before the gap battery, and the new module itself

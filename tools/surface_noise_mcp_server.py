@@ -5,7 +5,8 @@ The server itself lives in :mod:`model_protocol_lab.mcp_server`
 script). This file exists only so ``python
 tools/surface_noise_mcp_server.py`` keeps working from a checkout,
 including the test suite's subprocess spawns. It contains no server
-logic of its own: the import below is the whole implementation.
+logic of its own: the deferred import in :func:`main` is the whole
+implementation.
 
 The repository root is added to ``sys.path`` so the launcher also
 works from a bare checkout where the package is not installed; in
@@ -19,9 +20,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
-# skipcq: PYL-R0401 - intra-package cycles are managed by the deferred-import discipline
-from model_protocol_lab.mcp_server import serve
+
+def main() -> int:
+    """Run the shipped surface-noise MCP server."""
+    from model_protocol_lab.mcp_server import serve
+
+    return serve()
+
 
 if __name__ == "__main__":
-    sys.exit(serve())
+    sys.exit(main())

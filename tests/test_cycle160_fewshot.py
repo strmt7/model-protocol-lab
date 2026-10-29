@@ -50,6 +50,7 @@ def _fixture(
     expected: str = "WORD",
     content: str = "Say the word.",
 ) -> Fixture:
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=content),),
@@ -59,6 +60,7 @@ def _fixture(
 
 
 def _format(name: str, bos: str = "<s>", user_prefix: str = "[user]\n") -> Format:
+    """Format."""
     return Format(
         name=name,
         bos=bos,
@@ -83,10 +85,12 @@ class FewshotScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(
@@ -97,6 +101,7 @@ class FewshotScriptedBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         prompt = self.decode(input_ids)
         if "NOP" in prompt:
             answer = "WRONG"
@@ -123,10 +128,12 @@ class BrokenBackend(FewshotScriptedBackend):
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         raise RuntimeError("boom")
 
 
 def _demo_pool() -> tuple[Fixture, ...]:
+    """Demo pool."""
     return (
         _fixture("f_d0", expected="D0", content="Demo question zero."),
         _fixture("f_d1", expected="D1", content="Demo question one."),
@@ -134,6 +141,7 @@ def _demo_pool() -> tuple[Fixture, ...]:
 
 
 def _eval_cases() -> tuple[Fixture, ...]:
+    """Eval cases."""
     return (_fixture("f_e0"), _fixture("f_e1"))
 
 
@@ -143,12 +151,16 @@ def _eval_cases() -> tuple[Fixture, ...]:
 
 
 class FewshotValidationTests(unittest.TestCase):
+    """Fewshot validation tests."""
+
     def test_validate_accepts(self):
+        """Test validate accepts."""
         pool = _demo_pool()
         self.assertEqual(validate_demo_pool(pool), pool)
         self.assertEqual(validate_eval_fixtures(pool), pool)
 
     def test_validate_rejects(self):
+        """Test validate rejects."""
         good = _demo_pool()
         for bad in ((), [], "nope", None, 42):
             with self.assertRaises(ValueError):
@@ -162,25 +174,32 @@ class FewshotValidationTests(unittest.TestCase):
 
 
 class SampleDemosTests(unittest.TestCase):
+    """Sample demos tests."""
+
     def test_samples_k_in_sampled_order(self):
+        """Test samples k in sampled order."""
         demos = sample_demos(_demo_pool())
         self.assertEqual(len(demos), FEWSHOT_K)
         self.assertEqual({d.id for d in demos}, {"f_d0", "f_d1"})
 
     def test_deterministic(self):
+        """Test deterministic."""
         self.assertEqual(sample_demos(_demo_pool()), sample_demos(_demo_pool()))
 
     def test_input_order_independent(self):
+        """Test input order independent."""
         pool = _demo_pool()
         self.assertEqual(sample_demos(pool), sample_demos(tuple(reversed(pool))))
 
     def test_k_subset(self):
+        """Test k subset."""
         pool = tuple(_fixture(f"f_{i}") for i in range(5))
         demos = sample_demos(pool, k=3)
         self.assertEqual(len(demos), 3)
         self.assertEqual(len({d.id for d in demos}), 3)
 
     def test_seed_changes_selection(self):
+        """Test seed changes selection."""
         pool = tuple(_fixture(f"f_{i}") for i in range(6))
         first = sample_demos(pool, k=3, seed=1)
         second = sample_demos(pool, k=3, seed=2)
@@ -191,6 +210,7 @@ class SampleDemosTests(unittest.TestCase):
             self.assertTrue(all(d.id in {f"f_{i}" for i in range(6)} for d in demos))
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         pool = _demo_pool()
         with self.assertRaises(ValueError):
             sample_demos(pool, k=3)
@@ -210,12 +230,16 @@ class SampleDemosTests(unittest.TestCase):
             sample_demos("nope")  # type: ignore[arg-type]
 
     def test_seed_constant_pinned(self):
+        """Test seed constant pinned."""
         self.assertEqual(FEWSHOT_SEED, 20261019)
         self.assertEqual(FEWSHOT_K, 2)
 
 
 class DemoPermutationsTests(unittest.TestCase):
+    """Demo permutations tests."""
+
     def test_two_orders(self):
+        """Test two orders."""
         d0, d1 = _demo_pool()
         perms = demo_permutations((d0, d1))
         self.assertEqual(len(perms), 2)
@@ -223,10 +247,12 @@ class DemoPermutationsTests(unittest.TestCase):
         self.assertEqual(perms[1], (d1, d0))
 
     def test_single_demo(self):
+        """Test single demo."""
         (d0,) = _demo_pool()[:1]
         self.assertEqual(demo_permutations((d0,)), ((d0,),))
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         with self.assertRaises(ValueError):
             demo_permutations(())
         with self.assertRaises(ValueError):
@@ -234,7 +260,10 @@ class DemoPermutationsTests(unittest.TestCase):
 
 
 class DemoQuestionTextTests(unittest.TestCase):
+    """Demo question text tests."""
+
     def test_joins_user_turns(self):
+        """Test joins user turns."""
         demo = Fixture(
             id="d",
             messages=(
@@ -248,6 +277,7 @@ class DemoQuestionTextTests(unittest.TestCase):
         self.assertEqual(demo_question_text(demo), "First?\nSecond?")
 
     def test_rejects_no_user_message(self):
+        """Test rejects no user message."""
         demo = Fixture(
             id="d",
             messages=(Message(role="assistant", content="no"),),
@@ -258,12 +288,16 @@ class DemoQuestionTextTests(unittest.TestCase):
             demo_question_text(demo)
 
     def test_rejects_bad_type(self):
+        """Test rejects bad type."""
         with self.assertRaises(ValueError):
             demo_question_text("nope")  # type: ignore[arg-type]
 
 
 class BuildDemoMessagesTests(unittest.TestCase):
+    """Build demo messages tests."""
+
     def test_turn_pair_shape(self):
+        """Test turn pair shape."""
         demo = _fixture("f_d0", expected="D0", content="Demo question zero.")
         user_turn, asst_turn = build_demo_messages(demo, 1, 2)
         self.assertEqual(user_turn.role, "user")
@@ -274,11 +308,13 @@ class BuildDemoMessagesTests(unittest.TestCase):
         self.assertEqual(asst_turn.content, "D0")
 
     def test_second_index(self):
+        """Test second index."""
         demo = _fixture("f_d1", expected="D1", content="Q one.")
         user_turn, _ = build_demo_messages(demo, 2, 2)
         self.assertIn("Example 2 of 2:", user_turn.content)
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         demo = _fixture("f_d0")
         with self.assertRaises(ValueError):
             build_demo_messages("nope", 1, 2)  # type: ignore[arg-type]
@@ -293,7 +329,10 @@ class BuildDemoMessagesTests(unittest.TestCase):
 
 
 class MessagesAlternateTests(unittest.TestCase):
+    """Messages alternate tests."""
+
     def test_alternation_cases(self):
+        """Test alternation cases."""
         user = Message(role="user", content="q")
         asst = Message(role="assistant", content="a")
         self.assertFalse(_messages_alternate_user_last(()))
@@ -306,7 +345,10 @@ class MessagesAlternateTests(unittest.TestCase):
 
 
 class BuildDemoFixturesTests(unittest.TestCase):
+    """Build demo fixtures tests."""
+
     def test_prepends_demo_turns(self):
+        """Test prepends demo turns."""
         demos = sample_demos(_demo_pool())
         built = build_demo_fixtures(_eval_cases(), demos, perm_index=0)
         self.assertEqual(len(built), 2)
@@ -322,17 +364,20 @@ class BuildDemoFixturesTests(unittest.TestCase):
         self.assertEqual(first.messages[-1].content, "Say the word.")
 
     def test_perm_index_namespaces(self):
+        """Test perm index namespaces."""
         demos = sample_demos(_demo_pool())
         built = build_demo_fixtures(_eval_cases(), demos, perm_index=3)
         self.assertTrue(all(c.id.startswith("fewshot/perm3/") for c in built))
 
     def test_demo_order_follows_perm(self):
+        """Test demo order follows perm."""
         d0, d1 = _demo_pool()
         built = build_demo_fixtures(_eval_cases(), (d1, d0), perm_index=0)
         self.assertIn("A: D1", built[0].messages[0].content)
         self.assertIn("A: D0", built[0].messages[2].content)
 
     def test_rejects_non_alternating_eval(self):
+        """Test rejects non alternating eval."""
         demos = sample_demos(_demo_pool())
         bad = Fixture(
             id="bad",
@@ -358,6 +403,7 @@ class BuildDemoFixturesTests(unittest.TestCase):
             build_demo_fixtures((bad_end,), demos, perm_index=0)
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         demos = sample_demos(_demo_pool())
         with self.assertRaises(ValueError):
             build_demo_fixtures((), demos, perm_index=0)
@@ -370,11 +416,15 @@ class BuildDemoFixturesTests(unittest.TestCase):
 
 
 class OriginalFixtureIdTests(unittest.TestCase):
+    """Original fixture id tests."""
+
     def test_strips_namespace(self):
+        """Test strips namespace."""
         self.assertEqual(original_fixture_id("fewshot/perm0/f_e0"), "f_e0")
         self.assertEqual(original_fixture_id("fewshot/perm12/abc"), "abc")
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         with self.assertRaises(ValueError):
             original_fixture_id("f_e0")
         with self.assertRaises(ValueError):
@@ -384,7 +434,10 @@ class OriginalFixtureIdTests(unittest.TestCase):
 
 
 class ChangeRateTests(unittest.TestCase):
+    """Change rate tests."""
+
     def test_basic_counts(self):
+        """Test basic counts."""
         baseline = {"a": True, "b": True, "c": False}
         arm = {"a": False, "b": True, "c": False}
         out = change_rate(baseline, arm)
@@ -393,6 +446,7 @@ class ChangeRateTests(unittest.TestCase):
         self.assertAlmostEqual(out["rate"], 1 / 3)
 
     def test_none_verdicts_excluded_never_counted(self):
+        """Test none verdicts excluded never counted."""
         baseline = {"a": True, "b": True}
         arm = {"a": None, "b": False}
         out = change_rate(baseline, arm)
@@ -401,17 +455,20 @@ class ChangeRateTests(unittest.TestCase):
         self.assertEqual(out["rate"], 1.0)
 
     def test_no_evaluable_gives_none_rate(self):
+        """Test no evaluable gives none rate."""
         out = change_rate({"a": None}, {"a": True})
         self.assertEqual(out["n_evaluable"], 0)
         self.assertEqual(out["n_changed"], 0)
         self.assertIsNone(out["rate"])
 
     def test_unknown_fixture_ids_ignored(self):
+        """Test unknown fixture ids ignored."""
         out = change_rate({"a": True}, {"b": False})
         self.assertEqual(out["n_evaluable"], 0)
         self.assertIsNone(out["rate"])
 
     def test_rejects_malformed(self):
+        """Test rejects malformed."""
         with self.assertRaises(ValueError):
             change_rate("nope", {})  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
@@ -425,22 +482,29 @@ class ChangeRateTests(unittest.TestCase):
 
 
 class OrderSensitivityTests(unittest.TestCase):
+    """Order sensitivity tests."""
+
     def test_two_orders(self):
+        """Test two orders."""
         self.assertAlmostEqual(order_sensitivity((1.0, 0.0)), 0.5)
         self.assertAlmostEqual(order_sensitivity((0.25, 0.75)), 0.25)
 
     def test_identical_rates_zero(self):
+        """Test identical rates zero."""
         self.assertEqual(order_sensitivity((0.5, 0.5)), 0.0)
 
     def test_single_rate_zero(self):
+        """Test single rate zero."""
         self.assertEqual(order_sensitivity((0.7,)), 0.0)
 
     def test_none_skipped(self):
+        """Test none skipped."""
         self.assertEqual(order_sensitivity((None, 0.4)), 0.0)
         self.assertIsNone(order_sensitivity((None, None)))
         self.assertIsNone(order_sensitivity(()))
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         with self.assertRaises(ValueError):
             order_sensitivity([0.5, 0.5])  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
@@ -453,6 +517,7 @@ class OrderSensitivityTests(unittest.TestCase):
             order_sensitivity((True, 0.0))
 
     def test_arms_constant(self):
+        """Test arms constant."""
         self.assertEqual(ARMS, ("baseline", "order_a", "order_b"))
 
 
@@ -462,8 +527,11 @@ class OrderSensitivityTests(unittest.TestCase):
 
 
 class FewshotStageTests(unittest.TestCase):
+    """Fewshot stage tests."""
+
     @staticmethod
     def _run_stage(backend=None, formats=None):
+        """Run stage."""
         backend = backend or FewshotScriptedBackend()
         formats = formats or (
             _format("tmpl_a"),
@@ -481,6 +549,7 @@ class FewshotStageTests(unittest.TestCase):
         )
 
     def test_stage_shape_and_verdicts(self):
+        """Test stage shape and verdicts."""
         stage = self._run_stage()
         self.assertTrue(stage["available"])
         self.assertEqual(stage["k"], FEWSHOT_K)
@@ -500,6 +569,7 @@ class FewshotStageTests(unittest.TestCase):
         self.assertEqual(cell_c["f_e0"], {"baseline": False, "order_a": False, "order_b": False})
 
     def test_gain_analysis_values(self):
+        """Test gain analysis values."""
         stage = self._run_stage()
         analysis = fewshot_gain("tmpl_a", "selected", ("tmpl_a", "tmpl_b", "tmpl_c"), stage)
         self.assertTrue(analysis["available"])
@@ -531,6 +601,7 @@ class FewshotStageTests(unittest.TestCase):
         self.assertEqual({f["arm"] for f in analysis["flips"]}, {"baseline", "order_a", "order_b"})
 
     def test_flips_against_primary(self):
+        """Test flips against primary."""
         stage = self._run_stage(
             formats=(_format("tmpl_a"), _format("tmpl_c", user_prefix="[user NOP]\n"))
         )
@@ -546,6 +617,7 @@ class FewshotStageTests(unittest.TestCase):
             self.assertIsNone(flip["winner_to"])
 
     def test_primary_decision_mapping(self):
+        """Test primary decision mapping."""
         stage = self._run_stage(
             formats=(_format("tmpl_a"), _format("tmpl_c", user_prefix="[user NOP]\n"))
         )
@@ -556,6 +628,7 @@ class FewshotStageTests(unittest.TestCase):
         self.assertEqual(len(held_out["flips"]), 2)
 
     def test_broken_backend_degrades_cells(self):
+        """Test broken backend degrades cells."""
         stage = self._run_stage(backend=BrokenBackend())
         self.assertTrue(stage["available"])
         self.assertTrue(all(cell is None for cell in stage["per_candidate"].values()))
@@ -568,6 +641,7 @@ class FewshotStageTests(unittest.TestCase):
         self.assertEqual(analysis["flips"], [])
 
     def test_insufficient_demo_pool_fails_closed(self):
+        """Test insufficient demo pool fails closed."""
         stage = fewshot_stage(
             FewshotScriptedBackend(),
             (_format("tmpl_a"),),
@@ -584,6 +658,7 @@ class FewshotStageTests(unittest.TestCase):
         self.assertEqual(analysis["detail"], DETAIL_INSUFFICIENT_DEMO_POOL)
 
     def test_stage_rejects_bad_input(self):
+        """Test stage rejects bad input."""
         backend = FewshotScriptedBackend()
         formats = (_format("tmpl_a"),)
         good_kwargs = {
@@ -635,6 +710,7 @@ class FewshotStageTests(unittest.TestCase):
             )
 
     def test_boundary_map_respected(self):
+        """Test boundary map respected."""
         stage = fewshot_stage(
             FewshotScriptedBackend(),
             (_format("tmpl_a"),),
@@ -652,8 +728,11 @@ class FewshotStageTests(unittest.TestCase):
 
 
 class FewshotGainMalformedTests(unittest.TestCase):
+    """Fewshot gain malformed tests."""
+
     @staticmethod
     def _stage(**overrides):
+        """Stage."""
         per_candidate = {
             "c0": {
                 "n_eval": 1,
@@ -673,6 +752,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
 
     @staticmethod
     def _call(stage, **kwargs):
+        """Call."""
         params = {
             "primary_winner": "c0",
             "primary_decision": "selected",
@@ -683,6 +763,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
         return fewshot_gain(**params)  # type: ignore[arg-type]
 
     def test_malformed_candidates(self):
+        """Test malformed candidates."""
         stage = self._stage()
         for bad in ((), [], "c0", ("c0", "c0"), ("",), (None,), ("c0", 42)):
             out = self._call(stage, candidates=bad)
@@ -690,6 +771,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
             self.assertEqual(out["detail"], "invalid_candidates")
 
     def test_unknown_winner(self):
+        """Test unknown winner."""
         out = self._call(self._stage(), primary_winner="ghost")
         self.assertFalse(out["available"])
         self.assertEqual(out["detail"], "primary_winner_unknown")
@@ -697,12 +779,14 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertFalse(out["available"])
 
     def test_bad_primary_decision(self):
+        """Test bad primary decision."""
         for bad in ("", None, 42):
             out = self._call(self._stage(), primary_decision=bad)
             self.assertFalse(out["available"])
             self.assertEqual(out["detail"], "primary_decision_invalid")
 
     def test_bad_stage(self):
+        """Test bad stage."""
         self.assertEqual(self._call("nope")["detail"], "stage_invalid")
         self.assertEqual(self._call(None)["detail"], "stage_invalid")
         unavailable = {"available": False, "detail": "custom_detail"}
@@ -713,6 +797,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertEqual(out["detail"], "fewshot_unavailable")
 
     def test_bad_stage_shape(self):
+        """Test bad stage shape."""
         for overrides in (
             {"n_eval": 0},
             {"n_eval": "1"},
@@ -727,6 +812,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
             self.assertEqual(out["detail"], "stage_invalid")
 
     def test_bad_entry_shapes(self):
+        """Test bad entry shapes."""
         for entry in (
             42,
             {"n_eval": 2, "verdicts": {}},
@@ -741,6 +827,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
             self.assertEqual(out["detail"], "stage_invalid")
 
     def test_none_cell_excluded(self):
+        """Test none cell excluded."""
         stage = self._stage(per_candidate={"c0": None})
         out = self._call(stage)
         self.assertTrue(out["available"])
@@ -748,6 +835,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertEqual(out["per_candidate"], {})
 
     def test_all_none_verdicts_excluded(self):
+        """Test all none verdicts excluded."""
         entry = {
             "n_eval": 1,
             "verdicts": {"f0": {"baseline": None, "order_a": None, "order_b": None}},
@@ -757,12 +845,14 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertEqual(out["excluded_candidates"], ["c0"])
 
     def test_empty_verdicts_excluded(self):
+        """Test empty verdicts excluded."""
         entry = {"n_eval": 1, "verdicts": {}}
         out = self._call(self._stage(per_candidate={"c0": entry}))
         self.assertTrue(out["available"])
         self.assertEqual(out["excluded_candidates"], ["c0"])
 
     def test_partial_none_verdicts_included(self):
+        """Test partial none verdicts included."""
         # One fixture fully evaluable, one partially: gain from the
         # evaluable fixtures only, never a phantom.
         entry = {
@@ -783,6 +873,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertAlmostEqual(cand["order_sensitivity"], 0.25)
 
     def test_fully_none_arms_excluded(self):
+        """Test fully none arms excluded."""
         entry = {
             "n_eval": 1,
             "verdicts": {"f0": {"baseline": True, "order_a": None, "order_b": None}},
@@ -794,6 +885,7 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertEqual(out["per_candidate"], {})
 
     def test_included_candidate_always_has_both_rates(self):
+        """Test included candidate always has both rates."""
         # Invariant the analysis relies on: n_full >= 1 guarantees each
         # order at least one evaluable fixture, so per-order rates and
         # gain are never None for an included candidate.
@@ -827,6 +919,7 @@ class FewshotOracleTests(unittest.TestCase):
 
     @staticmethod
     def _oracle_rate(baseline, arm):
+        """Oracle rate."""
         pairs = [
             (baseline[f], arm[f])
             for f in baseline
@@ -838,6 +931,7 @@ class FewshotOracleTests(unittest.TestCase):
 
     @classmethod
     def _oracle_candidate(cls, verdicts):
+        """Oracle candidate."""
         baseline = {f: v["baseline"] for f, v in verdicts.items()}
         rates = {}
         for arm in ("order_a", "order_b"):
@@ -854,6 +948,7 @@ class FewshotOracleTests(unittest.TestCase):
 
     @staticmethod
     def _oracle_arm(cands):
+        """Oracle arm."""
         # cands: {name: {fid: bool|None} | None} for one arm
         passing = []
         evaluable = 0
@@ -875,7 +970,9 @@ class FewshotOracleTests(unittest.TestCase):
             return "ambiguous", None
         return "no_candidate", None
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_200_case_differential(self):
+        """Test 200 case differential."""
         rng = random.Random(20261019)  # noqa: S311 -- deterministic test seed
         decisions = [
             "selected",
@@ -982,6 +1079,7 @@ class FewshotMutationGateTests(unittest.TestCase):
     """Each gate reverts one safety property; the scenario must catch it."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -1001,6 +1099,7 @@ class FewshotMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _gain_mean_scenario(mod):
+        """Gain mean scenario."""
         stage = {
             "available": True,
             "k": 2,
@@ -1023,6 +1122,7 @@ class FewshotMutationGateTests(unittest.TestCase):
         assert got["per_candidate"]["c"]["gain"] == 0.5, got
 
     def test_mutant_gain_max_caught(self):
+        """Test mutant gain max caught."""
         self._run_gate(
             "experiments",
             "gain_max",
@@ -1033,10 +1133,12 @@ class FewshotMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _sensitivity_pstdev_scenario(mod):
+        """Sensitivity pstdev scenario."""
         assert mod.order_sensitivity((1.0, 0.0)) == 0.5
         assert mod.order_sensitivity((0.25, 0.75)) == 0.25
 
     def test_mutant_sensitivity_sample_stdev_caught(self):
+        """Test mutant sensitivity sample stdev caught."""
         self._run_gate(
             "fewshot",
             "sensitivity_sample_stdev",
@@ -1048,11 +1150,13 @@ class FewshotMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _change_rate_none_excluded_scenario(mod):
+        """Change rate none excluded scenario."""
         out = mod.change_rate({"f": True}, {"f": None})
         assert out["n_evaluable"] == 0, out
         assert out["rate"] is None, out
 
     def test_mutant_none_verdicts_counted_caught(self):
+        """Test mutant none verdicts counted caught."""
         self._run_gate(
             "fewshot",
             "none_verdicts_counted",
@@ -1064,6 +1168,7 @@ class FewshotMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _diff_payload(winner):
+        """Diff payload."""
         return {
             "available": True,
             "k": 2,
@@ -1092,6 +1197,7 @@ class FewshotMutationGateTests(unittest.TestCase):
         }
 
     def _arm_drift_scenario(self, mod):
+        """Arm drift scenario."""
         old = self._diff_payload("c")
         new = self._diff_payload(None)
         diff = mod.diff_fewshot(old, new)
@@ -1103,6 +1209,7 @@ class FewshotMutationGateTests(unittest.TestCase):
         assert not diff["sensitivity_drift"], diff
 
     def test_mutant_diff_arm_drift_ignored_caught(self):
+        """Test mutant diff arm drift ignored caught."""
         self._run_gate(
             "diffreports",
             "arm_drift_ignored",
@@ -1118,6 +1225,7 @@ class FewshotMutationGateTests(unittest.TestCase):
 
 
 def _diff_candidate(gain=1.0, sensitivity=0.0, n_evaluable=2):
+    """Diff candidate."""
     return {
         "gain": gain,
         "order_sensitivity": sensitivity,
@@ -1130,6 +1238,7 @@ def _diff_candidate(gain=1.0, sensitivity=0.0, n_evaluable=2):
 
 
 def _diff_payload(gain=1.0, sensitivity=0.0, winner="c", excluded=()):
+    """Diff payload."""
     return {
         "available": True,
         "k": 2,
@@ -1149,12 +1258,16 @@ def _diff_payload(gain=1.0, sensitivity=0.0, winner="c", excluded=()):
 
 
 class DiffFewshotTests(unittest.TestCase):
+    """Diff fewshot tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diffreports.diff_fewshot(_diff_payload(), _diff_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_availability_matrix(self):
+        """Test availability matrix."""
         good = _diff_payload()
         cases = [
             (good, good, "both"),
@@ -1169,6 +1282,7 @@ class DiffFewshotTests(unittest.TestCase):
                 self.assertEqual(diffreports.diff_fewshot(old, new)["available"], expected)
 
     def test_single_cause_pins(self):
+        """Test single cause pins."""
         # Gain drift only.
         diff = diffreports.diff_fewshot(_diff_payload(gain=1.0), _diff_payload(gain=0.0))
         self.assertTrue(diff["changed"])
@@ -1215,6 +1329,7 @@ class DiffFewshotTests(unittest.TestCase):
         self.assertEqual(diff["excluded_removed"], ["c"])
 
     def test_none_gain_drift_detected(self):
+        """Test none gain drift detected."""
         old = _diff_payload()
         new = _diff_payload()
         new["per_candidate"]["c"]["gain"] = None
@@ -1223,6 +1338,7 @@ class DiffFewshotTests(unittest.TestCase):
         self.assertEqual(diff["gain_drift"][0]["new"], None)
 
     def test_valid_fewshot_rejects_hostile(self):
+        """Test valid fewshot rejects hostile."""
         good = _diff_payload()
         self.assertTrue(diffreports._valid_fewshot(good))
         hostile = [
@@ -1254,8 +1370,11 @@ class DiffFewshotTests(unittest.TestCase):
                 self.assertFalse(diffreports._valid_fewshot(payload))
 
     def test_diff_feeds_identical(self):
+        """Test diff feeds identical."""
+
         # A fewshot-only change flips identical; asymmetric probe flips it too.
         def report(**kwargs):
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -1283,14 +1402,18 @@ class DiffFewshotTests(unittest.TestCase):
 
 
 class FewshotRenderSummaryTests(unittest.TestCase):
+    """Fewshot render summary tests."""
+
     @staticmethod
     def _diff():
+        """Diff."""
         old = _diff_payload()
         new = _diff_payload(gain=0.0, sensitivity=0.5, winner=None, excluded=["c"])
         new["per_candidate"]["c2"] = _diff_candidate()
         return diffreports.diff_fewshot(old, new)
 
     def test_render_summary_lines(self):
+        """Test render summary lines."""
         lines = diffreports._render_fewshot_summary(self._diff())
         text = "\n".join(lines)
         self.assertIn("Few-shot gain drift (1):", text)
@@ -1301,6 +1424,7 @@ class FewshotRenderSummaryTests(unittest.TestCase):
         self.assertIn("Few-shot newly excluded: c", text)
 
     def test_render_summary_sanitizes_hostile_ids(self):
+        """Test render summary sanitizes hostile ids."""
         old = _diff_payload()
         new = _diff_payload(gain=0.0)
         evil = "\x1b[31mRED\x1b[0m"
@@ -1313,6 +1437,7 @@ class FewshotRenderSummaryTests(unittest.TestCase):
         self.assertNotIn("\x1b", text)
 
     def test_render_summary_availability(self):
+        """Test render summary availability."""
         self.assertEqual(diffreports._render_fewshot_summary(None), [])
         self.assertEqual(diffreports._render_fewshot_summary({"available": "neither"}), [])
         lines = diffreports._render_fewshot_summary({"available": "old"})
@@ -1327,7 +1452,10 @@ class FewshotRenderSummaryTests(unittest.TestCase):
 
 
 class FewshotCliProbeTests(unittest.TestCase):
+    """Fewshot cli probe tests."""
+
     def test_flag_registered(self):
+        """Test flag registered."""
         from model_protocol_lab import cli
 
         parser = cli.build_parser()
@@ -1349,6 +1477,7 @@ class FewshotCliProbeTests(unittest.TestCase):
         self.assertFalse(args.few_shot)
 
     def test_probe_records_available_payload(self):
+        """Test probe records available payload."""
         from model_protocol_lab import cli
 
         formats = (_format("tmpl_a"),)
@@ -1372,6 +1501,7 @@ class FewshotCliProbeTests(unittest.TestCase):
         self.assertEqual(payload["per_arm"]["baseline"]["decision"], "selected")
 
     def test_probe_never_raises_on_broken_backend(self):
+        """Test probe never raises on broken backend."""
         from model_protocol_lab import cli
 
         result = {}
@@ -1395,8 +1525,11 @@ class FewshotCliProbeTests(unittest.TestCase):
 
 
 class FewshotReportingTests(unittest.TestCase):
+    """Fewshot reporting tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {
             "fewshot": {
                 "available": True,
@@ -1435,6 +1568,7 @@ class FewshotReportingTests(unittest.TestCase):
         }
 
     def test_section_renders_with_anchor(self):
+        """Test section renders with anchor."""
         from model_protocol_lab.reporting import _fewshot_section
 
         html = _fewshot_section(self._result())
@@ -1445,6 +1579,7 @@ class FewshotReportingTests(unittest.TestCase):
         self.assertIn("order_a", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         from model_protocol_lab.reporting import _fewshot_section
 
         self.assertEqual(_fewshot_section({}), "")
@@ -1456,6 +1591,7 @@ class FewshotReportingTests(unittest.TestCase):
         )
 
     def test_section_escapes_hostile_names(self):
+        """Test section escapes hostile names."""
         from model_protocol_lab.reporting import _fewshot_section
 
         result = self._result()
@@ -1470,6 +1606,7 @@ class FewshotReportingTests(unittest.TestCase):
         self.assertNotIn("<b>demo</b>", html)
 
     def test_section_handles_missing_optionals(self):
+        """Test section handles missing optionals."""
         from model_protocol_lab.reporting import _fewshot_section
 
         result = self._result()
@@ -1480,6 +1617,7 @@ class FewshotReportingTests(unittest.TestCase):
         self.assertIn('id="few-shot"', html)
 
     def test_toc_links_to_section(self):
+        """Test toc links to section."""
         from model_protocol_lab import reporting
 
         minimal = {
@@ -1497,7 +1635,10 @@ class FewshotReportingTests(unittest.TestCase):
 
 
 class FewshotRedTeamTests(unittest.TestCase):
+    """Fewshot red team tests."""
+
     def test_gain_never_raises_on_hostile_stage(self):
+        """Test gain never raises on hostile stage."""
         hostile_stages = [
             {"available": True},
             {"available": True, "n_eval": 1, "demo_ids": ["d"], "per_candidate": {"c": None}},
@@ -1534,13 +1675,19 @@ class FewshotRedTeamTests(unittest.TestCase):
                 self.assertIn("available", out)
 
     def test_stage_never_raises_on_hostile_backend(self):
+        """Test stage never raises on hostile backend."""
+
         class HostileBackend(FewshotScriptedBackend):
+            """Hostile backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("encode boom")
 
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 raise RuntimeError("generate boom")
 
         stage = fewshot_stage(
@@ -1556,17 +1703,20 @@ class FewshotRedTeamTests(unittest.TestCase):
         self.assertIsNone(stage["per_candidate"]["tmpl_a"])
 
     def test_pure_functions_reject_bad_id_types(self):
+        """Test pure functions reject bad id types."""
         with self.assertRaises(ValueError):
             original_fixture_id("fewshot/perm0")  # no fixture part
         with self.assertRaises(ValueError):
             change_rate({b"f": True}, {"f": False})  # bytes key
 
     def test_control_char_ids_are_plain_data(self):
+        """Test control char ids are plain data."""
         out = change_rate({"\x00\x1b[2Jf": True}, {"\x00\x1b[2Jf": False})
         self.assertEqual(out["rate"], 1.0)
         self.assertEqual(original_fixture_id("fewshot/perm0/\x00f"), "\x00f")
 
     def test_diff_never_raises_on_hostile(self):
+        """Test diff never raises on hostile."""
         hostile = [
             ({"available": True}, {"available": True}),
             ({"available": True, "per_candidate": {"c": None}}, None),
@@ -1580,6 +1730,7 @@ class FewshotRedTeamTests(unittest.TestCase):
                 self.assertIs(type(lines), list)
 
     def test_stderr_escapes_stripped(self):
+        """Test stderr escapes stripped."""
         old = _diff_payload()
         new = _diff_payload(gain=0.0)
         evil = "\x1b]0;pwned\x07"

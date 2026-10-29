@@ -167,13 +167,18 @@ _HY4_EXPECTED_2 = (
 
 
 class Hy4RenderTests(unittest.TestCase):
+    """Hy4 render tests."""
+
     def test_hy4_renders_byte_exact_1_turn(self) -> None:
+        """Test hy4 renders byte exact 1 turn."""
         self.assertEqual(CATALOG["hy4"].render(_MESSAGES_1), _HY4_EXPECTED_1)
 
     def test_hy4_renders_byte_exact_2_turn(self) -> None:
+        """Test hy4 renders byte exact 2 turn."""
         self.assertEqual(CATALOG["hy4"].render(_MESSAGES_2), _HY4_EXPECTED_2)
 
     def test_hy4_fields_match_catalog_entry(self) -> None:
+        """Test hy4 fields match catalog entry."""
         fmt = CATALOG["hy4"]
         self.assertEqual(fmt.bos, "")
         self.assertEqual(fmt.user_prefix, _HY4_USER_PREFIX)
@@ -185,6 +190,7 @@ class Hy4RenderTests(unittest.TestCase):
         self.assertFalse(fmt.repeat_bos)
 
     def test_hy4_markers_character_exact(self) -> None:
+        """Test hy4 markers character exact."""
         # The fullwidth bar is U+FF5C, not an ASCII pipe -- a plain '|'
         # would silently collide with ASCII-pipe families in dedup.
         self.assertEqual(ord("｜"), 0xFF5C)
@@ -205,6 +211,7 @@ class Hy4RenderTests(unittest.TestCase):
         )
 
     def test_hy4_system_block_documented_not_modeled(self) -> None:
+        """Test hy4 system block documented not modeled."""
         # With no leading system message the real template ALWAYS emits a
         # reasoning_mode system block (jinja lines 196-204); the lab's
         # Format only renders user/assistant turns, so the block is a
@@ -219,6 +226,7 @@ class Hy4RenderTests(unittest.TestCase):
         self.assertNotIn("<\uff5chy_start:opensource\uff5c>system", rendered)
 
     def test_hy4_eos_caveat_documented(self) -> None:
+        """Test hy4 eos caveat documented."""
         # The official tokenizer_config.json eos_token field is
         # <｜hy_end:opensource｜>; the catalog documents this and asserts no
         # stray EOS string beyond the turn end (Format has no EOS field).
@@ -286,13 +294,18 @@ _MM3_EXPECTED_2 = (
 
 
 class MiniMax3RenderTests(unittest.TestCase):
+    """Mini max3 render tests."""
+
     def test_minimax3_renders_byte_exact_1_turn(self) -> None:
+        """Test minimax3 renders byte exact 1 turn."""
         self.assertEqual(CATALOG["minimax3"].render(_MESSAGES_1), _MM3_EXPECTED_1)
 
     def test_minimax3_renders_byte_exact_2_turn(self) -> None:
+        """Test minimax3 renders byte exact 2 turn."""
         self.assertEqual(CATALOG["minimax3"].render(_MESSAGES_2), _MM3_EXPECTED_2)
 
     def test_minimax3_fields_match_catalog_entry(self) -> None:
+        """Test minimax3 fields match catalog entry."""
         fmt = CATALOG["minimax3"]
         self.assertEqual(fmt.bos, "")
         self.assertEqual(fmt.user_prefix, _MM3_USER_PREFIX)
@@ -304,6 +317,7 @@ class MiniMax3RenderTests(unittest.TestCase):
         self.assertFalse(fmt.repeat_bos)
 
     def test_minimax3_markers_character_exact(self) -> None:
+        """Test minimax3 markers character exact."""
         # The bracket-tilde dialect: frames open with ]~b], turns end with
         # [e~[ and a newline; the no-reasoning assistant history frame
         # carries the </mm:think> prefix (jinja line 167), while the default
@@ -315,6 +329,7 @@ class MiniMax3RenderTests(unittest.TestCase):
         self.assertNotIn("]~!b[", _MM3_USER_PREFIX + _MM3_ASSISTANT_PREFIX + _MM3_TURN_END)
 
     def test_minimax3_superprompts_documented_not_modeled(self) -> None:
+        """Test minimax3 superprompts documented not modeled."""
         # The real template ALWAYS emits a system super-prompt (the bod
         # ]~!b[ + identity + <thinking_instructions>, jinja lines 113-117)
         # and a developer super-prompt ("]~b]developer\\nYou are a helpful
@@ -331,6 +346,7 @@ class MiniMax3RenderTests(unittest.TestCase):
         self.assertNotIn("]~b]developer", rendered)
 
     def test_minimax3_eos_caveat_documented(self) -> None:
+        """Test minimax3 eos caveat documented."""
         # The official tokenizer_config.json eos_token field is [e~[; the
         # catalog documents this and asserts the frames carry no stray EOS
         # (Format has no EOS field).
@@ -379,13 +395,18 @@ _NBG_EXPECTED_2 = (
 
 
 class Nanbeige42RenderTests(unittest.TestCase):
+    """Nanbeige42 render tests."""
+
     def test_nanbeige42_renders_byte_exact_1_turn(self) -> None:
+        """Test nanbeige42 renders byte exact 1 turn."""
         self.assertEqual(CATALOG["nanbeige42"].render(_MESSAGES_1), _NBG_EXPECTED_1)
 
     def test_nanbeige42_renders_byte_exact_2_turn(self) -> None:
+        """Test nanbeige42 renders byte exact 2 turn."""
         self.assertEqual(CATALOG["nanbeige42"].render(_MESSAGES_2), _NBG_EXPECTED_2)
 
     def test_nanbeige42_fields_match_catalog_entry(self) -> None:
+        """Test nanbeige42 fields match catalog entry."""
         fmt = CATALOG["nanbeige42"]
         self.assertEqual(fmt.bos, "")
         self.assertEqual(fmt.user_prefix, _NBG_USER_PREFIX)
@@ -397,6 +418,7 @@ class Nanbeige42RenderTests(unittest.TestCase):
         self.assertFalse(fmt.repeat_bos)
 
     def test_nanbeige42_markers_character_exact(self) -> None:
+        """Test nanbeige42 markers character exact."""
         # ChatML-like with mandatory think blocks: the history assistant
         # frame carries an EMPTY <think>\n\n</think>\n\n block (jinja line
         # 99), the generation prompt opens <think>\n (jinja line 187), and
@@ -407,6 +429,7 @@ class Nanbeige42RenderTests(unittest.TestCase):
         self.assertEqual(_NBG_OPEN_SUFFIX, "<|im_start|>assistant\n<think>\n")
 
     def test_nanbeige42_system_prompt_documented_not_modeled(self) -> None:
+        """Test nanbeige42 system prompt documented not modeled."""
         # The real template ALWAYS emits a default system prompt (the
         # Chinese Nanbeige identity line, jinja lines 59-62) when the
         # conversation has no leading system message; the lab's Format only
@@ -421,6 +444,7 @@ class Nanbeige42RenderTests(unittest.TestCase):
         self.assertNotIn("<|im_start|>system", rendered)
 
     def test_nanbeige42_eos_caveat_documented(self) -> None:
+        """Test nanbeige42 eos caveat documented."""
         # The official tokenizer_config.json eos_token field is <|im_end|>;
         # the catalog documents this and asserts the frames carry no stray
         # EOS beyond the turn end (Format has no EOS field).
@@ -433,8 +457,11 @@ class Nanbeige42RenderTests(unittest.TestCase):
 
 
 class Cycle15MutateTests(unittest.TestCase):
+    """Cycle15 mutate tests."""
+
     @staticmethod
     def _variants(family: str) -> dict[str, Format]:
+        """Variants."""
         return {variant.name: variant for variant in candidates(family, mutate=True)}
 
     def _check_branch(
@@ -445,6 +472,7 @@ class Cycle15MutateTests(unittest.TestCase):
         expected_2: str,
         base_open_suffix: str,
     ) -> None:
+        """Check branch."""
         variants = self._variants(family)
         self.assertIn(branch_name, variants)
         branch = variants[branch_name]
@@ -462,6 +490,7 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_hy4_no_think_mutation_pin(self) -> None:
+        """Test hy4 no think mutation pin."""
         # reasoning_effort='no_think' (jinja line 304): the generation
         # prompt closes the think block immediately.
         self._check_branch(
@@ -469,6 +498,7 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_minimax3_thinking_disabled_mutation_pin(self) -> None:
+        """Test minimax3 thinking disabled mutation pin."""
         # thinking_mode='disabled' (jinja line 238): the generation prompt
         # closes the think block.
         self._check_branch(
@@ -480,6 +510,7 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_minimax3_thinking_enabled_mutation_pin(self) -> None:
+        """Test minimax3 thinking enabled mutation pin."""
         # thinking_mode='enabled' (jinja line 242): the generation prompt
         # opens the think block.
         self._check_branch(
@@ -491,6 +522,7 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_nanbeige42_thinking_off_mutation_pin(self) -> None:
+        """Test nanbeige42 thinking off mutation pin."""
         # enable_thinking=false (jinja line 185): the generation prompt
         # prefills an empty <think> block (kolibri/thinking-off convention).
         self._check_branch(
@@ -502,12 +534,15 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_cycle15_branch_dedup_no_collision(self) -> None:
+        """Test cycle15 branch dedup no collision."""
+
         # Each branch open_suffix must be genuinely new -- i.e. its
         # local_repairs dedup key must differ from every key already
         # present, or candidates() would silently drop it. This mirrors the
         # "cannot collide with local_repairs' dedup keys" notes in
         # catalog.candidates().
         def _key(fmt: Format) -> tuple[object, ...]:
+            """Key."""
             return (
                 fmt.bos,
                 fmt.user_prefix,
@@ -536,7 +571,10 @@ class Cycle15MutateTests(unittest.TestCase):
 
 
 class Cycle15DiffTests(unittest.TestCase):
+    """Cycle15 diff tests."""
+
     def _assert_differs(self, family: str) -> None:
+        """Assert differs."""
         mine = CATALOG[family].render(_MESSAGES_2)
         others = [name for name in CATALOG if name != family]
         self.assertEqual(len(others), len(CATALOG) - 1)
@@ -544,17 +582,23 @@ class Cycle15DiffTests(unittest.TestCase):
         self.assertEqual(collisions, [])
 
     def test_hy4_differs_from_every_other_family(self) -> None:
+        """Test hy4 differs from every other family."""
         self._assert_differs("hy4")
 
     def test_minimax3_differs_from_every_other_family(self) -> None:
+        """Test minimax3 differs from every other family."""
         self._assert_differs("minimax3")
 
     def test_nanbeige42_differs_from_every_other_family(self) -> None:
+        """Test nanbeige42 differs from every other family."""
         self._assert_differs("nanbeige42")
 
 
 class ReadmeCycle15NamesTests(unittest.TestCase):
+    """Readme cycle15 names tests."""
+
     def test_readme_names_new_families(self) -> None:
+        """Test readme names new families."""
         # The README's family list must name the new families, and its
         # "N-family catalog" claims must track len(CATALOG) (the absolute
         # count pins live in tests/test_cycle10_families.py and

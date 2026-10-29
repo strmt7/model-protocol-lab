@@ -136,7 +136,7 @@ def headings(text: str) -> list[dict[str, Any]]:
     Inputs: Markdown.
     Outputs: heading spans with descendants, ignoring fenced examples.
     """
-    result = []
+    result: list[dict[str, Any]] = []
     fence = None
     lines = text.splitlines(keepends=True)
     for number, line in enumerate(lines, 1):
@@ -191,7 +191,7 @@ def read_window(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     text, digest = read_source(root, args.path)
     start, end = source_window(text, args.section, args.start, args.end)
     record = {"path": args.path, "sha256": digest, "start": start, "end": end}
-    state = {"schema": 1, "reads": []}
+    state: dict[str, Any] = {"schema": 1, "reads": []}
     cache_name = state_name("sessions", args.session) if args.session else None
     if cache_name:
         state = load_state(root, cache_name)

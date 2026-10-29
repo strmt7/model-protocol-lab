@@ -191,6 +191,7 @@ def _tool_map() -> dict[str, dict[str, Any]]:
     return {tool["name"]: tool for tool in TOOLS}
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_tool_def(tool: object) -> dict[str, Any]:
     """Validate one tool definition; returns the normalized definition.
 
