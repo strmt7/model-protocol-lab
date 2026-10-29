@@ -10453,6 +10453,391 @@ def instruction_distance_analysis(
     }
 
 
+class _HistoryFrameCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    history-frame stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _history_frame_cell(
+    backend: Any,
+    carrier: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One history-frame generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm hybrid
+    text's ids, measured by the stage at construction for the
+    record's arm token counts and id digests (amendment A4:
+    the ids-identical gate is derived from those digests, so
+    a backend whose encode disagreed with its evaluation
+    surfaces downstream, never as a silently wrong gate). The
+    cancel event is checked before and after ``evaluate``
+    (the multiturn rule: a cancel observed during a generation
+    is never mislabelled an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _HistoryFrameCancelled
+    report = evaluate(
+        backend,
+        carrier,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _HistoryFrameCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+    return "arm_evaluation_failed", None
+
+
+def history_frame_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    fixtures: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """History-frame stage (cycle 219): the run's search
+    fixtures preceded by the frozen synthetic history, with
+    only the prepended segment reframed.
+
+    Every search fixture is prepended with synthhistory's
+    ``history_6`` turns (construction pins, amendment A5: the
+    built fixtures' messages re-wrapped under each fixture's
+    original id, original expected answer, and the module's
+    frozen group). Per candidate, four arms render the
+    prepended messages: ``own`` (the history segment in the
+    candidate's own framing), ``foreign_chatml`` and
+    ``foreign_llama3`` (the segment in the frozen donor
+    framings), and the descriptive ``verbatim_chatml`` (the
+    chatml segment under chatml's own leading bos). The tail,
+    the prompt-initial bos, and the open suffix are always the
+    candidate's own. Evaluation is one carrier ``evaluate``
+    call per (candidate, arm, fixture) holding the hybrid
+    text as a single user message, with the candidate's
+    resolved boundary ids and the fixture's original id in
+    every arm (request-seed identity across arms).
+
+    All screens run before any generation: S1 (amendment
+    A9's per-arm slice-swap identity against the candidate's
+    native render, with the own hybrid byte-identical to it),
+    S2 (special-token-literal audit over the frozen history
+    texts and the donor and candidate framing literals; user
+    fixture contents are never screened -- they are
+    byte-identical across arms and cannot manufacture a frame
+    contrast), and S3 (the record budget). A screen failure
+    fails the whole stage closed. Design:
+    docs/HISTORYFRAME_DESIGN.md.
+    """
+    from . import historyframe as _hf
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+    from .synthhistory import SYNTHETIC_TURNS
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    if type(fixtures) is not tuple or not fixtures:
+        raise ValueError("fixtures must be a nonempty tuple")
+    if any(type(case) is not Fixture for case in fixtures):
+        raise ValueError("fixtures must contain Fixture values")
+    fixture_ids = [case.id for case in fixtures]
+    if len(set(fixture_ids)) != len(fixture_ids):
+        raise ValueError("fixtures must have unique ids")
+    protocol: dict[str, Any] = dict(
+        _hf.protocol_object(seed, _backend_fingerprint(backend), fixture_ids)
+    )
+    protocol["fingerprint"] = _hf.protocol_fingerprint(
+        seed, _backend_fingerprint(backend), fixture_ids
+    )
+    audit: dict[str, Any] = {
+        "n_audit_excluded": 0,
+        "by_reason": {},
+        # nosec B105 -- integer audit counter field, not a credential
+        "special_token_findings": 0,
+    }
+    if len(formats) * len(fixtures) > _hf.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "historyframe_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    cases = _hf.stage_fixtures(fixtures)
+    donors = {arm: _hf.donor_format(arm) for arm in _hf.CONTRASTS}
+    # S2: the frozen history texts, audited against the
+    # special-token inventory derived from the framing fields
+    # of the donors and of every candidate family (the audit
+    # derives its inventory from the formats it is given, so
+    # the donor formats ride along -- a history text carrying
+    # a donor's or a candidate's special token would forge
+    # turn structure in the reframed segment).
+    audit_texts: list[str] = [turn.content for turn in SYNTHETIC_TURNS]
+    findings = audit_special_token_literals(tuple(audit_texts), (*formats, *donors.values()))
+    if findings:
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {"special_token_literal": len(findings)},
+            "special_token_findings": len(findings),
+        }
+        return {
+            "available": False,
+            "detail": "historyframe_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    stratum = {arm: _hf.encoding_stratum(backend, donors[arm]) for arm in _hf.CONTRASTS}
+    # S1 (strengthened, amendment A9): every arm's construction
+    # for every fixture is built and identity-checked before
+    # any generation is spent, for every candidate: the own
+    # hybrid must equal the candidate's native render byte for
+    # byte, each foreign hybrid must equal that render with
+    # only the history-segment slice exchanged, and the
+    # verbatim text must satisfy its own slice identity under
+    # its defining leading-bos substitution.
+    built: dict[str, list[dict[str, Any]]] = {}
+    for fmt in formats:
+        per_case: list[dict[str, Any]] = []
+        for case in cases:
+            native = fmt.render(case.messages)
+            seg_own = _hf.history_segment(fmt, case.messages)
+            texts: dict[str, str] = {"own": _hf.hybrid_text(fmt, fmt, case.messages)}
+            ok = texts["own"] == native
+            if ok:
+                for arm in _hf.CONTRASTS:
+                    texts[arm] = _hf.hybrid_text(donors[arm], fmt, case.messages)
+                    ok = ok and _hf.slice_swap_identity(
+                        native,
+                        texts[arm],
+                        seg_own,
+                        _hf.history_segment(donors[arm], case.messages),
+                        fmt.bos,
+                    )
+                texts[_hf.VERBATIM_ARM] = _hf.verbatim_text(
+                    donors[_hf.VERBATIM_TWIN], fmt, case.messages
+                )
+                ok = ok and _hf.verbatim_slice_identity(
+                    native,
+                    texts[_hf.VERBATIM_ARM],
+                    seg_own,
+                    _hf.history_segment(donors[_hf.VERBATIM_TWIN], case.messages),
+                    fmt.bos,
+                    donors[_hf.VERBATIM_TWIN].bos,
+                )
+            if not ok:
+                return {
+                    "available": False,
+                    "detail": "historyframe_screen_failed",
+                    "protocol": protocol,
+                    "audit": audit,
+                    "candidates": {},
+                }
+            per_case.append({"case": case, "texts": texts})
+        built[fmt.name] = per_case
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        carrier = _hf.carrier_format(fmt)
+        records: list[dict[str, Any]] = []
+        try:
+            for entry in built[name]:
+                if _cancelled():
+                    return {
+                        "available": False,
+                        "detail": "cancelled",
+                        "protocol": protocol,
+                        "audit": audit,
+                        "candidates": {},
+                    }
+                case = entry["case"]
+                texts = entry["texts"]
+                arm_ids = {arm: tuple(backend.encode(texts[arm])) for arm in _hf.ARM_KEYS}
+                record: dict[str, Any] = {
+                    "fixture": case.id,
+                    "expected_digest": _hf.digest_text(case.expected),
+                    "own_bos_digest": _hf.digest_text(fmt.bos),
+                    "donor_bos_digest": _hf.digest_text(donors[_hf.VERBATIM_TWIN].bos),
+                    "segment_digests": {
+                        "own": _hf.digest_text(_hf.history_segment(fmt, case.messages)),
+                        "foreign_chatml": _hf.digest_text(
+                            _hf.history_segment(donors["foreign_chatml"], case.messages)
+                        ),
+                        "foreign_llama3": _hf.digest_text(
+                            _hf.history_segment(donors["foreign_llama3"], case.messages)
+                        ),
+                        "verbatim_chatml": _hf.digest_text(
+                            _hf.history_segment(donors["foreign_chatml"], case.messages)
+                        ),
+                    },
+                    "hybrid_digests": {arm: _hf.digest_text(texts[arm]) for arm in _hf.ARM_KEYS},
+                    "arm_tokens": {arm: len(arm_ids[arm]) for arm in _hf.ARM_KEYS},
+                    "id_digests": {arm: _hf.digest_ids(arm_ids[arm]) for arm in _hf.ARM_KEYS},
+                    "cells": dict.fromkeys(_hf.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_hf.ARM_KEYS, ""),
+                }
+                records.append(record)
+                for arm in _hf.ARM_KEYS:
+                    if _cancelled():
+                        raise _HistoryFrameCancelled
+                    cell_fixture = Fixture(
+                        id=case.id,
+                        messages=(Message("user", texts[arm]),),
+                        expected=case.expected,
+                        group=_hf.GROUP,
+                    )
+                    detail, cell = _history_frame_cell(
+                        backend,
+                        carrier,
+                        cell_fixture,
+                        arm_ids[arm],
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+        except _HistoryFrameCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": audit,
+        "stratum": stratum,
+        "candidates": candidates,
+    }
+
+
+def history_frame_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+    primary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Aggregate a history-frame stage into the stored payload
+    (cycle 219).
+
+    Per-candidate readouts come from
+    historyframe.aggregate_candidate over the candidate's
+    ground records: per-arm rates and attrition, the two
+    headline contrasts with their classifications and
+    decompositions, and the descriptive verbatim readout.
+    Selection is recomputed per headline arm on the common
+    completed set (canonical-form discipline) and the winner
+    headline is taken per contrast; flips against the primary
+    run are computed with synthhistory's verdict mapping and
+    are labelled as pooling history presence with frame. The
+    family-wise block sums the exact at-n random-labeller
+    fire rates over the emitted classifications (amendment
+    A2 -- computed, never a frozen constant). Design:
+    docs/HISTORYFRAME_DESIGN.md.
+    """
+    from . import historyframe as _hf
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "historyframe_unavailable")),
+            "protocol": stage.get("protocol"),
+            "audit": stage.get("audit"),
+            "stratum": stage.get("stratum"),
+        }
+    stage_candidates = stage["candidates"]
+    candidates_out: dict[str, Any] = {}
+    records_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _hf.aggregate_candidate(entry["records"])
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+        records_by_candidate[name] = entry["records"]
+    conditions = {arm: _hf.arm_selection(records_by_candidate, arm) for arm in _hf.HEADLINE_ARMS}
+    selection = {
+        contrast: _hf.winner_headline(conditions["own"], conditions[contrast])
+        for contrast in _hf.CONTRASTS
+    }
+    rates: list[float] = []
+    for entry in candidates_out.values():
+        contrasts = entry.get("contrasts")
+        if not isinstance(contrasts, dict):
+            continue
+        for contrast in _hf.CONTRASTS:
+            block = contrasts.get(contrast)
+            if isinstance(block, dict) and block.get("random_fire_rate") is not None:
+                rates.append(float(block["random_fire_rate"]))
+    protocol = stage["protocol"]
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": stage.get("audit"),
+        "stratum": stage.get("stratum"),
+        "candidates": candidates_out,
+        "conditions": conditions,
+        "selection": selection,
+        "primary": primary,
+        "flips": _hf.primary_flips(conditions, primary),
+        "familywise": _hf.familywise_expectation(rates),
+        "n_candidates": len(candidate_names),
+        "n_fixtures": len(protocol["fixture_ids"]),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 219 — history-frame probe, 2026-10-28)
+
+- A history-frame probe (`run --history-frame`,
+  `model_protocol_lab/historyframe.py`): the frozen six-turn
+  synthetic history is prepended to every search fixture and
+  only that prepended segment is reframed — per candidate in
+  its own framing (`own`), the frozen chatml framing
+  (`foreign_chatml`), the frozen llama3 framing
+  (`foreign_llama3`), and a descriptive `verbatim_chatml`
+  arm differing from its twin only in the leading bos string
+  (recorded inapplicable, never a bos share of zero, when the
+  candidate's bos equals chatml's). The tail, the
+  prompt-initial bos, and the open suffix are always the
+  candidate's own. Per candidate per foreign framing, verdict
+  discordance over paired completed render-divergent
+  ids-divergent fixtures is classified by a total function
+  with floors n >= 10 / d >= 6 and a two-sided exact McNemar
+  gate (`discordant_asymmetric` is the only falsification
+  label); the exact random-labeller fire rate at the run's
+  own n and the computed family-wise expectation (1.76 over
+  48 decisions at n = 100) print beside the classifications,
+  with discordant pairs decomposed boundary-only / exact-only
+  / mixed, per-arm selection recomputed on the common
+  completed set, and the donors' encoding stratum compared
+  in diff reports. Records are digest-bound, including
+  per-arm token-id digests from which the validator derives
+  the ids-identical gate. The design of record is
+  `docs/HISTORYFRAME_DESIGN.md`, consolidated in this cycle
+  with the fresh review's binding amendments A1–A10
+  incorporated into the instrument text. Informational only:
+  the stage never affects selection and never fails the run.
+
 ### Added (cycle 218 — instruction-distance probe, 2026-10-28)
 
 - An instruction-distance probe (`run --instruction-distance`,

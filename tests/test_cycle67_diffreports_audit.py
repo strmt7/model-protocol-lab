@@ -293,6 +293,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "placement": {"available": "neither", "changed": False},
         "canonical_form": {"available": "neither", "changed": False},
         "instruction_distance": {"available": "neither", "changed": False},
+        "history_frame": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -390,6 +391,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "canonical_form_asymmetric": False,
             "instruction_distance_changed": False,
             "instruction_distance_asymmetric": False,
+            "history_frame_changed": False,
+            "history_frame_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -7192,6 +7195,838 @@ def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# ---------------------------------------------------------------------
+# History-frame oracle (cycle 219): an independent
+# re-implementation of diffreports._valid_history_frame /
+# diff_history_frame from docs/HISTORYFRAME_DESIGN.md section
+# 6 and the fresh review's amendments A1-A10. Frozen literals
+# are transcribed from the design text; aggregates are
+# recomputed from the records alone (the per-arm id-digest
+# gate of amendment A4 is re-derived here from the recorded
+# digests, so a forged payload disagrees with this oracle
+# exactly where it disagrees with the implementation).
+# ---------------------------------------------------------------------
+
+_O_HF_ARMS = ("own", "foreign_chatml", "foreign_llama3", "verbatim_chatml")
+_O_HF_CONTRASTS = ("foreign_chatml", "foreign_llama3")
+_O_HF_DONORS = {"foreign_chatml": "chatml", "foreign_llama3": "llama3"}
+_O_HF_MIN_N = 10
+_O_HF_MIN_D = 6
+_O_HF_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_O_HF_CELL_DETAILS = {"", "arm_context_exceeded", "arm_evaluation_failed"}
+_O_HF_TURNS = (
+    ("user", "Hello. I have a few short questions for you."),
+    ("assistant", "Hello! I am ready. Please ask your questions one at a time."),
+    ("user", "Thank you. I will keep each question short."),
+    ("assistant", "Understood. I will keep my answers short as well."),
+    ("user", "Let us begin whenever you are ready."),
+    ("assistant", "I am ready. Please go ahead with your first question."),
+)
+_O_HF_SEGMENT_RULE = (
+    "historyframe-segment-v1: seg(F, m, i) = (F.bos if i > 0 and F.repeat_bos else '')"
+    " + (F.user_prefix if m.role is user else F.assistant_prefix) + m.content"
+    " + (per-role end of F for m.role, the per-role field when it is not None else"
+    " F.turn_end); open(B) = (B.bos if B.repeat_bos else '') + (B.open_suffix if"
+    " B.open_suffix is not None else B.assistant_prefix); hybrid(A, B) = B.bos"
+    " + seg(A) over the first 6 messages + seg(B) over the rest + open(B);"
+    " verbatim(A, B) = A.bos + hybrid(A, B) with only the leading B.bos removed."
+    " Screens: S1 per-arm slice-swap identity pre-generation (each hybrid equals"
+    " the native B render with only the history-segment slice exchanged; the"
+    " verbatim arm exchanges the same slice under its defining leading-bos"
+    " substitution; hybrid(B, B) equals the native render byte for byte); S2"
+    " special-token-literal audit over the frozen history texts and the donor"
+    " and candidate framing literals; S3 budget caps. User fixture contents are"
+    " never screened: they are byte-identical across arms, so they cannot"
+    " manufacture a frame contrast."
+)
+_O_HF_OC = {
+    "random_labeller_fire_bound": 0.036,
+    "competent_fire_bound": 0.031,
+    "power_25_point_at_30": 0.52,
+    "power_25_point_at_100": 0.988,
+    "power_50_point_at_30": 0.983,
+    "power_50_point_at_100": 1.0,
+}
+_O_HF_JITTER = [
+    {"epsilon": 0.01, "fire_rate": 0.0004},
+    {"epsilon": 0.02, "fire_rate": 0.0048},
+    {"epsilon": 0.05, "fire_rate": 0.0213},
+]
+_O_HF_MAX_BYTES = 12 * 1024 * 1024
+
+
+def _o_hf_digest_ok(value: Any) -> bool:
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _o_hf_mcnemar_p(a: int, b: int) -> float | None:
+    d = a + b
+    if d == 0:
+        return None
+    k = min(a, b)
+    tail = sum(math.comb(d, i) for i in range(k + 1)) / (2**d)
+    return min(1.0, 2.0 * tail)
+
+
+def _o_hf_classify(n: int, a: int, b: int) -> str:
+    if n < _O_HF_MIN_N:
+        return "insufficient"
+    d = a + b
+    if d == 0:
+        return "no_discordance_observed"
+    if d < _O_HF_MIN_D:
+        return "below_threshold"
+    if a == b:
+        return "discordant_balanced"
+    p = _o_hf_mcnemar_p(a, b)
+    if p is not None and p < 0.05:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _o_hf_fire_rate(n: int) -> float:
+    if type(n) is not int or n < _O_HF_MIN_N:
+        return 0.0
+    total = 0.0
+    for d in range(_O_HF_MIN_D, n + 1):
+        p_d = math.comb(n, d) * (0.5**n)
+        for a in range(d + 1):
+            b = d - a
+            if a == b:
+                continue
+            p = _o_hf_mcnemar_p(a, b)
+            if p is not None and p < 0.05:
+                total += p_d * math.comb(d, a) * (0.5**d)
+    return total
+
+
+def _o_hf_familywise(rates: list[float]) -> dict[str, Any]:
+    product = 1.0
+    for rate in rates:
+        product *= 1.0 - rate
+    return {
+        "decisions": len(rates),
+        "expected_false_labels": sum(rates),
+        "p_at_least_one": 1.0 - product,
+    }
+
+
+def _o_hf_material_sha() -> str:
+    raw = json.dumps(
+        [[role, content] for role, content in _O_HF_TURNS],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _o_hf_protocol(seed: int, backend_fp: str, fixture_ids: list) -> dict[str, Any]:
+    protocol = {
+        "version": 1,
+        "arm_keys": list(_O_HF_ARMS),
+        "headline_arms": ["own", "foreign_chatml", "foreign_llama3"],
+        "contrasts": list(_O_HF_CONTRASTS),
+        "donor_families": dict(_O_HF_DONORS),
+        "verbatim_arm": "verbatim_chatml",
+        "verbatim_twin": "foreign_chatml",
+        "history_condition": "history_6",
+        "history_turns": 6,
+        "history_material_sha256": _o_hf_material_sha(),
+        "segment_rule_sha256": hashlib.sha256(_O_HF_SEGMENT_RULE.encode("utf-8")).hexdigest(),
+        "min_n": _O_HF_MIN_N,
+        "min_d": _O_HF_MIN_D,
+        "generation_budget": 9600,
+        "max_ground_records": 2400,
+        "max_records_bytes": _O_HF_MAX_BYTES,
+        "max_search_fixtures": 100,
+        "max_candidates": 24,
+        "seed": seed,
+        "backend_fingerprint": backend_fp,
+        "fixture_ids": list(fixture_ids),
+    }
+    canonical = json.dumps(protocol, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    protocol["fingerprint"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return protocol
+
+
+def _o_hf_cell(record: dict, arm: str):
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(arm)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_hf_decompose(own: dict, foreign: dict) -> str:
+    if own["answer_digest"] == foreign["answer_digest"]:
+        return "boundary_only"
+    if own["boundary_found"] and foreign["boundary_found"]:
+        return "exact_only"
+    return "mixed"
+
+
+def _o_hf_contrast(records: list, contrast: str) -> dict[str, Any]:
+    n_render_identical = 0
+    n_ids_identical = 0
+    n_same_ids_flips = 0
+    n_paired = 0
+    own_only = 0
+    foreign_only = 0
+    own_passes = 0
+    foreign_passes = 0
+    ungated_n = 0
+    ungated_own_only = 0
+    ungated_foreign_only = 0
+    decomposition = {"boundary_only": 0, "exact_only": 0, "mixed": 0}
+    deltas: list[int] = []
+    for record in records:
+        segments = record.get("segment_digests")
+        segments = segments if isinstance(segments, dict) else {}
+        render_divergent = segments.get(contrast) != segments.get("own")
+        tokens = record.get("arm_tokens")
+        tokens = tokens if isinstance(tokens, dict) else {}
+        own_tokens = tokens.get("own")
+        foreign_tokens = tokens.get(contrast)
+        if type(own_tokens) is int and type(foreign_tokens) is int:
+            deltas.append(own_tokens - foreign_tokens)
+        own_cell = _o_hf_cell(record, "own")
+        foreign_cell = _o_hf_cell(record, contrast)
+        if own_cell is not None and foreign_cell is not None:
+            ungated_n += 1
+            if own_cell["verdict"] and not foreign_cell["verdict"]:
+                ungated_own_only += 1
+            elif foreign_cell["verdict"] and not own_cell["verdict"]:
+                ungated_foreign_only += 1
+        if not render_divergent:
+            n_render_identical += 1
+            continue
+        digests = record.get("id_digests")
+        digests = digests if isinstance(digests, dict) else {}
+        own_digest = digests.get("own")
+        foreign_digest = digests.get(contrast)
+        ids_identical = (
+            type(own_digest) is str and own_digest != "" and own_digest == foreign_digest
+        )
+        if ids_identical:
+            n_ids_identical += 1
+            if (
+                own_cell is not None
+                and foreign_cell is not None
+                and own_cell["verdict"] != foreign_cell["verdict"]
+            ):
+                n_same_ids_flips += 1
+            continue
+        if own_cell is None or foreign_cell is None:
+            continue
+        n_paired += 1
+        if own_cell["verdict"]:
+            own_passes += 1
+        if foreign_cell["verdict"]:
+            foreign_passes += 1
+        if own_cell["verdict"] and not foreign_cell["verdict"]:
+            own_only += 1
+            decomposition[_o_hf_decompose(own_cell, foreign_cell)] += 1
+        elif foreign_cell["verdict"] and not own_cell["verdict"]:
+            foreign_only += 1
+            decomposition[_o_hf_decompose(own_cell, foreign_cell)] += 1
+    applicable = n_render_identical < len(records)
+    d = own_only + foreign_only
+    classification = _o_hf_classify(n_paired, own_only, foreign_only) if applicable else None
+    return {
+        "applicable": applicable,
+        "n_render_identical": n_render_identical,
+        "n_ids_identical": n_ids_identical,
+        "n_same_ids_flips": n_same_ids_flips,
+        "n_paired": n_paired,
+        "own_only": own_only,
+        "foreign_only": foreign_only,
+        "discordant": d,
+        "own_passes_paired": own_passes,
+        "foreign_passes_paired": foreign_passes,
+        "paired_rate_own": (own_passes / n_paired) if n_paired else None,
+        "paired_rate_foreign": (foreign_passes / n_paired) if n_paired else None,
+        "ungated_n": ungated_n,
+        "ungated_own_only": ungated_own_only,
+        "ungated_foreign_only": ungated_foreign_only,
+        "decomposition": decomposition,
+        "classification": classification,
+        "falsification": classification == "discordant_asymmetric",
+        "mcnemar_p": _o_hf_mcnemar_p(own_only, foreign_only) if d else None,
+        "random_fire_rate": _o_hf_fire_rate(n_paired) if applicable else None,
+        "id_length_delta": deltas,
+        "max_abs_id_delta": max((abs(x) for x in deltas), default=0),
+    }
+
+
+def _o_hf_verbatim(records: list) -> dict[str, Any]:
+    applicable = all(
+        type(record.get("own_bos_digest")) is str
+        and type(record.get("donor_bos_digest")) is str
+        and record.get("own_bos_digest") != record.get("donor_bos_digest")
+        for record in records
+    )
+    n_paired = 0
+    twin_only = 0
+    verbatim_only = 0
+    if applicable:
+        for record in records:
+            twin = _o_hf_cell(record, "foreign_chatml")
+            verbatim = _o_hf_cell(record, "verbatim_chatml")
+            if twin is None or verbatim is None:
+                continue
+            n_paired += 1
+            if twin["verdict"] and not verbatim["verdict"]:
+                twin_only += 1
+            elif verbatim["verdict"] and not twin["verdict"]:
+                verbatim_only += 1
+    return {
+        "applicable": applicable,
+        "n_paired": n_paired,
+        "twin_only": twin_only,
+        "verbatim_only": verbatim_only,
+        "discordant": twin_only + verbatim_only,
+    }
+
+
+def _o_hf_aggregate(records: list) -> dict[str, Any]:
+    arms: dict[str, Any] = {}
+    for key in _O_HF_ARMS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        for record in records:
+            details = record.get("cell_details")
+            detail = details.get(key) if isinstance(details, dict) else None
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_hf_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+        }
+    return {
+        "arms": arms,
+        "contrasts": {c: _o_hf_contrast(records, c) for c in _O_HF_CONTRASTS},
+        "verbatim": _o_hf_verbatim(records),
+        "operating_characteristics": dict(_O_HF_OC),
+        "jitter_grid": [dict(row) for row in _O_HF_JITTER],
+        "n_fixtures": len(records),
+    }
+
+
+def _o_hf_shared(by_candidate: dict) -> frozenset:
+    shared = None
+    for records in by_candidate.values():
+        ids = frozenset(record["fixture"] for record in records)
+        shared = ids if shared is None else shared & ids
+    return shared if shared is not None else frozenset()
+
+
+def _o_hf_selection_over(by_candidate: dict, arm: str, fixtures: frozenset):
+    completed_sets = []
+    all_pass: dict[str, Any] = {}
+    for name, records in by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _o_hf_cell(record, arm) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            bool(_o_hf_cell(record, arm)["verdict"])
+            for record in records
+            if record["fixture"] in completed and _o_hf_cell(record, arm) is not None
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _o_hf_arm_selection(by_candidate: dict, arm: str) -> dict[str, Any]:
+    shared = _o_hf_shared(by_candidate)
+    selection = _o_hf_selection_over(by_candidate, arm, shared) if shared else None
+    if selection is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+        }
+    return {
+        "decision": selection["decision"],
+        "detail": "",
+        "winner": selection["winner"],
+        "withheld": False,
+    }
+
+
+def _o_hf_winner_headline(baseline: dict, arm: dict) -> dict[str, Any]:
+    if not isinstance(baseline, dict) or not isinstance(arm, dict):
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_missing",
+            "winner_changed": None,
+        }
+    if baseline.get("withheld") is True or arm.get("withheld") is True:
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner_changed": None,
+        }
+    baseline_selected = baseline.get("decision") == "selected"
+    arm_selected = arm.get("decision") == "selected"
+    if baseline_selected and arm_selected:
+        if baseline.get("winner") != arm.get("winner"):
+            return {"headline": "winner_changed", "detail": "", "winner_changed": True}
+        return {"headline": "winner_stable", "detail": "", "winner_changed": False}
+    if baseline_selected != arm_selected:
+        return {"headline": "winner_abstention_asymmetric", "detail": "", "winner_changed": False}
+    return {"headline": "winner_undefined", "detail": "", "winner_changed": False}
+
+
+def _o_hf_primary_flips(conditions: dict, primary: Any) -> list:
+    if not isinstance(primary, dict):
+        return []
+    decision = primary.get("decision")
+    winner = primary.get("winner")
+    if decision in ("compatible_on_fixture_set", "held_out_failed"):
+        verdict = ("selected", winner)
+    elif type(decision) is str and decision:
+        verdict = (decision, winner)
+    else:
+        return []
+    flips = []
+    for arm in ("own", "foreign_chatml", "foreign_llama3"):
+        selection = conditions.get(arm) if isinstance(conditions, dict) else None
+        if not isinstance(selection, dict) or selection.get("withheld") is True:
+            continue
+        if (selection.get("decision"), selection.get("winner")) != verdict:
+            flips.append(
+                {
+                    "arm": arm,
+                    "decision_from": verdict[0],
+                    "decision_to": selection.get("decision"),
+                    "winner_from": verdict[1],
+                    "winner_to": selection.get("winner"),
+                }
+            )
+    return flips
+
+
+def _o_hf_stratum_ok(stratum: Any) -> bool:
+    if type(stratum) is not dict or set(stratum) != set(_O_HF_CONTRASTS):
+        return False
+    for arm in _O_HF_CONTRASTS:
+        block = stratum[arm]
+        if type(block) is not dict or set(block) != {"label", "literals"}:
+            return False
+        if block["label"] not in ("all_single", "all_fragmented", "mixed"):
+            return False
+        literals = block["literals"]
+        if type(literals) is not dict:
+            return False
+        for literal, real in literals.items():
+            if type(literal) is not str or not literal or type(real) is not bool:
+                return False
+        values = list(literals.values())
+        if values and all(values):
+            expected = "all_single"
+        elif values and not any(values):
+            expected = "all_fragmented"
+        elif values:
+            expected = "mixed"
+        else:
+            expected = "all_single"
+        if block["label"] != expected:
+            return False
+    return True
+
+
+def _o_hf_recompute(payload: Any):
+    if type(payload) is not dict:
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    fixture_ids = protocol.get("fixture_ids")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    if type(backend_fp) is not str:
+        return None
+    if (
+        type(fixture_ids) is not list
+        or not fixture_ids
+        or len(fixture_ids) > 100
+        or any(type(item) is not str for item in fixture_ids)
+        or len(set(fixture_ids)) != len(fixture_ids)
+    ):
+        return None
+    n_fixtures = len(fixture_ids)
+    if protocol != _o_hf_protocol(seed, backend_fp, fixture_ids):
+        return None
+    if not _o_hf_stratum_ok(payload.get("stratum")):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > 24:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    by_candidate: dict[str, list] = {}
+    rates: list[float] = []
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            aggregates[name] = {}
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != {
+            "arms",
+            "contrasts",
+            "verbatim",
+            "operating_characteristics",
+            "jitter_grid",
+            "n_fixtures",
+            "status",
+            "detail",
+            "records",
+        }:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) != n_fixtures:
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_HF_MAX_BYTES:
+            return None
+        own_bos = donor_bos = None
+        for record, fixture_id in zip(records, fixture_ids, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "expected_digest",
+                "own_bos_digest",
+                "donor_bos_digest",
+                "segment_digests",
+                "hybrid_digests",
+                "arm_tokens",
+                "id_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != fixture_id:
+                return None
+            if not _o_hf_digest_ok(record["expected_digest"]):
+                return None
+            if own_bos is None:
+                own_bos = record["own_bos_digest"]
+                donor_bos = record["donor_bos_digest"]
+            elif record["own_bos_digest"] != own_bos or record["donor_bos_digest"] != donor_bos:
+                return None
+            if not _o_hf_digest_ok(own_bos) or not _o_hf_digest_ok(donor_bos):
+                return None
+            for key in ("segment_digests", "hybrid_digests", "id_digests"):
+                mapping = record[key]
+                if type(mapping) is not dict or set(mapping) != set(_O_HF_ARMS):
+                    return None
+                if any(not _o_hf_digest_ok(digest) for digest in mapping.values()):
+                    return None
+            for key in ("arm_tokens", "cells", "cell_details"):
+                mapping = record[key]
+                if type(mapping) is not dict or set(mapping) != set(_O_HF_ARMS):
+                    return None
+            for arm in _O_HF_ARMS:
+                tokens = record["arm_tokens"][arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                detail = record["cell_details"][arm]
+                if detail not in _O_HF_CELL_DETAILS:
+                    return None
+                cell = record["cells"][arm]
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if type(cell) is not dict or set(cell) != _O_HF_CELL_FIELDS:
+                    return None
+                if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+                    return None
+                if (
+                    cell["boundary_text_match"] is not None
+                    and type(cell["boundary_text_match"]) is not bool
+                ):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+                digest = cell["answer_digest"]
+                if digest is not None and not _o_hf_digest_ok(digest):
+                    return None
+                if cell["verdict"] != (
+                    digest == record["expected_digest"] and cell["boundary_found"]
+                ):
+                    return None
+        aggregates[name] = _o_hf_aggregate(records)
+        by_candidate[name] = records
+        for contrast in _O_HF_CONTRASTS:
+            rate = aggregates[name]["contrasts"][contrast]["random_fire_rate"]
+            if rate is not None:
+                rates.append(rate)
+    if total_records > 2400:
+        return None
+    if not aggregates:
+        return None
+    conditions = {
+        arm: _o_hf_arm_selection(by_candidate, arm)
+        for arm in ("own", "foreign_chatml", "foreign_llama3")
+    }
+    selection = {
+        contrast: _o_hf_winner_headline(conditions["own"], conditions[contrast])
+        for contrast in _O_HF_CONTRASTS
+    }
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions,
+        "selection": selection,
+        "flips": _o_hf_primary_flips(conditions, payload.get("primary")),
+        "familywise": _o_hf_familywise(rates),
+        "n_candidates": len(candidates),
+        "n_fixtures": n_fixtures,
+    }
+
+
+def _o_historyframe_valid(value: Any) -> bool:
+    """Oracle history-frame validator: mirrors
+    diffreports._valid_history_frame."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "stratum",
+        "candidates",
+        "conditions",
+        "selection",
+        "primary",
+        "flips",
+        "familywise",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    primary = value.get("primary")
+    if primary is not None:
+        if type(primary) is not dict or set(primary) != {"decision", "winner"}:
+            return False
+        if primary["decision"] is not None and type(primary["decision"]) is not str:
+            return False
+        if primary["winner"] is not None and type(primary["winner"]) is not str:
+            return False
+    recomputed = _o_hf_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    for key in ("conditions", "selection", "flips", "familywise", "n_candidates", "n_fixtures"):
+        if value.get(key) != recomputed[key]:
+            return False
+    return True
+
+
+def _o_historyframe(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle history-frame section: mirrors
+    diffreports.diff_history_frame."""
+    old_ok = _o_historyframe_valid(old)
+    new_ok = _o_historyframe_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("history_material_sha256") != new["protocol"].get(
+        "history_material_sha256"
+    ) or old["protocol"].get("fixture_ids") != new["protocol"].get("fixture_ids")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    stratum_drift: list[dict[str, Any]] = []
+    for arm in _O_HF_CONTRASTS:
+        if old["stratum"][arm]["label"] != new["stratum"][arm]["label"]:
+            stratum_drift.append(
+                {
+                    "family": arm,
+                    "old": old["stratum"][arm]["label"],
+                    "new": new["stratum"][arm]["label"],
+                }
+            )
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list[tuple[str, Any, Any]] = []
+        for contrast in _O_HF_CONTRASTS:
+            old_block = old_entry["contrasts"][contrast]
+            new_block = new_entry["contrasts"][contrast]
+            metrics.extend(
+                [
+                    (
+                        f"classification_{contrast}",
+                        old_block["classification"],
+                        new_block["classification"],
+                    ),
+                    (f"n_paired_{contrast}", old_block["n_paired"], new_block["n_paired"]),
+                    (f"own_only_{contrast}", old_block["own_only"], new_block["own_only"]),
+                    (
+                        f"foreign_only_{contrast}",
+                        old_block["foreign_only"],
+                        new_block["foreign_only"],
+                    ),
+                    (
+                        f"boundary_only_{contrast}",
+                        old_block["decomposition"]["boundary_only"],
+                        new_block["decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"exact_only_{contrast}",
+                        old_block["decomposition"]["exact_only"],
+                        new_block["decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"mixed_{contrast}",
+                        old_block["decomposition"]["mixed"],
+                        new_block["decomposition"]["mixed"],
+                    ),
+                ]
+            )
+        metrics.append(
+            (
+                "verbatim_applicable",
+                old_entry["verbatim"]["applicable"],
+                new_entry["verbatim"]["applicable"],
+            )
+        )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    selection_drift: list[dict[str, Any]] = []
+    for contrast in _O_HF_CONTRASTS:
+        if old["selection"][contrast]["headline"] != new["selection"][contrast]["headline"]:
+            selection_drift.append(
+                {
+                    "contrast": contrast,
+                    "old": old["selection"][contrast]["headline"],
+                    "new": new["selection"][contrast]["headline"],
+                }
+            )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["selection_drift"] = selection_drift
+    diff["stratum_drift"] = stratum_drift
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift
+        or added
+        or removed
+        or selection_drift
+        or stratum_drift
+        or protocol_drift
+        or generator_drift
+        or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
     diffreports._valid_instruction_distance."""
@@ -11630,6 +12465,9 @@ def _oracle_diff(
     o_idist, o_idist_changed, o_idist_asymmetric = _o_instructiondistance(
         old.get("instruction_distance"), new.get("instruction_distance")
     )
+    o_hf, o_hf_changed, o_hf_asymmetric = _o_historyframe(
+        old.get("history_frame"), new.get("history_frame")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -11796,6 +12634,7 @@ def _oracle_diff(
         "placement": o_pl,
         "canonical_form": o_cform,
         "instruction_distance": o_idist,
+        "history_frame": o_hf,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -11889,6 +12728,8 @@ def _oracle_diff(
             "canonical_form_asymmetric": o_cform_asymmetric,
             "instruction_distance_changed": o_idist_changed,
             "instruction_distance_asymmetric": o_idist_asymmetric,
+            "history_frame_changed": o_hf_changed,
+            "history_frame_asymmetric": o_hf_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -12836,6 +13677,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "canonical_form_asymmetric": False,
                 "instruction_distance_changed": False,
                 "instruction_distance_asymmetric": False,
+                "history_frame_changed": False,
+                "history_frame_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -16744,6 +17587,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not canonical_form_asymmetric\n"
             '        and not instruction_distance_diff["changed"]\n'
             "        and not instruction_distance_asymmetric\n"
+            '        and not history_frame_diff["changed"]\n'
+            "        and not history_frame_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -16844,6 +17689,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or canonical_form_asymmetric\n"
             '        or instruction_distance_diff["changed"]\n'
             "        or instruction_distance_asymmetric\n"
+            '        or history_frame_diff["changed"]\n'
+            "        or history_frame_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -17066,6 +17913,77 @@ class InstructionDistanceOracleAgreementTests(unittest.TestCase):
         self.assertEqual(oracle["instruction_distance"], real["instruction_distance"])
         self.assertEqual(real["instruction_distance"]["available"], "old")
         self.assertFalse(real["instruction_distance"]["changed"])
+
+
+class HistoryFrameOracleAgreementTests(unittest.TestCase):
+    """Cycle 219: the history-frame oracle must agree with
+    the real diff on REAL stage payloads, not just on the
+    neither stubs the fuzzer produces (the fuzzer emits no
+    history_frame section, so without this test the oracle's
+    recompute depth -- including the amendment-A4 id-digest
+    gate -- would be unproven)."""
+
+    def _payload(self, mode):
+        from tests.test_cycle219_historyframe import _payload, _WordBackend
+
+        return _payload(_WordBackend(mode))
+
+    def _pair(self, old_payload, new_payload):
+        old = _base_report()
+        new = _base_report()
+        old["history_frame"] = old_payload
+        new["history_frame"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        payload = self._payload("perfect")
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["history_frame"], real["history_frame"])
+        self.assertEqual(
+            oracle["summary"]["history_frame_changed"],
+            real["summary"]["history_frame_changed"],
+        )
+        self.assertFalse(real["summary"]["history_frame_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        first = self._payload("perfect")
+        second = self._payload("frame_drop")
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["history_frame"], real["history_frame"])
+        self.assertTrue(real["history_frame"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["own"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["history_frame"], real["history_frame"])
+        self.assertEqual(real["history_frame"]["available"], "old")
+        self.assertFalse(real["history_frame"]["changed"])
+
+    def test_a4_digest_forgery_agreement_is_old(self):
+        # Amendment A4: flipping a record's foreign id digest
+        # to the own digest (faking the ids-identical gate)
+        # must invalidate the payload on both sides of the
+        # oracle boundary.
+        first = self._payload("frame_drop")
+        bad = copy.deepcopy(first)
+        for record in bad["candidates"]["chatml"]["records"]:
+            record["id_digests"]["foreign_llama3"] = record["id_digests"]["own"]
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["history_frame"], real["history_frame"])
+        self.assertEqual(real["history_frame"]["available"], "old")
 
 
 if __name__ == "__main__":

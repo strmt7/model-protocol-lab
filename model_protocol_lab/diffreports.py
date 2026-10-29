@@ -727,6 +727,7 @@ def diff_reports(
     instruction_distance_diff = diff_instruction_distance(
         old.get("instruction_distance"), new.get("instruction_distance")
     )
+    history_frame_diff = diff_history_frame(old.get("history_frame"), new.get("history_frame"))
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -809,6 +810,10 @@ def diff_reports(
         "neither",
     )
     instruction_distance_asymmetric = instruction_distance_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    history_frame_asymmetric = history_frame_diff["available"] not in (
         "both",
         "neither",
     )
@@ -931,6 +936,8 @@ def diff_reports(
         and not canonical_form_asymmetric
         and not instruction_distance_diff["changed"]
         and not instruction_distance_asymmetric
+        and not history_frame_diff["changed"]
+        and not history_frame_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1031,6 +1038,8 @@ def diff_reports(
         "canonical_form_asymmetric": canonical_form_asymmetric,
         "instruction_distance_changed": instruction_distance_diff["changed"],
         "instruction_distance_asymmetric": instruction_distance_asymmetric,
+        "history_frame_changed": history_frame_diff["changed"],
+        "history_frame_asymmetric": history_frame_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1086,6 +1095,7 @@ def diff_reports(
         "placement": placement_diff,
         "canonical_form": canonical_form_diff,
         "instruction_distance": instruction_distance_diff,
+        "history_frame": history_frame_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -12315,6 +12325,961 @@ def diff_instruction_distance(old: Any, new: Any) -> dict[str, Any]:
         or id_protocol_drift
         or id_generator_drift
         or id_backend_drift
+    )
+    return result
+
+
+_HISTORYFRAME_ARM_KEYS = ("own", "foreign_chatml", "foreign_llama3", "verbatim_chatml")
+_HISTORYFRAME_HEADLINE_ARMS = ("own", "foreign_chatml", "foreign_llama3")
+_HISTORYFRAME_CONTRASTS = ("foreign_chatml", "foreign_llama3")
+_HISTORYFRAME_DONOR_FAMILIES = {"foreign_chatml": "chatml", "foreign_llama3": "llama3"}
+_HISTORYFRAME_VERBATIM_ARM = "verbatim_chatml"
+_HISTORYFRAME_VERBATIM_TWIN = "foreign_chatml"
+_HISTORYFRAME_HISTORY_CONDITION = "history_6"
+_HISTORYFRAME_HISTORY_TURNS = 6
+_HISTORYFRAME_TURNS = (
+    ("user", "Hello. I have a few short questions for you."),
+    ("assistant", "Hello! I am ready. Please ask your questions one at a time."),
+    ("user", "Thank you. I will keep each question short."),
+    ("assistant", "Understood. I will keep my answers short as well."),
+    ("user", "Let us begin whenever you are ready."),
+    ("assistant", "I am ready. Please go ahead with your first question."),
+)
+_HISTORYFRAME_MIN_N = 10
+_HISTORYFRAME_MIN_D = 6
+_HISTORYFRAME_MAX_CANDIDATES = 24
+_HISTORYFRAME_MAX_SEARCH_FIXTURES = 100
+_HISTORYFRAME_MAX_GROUND_RECORDS = _HISTORYFRAME_MAX_CANDIDATES * _HISTORYFRAME_MAX_SEARCH_FIXTURES
+_HISTORYFRAME_GENERATION_BUDGET = len(_HISTORYFRAME_ARM_KEYS) * _HISTORYFRAME_MAX_GROUND_RECORDS
+_HISTORYFRAME_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_HISTORYFRAME_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_HISTORYFRAME_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_HISTORYFRAME_CLASSIFICATIONS = (
+    "insufficient",
+    "no_discordance_observed",
+    "discordant_balanced",
+    "discordant_asymmetric",
+    "below_threshold",
+)
+_HISTORYFRAME_STRATA = ("all_single", "all_fragmented", "mixed")
+_HISTORYFRAME_DECOMPOSITION_CLASSES = ("boundary_only", "exact_only", "mixed")
+_HISTORYFRAME_AGGREGATE_KEYS = {
+    "arms",
+    "contrasts",
+    "verbatim",
+    "operating_characteristics",
+    "jitter_grid",
+    "n_fixtures",
+}
+_HISTORYFRAME_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "random_labeller_fire_bound": 0.036,
+    "competent_fire_bound": 0.031,
+    "power_25_point_at_30": 0.52,
+    "power_25_point_at_100": 0.988,
+    "power_50_point_at_30": 0.983,
+    "power_50_point_at_100": 1.0,
+}
+_HISTORYFRAME_JITTER_GRID = (
+    {"epsilon": 0.01, "fire_rate": 0.0004},
+    {"epsilon": 0.02, "fire_rate": 0.0048},
+    {"epsilon": 0.05, "fire_rate": 0.0213},
+)
+_HISTORYFRAME_SEGMENT_RULE_TEXT = (
+    "historyframe-segment-v1: seg(F, m, i) = (F.bos if i > 0 "
+    "and F.repeat_bos else '') + (F.user_prefix if m.role is "
+    "user else F.assistant_prefix) + m.content + (per-role end "
+    "of F for m.role, the per-role field when it is not None "
+    "else F.turn_end); open(B) = (B.bos if B.repeat_bos else "
+    "'') + (B.open_suffix if B.open_suffix is not None else "
+    "B.assistant_prefix); hybrid(A, B) = B.bos + seg(A) over "
+    "the first 6 messages + seg(B) over the rest + open(B); "
+    "verbatim(A, B) = A.bos + hybrid(A, B) with only the "
+    "leading B.bos removed. Screens: S1 per-arm slice-swap "
+    "identity pre-generation (each hybrid equals the native "
+    "B render with only the history-segment slice exchanged; "
+    "the verbatim arm exchanges the same slice under its "
+    "defining leading-bos substitution; hybrid(B, B) equals "
+    "the native render byte for byte); S2 "
+    "special-token-literal audit over the frozen history texts "
+    "and the donor and candidate framing literals; S3 budget "
+    "caps. User fixture contents are never screened: they are "
+    "byte-identical across arms, so they cannot manufacture a "
+    "frame contrast."
+)
+
+
+def _historyframe_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    historyframe.py anywhere in this mirror)."""
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _historyframe_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _historyframe_mcnemar_p(a: int, b: int) -> float | None:
+    """Mirror of confidentiality.mcnemar_exact_p: two-sided
+    exact McNemar p; None when there are no discordant pairs."""
+    import math as _math
+
+    n = a + b
+    if n == 0:
+        return None
+    k = min(a, b)
+    tail: float = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _historyframe_classify(n: int, own_only: int, foreign_only: int) -> str:
+    """Mirror of historyframe.classify_history_frame."""
+    if n < _HISTORYFRAME_MIN_N:
+        return "insufficient"
+    d = own_only + foreign_only
+    if d == 0:
+        return "no_discordance_observed"
+    if d < _HISTORYFRAME_MIN_D:
+        return "below_threshold"
+    if own_only == foreign_only:
+        return "discordant_balanced"
+    p = _historyframe_mcnemar_p(own_only, foreign_only)
+    if p is not None and p < 0.05:
+        return "discordant_asymmetric"
+    return "below_threshold"
+
+
+def _historyframe_random_fire_rate(n: int) -> float:
+    """Mirror of historyframe.random_labeller_fire_rate
+    (exact enumeration over the discordant count and its
+    split under independent fair arms)."""
+    import math as _math
+
+    if type(n) is not int or n < _HISTORYFRAME_MIN_N:
+        return 0.0
+    total = 0.0
+    for d in range(_HISTORYFRAME_MIN_D, n + 1):
+        p_d = _math.comb(n, d) * (0.5**n)
+        for a in range(d + 1):
+            b = d - a
+            if a == b:
+                continue
+            p = _historyframe_mcnemar_p(a, b)
+            if p is not None and p < 0.05:
+                total += p_d * _math.comb(d, a) * (0.5**d)
+    return total
+
+
+def _historyframe_familywise(rates: list[float]) -> dict[str, Any]:
+    """Mirror of historyframe.familywise_expectation."""
+    expected = sum(rates)
+    survival = 1.0
+    for rate in rates:
+        survival *= 1.0 - rate
+    return {
+        "decisions": len(rates),
+        "expected_false_labels": expected,
+        "p_at_least_one": 1.0 - survival,
+    }
+
+
+def _historyframe_history_material_sha256() -> str:
+    """Mirror of historyframe's history-material digest over
+    the frozen transcript."""
+    import json as _json
+
+    canonical = _json.dumps(
+        [[role, content] for role, content in _HISTORYFRAME_TURNS],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _historyframe_digest(canonical)
+
+
+def _historyframe_protocol(
+    seed: int, backend_fingerprint: str, fixture_ids: list[str]
+) -> dict[str, Any]:
+    """Mirror of historyframe.protocol_object, fingerprint
+    included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_HISTORYFRAME_ARM_KEYS),
+        "headline_arms": list(_HISTORYFRAME_HEADLINE_ARMS),
+        "contrasts": list(_HISTORYFRAME_CONTRASTS),
+        "donor_families": dict(_HISTORYFRAME_DONOR_FAMILIES),
+        "verbatim_arm": _HISTORYFRAME_VERBATIM_ARM,
+        "verbatim_twin": _HISTORYFRAME_VERBATIM_TWIN,
+        "history_condition": _HISTORYFRAME_HISTORY_CONDITION,
+        "history_turns": _HISTORYFRAME_HISTORY_TURNS,
+        "history_material_sha256": _historyframe_history_material_sha256(),
+        "segment_rule_sha256": _historyframe_digest(_HISTORYFRAME_SEGMENT_RULE_TEXT),
+        "min_n": _HISTORYFRAME_MIN_N,
+        "min_d": _HISTORYFRAME_MIN_D,
+        "generation_budget": _HISTORYFRAME_GENERATION_BUDGET,
+        "max_ground_records": _HISTORYFRAME_MAX_GROUND_RECORDS,
+        "max_records_bytes": _HISTORYFRAME_MAX_RECORDS_BYTES,
+        "max_search_fixtures": _HISTORYFRAME_MAX_SEARCH_FIXTURES,
+        "max_candidates": _HISTORYFRAME_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+        "fixture_ids": list(fixture_ids),
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _historyframe_digest(canonical)
+    return protocol
+
+
+def _historyframe_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _historyframe_decompose(own_cell: dict[str, Any], foreign_cell: dict[str, Any]) -> str:
+    """Mirror of historyframe.decompose_pair."""
+    if own_cell.get("answer_digest") == foreign_cell.get("answer_digest"):
+        return "boundary_only"
+    if own_cell.get("boundary_found") and foreign_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _historyframe_contrast(records: list[dict[str, Any]], contrast: str) -> dict[str, Any]:
+    """Mirror of historyframe._contrast_aggregate. The
+    ids-identical gate is derived from the recorded id
+    digests (amendment A4), render-divergence from the
+    recorded segment digests, and ``id_length_delta`` is
+    recomputed from the recorded arm token counts -- a
+    carried flag or delta is never trusted."""
+    n_render_identical = 0
+    n_ids_identical = 0
+    n_same_ids_flips = 0
+    n_paired = 0
+    own_only = 0
+    foreign_only = 0
+    own_passes = 0
+    foreign_passes = 0
+    ungated_n = 0
+    ungated_own_only = 0
+    ungated_foreign_only = 0
+    decomposition: dict[str, int] = dict.fromkeys(_HISTORYFRAME_DECOMPOSITION_CLASSES, 0)
+    deltas: list[int] = []
+    for record in records:
+        segments = record.get("segment_digests")
+        segments = segments if isinstance(segments, dict) else {}
+        render_divergent = segments.get(contrast) != segments.get("own")
+        arm_tokens = record.get("arm_tokens") or {}
+        own_tokens = arm_tokens.get("own")
+        foreign_tokens = arm_tokens.get(contrast)
+        if type(own_tokens) is int and type(foreign_tokens) is int:
+            deltas.append(own_tokens - foreign_tokens)
+        own_cell = _historyframe_cell_get(record, "own")
+        foreign_cell = _historyframe_cell_get(record, contrast)
+        if own_cell is not None and foreign_cell is not None:
+            ungated_n += 1
+            if own_cell["verdict"] and not foreign_cell["verdict"]:
+                ungated_own_only += 1
+            elif foreign_cell["verdict"] and not own_cell["verdict"]:
+                ungated_foreign_only += 1
+        if not render_divergent:
+            n_render_identical += 1
+            continue
+        id_digests = record.get("id_digests")
+        id_digests = id_digests if isinstance(id_digests, dict) else {}
+        own_digest = id_digests.get("own")
+        foreign_digest = id_digests.get(contrast)
+        ids_identical = (
+            type(own_digest) is str and own_digest != "" and own_digest == foreign_digest
+        )
+        if ids_identical:
+            n_ids_identical += 1
+            if (
+                own_cell is not None
+                and foreign_cell is not None
+                and own_cell["verdict"] != foreign_cell["verdict"]
+            ):
+                n_same_ids_flips += 1
+            continue
+        if own_cell is None or foreign_cell is None:
+            continue
+        n_paired += 1
+        if own_cell["verdict"]:
+            own_passes += 1
+        if foreign_cell["verdict"]:
+            foreign_passes += 1
+        if own_cell["verdict"] and not foreign_cell["verdict"]:
+            own_only += 1
+            cls = _historyframe_decompose(own_cell, foreign_cell)
+            decomposition[cls] = decomposition.get(cls, 0) + 1
+        elif foreign_cell["verdict"] and not own_cell["verdict"]:
+            foreign_only += 1
+            cls = _historyframe_decompose(own_cell, foreign_cell)
+            decomposition[cls] = decomposition.get(cls, 0) + 1
+    applicable = n_render_identical < len(records)
+    d = own_only + foreign_only
+    classification = _historyframe_classify(n_paired, own_only, foreign_only)
+    return {
+        "applicable": applicable,
+        "n_render_identical": n_render_identical,
+        "n_ids_identical": n_ids_identical,
+        "n_same_ids_flips": n_same_ids_flips,
+        "n_paired": n_paired,
+        "own_only": own_only,
+        "foreign_only": foreign_only,
+        "discordant": d,
+        "own_passes_paired": own_passes,
+        "foreign_passes_paired": foreign_passes,
+        "paired_rate_own": (own_passes / n_paired) if n_paired else None,
+        "paired_rate_foreign": (foreign_passes / n_paired) if n_paired else None,
+        "ungated_n": ungated_n,
+        "ungated_own_only": ungated_own_only,
+        "ungated_foreign_only": ungated_foreign_only,
+        "decomposition": decomposition,
+        "classification": classification if applicable else None,
+        "falsification": (classification == "discordant_asymmetric") if applicable else False,
+        "mcnemar_p": _historyframe_mcnemar_p(own_only, foreign_only) if d else None,
+        "random_fire_rate": _historyframe_random_fire_rate(n_paired) if applicable else None,
+        "id_length_delta": deltas,
+        "max_abs_id_delta": max((abs(x) for x in deltas), default=0),
+    }
+
+
+def _historyframe_verbatim(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of historyframe._verbatim_aggregate.
+    Applicability is derived from the recorded bos digests
+    (amendment A1): equal digests mean the arm is
+    byte-identical to its twin and the readout is
+    inapplicable."""
+    applicable = all(
+        type(record.get("own_bos_digest")) is str
+        and type(record.get("donor_bos_digest")) is str
+        and record.get("own_bos_digest") != record.get("donor_bos_digest")
+        for record in records
+    )
+    n_paired = 0
+    twin_only = 0
+    verbatim_only = 0
+    if applicable:
+        for record in records:
+            twin = _historyframe_cell_get(record, _HISTORYFRAME_VERBATIM_TWIN)
+            verbatim = _historyframe_cell_get(record, _HISTORYFRAME_VERBATIM_ARM)
+            if twin is None or verbatim is None:
+                continue
+            n_paired += 1
+            if twin["verdict"] and not verbatim["verdict"]:
+                twin_only += 1
+            elif verbatim["verdict"] and not twin["verdict"]:
+                verbatim_only += 1
+    return {
+        "applicable": applicable,
+        "n_paired": n_paired,
+        "twin_only": twin_only,
+        "verbatim_only": verbatim_only,
+        "discordant": twin_only + verbatim_only,
+    }
+
+
+def _historyframe_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of historyframe.aggregate_candidate."""
+    arms: dict[str, Any] = {}
+    for key in _HISTORYFRAME_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        for record in records:
+            details = record.get("cell_details")
+            detail = details.get(key, "") if isinstance(details, dict) else ""
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _historyframe_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+        }
+    return {
+        "arms": arms,
+        "contrasts": {
+            contrast: _historyframe_contrast(records, contrast)
+            for contrast in _HISTORYFRAME_CONTRASTS
+        },
+        "verbatim": _historyframe_verbatim(records),
+        "operating_characteristics": dict(_HISTORYFRAME_OPERATING_CHARACTERISTICS),
+        "jitter_grid": [dict(row) for row in _HISTORYFRAME_JITTER_GRID],
+        "n_fixtures": len(records),
+    }
+
+
+def _historyframe_shared(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+) -> frozenset[str]:
+    """Mirror of historyframe.shared_fixtures."""
+    populations: list[frozenset[str]] = []
+    for records in records_by_candidate.values():
+        populations.append(frozenset(str(r.get("fixture")) for r in records))
+    if not populations:
+        return frozenset()
+    return frozenset.intersection(*populations)
+
+
+def _historyframe_verdict(record: dict[str, Any], key: str) -> bool:
+    """Mirror of historyframe._verdict."""
+    cell = _historyframe_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _historyframe_selection_over(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    key: str,
+    fixtures: frozenset[str],
+) -> dict[str, Any] | None:
+    """Mirror of historyframe._selection_over."""
+    completed_sets: list[frozenset[str]] = []
+    all_pass: dict[str, bool | None] = {}
+    for name, records in records_by_candidate.items():
+        completed = frozenset(
+            str(record["fixture"])
+            for record in records
+            if record["fixture"] in fixtures and _historyframe_cell_get(record, key) is not None
+        )
+        completed_sets.append(completed)
+        if not completed:
+            return None
+        all_pass[name] = all(
+            _historyframe_verdict(record, key)
+            for record in records
+            if record["fixture"] in completed
+        )
+    if len(set(completed_sets)) > 1:
+        return None
+    passers = [name for name, ok in all_pass.items() if ok]
+    if len(passers) == 1:
+        return {"decision": "selected", "winner": passers[0]}
+    if len(passers) > 1:
+        return {"decision": "ambiguous", "winner": None}
+    return {"decision": "no_candidate", "winner": None}
+
+
+def _historyframe_arm_selection(
+    records_by_candidate: dict[str, list[dict[str, Any]]],
+    arm: str,
+) -> dict[str, Any]:
+    """Mirror of historyframe.arm_selection."""
+    shared = _historyframe_shared(records_by_candidate)
+    own = _historyframe_selection_over(records_by_candidate, arm, shared) if shared else None
+    if own is None:
+        return {
+            "decision": "unavailable",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner": None,
+            "withheld": True,
+        }
+    return {"decision": own["decision"], "detail": "", "winner": own["winner"], "withheld": False}
+
+
+def _historyframe_winner_headline(baseline: Any, other: Any) -> dict[str, Any]:
+    """Mirror of historyframe.winner_headline."""
+    if not isinstance(baseline, dict) or not isinstance(other, dict):
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_missing",
+            "winner_changed": None,
+        }
+    if baseline.get("withheld") is True or other.get("withheld") is True:
+        return {
+            "headline": "winner_undefined",
+            "detail": "selection_withheld_mismatched_sets",
+            "winner_changed": None,
+        }
+    baseline_selected = baseline.get("decision") == "selected"
+    other_selected = other.get("decision") == "selected"
+    if baseline_selected and other_selected:
+        if baseline.get("winner") != other.get("winner"):
+            return {"headline": "winner_changed", "detail": "", "winner_changed": True}
+        return {"headline": "winner_stable", "detail": "", "winner_changed": False}
+    if baseline_selected != other_selected:
+        return {"headline": "winner_abstention_asymmetric", "detail": "", "winner_changed": False}
+    return {"headline": "winner_undefined", "detail": "", "winner_changed": False}
+
+
+def _historyframe_primary_flips(conditions: dict[str, Any], primary: Any) -> list[dict[str, Any]]:
+    """Mirror of historyframe.primary_flips."""
+    if not isinstance(primary, dict):
+        return []
+    decision = primary.get("decision")
+    winner = primary.get("winner")
+    if decision in ("compatible_on_fixture_set", "held_out_failed"):
+        verdict = ("selected", winner)
+    elif type(decision) is str and decision:
+        verdict = (decision, winner)
+    else:
+        return []
+    flips: list[dict[str, Any]] = []
+    for arm in _HISTORYFRAME_HEADLINE_ARMS:
+        selection = conditions.get(arm) if isinstance(conditions, dict) else None
+        if not isinstance(selection, dict) or selection.get("withheld") is True:
+            continue
+        if (selection.get("decision"), selection.get("winner")) != verdict:
+            flips.append(
+                {
+                    "arm": arm,
+                    "decision_from": verdict[0],
+                    "decision_to": selection.get("decision"),
+                    "winner_from": verdict[1],
+                    "winner_to": selection.get("winner"),
+                }
+            )
+    return flips
+
+
+def _historyframe_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and verdict binding: ``verdict ==
+    (answer_digest == expected_digest) and boundary_found``,
+    with the answer digest either a well-formed digest or
+    None (no answer string was decoded)."""
+    if type(cell) is not dict or set(cell) != _HISTORYFRAME_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    if cell["answer_digest"] is not None and not _historyframe_digest_ok(cell["answer_digest"]):
+        return False
+    verdict = (cell["answer_digest"] == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _historyframe_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a history-frame payload from its ground
+    records.
+
+    The validator carries its own frozen constants (donor
+    pair, transcript, floors, segment-rule text) and rebuilds
+    the protocol from them plus the payload's seed, backend
+    fingerprint, and fixture ids, comparing it whole (no
+    imports from historyframe.py). The fixture set itself is
+    user data and cannot be regenerated, so the mirror binds
+    everything the records make decidable: per record, the
+    fixture id against the protocol's set, the bos-digest
+    pair constant across the candidate (amendment A1's
+    applicability is derived, never carried), digest shapes
+    for every arm's segment/hybrid/id digests, arm token
+    counts bound to each completed cell's ``input_tokens``,
+    the verdict binding per cell, and the budget caps; then
+    every aggregate, the per-arm selections, the winner
+    headlines, the primary flips, and the family-wise block
+    are recomputed from the records and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    fixture_ids = protocol.get("fixture_ids")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    if type(backend_fingerprint) is not str:
+        return None
+    if (
+        type(fixture_ids) is not list
+        or not fixture_ids
+        or len(fixture_ids) > _HISTORYFRAME_MAX_SEARCH_FIXTURES
+        or any(type(fid) is not str for fid in fixture_ids)
+        or len(set(fixture_ids)) != len(fixture_ids)
+    ):
+        return None
+    if not _recomputed_equal(
+        protocol, _historyframe_protocol(seed, backend_fingerprint, fixture_ids)
+    ):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _HISTORYFRAME_MAX_CANDIDATES:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    records_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _HISTORYFRAME_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(fixture_ids):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _HISTORYFRAME_MAX_RECORDS_BYTES:
+            return None
+        bos_pair: tuple[Any, Any] | None = None
+        for record, fixture_id in zip(records, fixture_ids, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "expected_digest",
+                "own_bos_digest",
+                "donor_bos_digest",
+                "segment_digests",
+                "hybrid_digests",
+                "arm_tokens",
+                "id_digests",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != fixture_id:
+                return None
+            if not _historyframe_digest_ok(record["expected_digest"]):
+                return None
+            if not _historyframe_digest_ok(record["own_bos_digest"]):
+                return None
+            if not _historyframe_digest_ok(record["donor_bos_digest"]):
+                return None
+            pair = (record["own_bos_digest"], record["donor_bos_digest"])
+            if bos_pair is None:
+                bos_pair = pair
+            elif pair != bos_pair:
+                # The bos pair is a per-candidate constant (the
+                # candidate's bos and the frozen donor's); a
+                # record disagreeing with its siblings is a
+                # forgery or corruption, never data.
+                return None
+            for mapping_key in ("segment_digests", "hybrid_digests", "id_digests"):
+                mapping = record[mapping_key]
+                if type(mapping) is not dict or set(mapping) != set(_HISTORYFRAME_ARM_KEYS):
+                    return None
+                if any(not _historyframe_digest_ok(value) for value in mapping.values()):
+                    return None
+            arm_tokens = record["arm_tokens"]
+            if type(arm_tokens) is not dict or set(arm_tokens) != set(_HISTORYFRAME_ARM_KEYS):
+                return None
+            if any(type(value) is not int or value < 0 for value in arm_tokens.values()):
+                return None
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_HISTORYFRAME_ARM_KEYS):
+                    return None
+            for arm in _HISTORYFRAME_ARM_KEYS:
+                cell = cells[arm]
+                detail = details[arm]
+                if cell is None:
+                    if detail not in _HISTORYFRAME_DETAILS:
+                        return None
+                else:
+                    if detail != "":
+                        return None
+                    if not _historyframe_cell_ok(cell, record["expected_digest"]):
+                        return None
+                    if cell["input_tokens"] != arm_tokens[arm]:
+                        return None
+        aggregates[name] = _historyframe_aggregate(records)
+        records_by_candidate[name] = records
+    if total_records > _HISTORYFRAME_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    conditions = {
+        arm: _historyframe_arm_selection(records_by_candidate, arm)
+        for arm in _HISTORYFRAME_HEADLINE_ARMS
+    }
+    selection = {
+        contrast: _historyframe_winner_headline(conditions["own"], conditions[contrast])
+        for contrast in _HISTORYFRAME_CONTRASTS
+    }
+    rates: list[float] = []
+    for entry_agg in aggregates.values():
+        for contrast in _HISTORYFRAME_CONTRASTS:
+            block = entry_agg["contrasts"][contrast]
+            if block["random_fire_rate"] is not None:
+                rates.append(float(block["random_fire_rate"]))
+    return {
+        "aggregates": aggregates,
+        "conditions": conditions,
+        "selection": selection,
+        "flips": _historyframe_primary_flips(conditions, payload.get("primary")),
+        "familywise": _historyframe_familywise(rates),
+        "n_candidates": len(candidates),
+        "n_fixtures": len(fixture_ids),
+    }
+
+
+def _historyframe_stratum_ok(stratum: Any) -> bool:
+    """Shape check for the run-level stratum block: its
+    per-literal token-real values are backend observations,
+    not recomputable from records, so -- like the audit
+    block -- they are shape-checked only."""
+    if type(stratum) is not dict or set(stratum) != set(_HISTORYFRAME_CONTRASTS):
+        return False
+    for arm in _HISTORYFRAME_CONTRASTS:
+        block = stratum[arm]
+        if type(block) is not dict or set(block) != {"label", "literals"}:
+            return False
+        if block["label"] not in _HISTORYFRAME_STRATA:
+            return False
+        literals = block["literals"]
+        if type(literals) is not dict:
+            return False
+        for literal, real in literals.items():
+            if type(literal) is not str or not literal or type(real) is not bool:
+                return False
+        values = list(literals.values())
+        if values and all(values):
+            expected = "all_single"
+        elif values and not any(values):
+            expected = "all_fragmented"
+        elif values:
+            expected = "mixed"
+        else:
+            expected = "all_single"
+        if block["label"] != expected:
+            return False
+    return True
+
+
+def _valid_history_frame(payload: Any) -> bool:
+    """Structural check for a ``history_frame`` payload
+    (recompute standard). The audit block and the stratum
+    literals are shape-checked only: their values are stage
+    observations against the run's own formats and backend,
+    not recomputable from records."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "stratum",
+        "candidates",
+        "conditions",
+        "selection",
+        "primary",
+        "flips",
+        "familywise",
+        "n_candidates",
+        "n_fixtures",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    if not _historyframe_stratum_ok(payload.get("stratum")):
+        return False
+    primary = payload.get("primary")
+    if primary is not None:
+        if type(primary) is not dict or set(primary) != {"decision", "winner"}:
+            return False
+        if primary["decision"] is not None and type(primary["decision"]) is not str:
+            return False
+        if primary["winner"] is not None and type(primary["winner"]) is not str:
+            return False
+    recomputed = _historyframe_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    for key in ("conditions", "selection", "flips", "familywise", "n_candidates", "n_fixtures"):
+        if not _recomputed_equal(payload.get(key), recomputed[key]):
+            return False
+    return True
+
+
+def diff_history_frame(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``history_frame`` probe payloads;
+    deterministic.
+
+    Answers "did the history-frame story change between
+    runs?": per-candidate per-contrast classification drift
+    with the paired counts and decomposition that carry it,
+    verbatim applicability drift, winner-headline drift per
+    contrast, encoding-stratum drift per foreign family,
+    candidates added/removed, and protocol / history-material
+    / backend drift (any of which marks the comparison not
+    comparable, with the drift still listed -- the frozen
+    transcript and the fixture set are part of the
+    treatment). A side without a valid payload is reported
+    plainly.
+    """
+    old_ok = _valid_history_frame(old)
+    new_ok = _valid_history_frame(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    hf_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    hf_generator_drift = old["protocol"].get("history_material_sha256") != new["protocol"].get(
+        "history_material_sha256"
+    ) or old["protocol"].get("fixture_ids") != new["protocol"].get("fixture_ids")
+    hf_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    hf_comparable = not hf_protocol_drift and not hf_generator_drift and not hf_backend_drift
+    hf_stratum_drift: list[dict[str, Any]] = []
+    for arm in _HISTORYFRAME_CONTRASTS:
+        old_label = old["stratum"][arm]["label"]
+        new_label = new["stratum"][arm]["label"]
+        if old_label != new_label:
+            hf_stratum_drift.append({"family": arm, "old": old_label, "new": new_label})
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    hf_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    hf_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    hf_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                hf_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        hf_metrics: list[tuple[str, Any, Any]] = []
+        for contrast in _HISTORYFRAME_CONTRASTS:
+            old_block = old_entry["contrasts"][contrast]
+            new_block = new_entry["contrasts"][contrast]
+            hf_metrics.extend(
+                [
+                    (
+                        f"classification_{contrast}",
+                        old_block["classification"],
+                        new_block["classification"],
+                    ),
+                    (f"n_paired_{contrast}", old_block["n_paired"], new_block["n_paired"]),
+                    (f"own_only_{contrast}", old_block["own_only"], new_block["own_only"]),
+                    (
+                        f"foreign_only_{contrast}",
+                        old_block["foreign_only"],
+                        new_block["foreign_only"],
+                    ),
+                    (
+                        f"boundary_only_{contrast}",
+                        old_block["decomposition"]["boundary_only"],
+                        new_block["decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"exact_only_{contrast}",
+                        old_block["decomposition"]["exact_only"],
+                        new_block["decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"mixed_{contrast}",
+                        old_block["decomposition"]["mixed"],
+                        new_block["decomposition"]["mixed"],
+                    ),
+                ]
+            )
+        hf_metrics.append(
+            (
+                "verbatim_applicable",
+                old_entry["verbatim"]["applicable"],
+                new_entry["verbatim"]["applicable"],
+            )
+        )
+        for metric, old_value, new_value in hf_metrics:
+            if old_value != new_value:
+                hf_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    hf_selection_drift: list[dict[str, Any]] = []
+    for contrast in _HISTORYFRAME_CONTRASTS:
+        old_headline = old["selection"][contrast]["headline"]
+        new_headline = new["selection"][contrast]["headline"]
+        if old_headline != new_headline:
+            hf_selection_drift.append(
+                {"contrast": contrast, "old": old_headline, "new": new_headline}
+            )
+    result["candidate_drift"] = hf_candidate_drift
+    result["candidates_added"] = hf_candidates_added
+    result["candidates_removed"] = hf_candidates_removed
+    result["selection_drift"] = hf_selection_drift
+    result["stratum_drift"] = hf_stratum_drift
+    result["protocol_drift"] = hf_protocol_drift
+    result["generator_drift"] = hf_generator_drift
+    result["backend_drift"] = hf_backend_drift
+    result["comparable"] = hf_comparable
+    result["changed"] = bool(
+        hf_candidate_drift
+        or hf_candidates_added
+        or hf_candidates_removed
+        or hf_selection_drift
+        or hf_stratum_drift
+        or hf_protocol_drift
+        or hf_generator_drift
+        or hf_backend_drift
     )
     return result
 

@@ -10483,3 +10483,75 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   after-cell on the candidate fixture, so the residue is a
   contrast and a scorer, not an arm set (design doc §9 /
   amendment H).
+
+## Cycle 219 — history-frame probe: a frozen history's framing as the only variable (2026-10-28)
+
+- **What shipped:** `run --history-frame`
+  (`model_protocol_lab/historyframe.py`, the package's 67th
+  source file): every search fixture is prepended with the
+  shipped frozen `history_6` synthetic history, and only the
+  prepended segment is reframed — in the candidate's own
+  framing, the frozen chatml framing, the frozen llama3
+  framing, and a descriptive verbatim arm that differs from
+  its chatml twin only in the leading bos string. The tail,
+  the prompt-initial bos, and the open suffix are always the
+  candidate's own; the segment splice is a frozen formal
+  semantics over Format fields whose A == B case reproduces
+  `Format.render` byte for byte (review-verified 354/354;
+  build property test over the catalog plus local repairs).
+  Verdict discordance per candidate per foreign framing is
+  gated on render divergence and token-id divergence — the
+  latter derived from per-arm token-id digests in the
+  records (amendment A4, after the review executed a label
+  flip through the candidate text's carried flags) — and
+  classified by a total function (floors n >= 10, d >= 6;
+  two-sided exact McNemar) whose falsification label is
+  `discordant_asymmetric` alone. The family-wise expectation
+  is computed from the exact at-n random-labeller rates
+  (1.76 expected false labels over 48 decisions at n = 100,
+  P(at least one) 0.83 — amendment A2 correcting the
+  candidate text's printed 1.44 / 0.77), the symmetric
+  jitter grid is printed in the section (amendment A6), and
+  the pre-generation screen is the per-arm slice-swap
+  identity (amendment A9), which kills the seam mutant the
+  candidate's diagonal-only screen passed for 51 candidates.
+- **Uniqueness pass (combination framing; "first" claimed
+  nowhere).** The combination is: a frozen conversation
+  history held byte-identical in content while only its
+  framing strings are exchanged for a foreign family's, on
+  the run's own search fixtures under the run's own scorer,
+  with divergence-gated paired classification and per-frame
+  selection recomputation. Neighbours surveyed in the
+  design rounds: LM Evaluation Harness, HELM, OpenAI Evals,
+  DSPy — none ships segment-level cross-format reframing of
+  a prepended history with paired verdict discordance
+  (search-level pass over the named neighbours, stated as
+  such; PromptPerfect was left unresolved in the
+  instruction-distance round and is not cited here either).
+  Inside the tree the neighbours are synthhistory (history
+  presence/depth, native framing only), canonical-form
+  (Unicode normalisation of the whole prompt), and template
+  robustness (whole-template swaps) — each varies a
+  different axis.
+- **Naming audit (binding build condition).** Zero
+  collisions for `--history-frame` / `history_frame` in
+  cli.py, USAGE, or the package. The name's plain reading
+  understates the construction (the probe *prepends* a
+  frozen synthetic history and reframes only that segment),
+  so the audit's disclosure form was adopted: the CLI
+  help's first sentence, the USAGE §8.57 first sentence,
+  and the report section's first sentence all disclose the
+  prepend scope.
+- **Honest limits, printed in the report itself:** the
+  claim is string-scoped to the named framings and the one
+  frozen transcript on this checkpoint — nothing about
+  histories, migrations, or templates in general;
+  verdict-identity with the synthhistory stage is not
+  claimed (its namespaced ids change request seeds;
+  amendment A10); token length and marker encoding move
+  with the treatment by construction, and arm-level batch
+  composition / numerics channels correlated with the
+  foreign prompts' length are named residuals inside the
+  claim (amendment A8); power at a 25-point drop is 0.52 at
+  n = 30, so small panels read `insufficient` /
+  `below_threshold`, never invariance.

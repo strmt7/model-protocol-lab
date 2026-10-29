@@ -740,6 +740,62 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--history-frame",
+        action="store_true",
+        help="History-frame probe (cycle 219, research wave-11 rank "
+        "3): this probe prepends the frozen six-turn synthetic "
+        "history to every search fixture and reframes ONLY that "
+        "prepended segment -- the fixture's own messages are "
+        "never reframed. Per candidate, the prepended segment is "
+        "rendered in four arms: own (the candidate's own framing "
+        "of the history segment), foreign_chatml and "
+        "foreign_llama3 (the segment in the frozen chatml / "
+        "llama3 framings), and a descriptive verbatim_chatml arm "
+        "that differs from foreign_chatml only in the leading "
+        "bos string, so its discordance against foreign_chatml "
+        "is the bos-substitution share; when the candidate's bos "
+        "equals chatml's, the verbatim arm is byte-identical to "
+        "its twin and is recorded inapplicable for that "
+        "candidate, never read as a bos share of zero. The tail, "
+        "the prompt-initial bos, and the open suffix are always "
+        "the candidate's own, and the own arm's render is "
+        "byte-identical to the synth-history history_6 render of "
+        "the same messages (verdict-identity with the "
+        "synth-history stage is not claimed: that stage runs "
+        "namespaced ids, hence different request seeds). "
+        "Headline, per candidate per foreign framing over paired "
+        "completed render-divergent ids-divergent fixtures: n "
+        "paired, a = own-only passes, b = foreign-only passes; "
+        "n below 10 is insufficient, no discordance is "
+        "no_discordance_observed, fewer than 6 discordant is "
+        "below_threshold, an even split is discordant_balanced, "
+        "and otherwise a two-sided exact McNemar p below 0.05 is "
+        "discordant_asymmetric -- the only falsification label. "
+        "The exact random-labeller fire rate at the run's own n "
+        "prints beside every classification (3.6 percent at "
+        "n = 100), and the family-wise expectation is computed "
+        "from those rates over the run's decisions (about 1.76 "
+        "expected false labels over 48 decisions at n = 100 "
+        "under the random null). Power at a 25-point drop is "
+        "0.99 at n = 100 but a coin flip at n of 30 or below, so "
+        "below_threshold is weak evidence, never invariance. "
+        "Per-arm conservative selection is recomputed on the "
+        "common completed set, with winner headlines per "
+        "contrast; flips against the primary run pool history "
+        "presence with frame and are labelled as such, never "
+        "the headline. The label certifies string-level "
+        "discordance on this run, not a mechanism: arm-level "
+        "batch composition and numerics channels correlated "
+        "with the foreign prompts' length are named residuals. "
+        "Monday morning: 'can a history rendered in the old "
+        "family's framing be trusted before the final turn, or "
+        "must it be re-rendered first?' Costs 4 generations per "
+        "candidate per search fixture (9,600 at the legal "
+        "maximum: 24 candidates x 100 fixtures x 4; 7,200 "
+        "headline). Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2166,6 +2222,57 @@ def _run_instruction_distance_probe(
         result["instruction_distance"] = {
             "available": False,
             "detail": "instruction_distance_unavailable",
+        }
+
+
+def _run_history_frame_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    fixtures: Any,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the history-frame probe; never raises.
+
+    The probe treats the run's own search fixtures (preceded
+    by the frozen synthetic history), so it reads the recorded
+    primary decision and winner for its separately-labelled
+    flips readout, but it never writes to them: the primary
+    decision, winner, and exit code are untouched whatever
+    the stage does. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import history_frame_analysis, history_frame_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = history_frame_stage(
+            backend,
+            formats,
+            fixtures,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        primary = {
+            "decision": result.get("decision"),
+            "winner": result.get("selected_candidate"),
+        }
+        result["history_frame"] = history_frame_analysis(stage, names, primary)
+    except Exception:  # noqa: BLE001 -- history-frame must not fail the run
+        result["history_frame"] = {
+            "available": False,
+            "detail": "historyframe_unavailable",
         }
 
 
@@ -4178,6 +4285,27 @@ def main(argv: list[str] | None = None) -> int:
                         backend,
                         formats,
                         result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # History-frame probe (cycle 219, research
+                # wave-11 rank 3): the run's search fixtures
+                # preceded by the frozen synthetic history, with
+                # only the prepended segment reframed in the
+                # frozen chatml/llama3 framings per candidate,
+                # the run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.history_frame:
+                    _run_history_frame_probe(
+                        backend,
+                        formats,
+                        result,
+                        fixtures=tuple(split.search),
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,
